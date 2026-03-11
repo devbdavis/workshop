@@ -1,0 +1,7 @@
+node_modules
+dist
+workshop.db
+workshop.db-shm
+workshop.db-wal
+.workshop
+*.log
