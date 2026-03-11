@@ -1,4 +1,5 @@
 import Database from 'better-sqlite3';
+import { v4 as uuid } from 'uuid';
 import path from 'path';
 import { fileURLToPath } from 'url';
 
@@ -122,4 +123,83 @@ function runMigrations(db: Database.Database): void {
       updated_at TEXT NOT NULL
     );
   `);
+
+  // Migration: add default_prompt_template_id column to tracks
+  try {
+    db.exec(`ALTER TABLE tracks ADD COLUMN default_prompt_template_id TEXT REFERENCES prompt_templates(id);`);
+  } catch {
+    // Column already exists — safe to ignore
+  }
+
+  // Seed default prompt templates if the table is empty
+  seedDefaultTemplates(db);
+}
+
+function seedDefaultTemplates(db: Database.Database): void {
+  const count = db.prepare('SELECT COUNT(*) as cnt FROM prompt_templates').get() as { cnt: number };
+  if (count.cnt > 0) return;
+
+  const now = new Date().toISOString();
+  const insert = db.prepare(
+    'INSERT INTO prompt_templates (id, name, description, content, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)',
+  );
+
+  insert.run(
+    uuid(),
+    'General Development',
+    'A general-purpose system prompt for software development work',
+    `You are an expert software developer helping with the "{{track.name}}" project.
+
+{{track.description}}
+
+Repositories: {{track.repos}}
+Linked tickets: {{track.tickets}}
+
+Follow best practices for code quality, testing, and documentation. Be concise and actionable in your responses.`,
+    now,
+    now,
+  );
+
+  insert.run(
+    uuid(),
+    'Code Review',
+    'Focused on reviewing and improving code quality',
+    `You are a senior code reviewer analyzing code in the "{{track.name}}" project.
+
+{{track.description}}
+
+Repositories: {{track.repos}}
+
+Focus on:
+- Correctness and potential bugs
+- Performance implications
+- Security concerns
+- Code readability and maintainability
+- Adherence to project conventions
+
+Provide specific, actionable feedback with code examples where helpful.`,
+    now,
+    now,
+  );
+
+  insert.run(
+    uuid(),
+    'Research & Planning',
+    'Focused on investigation and planning tasks',
+    `You are a technical advisor helping plan and research for the "{{track.name}}" project.
+
+{{track.description}}
+
+Linked tickets: {{track.tickets}}
+
+Focus on:
+- Breaking down requirements into concrete tasks
+- Identifying risks and unknowns
+- Evaluating technical approaches with trade-offs
+- Providing well-structured recommendations
+
+Be thorough in your analysis but keep recommendations practical and prioritized.`,
+    now,
+    now,
+  );
 }

@@ -1,7 +1,7 @@
 import { v4 as uuid } from 'uuid';
 import { getDatabase } from './database.js';
 import type { TrackRepository } from '@domain/track/repository';
-import type { Track, TrackId, TrackRepo, TrackPath, RepoId, PathId } from '@foundation/types';
+import type { Track, TrackId, TrackRepo, TrackPath, RepoId, PathId, TemplateId } from '@foundation/types';
 
 export function createTrackRepository(): TrackRepository {
   const db = getDatabase();
@@ -45,6 +45,13 @@ export function createTrackRepository(): TrackRepository {
 
     delete(id: TrackId): boolean {
       const result = db.prepare('DELETE FROM tracks WHERE id = ?').run(id);
+      return result.changes > 0;
+    },
+
+    setDefaultPromptTemplate(trackId: TrackId, templateId: TemplateId | null): boolean {
+      const result = db.prepare(
+        'UPDATE tracks SET default_prompt_template_id = ?, updated_at = ? WHERE id = ?',
+      ).run(templateId, new Date().toISOString(), trackId);
       return result.changes > 0;
     },
 
@@ -95,6 +102,7 @@ interface TrackRow {
   name: string;
   description: string | null;
   status: string;
+  default_prompt_template_id: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -121,6 +129,7 @@ function rowToTrack(row: TrackRow): Track {
     name: row.name,
     description: row.description || undefined,
     status: row.status as Track['status'],
+    defaultPromptTemplateId: (row.default_prompt_template_id as TemplateId) || undefined,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };

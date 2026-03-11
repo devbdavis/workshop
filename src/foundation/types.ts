@@ -14,6 +14,7 @@ export interface Track {
   name: string;
   description?: string;
   status: 'active' | 'archived';
+  defaultPromptTemplateId?: TemplateId;
   createdAt: string;
   updatedAt: string;
   // Populated relations
