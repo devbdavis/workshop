@@ -1,16 +1,24 @@
 import { execSync } from 'child_process';
-import { writeFileSync, mkdtempSync, unlinkSync } from 'fs';
-import { tmpdir } from 'os';
+import { writeFileSync, mkdirSync, rmSync, existsSync } from 'fs';
 import path from 'path';
 import { v4 as uuid } from 'uuid';
 import type { SessionRepository } from '@domain/session/repository';
 import type { Session, SessionId, TrackId } from '@foundation/types';
+
+/** Directory for per-session data (prompt files, etc.) */
+const SESSION_DATA_DIR = path.join(
+  process.env.HOME || '/tmp',
+  '.workshop',
+  'sessions',
+);
 
 export interface CreateSessionOptions {
   systemPrompt?: string;
   workingDirectory?: string;
   /** If true, do not start Claude Code in the tmux session (just leave the shell). Defaults to false. */
   skipClaude?: boolean;
+  /** If true, the session runs in the background (not shown in the main terminal area). Defaults to false. */
+  background?: boolean;
 }
 
 export interface TerminalManager {
@@ -26,6 +34,21 @@ export function createTerminalManager(sessionRepo: SessionRepository): TerminalM
     execSync('which tmux', { stdio: 'pipe' });
   } catch {
     console.warn('tmux not found in PATH. Terminal sessions will not work.');
+  }
+
+  /** Get the data directory for a session, creating it if needed */
+  function getSessionDir(sessionId: string): string {
+    const dir = path.join(SESSION_DATA_DIR, sessionId);
+    mkdirSync(dir, { recursive: true });
+    return dir;
+  }
+
+  /** Clean up a session's data directory */
+  function cleanSessionDir(sessionId: string): void {
+    const dir = path.join(SESSION_DATA_DIR, sessionId);
+    if (existsSync(dir)) {
+      rmSync(dir, { recursive: true, force: true });
+    }
   }
 
   return {
@@ -49,6 +72,7 @@ export function createTerminalManager(sessionRepo: SessionRepository): TerminalM
         tmuxSession: tmuxName,
         systemPrompt: options?.systemPrompt,
         state: 'active',
+        background: options?.background ?? false,
       });
 
       // Step 3: Optionally start Claude Code inside the tmux session
@@ -56,21 +80,12 @@ export function createTerminalManager(sessionRepo: SessionRepository): TerminalM
         const claudeArgs = ['claude'];
 
         if (options?.systemPrompt) {
-          // Write system prompt to a temp file so we can pass --system-prompt-file
-          const tmpDir = mkdtempSync(path.join(tmpdir(), 'workshop-'));
-          const promptFile = path.join(tmpDir, 'system-prompt.md');
+          // Write system prompt to a stable per-session directory
+          // (cleaned up when session is destroyed, not on a timer)
+          const sessionDir = getSessionDir(session.id);
+          const promptFile = path.join(sessionDir, 'system-prompt.md');
           writeFileSync(promptFile, options.systemPrompt, 'utf-8');
           claudeArgs.push('--system-prompt-file', promptFile);
-
-          // Schedule cleanup of the temp file after a short delay
-          // (Claude Code will have read it by then)
-          setTimeout(() => {
-            try {
-              unlinkSync(promptFile);
-            } catch {
-              // Ignore cleanup errors
-            }
-          }, 5000);
         }
 
         // Send the command to the tmux session as a single literal string
@@ -94,6 +109,9 @@ export function createTerminalManager(sessionRepo: SessionRepository): TerminalM
       } catch {
         // Session might already be dead
       }
+
+      // Clean up session data directory (prompt files, etc.)
+      cleanSessionDir(sessionId);
 
       sessionRepo.delete(sessionId);
     },
@@ -119,6 +137,7 @@ export function createTerminalManager(sessionRepo: SessionRepository): TerminalM
           } catch {
             // Already dead
           }
+          cleanSessionDir(session.id);
           sessionRepo.delete(session.id);
           cleaned++;
         } else if (alive && session.state === 'dead') {
