@@ -25,9 +25,9 @@ export function createTrackRepository(): TrackRepository {
       const id = uuid() as TrackId;
       const now = new Date().toISOString();
       db.prepare(
-        'INSERT INTO tracks (id, name, description, status, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)',
-      ).run(id, data.name, data.description || null, data.status || 'active', now, now);
-      return { id, name: data.name, description: data.description, status: data.status || 'active', createdAt: now, updatedAt: now };
+        'INSERT INTO tracks (id, name, description, context, status, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)',
+      ).run(id, data.name, data.description || null, data.context || null, data.status || 'active', now, now);
+      return { id, name: data.name, description: data.description, context: data.context, status: data.status || 'active', createdAt: now, updatedAt: now };
     },
 
     update(id: TrackId, data): Track | null {
@@ -36,11 +36,12 @@ export function createTrackRepository(): TrackRepository {
       const now = new Date().toISOString();
       const name = data.name ?? existing.name;
       const description = data.description ?? existing.description;
+      const context = data.context !== undefined ? data.context : existing.context;
       const status = data.status ?? existing.status;
       db.prepare(
-        'UPDATE tracks SET name = ?, description = ?, status = ?, updated_at = ? WHERE id = ?',
-      ).run(name, description || null, status, now, id);
-      return { ...existing, name, description, status, updatedAt: now };
+        'UPDATE tracks SET name = ?, description = ?, context = ?, status = ?, updated_at = ? WHERE id = ?',
+      ).run(name, description || null, context || null, status, now, id);
+      return { ...existing, name, description, context, status, updatedAt: now };
     },
 
     delete(id: TrackId): boolean {
@@ -101,6 +102,7 @@ interface TrackRow {
   id: string;
   name: string;
   description: string | null;
+  context: string | null;
   status: string;
   default_prompt_template_id: string | null;
   created_at: string;
@@ -128,6 +130,7 @@ function rowToTrack(row: TrackRow): Track {
     id: row.id as TrackId,
     name: row.name,
     description: row.description || undefined,
+    context: row.context || undefined,
     status: row.status as Track['status'],
     defaultPromptTemplateId: (row.default_prompt_template_id as TemplateId) || undefined,
     createdAt: row.created_at,

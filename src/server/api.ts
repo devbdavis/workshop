@@ -11,6 +11,7 @@ import { createGitAdapter } from '@infrastructure/git/git-adapter.js';
 import { createSummaryGenerationService } from '@application/summary-generation/service.js';
 import { interpolateTemplate } from '@application/track-management/prompt-interpolation.js';
 import type { AutomationEngine } from '@application/automation-engine/engine.js';
+import { broadcast } from './events.js';
 
 export interface ApiRouterDeps {
   automationEngine?: AutomationEngine;
@@ -25,6 +26,7 @@ export function createApiRouter(deps: ApiRouterDeps = {}): Router {
   const automationRules = createAutomationRuleRepository();
   const promptTemplates = createPromptTemplateRepository();
   const terminal = createTerminalManager(sessions);
+  terminal.syncSessionStates();
   const gitAdapter = createGitAdapter();
   const summaryGeneration = createSummaryGenerationService({
     trackRepo: tracks,
@@ -46,6 +48,7 @@ export function createApiRouter(deps: ApiRouterDeps = {}): Router {
       return;
     }
     const track = tracks.create({ name, description, status: 'active' });
+    broadcast('track:created', track.id);
     res.status(201).json(track);
   });
 
@@ -61,21 +64,24 @@ export function createApiRouter(deps: ApiRouterDeps = {}): Router {
   });
 
   router.put('/tracks/:id', (req, res) => {
-    const { name, description, status } = req.body;
-    const track = tracks.update(req.params.id as TrackId, { name, description, status });
+    const { name, description, context, status } = req.body;
+    const track = tracks.update(req.params.id as TrackId, { name, description, context, status });
     if (!track) {
       res.status(404).json({ error: 'Track not found' });
       return;
     }
+    broadcast('track:updated', track.id);
     res.json(track);
   });
 
   router.delete('/tracks/:id', (req, res) => {
-    const deleted = tracks.delete(req.params.id as TrackId);
+    const trackId = req.params.id as TrackId;
+    const deleted = tracks.delete(trackId);
     if (!deleted) {
       res.status(404).json({ error: 'Track not found' });
       return;
     }
+    broadcast('track:deleted', trackId);
     res.status(204).send();
   });
 
@@ -155,10 +161,43 @@ export function createApiRouter(deps: ApiRouterDeps = {}): Router {
         res.status(404).json({ error: 'Track not found' });
         return;
       }
+
+      // Auto-compose system prompt from track context + summary + template
+      let systemPrompt = req.body?.systemPrompt;
+      if (!systemPrompt) {
+        const parts: string[] = [];
+
+        // 1. Track context (freeform user-provided context)
+        if (track.context) {
+          parts.push(track.context);
+        }
+
+        // 2. Latest summary
+        const summary = summaries.findLatest(trackId);
+        if (summary) {
+          parts.push(`## Current Status\n\n${summary.content}`);
+        }
+
+        // 3. Interpolated prompt template
+        if (track.defaultPromptTemplateId) {
+          const template = promptTemplates.findById(track.defaultPromptTemplateId);
+          if (template) {
+            track.tickets = tickets.findByTrack(trackId);
+            const interpolated = interpolateTemplate(template.content, { track });
+            parts.push(interpolated);
+          }
+        }
+
+        if (parts.length > 0) {
+          systemPrompt = parts.join('\n\n---\n\n');
+        }
+      }
+
       const session = await terminal.createSession(trackId, {
-        systemPrompt: req.body?.systemPrompt,
+        systemPrompt,
         workingDirectory: track.repos?.[0]?.path,
       });
+      broadcast('session:created', trackId);
       res.status(201).json(session);
     } catch (err) {
       console.error('Failed to create session:', err);
@@ -169,6 +208,7 @@ export function createApiRouter(deps: ApiRouterDeps = {}): Router {
   router.delete('/tracks/:trackId/sessions/:sessionId', async (req, res) => {
     try {
       await terminal.destroySession(req.params.sessionId as SessionId);
+      broadcast('session:deleted', req.params.trackId as TrackId);
       res.status(204).send();
     } catch (err) {
       console.error('Failed to destroy session:', err);
@@ -196,6 +236,7 @@ export function createApiRouter(deps: ApiRouterDeps = {}): Router {
         return;
       }
       const summary = await summaryGeneration.generateSummary(trackId);
+      broadcast('summary:updated', trackId);
       res.json(summary);
     } catch (err) {
       console.error('Failed to generate summary:', err);

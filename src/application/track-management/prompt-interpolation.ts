@@ -15,6 +15,7 @@ export interface TrackContext {
  *   {{track.id}}              - Track ID
  *   {{track.name}}            - Track name
  *   {{track.description}}     - Track description (or empty string)
+ *   {{track.context}}         - Track context (or empty string)
  *   {{track.repos}}           - Comma-separated list of repo paths
  *   {{track.repos[N].path}}   - Path of the Nth repo (0-indexed)
  *   {{track.repos[N].branch}} - Branch of the Nth repo (0-indexed)
@@ -33,6 +34,7 @@ export function interpolateTemplate(template: string, ctx: TrackContext): string
     if (key === 'track.id') return track.id;
     if (key === 'track.name') return track.name;
     if (key === 'track.description') return track.description ?? '';
+    if (key === 'track.context') return track.context ?? '';
 
     if (key === 'track.repos') {
       return repos.map((r) => r.path).join(', ');

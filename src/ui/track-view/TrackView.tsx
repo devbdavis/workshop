@@ -40,6 +40,24 @@ export function TrackView() {
     loadTrack();
   }, [loadTrack]);
 
+  // Subscribe to server-sent events so external changes (MCP, API) trigger a re-render
+  useEffect(() => {
+    if (!trackId) return;
+    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+    const ws = new WebSocket(`${protocol}//${window.location.host}/ws/events`);
+    ws.onmessage = (evt) => {
+      try {
+        const event = JSON.parse(evt.data);
+        if (event.trackId === trackId) {
+          loadTrack();
+        }
+      } catch {
+        // ignore malformed messages
+      }
+    };
+    return () => ws.close();
+  }, [trackId, loadTrack]);
+
   async function createSession() {
     if (!trackId) return;
     try {
@@ -118,7 +136,7 @@ export function TrackView() {
           {sidebarTab === 'context' ? (
             <>
               <TicketPanel trackId={track.id} tickets={tickets} onUpdate={loadTrack} />
-              <ContextPanel track={track} />
+              <ContextPanel track={track} onUpdate={loadTrack} />
             </>
           ) : (
             <TrackConfig track={track} onUpdate={loadTrack} />

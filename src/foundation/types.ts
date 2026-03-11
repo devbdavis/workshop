@@ -13,6 +13,7 @@ export interface Track {
   id: TrackId;
   name: string;
   description?: string;
+  context?: string;
   status: 'active' | 'archived';
   defaultPromptTemplateId?: TemplateId;
   createdAt: string;
