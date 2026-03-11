@@ -131,6 +131,13 @@ function runMigrations(db: Database.Database): void {
     // Column already exists — safe to ignore
   }
 
+  // Migration: add context column to tracks
+  try {
+    db.exec(`ALTER TABLE tracks ADD COLUMN context TEXT;`);
+  } catch {
+    // Column already exists — safe to ignore
+  }
+
   // Seed default prompt templates if the table is empty
   seedDefaultTemplates(db);
 }

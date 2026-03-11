@@ -4,6 +4,7 @@ import { execSync } from 'child_process';
 import * as pty from 'node-pty';
 import type { IncomingMessage } from 'http';
 import { createSessionRepository } from '@infrastructure/persistence/session-repository.js';
+import { addEventClient } from './events.js';
 import type { SessionId } from '@foundation/types';
 import type { IPty } from 'node-pty';
 
@@ -14,6 +15,15 @@ interface PtyConnection {
   tmuxSession: string;
 }
 
+// Resolve tmux path once at startup so node-pty can find it
+const tmuxPath = (() => {
+  try {
+    return execSync('which tmux', { stdio: 'pipe' }).toString().trim();
+  } catch {
+    return 'tmux';
+  }
+})();
+
 export function setupWebSocket(server: HttpServer): void {
   const wss = new WebSocketServer({ noServer: true });
   const sessions = createSessionRepository();
@@ -21,10 +31,21 @@ export function setupWebSocket(server: HttpServer): void {
   // Map from sessionId to the active pty connection
   const activePtys = new Map<string, PtyConnection>();
 
+  const eventsWss = new WebSocketServer({ noServer: true });
+
   server.on('upgrade', (request: IncomingMessage, socket, head) => {
     const url = new URL(request.url || '', `http://${request.headers.host}`);
-    const match = url.pathname.match(/^\/ws\/tracks\/[^/]+\/sessions\/([^/]+)\/terminal$/);
 
+    // Event notification channel
+    if (url.pathname === '/ws/events') {
+      eventsWss.handleUpgrade(request, socket, head, (ws) => {
+        addEventClient(ws);
+      });
+      return;
+    }
+
+    // Terminal connections
+    const match = url.pathname.match(/^\/ws\/tracks\/[^/]+\/sessions\/([^/]+)\/terminal$/);
     if (!match) {
       socket.destroy();
       return;
@@ -58,13 +79,33 @@ export function setupWebSocket(server: HttpServer): void {
       activePtys.delete(sessionId);
     }
 
+    // Verify the tmux session exists before attempting to attach
+    try {
+      execSync(`tmux has-session -t ${session.tmuxSession}`, { stdio: 'pipe' });
+    } catch {
+      ws.close(1008, 'tmux session not found');
+      return;
+    }
+
     // Spawn a pty running `tmux attach-session`
-    const ptyProcess = pty.spawn('tmux', ['attach-session', '-t', session.tmuxSession], {
-      name: 'xterm-256color',
-      cols: 120,
-      rows: 40,
-      env: { ...process.env } as { [key: string]: string },
-    });
+    let ptyProcess: IPty;
+    try {
+      // Filter out undefined env values that can cause node-pty to fail
+      const cleanEnv: { [key: string]: string } = {};
+      for (const [k, v] of Object.entries(process.env)) {
+        if (v !== undefined) cleanEnv[k] = v;
+      }
+      ptyProcess = pty.spawn(tmuxPath, ['attach-session', '-t', session.tmuxSession], {
+        name: 'xterm-256color',
+        cols: 120,
+        rows: 40,
+        env: cleanEnv,
+      });
+    } catch (err) {
+      console.error(`Failed to spawn pty for session ${sessionId}:`, err);
+      ws.close(1011, 'Failed to spawn terminal');
+      return;
+    }
 
     const connection: PtyConnection = {
       pty: ptyProcess,

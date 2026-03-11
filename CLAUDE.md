@@ -56,6 +56,28 @@ UI (React) → Application → Domain → Foundation
 - `src/infrastructure/terminal/manager.ts` — tmux session lifecycle
 - `src/infrastructure/persistence/database.ts` — SQLite schema + migrations
 
+## Production Server
+
+```bash
+scripts/workshop.sh start    # Start prod (port 3002, DB ~/.workshop/workshop.db)
+scripts/workshop.sh stop
+scripts/workshop.sh restart  # After backend code changes
+scripts/workshop.sh status
+```
+
+Dev and prod can run simultaneously (dev: 3001, prod: 3002).
+
+## Workshop Skills
+
+Workshop skills live in `skills/` in this repo and are symlinked to `~/.claude/skills/`. To create a new workshop skill:
+
+1. Use the `skill-creator` skill to initialize: `python3 ~/.claude/skills/skill-creator/scripts/init_skill.py <skill-name> --path skills/`
+2. Edit `skills/<skill-name>/SKILL.md` — include `Tagged: workshop.` in the description
+3. Package/validate: `python3 ~/.claude/skills/skill-creator/scripts/package_skill.py skills/<skill-name>`
+4. Symlink: `ln -s $(pwd)/skills/<skill-name> ~/.claude/skills/<skill-name>`
+
+All workshop skills are tracked in git under `skills/`.
+
 ## Conventions
 
 - ESM imports throughout (`import`, not `require`)

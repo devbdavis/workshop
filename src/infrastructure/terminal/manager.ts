@@ -34,9 +34,13 @@ export function createTerminalManager(sessionRepo: SessionRepository): TerminalM
       const cwd = options?.workingDirectory || process.env.HOME || '/tmp';
 
       // Step 1: Create a detached tmux session with just a shell
+      // Build a clean env without CLAUDECODE so spawned Claude sessions work
+      const cleanEnv = { ...process.env };
+      delete cleanEnv.CLAUDECODE;
+
       execSync(
         `tmux new-session -d -s ${tmuxName} -x 120 -y 40 -c ${JSON.stringify(cwd)}`,
-        { stdio: 'pipe' },
+        { stdio: 'pipe', env: cleanEnv },
       );
 
       // Step 2: Record the session in the database
@@ -69,10 +73,10 @@ export function createTerminalManager(sessionRepo: SessionRepository): TerminalM
           }, 5000);
         }
 
-        // Send the command to the tmux session
-        const cmd = claudeArgs.map((a) => JSON.stringify(a)).join(' ');
+        // Send the command to the tmux session as a single literal string
+        const cmd = claudeArgs.join(' ');
         execSync(
-          `tmux send-keys -t ${tmuxName} ${cmd} Enter`,
+          `tmux send-keys -t ${tmuxName} ${JSON.stringify(cmd)} Enter`,
           { stdio: 'pipe' },
         );
       }
@@ -105,13 +109,24 @@ export function createTerminalManager(sessionRepo: SessionRepository): TerminalM
 
     syncSessionStates(): void {
       const allSessions = sessionRepo.findAll();
+      let cleaned = 0;
       for (const session of allSessions) {
         const alive = this.isSessionAlive(session);
         if (!alive && session.state !== 'dead') {
-          sessionRepo.updateState(session.id, 'dead');
+          // tmux session gone — kill it if somehow still lingering, then remove from DB
+          try {
+            execSync(`tmux kill-session -t ${session.tmuxSession}`, { stdio: 'pipe' });
+          } catch {
+            // Already dead
+          }
+          sessionRepo.delete(session.id);
+          cleaned++;
         } else if (alive && session.state === 'dead') {
           sessionRepo.updateState(session.id, 'active');
         }
+      }
+      if (cleaned > 0) {
+        console.log(`Session sync: cleaned up ${cleaned} dead session(s)`);
       }
     },
   };

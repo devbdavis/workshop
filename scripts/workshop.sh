@@ -1,0 +1,116 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+WORKSHOP_DIR="$HOME/.workshop"
+WORKSHOP_PORT="${WORKSHOP_PORT:-3002}"
+DB_PATH="$WORKSHOP_DIR/workshop.db"
+PID_FILE="$WORKSHOP_DIR/server.pid"
+LOG_FILE="$WORKSHOP_DIR/server.log"
+PROJECT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
+
+mkdir -p "$WORKSHOP_DIR"
+
+# Fix node-pty spawn-helper permissions if needed
+SPAWN_HELPER="$PROJECT_DIR/node_modules/node-pty/prebuilds/darwin-arm64/spawn-helper"
+if [ -f "$SPAWN_HELPER" ] && [ ! -x "$SPAWN_HELPER" ]; then
+  chmod +x "$SPAWN_HELPER"
+fi
+
+is_running() {
+  [ -f "$PID_FILE" ] && kill -0 "$(cat "$PID_FILE")" 2>/dev/null
+}
+
+start() {
+  if is_running; then
+    echo "Workshop server already running (PID $(cat "$PID_FILE"))"
+    return 0
+  fi
+
+  echo "Starting Workshop server..."
+  echo "  DB:   $DB_PATH"
+  echo "  Port: $WORKSHOP_PORT"
+  echo "  Log:  $LOG_FILE"
+
+  # Unset CLAUDECODE so spawned sessions can run Claude Code
+  unset CLAUDECODE 2>/dev/null || true
+
+  NODE_ENV=production \
+    WORKSHOP_DB_PATH="$DB_PATH" \
+    PORT="$WORKSHOP_PORT" \
+    nohup npx --prefix "$PROJECT_DIR" tsx "$PROJECT_DIR/src/server/index.ts" \
+    >> "$LOG_FILE" 2>&1 &
+
+  echo $! > "$PID_FILE"
+  sleep 2
+
+  if is_running; then
+    echo "Server started (PID $(cat "$PID_FILE"))"
+  else
+    echo "Server failed to start. Check $LOG_FILE"
+    rm -f "$PID_FILE"
+    return 1
+  fi
+}
+
+stop() {
+  if ! is_running; then
+    echo "Workshop server is not running"
+    rm -f "$PID_FILE"
+    return 0
+  fi
+
+  local pid
+  pid=$(cat "$PID_FILE")
+  echo "Stopping Workshop server (PID $pid)..."
+  kill "$pid"
+
+  # Wait up to 5 seconds for graceful shutdown
+  for i in {1..10}; do
+    if ! kill -0 "$pid" 2>/dev/null; then
+      break
+    fi
+    sleep 0.5
+  done
+
+  # Force kill if still running
+  if kill -0 "$pid" 2>/dev/null; then
+    kill -9 "$pid"
+  fi
+
+  rm -f "$PID_FILE"
+  echo "Server stopped"
+}
+
+restart() {
+  stop
+  start
+}
+
+status() {
+  if is_running; then
+    echo "Workshop server is running (PID $(cat "$PID_FILE"))"
+  else
+    echo "Workshop server is not running"
+    rm -f "$PID_FILE"
+  fi
+}
+
+logs() {
+  if [ -f "$LOG_FILE" ]; then
+    tail -f "$LOG_FILE"
+  else
+    echo "No log file found at $LOG_FILE"
+  fi
+}
+
+case "${1:-start}" in
+  start)   start   ;;
+  stop)    stop    ;;
+  restart) restart ;;
+  status)  status  ;;
+  logs)    logs    ;;
+  *)
+    echo "Usage: $0 {start|stop|restart|status|logs}"
+    exit 1
+    ;;
+esac
