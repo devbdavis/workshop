@@ -30,6 +30,12 @@ export function Dashboard() {
         <h1 className="text-2xl font-bold">Workshop</h1>
         <div className="flex gap-3">
           <Link
+            to="/kanban"
+            className="px-4 py-2 text-sm bg-gray-800 hover:bg-gray-700 rounded-lg transition-colors"
+          >
+            Kanban
+          </Link>
+          <Link
             to="/settings"
             className="px-4 py-2 text-sm bg-gray-800 hover:bg-gray-700 rounded-lg transition-colors"
           >

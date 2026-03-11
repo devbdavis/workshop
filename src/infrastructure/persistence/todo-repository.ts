@@ -1,0 +1,158 @@
+import { v4 as uuid } from 'uuid';
+import { getDatabase } from './database.js';
+import type { TodoRepository } from '@domain/todo/repository';
+import type { Todo, TodoId, TodoStatus, TrackId, SessionId } from '@foundation/types';
+
+export function createTodoRepository(): TodoRepository {
+  const db = getDatabase();
+
+  return {
+    findById(id: TodoId): Todo | null {
+      const row = db.prepare('SELECT * FROM todos WHERE id = ?').get(id) as TodoRow | undefined;
+      return row ? rowToTodo(row) : null;
+    },
+
+    findByTrack(trackId: TrackId): Todo[] {
+      const rows = db
+        .prepare('SELECT * FROM todos WHERE track_id = ? ORDER BY sort_order ASC, created_at DESC')
+        .all(trackId) as TodoRow[];
+      return rows.map(rowToTodo);
+    },
+
+    findAll(): Todo[] {
+      const rows = db
+        .prepare('SELECT * FROM todos ORDER BY sort_order ASC, created_at DESC')
+        .all() as TodoRow[];
+      return rows.map(rowToTodo);
+    },
+
+    findByStatus(status: TodoStatus): Todo[] {
+      const rows = db
+        .prepare('SELECT * FROM todos WHERE status = ? ORDER BY sort_order ASC, created_at DESC')
+        .all(status) as TodoRow[];
+      return rows.map(rowToTodo);
+    },
+
+    findBySession(sessionId: SessionId): Todo | null {
+      const row = db
+        .prepare('SELECT * FROM todos WHERE session_id = ?')
+        .get(sessionId) as TodoRow | undefined;
+      return row ? rowToTodo(row) : null;
+    },
+
+    create(data): Todo {
+      const id = uuid() as TodoId;
+      const now = new Date().toISOString();
+
+      db.prepare(
+        `INSERT INTO todos (id, track_id, title, description, status, priority, refined, session_id, sort_order, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      ).run(
+        id,
+        data.trackId,
+        data.title,
+        data.description || null,
+        data.status,
+        data.priority,
+        data.refined ? 1 : 0,
+        data.sessionId || null,
+        data.sortOrder,
+        now,
+        now,
+      );
+
+      return {
+        id,
+        trackId: data.trackId,
+        title: data.title,
+        description: data.description,
+        status: data.status,
+        priority: data.priority,
+        refined: data.refined,
+        sessionId: data.sessionId,
+        sortOrder: data.sortOrder,
+        createdAt: now,
+        updatedAt: now,
+      };
+    },
+
+    update(id, data): Todo | null {
+      const existing = this.findById(id);
+      if (!existing) return null;
+
+      const now = new Date().toISOString();
+      const title = data.title ?? existing.title;
+      const description = data.description !== undefined ? data.description : existing.description;
+      const status = data.status ?? existing.status;
+      const priority = data.priority ?? existing.priority;
+      const refined = data.refined !== undefined ? data.refined : existing.refined;
+      const sessionId = data.sessionId !== undefined ? data.sessionId : existing.sessionId;
+      const sortOrder = data.sortOrder ?? existing.sortOrder;
+
+      db.prepare(
+        `UPDATE todos
+         SET title = ?, description = ?, status = ?, priority = ?, refined = ?, session_id = ?, sort_order = ?, updated_at = ?
+         WHERE id = ?`,
+      ).run(
+        title,
+        description || null,
+        status,
+        priority,
+        refined ? 1 : 0,
+        sessionId || null,
+        sortOrder,
+        now,
+        id,
+      );
+
+      return {
+        ...existing,
+        title,
+        description,
+        status,
+        priority,
+        refined,
+        sessionId,
+        sortOrder,
+        updatedAt: now,
+      };
+    },
+
+    delete(id: TodoId): boolean {
+      const result = db.prepare('DELETE FROM todos WHERE id = ?').run(id);
+      return result.changes > 0;
+    },
+  };
+}
+
+// --- Row type and mapper ---
+
+interface TodoRow {
+  id: string;
+  track_id: string;
+  title: string;
+  description: string | null;
+  status: string;
+  priority: string;
+  refined: number;
+  session_id: string | null;
+  sort_order: number;
+  created_at: string;
+  updated_at: string;
+}
+
+function rowToTodo(row: TodoRow): Todo {
+  return {
+    id: row.id as TodoId,
+    trackId: row.track_id as TrackId,
+    title: row.title,
+    description: row.description || undefined,
+    status: row.status as TodoStatus,
+    priority: row.priority as Todo['priority'],
+    refined: row.refined === 1,
+    sessionId: row.session_id as SessionId | undefined || undefined,
+    sortOrder: row.sort_order,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  };
+}

@@ -1,0 +1,190 @@
+import { Router } from 'express';
+import type { TrackId, TodoId, SessionId } from '@foundation/types';
+import type { TodoRepository } from '@domain/todo/repository';
+import type { TrackRepository } from '@domain/track/repository';
+import type { SessionRepository } from '@domain/session/repository';
+import type { SummaryRepository } from '@domain/summary/repository';
+import type { TicketRepository } from '@domain/ticket/repository';
+import type { PromptTemplateRepository } from '@domain/prompt-template/repository';
+import { interpolateTemplate } from '@application/track-management/prompt-interpolation.js';
+import { broadcast } from './events.js';
+
+export interface TodoRouterDeps {
+  todos: TodoRepository;
+  tracks: TrackRepository;
+  sessions: SessionRepository;
+  summaries: SummaryRepository;
+  tickets: TicketRepository;
+  promptTemplates: PromptTemplateRepository;
+  terminal: {
+    createSession: (
+      trackId: TrackId,
+      opts?: { systemPrompt?: string; workingDirectory?: string },
+    ) => Promise<{ id: SessionId; trackId: TrackId; tmuxSession: string; state: string }>;
+  };
+}
+
+export function createTodoRouter(deps: TodoRouterDeps): Router {
+  const router = Router();
+  const { todos, tracks, sessions, summaries, tickets, promptTemplates, terminal } = deps;
+
+  // --- List all todos (with optional filters) ---
+
+  router.get('/todos', (req, res) => {
+    const { trackId, status } = req.query;
+    if (trackId) {
+      res.json(todos.findByTrack(trackId as TrackId));
+      return;
+    }
+    if (status) {
+      res.json(todos.findByStatus(status as any));
+      return;
+    }
+    res.json(todos.findAll());
+  });
+
+  // --- List todos for a track ---
+
+  router.get('/tracks/:id/todos', (req, res) => {
+    res.json(todos.findByTrack(req.params.id as TrackId));
+  });
+
+  // --- Create todo for a track ---
+
+  router.post('/tracks/:id/todos', (req, res) => {
+    const trackId = req.params.id as TrackId;
+    const track = tracks.findById(trackId);
+    if (!track) {
+      res.status(404).json({ error: 'Track not found' });
+      return;
+    }
+
+    const { title, description, priority, refined, status } = req.body;
+    if (!title || typeof title !== 'string') {
+      res.status(400).json({ error: 'title is required' });
+      return;
+    }
+
+    const todo = todos.create({
+      trackId,
+      title,
+      description,
+      status: status || 'backlog',
+      priority: priority || 'medium',
+      refined: refined ?? false,
+      sortOrder: 0,
+    });
+    broadcast('todo:created', trackId);
+    res.status(201).json(todo);
+  });
+
+  // --- Get single todo ---
+
+  router.get('/todos/:todoId', (req, res) => {
+    const todo = todos.findById(req.params.todoId as TodoId);
+    if (!todo) {
+      res.status(404).json({ error: 'Todo not found' });
+      return;
+    }
+    res.json(todo);
+  });
+
+  // --- Update todo ---
+
+  router.put('/todos/:todoId', (req, res) => {
+    const { title, description, status, priority, refined, sessionId, sortOrder } = req.body;
+    const todo = todos.update(req.params.todoId as TodoId, {
+      title,
+      description,
+      status,
+      priority,
+      refined,
+      sessionId,
+      sortOrder,
+    });
+    if (!todo) {
+      res.status(404).json({ error: 'Todo not found' });
+      return;
+    }
+    broadcast('todo:updated', todo.trackId);
+    res.json(todo);
+  });
+
+  // --- Delete todo ---
+
+  router.delete('/todos/:todoId', (req, res) => {
+    const todo = todos.findById(req.params.todoId as TodoId);
+    if (!todo) {
+      res.status(404).json({ error: 'Todo not found' });
+      return;
+    }
+    todos.delete(todo.id);
+    broadcast('todo:deleted', todo.trackId);
+    res.status(204).send();
+  });
+
+  // --- Dispatch todo to an agent session ---
+
+  router.post('/todos/:todoId/dispatch', async (req, res) => {
+    try {
+      const todo = todos.findById(req.params.todoId as TodoId);
+      if (!todo) {
+        res.status(404).json({ error: 'Todo not found' });
+        return;
+      }
+
+      const track = tracks.findById(todo.trackId);
+      if (!track) {
+        res.status(404).json({ error: 'Track not found' });
+        return;
+      }
+
+      // Compose system prompt: track context + summary + template + todo task
+      const parts: string[] = [];
+
+      if (track.context) {
+        parts.push(track.context);
+      }
+
+      const summary = summaries.findLatest(todo.trackId);
+      if (summary) {
+        parts.push(`## Current Status\n\n${summary.content}`);
+      }
+
+      if (track.defaultPromptTemplateId) {
+        const template = promptTemplates.findById(track.defaultPromptTemplateId);
+        if (template) {
+          track.tickets = tickets.findByTrack(todo.trackId);
+          const interpolated = interpolateTemplate(template.content, { track });
+          parts.push(interpolated);
+        }
+      }
+
+      // Add the todo task as the specific instruction
+      parts.push(`## Task\n\n**${todo.title}**\n\n${todo.description || ''}`);
+
+      const systemPrompt = parts.join('\n\n---\n\n');
+      const repos = tracks.findReposByTrack(todo.trackId);
+
+      const session = await terminal.createSession(todo.trackId, {
+        systemPrompt,
+        workingDirectory: repos[0]?.path,
+      });
+
+      // Update todo status and link session
+      const updated = todos.update(todo.id, {
+        status: 'in-progress',
+        sessionId: session.id as SessionId,
+      });
+
+      broadcast('todo:dispatched', todo.trackId);
+      broadcast('session:created', todo.trackId);
+      res.status(201).json({ todo: updated, session });
+    } catch (err) {
+      console.error('Failed to dispatch todo:', err);
+      res.status(500).json({ error: 'Failed to dispatch todo to agent' });
+    }
+  });
+
+  return router;
+}
