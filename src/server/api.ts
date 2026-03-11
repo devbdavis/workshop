@@ -1,10 +1,11 @@
 import { Router } from 'express';
-import type { TrackId, SessionId } from '@foundation/types';
+import type { TrackId, SessionId, RepoId } from '@foundation/types';
 import { createTrackRepository } from '@infrastructure/persistence/track-repository.js';
 import { createSessionRepository } from '@infrastructure/persistence/session-repository.js';
 import { createSummaryRepository } from '@infrastructure/persistence/summary-repository.js';
 import { createTicketRepository } from '@infrastructure/persistence/ticket-repository.js';
 import { createTerminalManager } from '@infrastructure/terminal/manager.js';
+import { createGitAdapter } from '@infrastructure/git/git-adapter.js';
 
 export function createApiRouter(): Router {
   const router = Router();
@@ -13,6 +14,7 @@ export function createApiRouter(): Router {
   const summaries = createSummaryRepository();
   const tickets = createTicketRepository();
   const terminal = createTerminalManager(sessions);
+  const gitAdapter = createGitAdapter();
 
   // --- Tracks ---
 
@@ -79,6 +81,34 @@ export function createApiRouter(): Router {
       return;
     }
     res.status(204).send();
+  });
+
+  // --- Git Status ---
+
+  router.get('/tracks/:id/repos/:repoId/git-status', async (req, res) => {
+    try {
+      const trackId = req.params.id as TrackId;
+      const repoId = req.params.repoId as RepoId;
+
+      const repos = tracks.findReposByTrack(trackId);
+      const repo = repos.find((r) => r.id === repoId);
+      if (!repo) {
+        res.status(404).json({ error: 'Repo not found' });
+        return;
+      }
+
+      const isRepo = await gitAdapter.isGitRepo(repo.path);
+      if (!isRepo) {
+        res.status(400).json({ error: 'Path is not a git repository' });
+        return;
+      }
+
+      const status = await gitAdapter.getStatus(repo.path);
+      res.json(status);
+    } catch (err) {
+      console.error('Failed to get git status:', err);
+      res.status(500).json({ error: 'Failed to get git status' });
+    }
   });
 
   // --- Track Paths ---
