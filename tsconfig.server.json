@@ -1,0 +1,17 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "outDir": "dist/server",
+    "noEmit": false,
+    "jsx": "react-jsx"
+  },
+  "include": [
+    "src/foundation/**/*.ts",
+    "src/domain/**/*.ts",
+    "src/infrastructure/**/*.ts",
+    "src/application/**/*.ts",
+    "src/server/**/*.ts"
+  ]
+}
