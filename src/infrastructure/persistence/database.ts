@@ -156,6 +156,13 @@ function runMigrations(db: Database.Database): void {
     // Column already exists — safe to ignore
   }
 
+  // Migration: add background column to sessions
+  try {
+    db.exec(`ALTER TABLE sessions ADD COLUMN background INTEGER NOT NULL DEFAULT 0;`);
+  } catch {
+    // Column already exists — safe to ignore
+  }
+
   // Seed default prompt templates if the table is empty
   seedDefaultTemplates(db);
 }

@@ -31,8 +31,8 @@ export function createSessionRepository(): SessionRepository {
       const id = uuid() as SessionId;
       const now = new Date().toISOString();
       db.prepare(
-        'INSERT INTO sessions (id, track_id, tmux_session, claude_resume_id, system_prompt, state, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
-      ).run(id, data.trackId, data.tmuxSession, data.claudeResumeId || null, data.systemPrompt || null, data.state, now, now);
+        'INSERT INTO sessions (id, track_id, tmux_session, claude_resume_id, system_prompt, state, background, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
+      ).run(id, data.trackId, data.tmuxSession, data.claudeResumeId || null, data.systemPrompt || null, data.state, data.background ? 1 : 0, now, now);
       return {
         id,
         trackId: data.trackId,
@@ -40,6 +40,7 @@ export function createSessionRepository(): SessionRepository {
         claudeResumeId: data.claudeResumeId,
         systemPrompt: data.systemPrompt,
         state: data.state,
+        background: data.background ?? false,
         createdAt: now,
         updatedAt: now,
       };
@@ -73,6 +74,7 @@ interface SessionRow {
   claude_resume_id: string | null;
   system_prompt: string | null;
   state: string;
+  background: number;
   created_at: string;
   updated_at: string;
 }
@@ -85,6 +87,7 @@ function rowToSession(row: SessionRow): Session {
     claudeResumeId: row.claude_resume_id || undefined,
     systemPrompt: row.system_prompt || undefined,
     state: row.state as SessionState,
+    background: row.background === 1,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };

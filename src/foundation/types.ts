@@ -55,6 +55,8 @@ export interface Session {
   claudeResumeId?: string;
   systemPrompt?: string;
   state: SessionState;
+  /** Background sessions run agents silently — not shown in the main terminal area */
+  background: boolean;
   createdAt: string;
   updatedAt: string;
 }
