@@ -1,7 +1,7 @@
 import { WebSocket } from 'ws';
 import type { TrackId } from '@foundation/types';
 
-type EventType = 'track:updated' | 'track:created' | 'track:deleted' | 'session:created' | 'session:deleted' | 'summary:updated';
+type EventType = 'track:updated' | 'track:created' | 'track:deleted' | 'session:created' | 'session:deleted' | 'summary:updated' | 'todo:created' | 'todo:updated' | 'todo:deleted' | 'todo:dispatched';
 
 interface WorkshopEvent {
   type: EventType;

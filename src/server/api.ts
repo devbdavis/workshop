@@ -6,11 +6,13 @@ import { createSummaryRepository } from '@infrastructure/persistence/summary-rep
 import { createTicketRepository } from '@infrastructure/persistence/ticket-repository.js';
 import { createAutomationRuleRepository } from '@infrastructure/persistence/automation-repository.js';
 import { createPromptTemplateRepository } from '@infrastructure/persistence/prompt-template-repository.js';
+import { createTodoRepository } from '@infrastructure/persistence/todo-repository.js';
 import { createTerminalManager } from '@infrastructure/terminal/manager.js';
 import { createGitAdapter } from '@infrastructure/git/git-adapter.js';
 import { createSummaryGenerationService } from '@application/summary-generation/service.js';
 import { interpolateTemplate } from '@application/track-management/prompt-interpolation.js';
 import type { AutomationEngine } from '@application/automation-engine/engine.js';
+import { createTodoRouter } from './todo-routes.js';
 import { broadcast } from './events.js';
 
 export interface ApiRouterDeps {
@@ -25,6 +27,7 @@ export function createApiRouter(deps: ApiRouterDeps = {}): Router {
   const tickets = createTicketRepository();
   const automationRules = createAutomationRuleRepository();
   const promptTemplates = createPromptTemplateRepository();
+  const todos = createTodoRepository();
   const terminal = createTerminalManager(sessions);
   terminal.syncSessionStates();
   const gitAdapter = createGitAdapter();
@@ -34,6 +37,18 @@ export function createApiRouter(deps: ApiRouterDeps = {}): Router {
     summaryRepo: summaries,
     gitAdapter,
   });
+
+  // Mount todo sub-router
+  const todoRouter = createTodoRouter({
+    todos,
+    tracks,
+    sessions,
+    summaries,
+    tickets,
+    promptTemplates,
+    terminal,
+  });
+  router.use(todoRouter);
 
   // --- Tracks ---
 

@@ -1,9 +1,10 @@
 import { useEffect, useState, useCallback } from 'react';
 import { useParams, Link } from 'react-router-dom';
-import type { Track, Session, TrackSummary, ExternalTicket } from '@foundation/types';
+import type { Track, Session, TrackSummary, ExternalTicket, Todo } from '@foundation/types';
 import { SummaryPanel } from './SummaryPanel';
 import { ContextPanel } from './ContextPanel';
 import { TicketPanel } from './TicketPanel';
+import { TodoPanel } from './TodoPanel';
 import { TrackConfig } from './TrackConfig';
 import { TerminalArea } from '../terminal-panel/TerminalArea';
 
@@ -13,22 +14,25 @@ export function TrackView() {
   const [sessions, setSessions] = useState<Session[]>([]);
   const [summary, setSummary] = useState<TrackSummary | null>(null);
   const [tickets, setTickets] = useState<ExternalTicket[]>([]);
+  const [todos, setTodos] = useState<Todo[]>([]);
   const [loading, setLoading] = useState(true);
-  const [sidebarTab, setSidebarTab] = useState<'context' | 'config'>('context');
+  const [sidebarTab, setSidebarTab] = useState<'context' | 'todos' | 'config'>('context');
 
   const loadTrack = useCallback(async () => {
     if (!trackId) return;
     try {
-      const [trackRes, sessionsRes, summaryRes, ticketsRes] = await Promise.all([
+      const [trackRes, sessionsRes, summaryRes, ticketsRes, todosRes] = await Promise.all([
         fetch(`/api/tracks/${trackId}`),
         fetch(`/api/tracks/${trackId}/sessions`),
         fetch(`/api/tracks/${trackId}/summary`),
         fetch(`/api/tracks/${trackId}/tickets`),
+        fetch(`/api/tracks/${trackId}/todos`),
       ]);
       if (trackRes.ok) setTrack(await trackRes.json());
       if (sessionsRes.ok) setSessions(await sessionsRes.json());
       if (summaryRes.ok) setSummary(await summaryRes.json());
       if (ticketsRes.ok) setTickets(await ticketsRes.json());
+      if (todosRes.ok) setTodos(await todosRes.json());
     } catch (err) {
       console.error('Failed to load track:', err);
     } finally {
@@ -126,6 +130,17 @@ export function TrackView() {
               Context
             </button>
             <button
+              onClick={() => setSidebarTab('todos')}
+              className={`flex-1 px-3 py-2 text-xs font-medium ${sidebarTab === 'todos' ? 'text-blue-400 border-b-2 border-blue-400' : 'text-gray-500 hover:text-gray-300'}`}
+            >
+              Todos
+              {todos.filter((t) => t.status !== 'done').length > 0 && (
+                <span className="ml-1 text-[10px] bg-blue-900 text-blue-300 px-1 py-0.5 rounded">
+                  {todos.filter((t) => t.status !== 'done').length}
+                </span>
+              )}
+            </button>
+            <button
               onClick={() => setSidebarTab('config')}
               className={`flex-1 px-3 py-2 text-xs font-medium ${sidebarTab === 'config' ? 'text-blue-400 border-b-2 border-blue-400' : 'text-gray-500 hover:text-gray-300'}`}
             >
@@ -138,6 +153,8 @@ export function TrackView() {
               <TicketPanel trackId={track.id} tickets={tickets} onUpdate={loadTrack} />
               <ContextPanel track={track} onUpdate={loadTrack} />
             </>
+          ) : sidebarTab === 'todos' ? (
+            <TodoPanel trackId={track.id} todos={todos} onUpdate={loadTrack} />
           ) : (
             <TrackConfig track={track} onUpdate={loadTrack} />
           )}

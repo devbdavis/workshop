@@ -7,6 +7,7 @@ export type AutomationRuleId = string & { readonly __brand: 'AutomationRuleId' }
 export type RepoId = string & { readonly __brand: 'RepoId' };
 export type PathId = string & { readonly __brand: 'PathId' };
 export type TemplateId = string & { readonly __brand: 'TemplateId' };
+export type TodoId = string & { readonly __brand: 'TodoId' };
 
 // Track
 export interface Track {
@@ -108,6 +109,24 @@ export interface AutomationRun {
   result?: Record<string, unknown>;
   startedAt: string;
   completedAt?: string;
+}
+
+// Todo
+export type TodoStatus = 'backlog' | 'ready' | 'in-progress' | 'review' | 'done';
+export type TodoPriority = 'low' | 'medium' | 'high';
+
+export interface Todo {
+  id: TodoId;
+  trackId: TrackId;
+  title: string;
+  description?: string;
+  status: TodoStatus;
+  priority: TodoPriority;
+  refined: boolean;
+  sessionId?: SessionId;
+  sortOrder: number;
+  createdAt: string;
+  updatedAt: string;
 }
 
 // Prompt template
