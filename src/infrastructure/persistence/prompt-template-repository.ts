@@ -1,0 +1,78 @@
+import { v4 as uuid } from 'uuid';
+import { getDatabase } from './database.js';
+import type { PromptTemplateRepository } from '@domain/prompt-template/repository';
+import type { PromptTemplate, TemplateId } from '@foundation/types';
+
+export function createPromptTemplateRepository(): PromptTemplateRepository {
+  const db = getDatabase();
+
+  return {
+    findAll(): PromptTemplate[] {
+      const rows = db
+        .prepare('SELECT * FROM prompt_templates ORDER BY created_at ASC')
+        .all() as TemplateRow[];
+      return rows.map(rowToTemplate);
+    },
+
+    findById(id: TemplateId): PromptTemplate | null {
+      const row = db
+        .prepare('SELECT * FROM prompt_templates WHERE id = ?')
+        .get(id) as TemplateRow | undefined;
+      return row ? rowToTemplate(row) : null;
+    },
+
+    create(data): PromptTemplate {
+      const id = uuid() as TemplateId;
+      const now = new Date().toISOString();
+      db.prepare(
+        'INSERT INTO prompt_templates (id, name, description, content, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)',
+      ).run(id, data.name, data.description || null, data.content, now, now);
+      return {
+        id,
+        name: data.name,
+        description: data.description,
+        content: data.content,
+        createdAt: now,
+        updatedAt: now,
+      };
+    },
+
+    update(id: TemplateId, data): PromptTemplate | null {
+      const existing = this.findById(id);
+      if (!existing) return null;
+      const now = new Date().toISOString();
+      const name = data.name ?? existing.name;
+      const description = data.description ?? existing.description;
+      const content = data.content ?? existing.content;
+      db.prepare(
+        'UPDATE prompt_templates SET name = ?, description = ?, content = ?, updated_at = ? WHERE id = ?',
+      ).run(name, description || null, content, now, id);
+      return { ...existing, name, description, content, updatedAt: now };
+    },
+
+    delete(id: TemplateId): boolean {
+      const result = db.prepare('DELETE FROM prompt_templates WHERE id = ?').run(id);
+      return result.changes > 0;
+    },
+  };
+}
+
+interface TemplateRow {
+  id: string;
+  name: string;
+  description: string | null;
+  content: string;
+  created_at: string;
+  updated_at: string;
+}
+
+function rowToTemplate(row: TemplateRow): PromptTemplate {
+  return {
+    id: row.id as TemplateId,
+    name: row.name,
+    description: row.description || undefined,
+    content: row.content,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  };
+}
