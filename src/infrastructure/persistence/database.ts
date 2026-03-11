@@ -4,13 +4,17 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const DB_PATH = process.env.WORKSHOP_DB_PATH || path.resolve(__dirname, '../../../workshop.db');
+
+function resolveDbPath(): string {
+  return process.env.WORKSHOP_DB_PATH || path.resolve(__dirname, '../../../workshop.db');
+}
 
 let db: Database.Database | null = null;
 
 export function getDatabase(): Database.Database {
   if (!db) {
-    db = new Database(DB_PATH);
+    const dbPath = resolveDbPath();
+    db = new Database(dbPath);
     db.pragma('journal_mode = WAL');
     db.pragma('foreign_keys = ON');
     runMigrations(db);
