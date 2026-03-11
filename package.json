@@ -9,6 +9,7 @@
     "dev:client": "vite",
     "build": "vite build && tsc -p tsconfig.server.json",
     "test": "vitest run",
+    "test:docker": "docker build -f Dockerfile.test -t workshop-test . && docker run --rm workshop-test",
     "test:watch": "vitest",
     "test:structural": "vitest run tests/structural/",
     "lint": "eslint src/ tests/",
