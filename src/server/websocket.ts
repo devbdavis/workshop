@@ -1,13 +1,25 @@
 import { Server as HttpServer } from 'http';
 import { WebSocketServer, WebSocket } from 'ws';
-import { spawn } from 'child_process';
+import { execSync } from 'child_process';
+import * as pty from 'node-pty';
 import type { IncomingMessage } from 'http';
 import { createSessionRepository } from '@infrastructure/persistence/session-repository.js';
 import type { SessionId } from '@foundation/types';
+import type { IPty } from 'node-pty';
+
+/** Tracks an active pty connection for a given session. */
+interface PtyConnection {
+  pty: IPty;
+  ws: WebSocket;
+  tmuxSession: string;
+}
 
 export function setupWebSocket(server: HttpServer): void {
   const wss = new WebSocketServer({ noServer: true });
   const sessions = createSessionRepository();
+
+  // Map from sessionId to the active pty connection
+  const activePtys = new Map<string, PtyConnection>();
 
   server.on('upgrade', (request: IncomingMessage, socket, head) => {
     const url = new URL(request.url || '', `http://${request.headers.host}`);
@@ -31,36 +43,65 @@ export function setupWebSocket(server: HttpServer): void {
       return;
     }
 
-    // Attach to the tmux session via a pty-like mechanism
-    // We spawn `tmux attach` and pipe I/O through the WebSocket
-    const tmuxProc = spawn('tmux', ['attach-session', '-t', session.tmuxSession], {
-      stdio: ['pipe', 'pipe', 'pipe'],
-      env: { ...process.env, TERM: 'xterm-256color' },
+    // If there's already an active pty for this session, clean it up first.
+    // The old WebSocket may have disconnected without proper cleanup.
+    const existing = activePtys.get(sessionId);
+    if (existing) {
+      try {
+        existing.pty.kill();
+      } catch {
+        // pty may already be dead
+      }
+      if (existing.ws.readyState === WebSocket.OPEN) {
+        existing.ws.close(1000, 'Replaced by new connection');
+      }
+      activePtys.delete(sessionId);
+    }
+
+    // Spawn a pty running `tmux attach-session`
+    const ptyProcess = pty.spawn('tmux', ['attach-session', '-t', session.tmuxSession], {
+      name: 'xterm-256color',
+      cols: 120,
+      rows: 40,
+      env: { ...process.env } as { [key: string]: string },
     });
 
-    tmuxProc.stdout?.on('data', (data: Buffer) => {
+    const connection: PtyConnection = {
+      pty: ptyProcess,
+      ws,
+      tmuxSession: session.tmuxSession,
+    };
+    activePtys.set(sessionId, connection);
+
+    // Pipe pty output to WebSocket
+    const dataDisposable = ptyProcess.onData((data: string) => {
       if (ws.readyState === WebSocket.OPEN) {
         ws.send(data);
       }
     });
 
-    tmuxProc.stderr?.on('data', (data: Buffer) => {
+    // Handle pty exit
+    const exitDisposable = ptyProcess.onExit(({ exitCode }) => {
+      activePtys.delete(sessionId);
       if (ws.readyState === WebSocket.OPEN) {
-        ws.send(data);
+        ws.close(1000, `pty exited with code ${exitCode}`);
       }
     });
 
+    // Handle incoming WebSocket messages
     ws.on('message', (data: Buffer | string) => {
-      const msg = data.toString();
+      const msg = typeof data === 'string' ? data : data.toString('utf-8');
 
-      // Check if it's a control message (JSON)
+      // Check if it's a JSON control message
       if (msg.startsWith('{')) {
         try {
-          const ctrl = JSON.parse(msg);
+          const ctrl = JSON.parse(msg) as { type: string; cols?: number; rows?: number };
           if (ctrl.type === 'resize' && ctrl.cols && ctrl.rows) {
-            // Resize the tmux pane
+            // Resize the pty
+            ptyProcess.resize(ctrl.cols, ctrl.rows);
+
+            // Also resize the tmux window so tmux knows the new dimensions
             try {
-              const { execSync } = require('child_process');
               execSync(
                 `tmux resize-window -t ${session.tmuxSession} -x ${ctrl.cols} -y ${ctrl.rows}`,
                 { stdio: 'pipe' },
@@ -71,21 +112,37 @@ export function setupWebSocket(server: HttpServer): void {
             return;
           }
         } catch {
-          // Not JSON, treat as terminal input
+          // Not valid JSON, treat as terminal input
         }
       }
 
-      tmuxProc.stdin?.write(data);
+      // Write terminal input to the pty
+      ptyProcess.write(msg);
     });
 
+    // Handle WebSocket close: kill the pty but NOT the tmux session
     ws.on('close', () => {
-      tmuxProc.kill();
+      dataDisposable.dispose();
+      exitDisposable.dispose();
+      try {
+        ptyProcess.kill();
+      } catch {
+        // pty may already be dead
+      }
+      activePtys.delete(sessionId);
     });
 
-    tmuxProc.on('exit', () => {
-      if (ws.readyState === WebSocket.OPEN) {
-        ws.close();
+    // Handle WebSocket errors
+    ws.on('error', (err) => {
+      console.error(`WebSocket error for session ${sessionId}:`, err.message);
+      dataDisposable.dispose();
+      exitDisposable.dispose();
+      try {
+        ptyProcess.kill();
+      } catch {
+        // pty may already be dead
       }
+      activePtys.delete(sessionId);
     });
   }
 }
