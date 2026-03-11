@@ -24,6 +24,14 @@ export function closeDatabase(): void {
   }
 }
 
+/**
+ * Reset the database singleton so a new connection can be established.
+ * Useful for tests that need isolated databases via WORKSHOP_DB_PATH.
+ */
+export function resetDatabase(): void {
+  closeDatabase();
+}
+
 function runMigrations(db: Database.Database): void {
   db.exec(`
     CREATE TABLE IF NOT EXISTS tracks (
