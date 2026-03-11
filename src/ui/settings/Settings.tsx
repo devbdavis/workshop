@@ -1,4 +1,5 @@
 import { Link } from 'react-router-dom';
+import { PromptTemplates } from './PromptTemplates';
 
 export function Settings() {
   return (
@@ -12,9 +13,7 @@ export function Settings() {
 
       <div className="space-y-6">
         <section className="bg-gray-900 border border-gray-800 rounded-lg p-6">
-          <h2 className="text-lg font-semibold mb-4">Prompt Templates</h2>
-          <p className="text-sm text-gray-400">Manage system prompt templates for Claude sessions.</p>
-          <p className="text-sm text-gray-500 mt-2 italic">Coming soon.</p>
+          <PromptTemplates />
         </section>
 
         <section className="bg-gray-900 border border-gray-800 rounded-lg p-6">
