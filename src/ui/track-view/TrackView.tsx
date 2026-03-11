@@ -1,8 +1,10 @@
 import { useEffect, useState, useCallback } from 'react';
 import { useParams, Link } from 'react-router-dom';
-import type { Track, Session, TrackSummary } from '@foundation/types';
+import type { Track, Session, TrackSummary, ExternalTicket } from '@foundation/types';
 import { SummaryPanel } from './SummaryPanel';
 import { ContextPanel } from './ContextPanel';
+import { TicketPanel } from './TicketPanel';
+import { TrackConfig } from './TrackConfig';
 import { TerminalArea } from '../terminal-panel/TerminalArea';
 
 export function TrackView() {
@@ -10,19 +12,23 @@ export function TrackView() {
   const [track, setTrack] = useState<Track | null>(null);
   const [sessions, setSessions] = useState<Session[]>([]);
   const [summary, setSummary] = useState<TrackSummary | null>(null);
+  const [tickets, setTickets] = useState<ExternalTicket[]>([]);
   const [loading, setLoading] = useState(true);
+  const [sidebarTab, setSidebarTab] = useState<'context' | 'config'>('context');
 
   const loadTrack = useCallback(async () => {
     if (!trackId) return;
     try {
-      const [trackRes, sessionsRes, summaryRes] = await Promise.all([
+      const [trackRes, sessionsRes, summaryRes, ticketsRes] = await Promise.all([
         fetch(`/api/tracks/${trackId}`),
         fetch(`/api/tracks/${trackId}/sessions`),
         fetch(`/api/tracks/${trackId}/summary`),
+        fetch(`/api/tracks/${trackId}/tickets`),
       ]);
       if (trackRes.ok) setTrack(await trackRes.json());
       if (sessionsRes.ok) setSessions(await sessionsRes.json());
       if (summaryRes.ok) setSummary(await summaryRes.json());
+      if (ticketsRes.ok) setTickets(await ticketsRes.json());
     } catch (err) {
       console.error('Failed to load track:', err);
     } finally {
@@ -93,7 +99,30 @@ export function TrackView() {
       <div className="flex flex-1 overflow-hidden">
         <aside className="w-80 border-r border-gray-800 overflow-y-auto shrink-0">
           <SummaryPanel summary={summary} trackId={track.id} onRefresh={loadTrack} />
-          <ContextPanel track={track} />
+
+          <div className="flex border-b border-gray-800">
+            <button
+              onClick={() => setSidebarTab('context')}
+              className={`flex-1 px-3 py-2 text-xs font-medium ${sidebarTab === 'context' ? 'text-blue-400 border-b-2 border-blue-400' : 'text-gray-500 hover:text-gray-300'}`}
+            >
+              Context
+            </button>
+            <button
+              onClick={() => setSidebarTab('config')}
+              className={`flex-1 px-3 py-2 text-xs font-medium ${sidebarTab === 'config' ? 'text-blue-400 border-b-2 border-blue-400' : 'text-gray-500 hover:text-gray-300'}`}
+            >
+              Config
+            </button>
+          </div>
+
+          {sidebarTab === 'context' ? (
+            <>
+              <TicketPanel trackId={track.id} tickets={tickets} onUpdate={loadTrack} />
+              <ContextPanel track={track} />
+            </>
+          ) : (
+            <TrackConfig track={track} onUpdate={loadTrack} />
+          )}
         </aside>
 
         <main className="flex-1 overflow-hidden">
