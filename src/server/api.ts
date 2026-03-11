@@ -6,6 +6,7 @@ import { createSummaryRepository } from '@infrastructure/persistence/summary-rep
 import { createTicketRepository } from '@infrastructure/persistence/ticket-repository.js';
 import { createTerminalManager } from '@infrastructure/terminal/manager.js';
 import { createGitAdapter } from '@infrastructure/git/git-adapter.js';
+import { createSummaryGenerationService } from '@application/summary-generation/service.js';
 
 export function createApiRouter(): Router {
   const router = Router();
@@ -15,6 +16,12 @@ export function createApiRouter(): Router {
   const tickets = createTicketRepository();
   const terminal = createTerminalManager(sessions);
   const gitAdapter = createGitAdapter();
+  const summaryGeneration = createSummaryGenerationService({
+    trackRepo: tracks,
+    ticketRepo: tickets,
+    summaryRepo: summaries,
+    gitAdapter,
+  });
 
   // --- Tracks ---
 
@@ -170,9 +177,21 @@ export function createApiRouter(): Router {
     res.json(summary);
   });
 
-  router.post('/tracks/:id/summary/refresh', (_req, res) => {
-    // Placeholder — summary generation will be implemented in Phase 6
-    res.status(501).json({ error: 'Summary generation not yet implemented' });
+  router.post('/tracks/:id/summary/refresh', async (req, res) => {
+    try {
+      const trackId = req.params.id as TrackId;
+      const track = tracks.findById(trackId);
+      if (!track) {
+        res.status(404).json({ error: 'Track not found' });
+        return;
+      }
+      const summary = await summaryGeneration.generateSummary(trackId);
+      res.json(summary);
+    } catch (err) {
+      console.error('Failed to generate summary:', err);
+      const message = err instanceof Error ? err.message : 'Failed to generate summary';
+      res.status(500).json({ error: message });
+    }
   });
 
   // --- Tickets ---
