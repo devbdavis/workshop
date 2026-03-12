@@ -85,17 +85,19 @@ export function TrackView() {
     return () => ws.close();
   }, [trackId, loadTrack]);
 
-  async function createSession() {
-    if (!trackId) return;
+  async function createSession(): Promise<Session | null> {
+    if (!trackId) return null;
     try {
       const res = await fetch(`/api/tracks/${trackId}/sessions`, { method: 'POST' });
       if (res.ok) {
-        const session = await res.json();
+        const session: Session = await res.json();
         setSessions((prev) => [...prev, session]);
+        return session;
       }
     } catch (err) {
       console.error('Failed to create session:', err);
     }
+    return null;
   }
 
   async function destroySession(sessionId: string) {
@@ -119,6 +121,16 @@ export function TrackView() {
       setPendingPermissions((prev) => prev.filter((p) => p.id !== id));
     } catch (err) {
       console.error('Failed to resolve permission:', err);
+    }
+  }
+
+  async function allowAllForSession(sessionId: string) {
+    try {
+      await fetch(`/api/permissions/sessions/${sessionId}/auto-approve`, { method: 'POST' });
+      // Clear all pending permissions for this session from local state
+      setPendingPermissions((prev) => prev.filter((p) => p.sessionId !== sessionId));
+    } catch (err) {
+      console.error('Failed to set auto-approve:', err);
     }
   }
 
@@ -196,19 +208,24 @@ export function TrackView() {
               <ContextPanel track={track} onUpdate={loadTrack} />
             </>
           ) : sidebarTab === 'todos' ? (
-            <TodoPanel trackId={track.id} todos={todos} onUpdate={loadTrack} />
+            <TodoPanel trackId={track.id} todos={todos} sessions={sessions} onUpdate={loadTrack} />
           ) : (
             <TrackConfig track={track} onUpdate={loadTrack} />
           )}
         </aside>
 
         <main className="flex-1 overflow-hidden flex flex-col">
-          <PermissionPanel requests={pendingPermissions} onResolve={resolvePermission} />
+          <PermissionPanel
+            requests={pendingPermissions}
+            onResolve={resolvePermission}
+            onAllowAllForSession={allowAllForSession}
+          />
           <div className="flex-1 min-h-0">
             <TerminalArea
               trackId={track.id}
               sessions={sessions}
               onDestroySession={destroySession}
+              onCreateSession={createSession}
             />
           </div>
         </main>

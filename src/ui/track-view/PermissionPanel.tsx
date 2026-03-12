@@ -4,10 +4,14 @@ import type { PermissionRequest } from '@foundation/types';
 interface Props {
   requests: PermissionRequest[];
   onResolve: (id: string, decision: 'approved' | 'denied', comment?: string) => void;
+  onAllowAllForSession: (sessionId: string) => void;
 }
 
-export function PermissionPanel({ requests, onResolve }: Props) {
+export function PermissionPanel({ requests, onResolve, onAllowAllForSession }: Props) {
   if (requests.length === 0) return null;
+
+  // Group by session to show per-session "Allow All" buttons
+  const sessionIds = [...new Set(requests.map((r) => r.sessionId))];
 
   return (
     <div className="border-b border-amber-800/50 bg-amber-950/30">
@@ -16,6 +20,18 @@ export function PermissionPanel({ requests, onResolve }: Props) {
         <span className="text-xs font-semibold text-amber-300">
           {requests.length} pending approval{requests.length > 1 ? 's' : ''}
         </span>
+        <div className="ml-auto flex items-center gap-2">
+          {sessionIds.map((sid) => (
+            <button
+              key={sid}
+              onClick={() => onAllowAllForSession(sid)}
+              className="px-2 py-0.5 text-[11px] bg-amber-800/60 hover:bg-amber-700/60 text-amber-200 rounded transition-colors"
+              title={`Auto-approve all tool use for session ${sid.slice(0, 8)} going forward`}
+            >
+              Allow all{sessionIds.length > 1 ? ` (${sid.slice(0, 8)})` : ''}
+            </button>
+          ))}
+        </div>
       </div>
       <div className="max-h-64 overflow-y-auto">
         {requests.map((req) => (

@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import type { TrackId, SessionId, RepoId, AutomationRuleId, TemplateId } from '@foundation/types';
+import type { TrackId, SessionId, RepoId, AutomationRuleId, TemplateId, TerminalLayout } from '@foundation/types';
 import { createTrackRepository } from '@infrastructure/persistence/track-repository.js';
 import { createSessionRepository } from '@infrastructure/persistence/session-repository.js';
 import { createSummaryRepository } from '@infrastructure/persistence/summary-repository.js';
@@ -166,6 +166,30 @@ export function createApiRouter(deps: ApiRouterDeps = {}): Router {
     }
     const p = tracks.addPath(req.params.id as TrackId, fsPath, label);
     res.status(201).json(p);
+  });
+
+  // --- Terminal Layout ---
+
+  router.get('/tracks/:id/layout', (req, res) => {
+    const trackId = req.params.id as TrackId;
+    const layout = tracks.getTerminalLayout(trackId);
+    res.json(layout || { root: null });
+  });
+
+  router.put('/tracks/:id/layout', (req, res) => {
+    const trackId = req.params.id as TrackId;
+    const track = tracks.findById(trackId);
+    if (!track) {
+      res.status(404).json({ error: 'Track not found' });
+      return;
+    }
+    const layout = req.body as TerminalLayout;
+    const updated = tracks.setTerminalLayout(trackId, layout);
+    if (!updated) {
+      res.status(500).json({ error: 'Failed to update layout' });
+      return;
+    }
+    res.json(layout);
   });
 
   // --- Sessions ---

@@ -1,9 +1,11 @@
 import { useState } from 'react';
-import type { Todo, TodoPriority, TodoStatus } from '@foundation/types';
+import type { Todo, TodoPriority, TodoStatus, Session } from '@foundation/types';
+import { TerminalModal } from './TerminalModal';
 
 interface Props {
   trackId: string;
   todos: Todo[];
+  sessions: Session[];
   onUpdate: () => void;
 }
 
@@ -29,9 +31,16 @@ const PRIORITY_COLORS: Record<TodoPriority, string> = {
   high: 'text-red-400',
 };
 
-export function TodoPanel({ trackId, todos, onUpdate }: Props) {
+export function TodoPanel({ trackId, todos, sessions, onUpdate }: Props) {
   const [showAdd, setShowAdd] = useState(false);
+  const [terminalSessionId, setTerminalSessionId] = useState<string | null>(null);
+  const [terminalTodoTitle, setTerminalTodoTitle] = useState('');
   const activeTodos = todos.filter((t) => t.status !== 'done');
+
+  // Build a set of active session IDs for quick lookup
+  const activeSessionIds = new Set(
+    sessions.filter((s) => s.state === 'active' && s.background).map((s) => s.id),
+  );
 
   async function deleteTodo(todoId: string) {
     await fetch(`/api/todos/${todoId}`, { method: 'DELETE' });
@@ -109,9 +118,21 @@ export function TodoPanel({ trackId, todos, onUpdate }: Props) {
                         Dispatch
                       </button>
                     )}
-                    {todo.sessionId && (
-                      <span className="text-[10px] text-emerald-500">agent</span>
-                    )}
+                    {todo.sessionId && activeSessionIds.has(todo.sessionId) ? (
+                      <button
+                        onClick={() => {
+                          setTerminalSessionId(todo.sessionId!);
+                          setTerminalTodoTitle(todo.title);
+                        }}
+                        className="text-[10px] text-emerald-400 hover:text-emerald-300 flex items-center gap-0.5"
+                        title="Open agent terminal"
+                      >
+                        <TerminalIcon className="w-3 h-3" />
+                        <span>agent</span>
+                      </button>
+                    ) : todo.sessionId ? (
+                      <span className="text-[10px] text-gray-500">agent</span>
+                    ) : null}
                   </div>
                 </div>
                 <button
@@ -127,7 +148,35 @@ export function TodoPanel({ trackId, todos, onUpdate }: Props) {
       ) : (
         <p className="text-xs text-gray-600 italic">No active todos.</p>
       )}
+
+      {terminalSessionId && (
+        <TerminalModal
+          trackId={trackId}
+          sessionId={terminalSessionId}
+          title={`Agent: ${terminalTodoTitle}`}
+          onClose={() => setTerminalSessionId(null)}
+        />
+      )}
     </div>
+  );
+}
+
+/** Inline terminal SVG icon */
+function TerminalIcon({ className }: { className?: string }) {
+  return (
+    <svg
+      className={className}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth={2}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      <rect x="2" y="4" width="20" height="16" rx="2" />
+      <path d="M7 9l3 3-3 3" />
+      <path d="M13 15h4" />
+    </svg>
   );
 }
 

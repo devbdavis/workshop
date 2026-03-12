@@ -18,6 +18,7 @@ export interface Track {
   context?: string;
   status: 'active' | 'archived';
   defaultPromptTemplateId?: TemplateId;
+  terminalLayout?: TerminalLayout;
   createdAt: string;
   updatedAt: string;
   // Populated relations
@@ -145,6 +146,34 @@ export interface PermissionRequest {
   userComment?: string;
   createdAt: string;
   resolvedAt?: string;
+}
+
+// Terminal layout (recursive split tree)
+export type LayoutNodeId = string & { readonly __brand: 'LayoutNodeId' };
+
+/** Leaf node hosting a single terminal session */
+export interface LayoutLeaf {
+  type: 'leaf';
+  id: LayoutNodeId;
+  sessionId: SessionId;
+}
+
+/** Split node dividing space between children */
+export interface LayoutSplit {
+  type: 'split';
+  id: LayoutNodeId;
+  /** horizontal = children side by side (columns), vertical = children stacked (rows) */
+  direction: 'horizontal' | 'vertical';
+  children: LayoutNode[];
+  /** Percentage sizes for each child (must sum to 100) */
+  sizes: number[];
+}
+
+export type LayoutNode = LayoutLeaf | LayoutSplit;
+
+/** Top-level layout configuration stored per track */
+export interface TerminalLayout {
+  root: LayoutNode | null;
 }
 
 // Prompt template

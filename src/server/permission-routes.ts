@@ -8,6 +8,9 @@ const HOOK_POLL_TIMEOUT = 300_000; // 5 minutes
 /** Poll interval (ms) for checking if a decision has been made */
 const POLL_INTERVAL = 500;
 
+/** Sessions that have been set to auto-approve all tool use (in-memory, resets on server restart) */
+const autoApprovedSessions = new Set<string>();
+
 export interface PermissionRouterDeps {
   permissions: PermissionRequestRepository;
 }
@@ -31,6 +34,12 @@ export function createPermissionRouter(deps: PermissionRouterDeps): Router {
 
       // Look up session ID from the env var we set when launching the agent
       const sessionId = (req.headers['x-workshop-session'] as string) || session_id;
+
+      // If session is auto-approved, allow immediately without prompting
+      if (autoApprovedSessions.has(sessionId)) {
+        res.json(makeHookResponse('allow', 'Auto-approved (session-level)'));
+        return;
+      }
 
       // Create a pending permission request
       const request = permissions.create({
@@ -112,6 +121,33 @@ export function createPermissionRouter(deps: PermissionRouterDeps): Router {
 
     broadcast('permission:resolved', updated.sessionId);
     res.json(updated);
+  });
+
+  // --- Auto-approve: allow all tool use for a session going forward ---
+
+  router.post('/permissions/sessions/:sessionId/auto-approve', (req, res) => {
+    const sessionId = req.params.sessionId;
+    autoApprovedSessions.add(sessionId);
+
+    // Also approve all currently pending requests for this session
+    const pending = permissions.findPendingBySession(sessionId as SessionId);
+    for (const p of pending) {
+      permissions.resolve(p.id, 'approved', 'Auto-approved (session-level)');
+    }
+
+    broadcast('permission:resolved', sessionId);
+    res.json({ sessionId, autoApprove: true, approvedCount: pending.length });
+  });
+
+  router.delete('/permissions/sessions/:sessionId/auto-approve', (req, res) => {
+    const sessionId = req.params.sessionId;
+    autoApprovedSessions.delete(sessionId);
+    res.json({ sessionId, autoApprove: false });
+  });
+
+  router.get('/permissions/sessions/:sessionId/auto-approve', (req, res) => {
+    const sessionId = req.params.sessionId;
+    res.json({ sessionId, autoApprove: autoApprovedSessions.has(sessionId) });
   });
 
   // --- Poll helper: checks DB until resolved or timeout ---

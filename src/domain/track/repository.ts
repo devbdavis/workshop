@@ -1,4 +1,4 @@
-import type { Track, TrackId, TrackRepo, TrackPath, RepoId, PathId, TemplateId } from '@foundation/types';
+import type { Track, TrackId, TrackRepo, TrackPath, RepoId, PathId, TemplateId, TerminalLayout } from '@foundation/types';
 
 export interface TrackRepository {
   findAll(): Track[];
@@ -9,6 +9,10 @@ export interface TrackRepository {
 
   // Prompt template association
   setDefaultPromptTemplate(trackId: TrackId, templateId: TemplateId | null): boolean;
+
+  // Terminal layout
+  getTerminalLayout(trackId: TrackId): TerminalLayout | null;
+  setTerminalLayout(trackId: TrackId, layout: TerminalLayout | null): boolean;
 
   // Repo associations
   addRepo(trackId: TrackId, path: string, remoteUrl?: string): TrackRepo;
