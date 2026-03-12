@@ -19,7 +19,7 @@ export interface TodoRouterDeps {
   terminal: {
     createSession: (
       trackId: TrackId,
-      opts?: { systemPrompt?: string; workingDirectory?: string; background?: boolean; todoId?: string },
+      opts?: { systemPrompt?: string; workingDirectory?: string; background?: boolean; todoId?: string; initialPrompt?: string },
     ) => Promise<{ id: SessionId; trackId: TrackId; tmuxSession: string; state: string }>;
   };
 }
@@ -166,11 +166,14 @@ export function createTodoRouter(deps: TodoRouterDeps): Router {
       const systemPrompt = parts.join('\n\n---\n\n');
       const repos = tracks.findReposByTrack(todo.trackId);
 
+      const taskPrompt = `Complete the following task:\n\n**${todo.title}**\n\n${todo.description || 'No additional details provided.'}`;
+
       const session = await terminal.createSession(todo.trackId, {
         systemPrompt,
         workingDirectory: repos[0]?.path,
         background: true,
         todoId: todo.id,
+        initialPrompt: taskPrompt,
       });
 
       // Update todo status and link session
