@@ -61,7 +61,8 @@ export function TodoDetailModal({ todo, tracks, onClose, onSave, onDelete, onDis
   return (
     <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50" onClick={onClose}>
       <div
-        className="bg-gray-900 border border-gray-700 rounded-xl w-full max-w-lg mx-4 overflow-hidden"
+        className="bg-gray-900 border border-gray-700 rounded-xl w-full max-w-3xl mx-4 overflow-hidden resize"
+        style={{ minWidth: '24rem', minHeight: '20rem' }}
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-center justify-between px-5 py-3 border-b border-gray-800">
@@ -88,7 +89,7 @@ export function TodoDetailModal({ todo, tracks, onClose, onSave, onDelete, onDis
             <textarea
               value={description}
               onChange={(e) => setDescription(e.target.value)}
-              rows={5}
+              rows={10}
               className="w-full px-3 py-2 bg-gray-800 border border-gray-700 rounded-lg text-sm text-gray-200 font-mono"
             />
           </div>

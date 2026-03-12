@@ -11,6 +11,38 @@ const POLL_INTERVAL = 500;
 /** Sessions that have been set to auto-approve all tool use (in-memory, resets on server restart) */
 const autoApprovedSessions = new Set<string>();
 
+/**
+ * Tool invocations that are permanently auto-approved for all sessions.
+ * Each entry is checked against tool_name (exact or prefix match) or,
+ * for Bash commands, against the command string.
+ *
+ * This prevents background agents from getting stuck when calling back
+ * into Workshop's own API (e.g. updating their todo status).
+ */
+const PERMANENTLY_APPROVED: Array<{
+  tool?: string;
+  toolPrefix?: string;
+  bashCommandPattern?: RegExp;
+}> = [
+  // All Workshop MCP tool calls (in case the hook matcher is ever broadened)
+  { toolPrefix: 'mcp__workshop__' },
+  // Bash commands that curl the Workshop API
+  { tool: 'Bash', bashCommandPattern: /curl\s.*localhost:\d+\/api\// },
+  { tool: 'Bash', bashCommandPattern: /curl\s.*127\.0\.0\.1:\d+\/api\// },
+];
+
+/** Check if a tool invocation matches the permanent allowlist */
+function isPermanentlyApproved(toolName: string, toolInput: Record<string, unknown>): boolean {
+  for (const rule of PERMANENTLY_APPROVED) {
+    if (rule.toolPrefix && toolName.startsWith(rule.toolPrefix)) return true;
+    if (rule.tool && rule.tool === toolName && rule.bashCommandPattern) {
+      const command = String(toolInput.command || '');
+      if (rule.bashCommandPattern.test(command)) return true;
+    }
+  }
+  return false;
+}
+
 export interface PermissionRouterDeps {
   permissions: PermissionRequestRepository;
 }
@@ -38,6 +70,12 @@ export function createPermissionRouter(deps: PermissionRouterDeps): Router {
       // If session is auto-approved, allow immediately without prompting
       if (autoApprovedSessions.has(sessionId)) {
         res.json(makeHookResponse('allow', 'Auto-approved (session-level)'));
+        return;
+      }
+
+      // If tool is on the permanent allowlist, allow without prompting
+      if (isPermanentlyApproved(tool_name, tool_input || {})) {
+        res.json(makeHookResponse('allow', 'Permanently approved tool'));
         return;
       }
 
