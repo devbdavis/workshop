@@ -7,6 +7,7 @@ export interface SessionRepository {
   findAll(): Session[];
   create(session: Omit<Session, 'id' | 'createdAt' | 'updatedAt'>): Session;
   updateState(id: SessionId, state: SessionState): Session | null;
+  updateName(id: SessionId, name: string): Session | null;
   updateClaudeResumeId(id: SessionId, claudeResumeId: string): Session | null;
   delete(id: SessionId): boolean;
 }

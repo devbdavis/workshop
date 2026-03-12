@@ -110,6 +110,23 @@ export function TrackView() {
     }
   }
 
+  async function renameSession(sessionId: string, name: string) {
+    if (!trackId) return;
+    try {
+      const res = await fetch(`/api/tracks/${trackId}/sessions/${sessionId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name }),
+      });
+      if (res.ok) {
+        const updated: Session = await res.json();
+        setSessions((prev) => prev.map((s) => (s.id === sessionId ? updated : s)));
+      }
+    } catch (err) {
+      console.error('Failed to rename session:', err);
+    }
+  }
+
   async function resolvePermission(id: string, decision: 'approved' | 'denied', comment?: string) {
     try {
       await fetch(`/api/permissions/${id}`, {
@@ -223,6 +240,7 @@ export function TrackView() {
               sessions={sessions}
               onDestroySession={destroySession}
               onCreateSession={createSession}
+              onRenameSession={renameSession}
             />
           </div>
         </main>

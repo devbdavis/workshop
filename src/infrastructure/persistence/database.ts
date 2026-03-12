@@ -202,6 +202,13 @@ function runMigrations(db: Database.Database): void {
     // Column already exists — safe to ignore
   }
 
+  // Migration: add name column to sessions
+  try {
+    db.exec(`ALTER TABLE sessions ADD COLUMN name TEXT;`);
+  } catch {
+    // Column already exists — safe to ignore
+  }
+
   // Seed default prompt templates if the table is empty
   seedDefaultTemplates(db);
 }

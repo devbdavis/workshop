@@ -264,6 +264,22 @@ export function createApiRouter(deps: ApiRouterDeps = {}): Router {
     }
   });
 
+  router.patch('/tracks/:trackId/sessions/:sessionId', (req, res) => {
+    const sessionId = req.params.sessionId as SessionId;
+    const { name } = req.body;
+    if (typeof name !== 'string') {
+      res.status(400).json({ error: 'name must be a string' });
+      return;
+    }
+    const session = sessions.updateName(sessionId, name);
+    if (!session) {
+      res.status(404).json({ error: 'Session not found' });
+      return;
+    }
+    broadcast('session:updated', req.params.trackId as TrackId);
+    res.json(session);
+  });
+
   router.delete('/tracks/:trackId/sessions/:sessionId', async (req, res) => {
     try {
       await terminal.destroySession(req.params.sessionId as SessionId);
