@@ -140,20 +140,40 @@ export function useTerminalLayout(
   const [layout, setLayoutState] = useState<TerminalLayout>({ root: null });
   const [loaded, setLoaded] = useState(false);
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const trackIdRef = useRef(trackId);
+  trackIdRef.current = trackId;
+
+  // Keep a ref to the latest layout so the sync effect always reads current state
+  const layoutRef = useRef<TerminalLayout>(layout);
+  layoutRef.current = layout;
+
+  // Track pending save data for flush-on-unmount
+  const pendingSaveRef = useRef<TerminalLayout | null>(null);
+
+  // Immediate save (no debounce) — used for flush-on-unmount
+  const saveLayoutImmediate = useCallback(
+    (newLayout: TerminalLayout) => {
+      fetch(`/api/tracks/${trackIdRef.current}/layout`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(newLayout),
+      }).catch((err) => console.error('Failed to save layout:', err));
+    },
+    [],
+  );
 
   // Debounced save to server
   const saveLayout = useCallback(
     (newLayout: TerminalLayout) => {
       if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
+      pendingSaveRef.current = newLayout;
       saveTimerRef.current = setTimeout(() => {
-        fetch(`/api/tracks/${trackId}/layout`, {
-          method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(newLayout),
-        }).catch((err) => console.error('Failed to save layout:', err));
+        saveTimerRef.current = null;
+        pendingSaveRef.current = null;
+        saveLayoutImmediate(newLayout);
       }, 500);
     },
-    [trackId],
+    [saveLayoutImmediate],
   );
 
   const setLayout = useCallback(
@@ -164,9 +184,25 @@ export function useTerminalLayout(
     [saveLayout],
   );
 
-  // Load layout from server on mount
+  // Flush any pending debounced save on unmount
+  useEffect(() => {
+    return () => {
+      if (saveTimerRef.current) {
+        clearTimeout(saveTimerRef.current);
+        saveTimerRef.current = null;
+      }
+      if (pendingSaveRef.current) {
+        saveLayoutImmediate(pendingSaveRef.current);
+        pendingSaveRef.current = null;
+      }
+    };
+  }, [saveLayoutImmediate]);
+
+  // Load layout from server on mount (or when trackId changes)
   useEffect(() => {
     let cancelled = false;
+    // Reset loaded state so sync effect doesn't run with stale layout
+    setLoaded(false);
     fetch(`/api/tracks/${trackId}/layout`)
       .then((res) => res.json())
       .then((data: TerminalLayout) => {
@@ -184,19 +220,24 @@ export function useTerminalLayout(
   // Sync layout with sessions whenever sessions or loaded state changes
   useEffect(() => {
     if (!loaded) return;
+
+    // Read from ref to always get the latest layout value,
+    // avoiding stale closures when sessions trigger this effect
+    const currentLayout = layoutRef.current;
     const foreground = sessions.filter((s) => !s.background);
+
     if (foreground.length === 0) {
-      if (layout.root !== null) {
+      if (currentLayout.root !== null) {
         setLayout({ root: null });
       }
       return;
     }
 
-    const layoutSessionIds = collectSessionIds(layout.root);
+    const layoutSessionIds = collectSessionIds(currentLayout.root);
     const activeSessionIds = new Set(foreground.map((s) => s.id));
 
     // Remove stale sessions from layout
-    let currentRoot = layout.root;
+    let currentRoot = currentLayout.root;
     for (const id of layoutSessionIds) {
       if (!activeSessionIds.has(id) && currentRoot) {
         currentRoot = removeSessionFromTree(currentRoot, id as SessionId);
@@ -206,7 +247,7 @@ export function useTerminalLayout(
     // Find sessions not in layout
     const missing = foreground.filter((s) => !layoutSessionIds.has(s.id));
 
-    if (missing.length === 0 && currentRoot === layout.root) return;
+    if (missing.length === 0 && currentRoot === currentLayout.root) return;
 
     // Add missing sessions
     if (missing.length > 0) {
@@ -247,33 +288,37 @@ export function useTerminalLayout(
     }
 
     setLayout({ root: currentRoot });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sessions, loaded]);
 
   const splitPane = useCallback(
     (nodeId: LayoutNodeId, direction: 'horizontal' | 'vertical', newSessionId: SessionId) => {
-      if (!layout.root) return;
-      const newRoot = splitNode(layout.root, nodeId, direction, newSessionId);
+      const current = layoutRef.current;
+      if (!current.root) return;
+      const newRoot = splitNode(current.root, nodeId, direction, newSessionId);
       setLayout({ root: newRoot });
     },
-    [layout, setLayout],
+    [setLayout],
   );
 
   const closePane = useCallback(
     (nodeId: LayoutNodeId) => {
-      if (!layout.root) return;
-      const newRoot = removeNode(layout.root, nodeId);
+      const current = layoutRef.current;
+      if (!current.root) return;
+      const newRoot = removeNode(current.root, nodeId);
       setLayout({ root: newRoot });
     },
-    [layout, setLayout],
+    [setLayout],
   );
 
   const resizePanes = useCallback(
     (splitId: LayoutNodeId, newSizes: number[]) => {
-      if (!layout.root) return;
-      const newRoot = updateSizes(layout.root, splitId, newSizes);
+      const current = layoutRef.current;
+      if (!current.root) return;
+      const newRoot = updateSizes(current.root, splitId, newSizes);
       setLayout({ root: newRoot });
     },
-    [layout, setLayout],
+    [setLayout],
   );
 
   const syncWithSessions = useCallback(
