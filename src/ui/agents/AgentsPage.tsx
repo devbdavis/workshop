@@ -81,14 +81,17 @@ export function AgentsPage() {
 
   if (loading) {
     return (
-      <div className="max-w-4xl mx-auto px-6 py-8">
-        <p className="text-sm text-gray-500">Loading agents...</p>
+      <div className="h-full overflow-y-auto">
+        <div className="max-w-4xl mx-auto px-6 py-8">
+          <p className="text-sm text-gray-500">Loading agents...</p>
+        </div>
       </div>
     );
   }
 
   return (
-    <div className="max-w-4xl mx-auto px-6 py-8">
+    <div className="h-full overflow-y-auto">
+      <div className="max-w-4xl mx-auto px-6 py-8">
       <header className="flex items-center justify-between mb-8">
         <div className="flex items-center gap-4">
           <Link to="/" className="text-gray-400 hover:text-gray-200 text-sm">
@@ -146,6 +149,7 @@ export function AgentsPage() {
           onUpdate={handleUpdate}
           onDelete={handleDelete}
         />
+      </div>
       </div>
     </div>
   );
