@@ -1,14 +1,10 @@
-import { Link } from 'react-router-dom';
 import { PromptTemplates } from './PromptTemplates';
 
 export function Settings() {
   return (
     <div className="max-w-4xl mx-auto px-6 py-8">
-      <header className="flex items-center gap-4 mb-8">
-        <Link to="/" className="text-gray-400 hover:text-gray-200 text-sm">
-          &larr; Dashboard
-        </Link>
-        <h1 className="text-2xl font-bold">Settings</h1>
+      <header className="flex items-center gap-4 mb-6">
+        <h1 className="text-xl font-semibold">Settings</h1>
       </header>
 
       <div className="space-y-6">

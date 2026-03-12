@@ -150,11 +150,8 @@ export function TrackView() {
   }
 
   return (
-    <div className="h-screen flex flex-col">
-      <header className="flex items-center gap-4 px-6 py-3 border-b border-gray-800 shrink-0">
-        <Link to="/" className="text-gray-400 hover:text-gray-200 text-sm">
-          &larr; Dashboard
-        </Link>
+    <div className="h-full flex flex-col">
+      <header className="flex items-center gap-4 px-6 py-2 border-b border-gray-800 shrink-0">
         <h1 className="text-lg font-semibold">{track.name}</h1>
         <span className="text-xs text-gray-500 bg-gray-800 px-2 py-0.5 rounded">{track.status}</span>
         {pendingPermissions.length > 0 && (

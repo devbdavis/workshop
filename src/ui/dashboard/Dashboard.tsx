@@ -26,34 +26,14 @@ export function Dashboard() {
 
   return (
     <div className="max-w-6xl mx-auto px-6 py-8">
-      <header className="flex items-center justify-between mb-8">
-        <h1 className="text-2xl font-bold">Workshop</h1>
-        <div className="flex gap-3">
-          <Link
-            to="/kanban"
-            className="px-4 py-2 text-sm bg-gray-800 hover:bg-gray-700 rounded-lg transition-colors"
-          >
-            Kanban
-          </Link>
-          <Link
-            to="/agents"
-            className="px-4 py-2 text-sm bg-gray-800 hover:bg-gray-700 rounded-lg transition-colors"
-          >
-            Agents
-          </Link>
-          <Link
-            to="/settings"
-            className="px-4 py-2 text-sm bg-gray-800 hover:bg-gray-700 rounded-lg transition-colors"
-          >
-            Settings
-          </Link>
-          <button
-            onClick={() => setShowCreate(true)}
-            className="px-4 py-2 text-sm bg-blue-600 hover:bg-blue-500 rounded-lg transition-colors"
-          >
-            New Track
-          </button>
-        </div>
+      <header className="flex items-center justify-between mb-6">
+        <h1 className="text-xl font-semibold">Tracks</h1>
+        <button
+          onClick={() => setShowCreate(true)}
+          className="px-4 py-2 text-sm bg-blue-600 hover:bg-blue-500 rounded-lg transition-colors"
+        >
+          New Track
+        </button>
       </header>
 
       {loading ? (
