@@ -23,6 +23,15 @@ You have access to Workshop MCP tools that let you interact with the Workshop pr
 | `mcp__workshop__workshop_get_composed_prompt` | Preview the system prompt that would be used for new sessions |
 | `mcp__workshop__workshop_add_repo` | Link a git repo to a track |
 | `mcp__workshop__workshop_create_track` | Create a new track |
+| `mcp__workshop__workshop_list_todos` | List todos (filterable by trackId/status) |
+| `mcp__workshop__workshop_create_todo` | Create a new todo for a track |
+| `mcp__workshop__workshop_update_todo` | Update todo fields |
+| `mcp__workshop__workshop_dispatch_todo` | Dispatch a refined todo to a background agent |
+| `mcp__workshop__workshop_delete_todo` | Delete a todo |
+
+## Important: Todos Are Just Todos
+
+When the user asks to **create a todo**, your job is to create it and stop. Do NOT start implementing the work described in the todo. Todos are planning artifacts — the user will decide when and how to act on them (manually, by dispatching to an agent, etc.).
 
 ## Key Concepts
 

@@ -175,6 +175,13 @@ function runMigrations(db: Database.Database): void {
     // Column already exists — safe to ignore
   }
 
+  // Migration: add terminal_layout column to tracks (JSON string)
+  try {
+    db.exec(`ALTER TABLE tracks ADD COLUMN terminal_layout TEXT;`);
+  } catch {
+    // Column already exists — safe to ignore
+  }
+
   // Seed default prompt templates if the table is empty
   seedDefaultTemplates(db);
 }

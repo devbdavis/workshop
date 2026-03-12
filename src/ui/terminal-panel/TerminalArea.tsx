@@ -1,15 +1,18 @@
 import type { Session } from '@foundation/types';
-import { TerminalPanel } from './TerminalPanel';
+import { SplitPaneLayout } from './SplitPaneLayout';
+import { useTerminalLayout } from './use-terminal-layout';
 
 interface Props {
   trackId: string;
   sessions: Session[];
   onDestroySession: (sessionId: string) => void;
+  onCreateSession: () => Promise<Session | null>;
 }
 
-export function TerminalArea({ trackId, sessions, onDestroySession }: Props) {
+export function TerminalArea({ trackId, sessions, onDestroySession, onCreateSession }: Props) {
   const foregroundSessions = sessions.filter((s) => !s.background);
   const backgroundSessions = sessions.filter((s) => s.background);
+  const { layout, splitPane, closePane, resizePanes } = useTerminalLayout(trackId, sessions);
 
   return (
     <div className="h-full flex flex-col">
@@ -17,33 +20,22 @@ export function TerminalArea({ trackId, sessions, onDestroySession }: Props) {
         <BackgroundAgentBar sessions={backgroundSessions} onDestroy={onDestroySession} />
       )}
 
-      {foregroundSessions.length === 0 ? (
+      {!layout.root || foregroundSessions.length === 0 ? (
         <div className="flex items-center justify-center flex-1 text-gray-500">
           <p>No active sessions. Click "New Session" to start one.</p>
         </div>
       ) : (
-        <div className="flex-1 flex flex-col min-h-0">
-          {foregroundSessions.map((session) => (
-            <div key={session.id} className="flex-1 min-h-0 flex flex-col border-b border-gray-800 last:border-b-0">
-              <div className="flex items-center justify-between px-3 py-1 bg-gray-900 border-b border-gray-800 shrink-0">
-                <span className="text-xs text-gray-400 font-mono">
-                  session:{session.id.slice(0, 8)}
-                </span>
-                <div className="flex items-center gap-2">
-                  <span className={`w-2 h-2 rounded-full ${session.state === 'active' ? 'bg-green-500' : session.state === 'detached' ? 'bg-yellow-500' : 'bg-red-500'}`} />
-                  <button
-                    onClick={() => onDestroySession(session.id)}
-                    className="text-xs text-gray-500 hover:text-red-400"
-                  >
-                    Kill
-                  </button>
-                </div>
-              </div>
-              <div className="flex-1 min-h-0">
-                <TerminalPanel trackId={trackId} sessionId={session.id} />
-              </div>
-            </div>
-          ))}
+        <div className="flex-1 min-h-0">
+          <SplitPaneLayout
+            node={layout.root}
+            trackId={trackId}
+            sessions={foregroundSessions}
+            onSplit={splitPane}
+            onClose={closePane}
+            onResize={resizePanes}
+            onCreateSession={onCreateSession}
+            onDestroySession={onDestroySession}
+          />
         </div>
       )}
     </div>

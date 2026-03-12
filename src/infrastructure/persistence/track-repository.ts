@@ -1,7 +1,7 @@
 import { v4 as uuid } from 'uuid';
 import { getDatabase } from './database.js';
 import type { TrackRepository } from '@domain/track/repository';
-import type { Track, TrackId, TrackRepo, TrackPath, RepoId, PathId, TemplateId } from '@foundation/types';
+import type { Track, TrackId, TrackRepo, TrackPath, RepoId, PathId, TemplateId, TerminalLayout } from '@foundation/types';
 
 export function createTrackRepository(): TrackRepository {
   const db = getDatabase();
@@ -93,6 +93,24 @@ export function createTrackRepository(): TrackRepository {
       const rows = db.prepare('SELECT * FROM track_paths WHERE track_id = ?').all(trackId) as PathRow[];
       return rows.map(rowToPath);
     },
+
+    getTerminalLayout(trackId: TrackId): TerminalLayout | null {
+      const row = db.prepare('SELECT terminal_layout FROM tracks WHERE id = ?').get(trackId) as { terminal_layout: string | null } | undefined;
+      if (!row || !row.terminal_layout) return null;
+      try {
+        return JSON.parse(row.terminal_layout) as TerminalLayout;
+      } catch {
+        return null;
+      }
+    },
+
+    setTerminalLayout(trackId: TrackId, layout: TerminalLayout | null): boolean {
+      const json = layout ? JSON.stringify(layout) : null;
+      const result = db.prepare(
+        'UPDATE tracks SET terminal_layout = ?, updated_at = ? WHERE id = ?',
+      ).run(json, new Date().toISOString(), trackId);
+      return result.changes > 0;
+    },
   };
 }
 
@@ -105,6 +123,7 @@ interface TrackRow {
   context: string | null;
   status: string;
   default_prompt_template_id: string | null;
+  terminal_layout: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -126,6 +145,14 @@ interface PathRow {
 }
 
 function rowToTrack(row: TrackRow): Track {
+  let terminalLayout: TerminalLayout | undefined;
+  if (row.terminal_layout) {
+    try {
+      terminalLayout = JSON.parse(row.terminal_layout) as TerminalLayout;
+    } catch {
+      // Ignore malformed JSON
+    }
+  }
   return {
     id: row.id as TrackId,
     name: row.name,
@@ -133,6 +160,7 @@ function rowToTrack(row: TrackRow): Track {
     context: row.context || undefined,
     status: row.status as Track['status'],
     defaultPromptTemplateId: (row.default_prompt_template_id as TemplateId) || undefined,
+    terminalLayout,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
