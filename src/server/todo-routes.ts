@@ -1,11 +1,13 @@
 import { Router } from 'express';
-import type { TrackId, TodoId, SessionId } from '@foundation/types';
+import type { TrackId, TodoId, SessionId, AgentId } from '@foundation/types';
 import type { TodoRepository } from '@domain/todo/repository';
 import type { TrackRepository } from '@domain/track/repository';
 import type { SessionRepository } from '@domain/session/repository';
 import type { SummaryRepository } from '@domain/summary/repository';
 import type { TicketRepository } from '@domain/ticket/repository';
 import type { PromptTemplateRepository } from '@domain/prompt-template/repository';
+import type { AgentRepository } from '@domain/agent/repository';
+import type { FilesystemAgentScanner } from '@infrastructure/agents/filesystem-scanner.js';
 import { interpolateTemplate } from '@application/track-management/prompt-interpolation.js';
 import { broadcast } from './events.js';
 
@@ -16,6 +18,9 @@ export interface TodoRouterDeps {
   summaries: SummaryRepository;
   tickets: TicketRepository;
   promptTemplates: PromptTemplateRepository;
+  agents: AgentRepository;
+  filesystemScanner: FilesystemAgentScanner;
+  projectRoot: string;
   terminal: {
     createSession: (
       trackId: TrackId,
@@ -26,7 +31,7 @@ export interface TodoRouterDeps {
 
 export function createTodoRouter(deps: TodoRouterDeps): Router {
   const router = Router();
-  const { todos, tracks, sessions, summaries, tickets, promptTemplates, terminal } = deps;
+  const { todos, tracks, sessions, summaries, tickets, promptTemplates, agents, filesystemScanner, projectRoot, terminal } = deps;
 
   // --- List all todos (with optional filters) ---
 
@@ -139,8 +144,23 @@ export function createTodoRouter(deps: TodoRouterDeps): Router {
         return;
       }
 
-      // Compose system prompt: track context + summary + template + todo task
+      // Accept optional agentId from request body
+      const agentId = req.body?.agentId as AgentId | undefined;
+
+      // Compose system prompt: agent + track context + summary + template + todo task
       const parts: string[] = [];
+
+      // If an agent is specified, prepend its system prompt
+      if (agentId) {
+        // Check DB first (workshop agents), then filesystem
+        let agent = agents.findById(agentId);
+        if (!agent) {
+          agent = filesystemScanner.findById(agentId, projectRoot);
+        }
+        if (agent) {
+          parts.push(`## Agent: ${agent.name}\n\n${agent.systemPrompt}`);
+        }
+      }
 
       if (track.context) {
         parts.push(track.context);
@@ -176,10 +196,11 @@ export function createTodoRouter(deps: TodoRouterDeps): Router {
         initialPrompt: taskPrompt,
       });
 
-      // Update todo status and link session
+      // Update todo status, link session, and store agent reference
       const updated = todos.update(todo.id, {
         status: 'in-progress',
         sessionId: session.id as SessionId,
+        agentId,
       });
 
       broadcast('todo:dispatched', todo.trackId);

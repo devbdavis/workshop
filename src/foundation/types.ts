@@ -9,6 +9,7 @@ export type PathId = string & { readonly __brand: 'PathId' };
 export type TemplateId = string & { readonly __brand: 'TemplateId' };
 export type TodoId = string & { readonly __brand: 'TodoId' };
 export type PermissionRequestId = string & { readonly __brand: 'PermissionRequestId' };
+export type AgentId = string & { readonly __brand: 'AgentId' };
 
 // Track
 export interface Track {
@@ -128,6 +129,7 @@ export interface Todo {
   priority: TodoPriority;
   refined: boolean;
   sessionId?: SessionId;
+  agentId?: AgentId;
   sortOrder: number;
   createdAt: string;
   updatedAt: string;
@@ -182,6 +184,27 @@ export interface PromptTemplate {
   name: string;
   description?: string;
   content: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+// Agent
+export type AgentSource = 'global' | 'project' | 'workshop';
+
+export interface Agent {
+  id: AgentId;
+  name: string;
+  description: string;
+  model?: string;
+  color?: string;
+  systemPrompt: string;
+  source: AgentSource;
+  /** Filesystem path for global/project agents */
+  filePath?: string;
+  /** Allowed tools (from Claude Code agent frontmatter) */
+  allowedTools?: string[];
+  /** Max agentic turns */
+  maxTurns?: number;
   createdAt: string;
   updatedAt: string;
 }
