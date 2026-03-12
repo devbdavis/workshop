@@ -9,7 +9,7 @@ export interface TodoRepository {
   create(todo: Omit<Todo, 'id' | 'createdAt' | 'updatedAt'>): Todo;
   update(
     id: TodoId,
-    data: Partial<Pick<Todo, 'title' | 'description' | 'status' | 'priority' | 'refined' | 'sessionId' | 'sortOrder'>>,
+    data: Partial<Pick<Todo, 'title' | 'description' | 'status' | 'priority' | 'refined' | 'sessionId' | 'agentId' | 'sortOrder'>>,
   ): Todo | null;
   delete(id: TodoId): boolean;
 }
