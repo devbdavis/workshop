@@ -3,34 +3,6 @@ import { v4 as uuid } from 'uuid';
 import type { TerminalLayout, LayoutNode, LayoutLeaf, LayoutSplit, LayoutNodeId, SessionId } from '@foundation/types';
 import type { Session } from '@foundation/types';
 
-/** Build a default layout from a list of foreground sessions (vertical stack) */
-function buildDefaultLayout(sessions: Session[]): TerminalLayout {
-  const fg = sessions.filter((s) => !s.background);
-  if (fg.length === 0) return { root: null };
-  if (fg.length === 1) {
-    return {
-      root: {
-        type: 'leaf',
-        id: uuid() as LayoutNodeId,
-        sessionId: fg[0].id,
-      },
-    };
-  }
-  return {
-    root: {
-      type: 'split',
-      id: uuid() as LayoutNodeId,
-      direction: 'vertical',
-      children: fg.map((s) => ({
-        type: 'leaf' as const,
-        id: uuid() as LayoutNodeId,
-        sessionId: s.id,
-      })),
-      sizes: fg.map(() => 100 / fg.length),
-    },
-  };
-}
-
 /** Collect all session IDs referenced in a layout tree */
 function collectSessionIds(node: LayoutNode | null): Set<SessionId> {
   if (!node) return new Set();
@@ -57,7 +29,6 @@ function removeNode(node: LayoutNode, targetId: LayoutNodeId): LayoutNode | null
   }
   if (remaining.length === 0) return null;
   if (remaining.length === 1) return remaining[0];
-  // Normalize sizes
   const total = remainingSizes.reduce((a, b) => a + b, 0);
   const normalizedSizes = remainingSizes.map((s) => (s / total) * 100);
   return { ...node, children: remaining, sizes: normalizedSizes };
@@ -129,7 +100,6 @@ export interface UseTerminalLayoutResult {
   splitPane: (nodeId: LayoutNodeId, direction: 'horizontal' | 'vertical', newSessionId: SessionId) => void;
   closePane: (nodeId: LayoutNodeId) => void;
   resizePanes: (splitId: LayoutNodeId, newSizes: number[]) => void;
-  /** Sync layout with current session list (add missing, remove stale) */
   syncWithSessions: (sessions: Session[]) => void;
 }
 
@@ -138,14 +108,18 @@ export function useTerminalLayout(
   sessions: Session[],
 ): UseTerminalLayoutResult {
   const [layout, setLayoutState] = useState<TerminalLayout>({ root: null });
-  const [loaded, setLoaded] = useState(false);
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const trackIdRef = useRef(trackId);
   trackIdRef.current = trackId;
 
-  // Keep a ref to the latest layout so the sync effect always reads current state
+  // Keep a ref to the latest layout so callbacks always read current state
   const layoutRef = useRef<TerminalLayout>(layout);
   layoutRef.current = layout;
+
+  // Track whether we've received the layout from the server for this trackId.
+  // This is separate from React state to avoid timing issues: the sync effect
+  // must NOT run until the server response has been written into layoutRef.
+  const serverLayoutReceivedRef = useRef(false);
 
   // Track pending save data for flush-on-unmount
   const pendingSaveRef = useRef<TerminalLayout | null>(null);
@@ -201,37 +175,40 @@ export function useTerminalLayout(
   // Load layout from server on mount (or when trackId changes)
   useEffect(() => {
     let cancelled = false;
-    // Reset loaded state so sync effect doesn't run with stale layout
-    setLoaded(false);
+    // Mark as not received so sync effect won't run with stale data
+    serverLayoutReceivedRef.current = false;
     fetch(`/api/tracks/${trackId}/layout`)
       .then((res) => res.json())
       .then((data: TerminalLayout) => {
         if (!cancelled) {
           setLayoutState(data);
-          setLoaded(true);
+          // Mark received AFTER state is queued — React will process both
+          // in the same render, and the sync effect reads from layoutRef
+          // which gets updated during that render.
+          serverLayoutReceivedRef.current = true;
         }
       })
       .catch(() => {
-        if (!cancelled) setLoaded(true);
+        if (!cancelled) {
+          serverLayoutReceivedRef.current = true;
+        }
       });
     return () => { cancelled = true; };
   }, [trackId]);
 
-  // Sync layout with sessions whenever sessions or loaded state changes
+  // Sync layout with sessions whenever sessions change.
+  // Only runs after the server layout has been received.
   useEffect(() => {
-    if (!loaded) return;
+    if (!serverLayoutReceivedRef.current) return;
 
-    // Read from ref to always get the latest layout value,
-    // avoiding stale closures when sessions trigger this effect
     const currentLayout = layoutRef.current;
     const foreground = sessions.filter((s) => !s.background);
 
-    if (foreground.length === 0) {
-      if (currentLayout.root !== null) {
-        setLayout({ root: null });
-      }
-      return;
-    }
+    // If there are no foreground sessions, do NOT wipe the layout.
+    // The saved layout structure (split directions, sizes) is valuable
+    // and should be preserved for when sessions come back.
+    // The UI layer (TerminalArea) already handles the empty-sessions case.
+    if (foreground.length === 0) return;
 
     const layoutSessionIds = collectSessionIds(currentLayout.root);
     const activeSessionIds = new Set(foreground.map((s) => s.id));
@@ -252,12 +229,34 @@ export function useTerminalLayout(
     // Add missing sessions
     if (missing.length > 0) {
       if (!currentRoot) {
-        // Build fresh layout
-        const newLayout = buildDefaultLayout(foreground);
-        setLayout(newLayout);
+        // No existing structure to preserve — build a fresh layout.
+        // Use horizontal direction to match common multi-pane workflows.
+        if (foreground.length === 1) {
+          setLayout({
+            root: {
+              type: 'leaf',
+              id: uuid() as LayoutNodeId,
+              sessionId: foreground[0].id,
+            },
+          });
+        } else {
+          setLayout({
+            root: {
+              type: 'split',
+              id: uuid() as LayoutNodeId,
+              direction: 'horizontal',
+              children: foreground.map((s) => ({
+                type: 'leaf' as const,
+                id: uuid() as LayoutNodeId,
+                sessionId: s.id,
+              })),
+              sizes: foreground.map(() => 100 / foreground.length),
+            },
+          });
+        }
         return;
       }
-      // Append missing sessions to root
+      // Append missing sessions to existing root, preserving its structure
       for (const session of missing) {
         const newLeaf: LayoutLeaf = {
           type: 'leaf',
@@ -268,7 +267,7 @@ export function useTerminalLayout(
           currentRoot = {
             type: 'split',
             id: uuid() as LayoutNodeId,
-            direction: 'vertical',
+            direction: 'horizontal',
             children: [currentRoot, newLeaf],
             sizes: [50, 50],
           };
@@ -289,7 +288,7 @@ export function useTerminalLayout(
 
     setLayout({ root: currentRoot });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [sessions, loaded]);
+  }, [sessions]);
 
   const splitPane = useCallback(
     (nodeId: LayoutNodeId, direction: 'horizontal' | 'vertical', newSessionId: SessionId) => {
