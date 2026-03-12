@@ -1,5 +1,5 @@
 import { execSync } from 'child_process';
-import { writeFileSync, mkdirSync, rmSync, existsSync } from 'fs';
+import { writeFileSync, mkdirSync, rmSync, existsSync, chmodSync } from 'fs';
 import path from 'path';
 import { v4 as uuid } from 'uuid';
 import type { SessionRepository } from '@domain/session/repository';
@@ -24,6 +24,8 @@ export interface CreateSessionOptions {
   background?: boolean;
   /** Todo ID if dispatched from a todo (used in system prompt extension). */
   todoId?: string;
+  /** Initial prompt to send to Claude (the task to work on). */
+  initialPrompt?: string;
 }
 
 export interface TerminalManager {
@@ -127,31 +129,43 @@ export function createTerminalManager(sessionRepo: SessionRepository): TerminalM
       });
 
       if (!options?.skipClaude) {
-        const claudeArgs = ['claude'];
         const sessionDir = getSessionDir(session.id);
+        const launcherFile = path.join(sessionDir, 'launch.sh');
+        const launcherLines = ['#!/bin/bash', 'set -e', ''];
+        const claudeArgs = ['claude'];
 
         if (options?.systemPrompt) {
           let prompt = options.systemPrompt;
-
-          // For background agents, append self-management instructions
           if (options.background) {
             prompt = appendBackgroundInstructions(prompt, options.todoId);
           }
-
           const promptFile = path.join(sessionDir, 'system-prompt.md');
           writeFileSync(promptFile, prompt, 'utf-8');
-          claudeArgs.push('--system-prompt-file', promptFile);
+          claudeArgs.push('--system-prompt-file', JSON.stringify(promptFile));
         }
 
-        // For background agents, wire up permission hooks
         if (options?.background) {
           const settingsFile = writeHookSettings(sessionDir, session.id);
-          claudeArgs.push('--settings', settingsFile);
+          claudeArgs.push('--settings', JSON.stringify(settingsFile));
         }
 
-        const cmd = claudeArgs.join(' ');
+        // For background agents, use -p with the initial prompt piped from a file.
+        // Claude runs the task autonomously and exits when done.
+        // The user can still attach to the tmux session to monitor output.
+        if (options?.initialPrompt) {
+          const promptMsgFile = path.join(sessionDir, 'initial-prompt.txt');
+          writeFileSync(promptMsgFile, options.initialPrompt, 'utf-8');
+          launcherLines.push(`exec ${claudeArgs.join(' ')} -p "$(cat ${JSON.stringify(promptMsgFile)})"`);
+        } else {
+          launcherLines.push(`exec ${claudeArgs.join(' ')}`);
+        }
+
+        writeFileSync(launcherFile, launcherLines.join('\n') + '\n', 'utf-8');
+        chmodSync(launcherFile, 0o755);
+
+        // Launch via the script — avoids all quoting issues with tmux send-keys
         execSync(
-          `tmux send-keys -t ${tmuxName} ${JSON.stringify(cmd)} Enter`,
+          `tmux send-keys -t ${tmuxName} ${JSON.stringify(launcherFile)} Enter`,
           { stdio: 'pipe' },
         );
       }
