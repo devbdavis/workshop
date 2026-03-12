@@ -127,6 +127,18 @@ function runMigrations(db: Database.Database): void {
       updated_at TEXT NOT NULL
     );
 
+    CREATE TABLE IF NOT EXISTS permission_requests (
+      id TEXT PRIMARY KEY,
+      session_id TEXT NOT NULL REFERENCES sessions(id) ON DELETE CASCADE,
+      tool_name TEXT NOT NULL,
+      tool_input TEXT NOT NULL,
+      decision TEXT NOT NULL DEFAULT 'pending',
+      decision_reason TEXT,
+      user_comment TEXT,
+      created_at TEXT NOT NULL,
+      resolved_at TEXT
+    );
+
     CREATE TABLE IF NOT EXISTS todos (
       id TEXT PRIMARY KEY,
       track_id TEXT NOT NULL REFERENCES tracks(id) ON DELETE CASCADE,

@@ -8,6 +8,7 @@ export type RepoId = string & { readonly __brand: 'RepoId' };
 export type PathId = string & { readonly __brand: 'PathId' };
 export type TemplateId = string & { readonly __brand: 'TemplateId' };
 export type TodoId = string & { readonly __brand: 'TodoId' };
+export type PermissionRequestId = string & { readonly __brand: 'PermissionRequestId' };
 
 // Track
 export interface Track {
@@ -129,6 +130,21 @@ export interface Todo {
   sortOrder: number;
   createdAt: string;
   updatedAt: string;
+}
+
+// Permission request (for background agent tool approvals)
+export type PermissionDecision = 'pending' | 'approved' | 'denied';
+
+export interface PermissionRequest {
+  id: PermissionRequestId;
+  sessionId: SessionId;
+  toolName: string;
+  toolInput: Record<string, unknown>;
+  decision: PermissionDecision;
+  decisionReason?: string;
+  userComment?: string;
+  createdAt: string;
+  resolvedAt?: string;
 }
 
 // Prompt template
