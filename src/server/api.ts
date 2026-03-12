@@ -8,13 +8,16 @@ import { createAutomationRuleRepository } from '@infrastructure/persistence/auto
 import { createPromptTemplateRepository } from '@infrastructure/persistence/prompt-template-repository.js';
 import { createTodoRepository } from '@infrastructure/persistence/todo-repository.js';
 import { createPermissionRequestRepository } from '@infrastructure/persistence/permission-repository.js';
+import { createAgentRepository } from '@infrastructure/persistence/agent-repository.js';
 import { createTerminalManager } from '@infrastructure/terminal/manager.js';
 import { createGitAdapter } from '@infrastructure/git/git-adapter.js';
+import { createFilesystemAgentScanner } from '@infrastructure/agents/filesystem-scanner.js';
 import { createSummaryGenerationService } from '@application/summary-generation/service.js';
 import { interpolateTemplate } from '@application/track-management/prompt-interpolation.js';
 import type { AutomationEngine } from '@application/automation-engine/engine.js';
 import { createTodoRouter } from './todo-routes.js';
 import { createPermissionRouter } from './permission-routes.js';
+import { createAgentRouter } from './agent-routes.js';
 import { broadcast } from './events.js';
 
 export interface ApiRouterDeps {
@@ -31,6 +34,9 @@ export function createApiRouter(deps: ApiRouterDeps = {}): Router {
   const promptTemplates = createPromptTemplateRepository();
   const todos = createTodoRepository();
   const permissions = createPermissionRequestRepository();
+  const agents = createAgentRepository();
+  const filesystemScanner = createFilesystemAgentScanner();
+  const projectRoot = process.cwd();
   const terminal = createTerminalManager(sessions);
   terminal.syncSessionStates();
   const gitAdapter = createGitAdapter();
@@ -49,6 +55,9 @@ export function createApiRouter(deps: ApiRouterDeps = {}): Router {
     summaries,
     tickets,
     promptTemplates,
+    agents,
+    filesystemScanner,
+    projectRoot,
     terminal,
   });
   router.use(todoRouter);
@@ -56,6 +65,10 @@ export function createApiRouter(deps: ApiRouterDeps = {}): Router {
   // Mount permission sub-router
   const permissionRouter = createPermissionRouter({ permissions });
   router.use(permissionRouter);
+
+  // Mount agent sub-router
+  const agentRouter = createAgentRouter({ agents, filesystemScanner, projectRoot });
+  router.use(agentRouter);
 
   // --- Tracks ---
 

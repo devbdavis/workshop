@@ -1,7 +1,7 @@
 import { v4 as uuid } from 'uuid';
 import { getDatabase } from './database.js';
 import type { TodoRepository } from '@domain/todo/repository';
-import type { Todo, TodoId, TodoStatus, TrackId, SessionId } from '@foundation/types';
+import type { Todo, TodoId, TodoStatus, TrackId, SessionId, AgentId } from '@foundation/types';
 
 export function createTodoRepository(): TodoRepository {
   const db = getDatabase();
@@ -45,8 +45,8 @@ export function createTodoRepository(): TodoRepository {
       const now = new Date().toISOString();
 
       db.prepare(
-        `INSERT INTO todos (id, track_id, title, description, status, priority, refined, session_id, sort_order, created_at, updated_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        `INSERT INTO todos (id, track_id, title, description, status, priority, refined, session_id, agent_id, sort_order, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       ).run(
         id,
         data.trackId,
@@ -56,6 +56,7 @@ export function createTodoRepository(): TodoRepository {
         data.priority,
         data.refined ? 1 : 0,
         data.sessionId || null,
+        data.agentId || null,
         data.sortOrder,
         now,
         now,
@@ -70,6 +71,7 @@ export function createTodoRepository(): TodoRepository {
         priority: data.priority,
         refined: data.refined,
         sessionId: data.sessionId,
+        agentId: data.agentId,
         sortOrder: data.sortOrder,
         createdAt: now,
         updatedAt: now,
@@ -87,11 +89,12 @@ export function createTodoRepository(): TodoRepository {
       const priority = data.priority ?? existing.priority;
       const refined = data.refined !== undefined ? data.refined : existing.refined;
       const sessionId = data.sessionId !== undefined ? data.sessionId : existing.sessionId;
+      const agentId = data.agentId !== undefined ? data.agentId : existing.agentId;
       const sortOrder = data.sortOrder ?? existing.sortOrder;
 
       db.prepare(
         `UPDATE todos
-         SET title = ?, description = ?, status = ?, priority = ?, refined = ?, session_id = ?, sort_order = ?, updated_at = ?
+         SET title = ?, description = ?, status = ?, priority = ?, refined = ?, session_id = ?, agent_id = ?, sort_order = ?, updated_at = ?
          WHERE id = ?`,
       ).run(
         title,
@@ -100,6 +103,7 @@ export function createTodoRepository(): TodoRepository {
         priority,
         refined ? 1 : 0,
         sessionId || null,
+        agentId || null,
         sortOrder,
         now,
         id,
@@ -113,6 +117,7 @@ export function createTodoRepository(): TodoRepository {
         priority,
         refined,
         sessionId,
+        agentId,
         sortOrder,
         updatedAt: now,
       };
@@ -136,6 +141,7 @@ interface TodoRow {
   priority: string;
   refined: number;
   session_id: string | null;
+  agent_id: string | null;
   sort_order: number;
   created_at: string;
   updated_at: string;
@@ -151,6 +157,7 @@ function rowToTodo(row: TodoRow): Todo {
     priority: row.priority as Todo['priority'],
     refined: row.refined === 1,
     sessionId: row.session_id as SessionId | undefined || undefined,
+    agentId: row.agent_id as AgentId | undefined || undefined,
     sortOrder: row.sort_order,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
