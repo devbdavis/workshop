@@ -152,6 +152,19 @@ function runMigrations(db: Database.Database): void {
       created_at TEXT NOT NULL,
       updated_at TEXT NOT NULL
     );
+
+    CREATE TABLE IF NOT EXISTS agents (
+      id TEXT PRIMARY KEY,
+      name TEXT NOT NULL,
+      description TEXT NOT NULL,
+      model TEXT,
+      color TEXT,
+      system_prompt TEXT NOT NULL,
+      allowed_tools TEXT,
+      max_turns INTEGER,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    );
   `);
 
   // Migration: add default_prompt_template_id column to tracks
@@ -178,6 +191,13 @@ function runMigrations(db: Database.Database): void {
   // Migration: add terminal_layout column to tracks (JSON string)
   try {
     db.exec(`ALTER TABLE tracks ADD COLUMN terminal_layout TEXT;`);
+  } catch {
+    // Column already exists — safe to ignore
+  }
+
+  // Migration: add agent_id column to todos
+  try {
+    db.exec(`ALTER TABLE todos ADD COLUMN agent_id TEXT;`);
   } catch {
     // Column already exists — safe to ignore
   }

@@ -3,6 +3,7 @@ import { Dashboard } from './dashboard/Dashboard';
 import { TrackView } from './track-view/TrackView';
 import { Settings } from './settings/Settings';
 import { KanbanBoard } from './kanban/KanbanBoard';
+import { AgentsPage } from './agents/AgentsPage';
 
 export function App() {
   return (
@@ -12,6 +13,7 @@ export function App() {
         <Route path="/tracks/:trackId" element={<TrackView />} />
         <Route path="/settings" element={<Settings />} />
         <Route path="/kanban" element={<KanbanBoard />} />
+        <Route path="/agents" element={<AgentsPage />} />
       </Routes>
     </div>
   );

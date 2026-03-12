@@ -36,6 +36,12 @@ export function Dashboard() {
             Kanban
           </Link>
           <Link
+            to="/agents"
+            className="px-4 py-2 text-sm bg-gray-800 hover:bg-gray-700 rounded-lg transition-colors"
+          >
+            Agents
+          </Link>
+          <Link
             to="/settings"
             className="px-4 py-2 text-sm bg-gray-800 hover:bg-gray-700 rounded-lg transition-colors"
           >

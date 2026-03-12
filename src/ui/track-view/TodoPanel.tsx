@@ -1,5 +1,5 @@
-import { useState } from 'react';
-import type { Todo, TodoPriority, TodoStatus, Session } from '@foundation/types';
+import { useState, useEffect } from 'react';
+import type { Todo, TodoPriority, TodoStatus, Session, Agent } from '@foundation/types';
 import { TerminalModal } from './TerminalModal';
 
 interface Props {
@@ -35,12 +35,22 @@ export function TodoPanel({ trackId, todos, sessions, onUpdate }: Props) {
   const [showAdd, setShowAdd] = useState(false);
   const [terminalSessionId, setTerminalSessionId] = useState<string | null>(null);
   const [terminalTodoTitle, setTerminalTodoTitle] = useState('');
+  const [agents, setAgents] = useState<Agent[]>([]);
+  const [dispatchingTodoId, setDispatchingTodoId] = useState<string | null>(null);
   const activeTodos = todos.filter((t) => t.status !== 'done');
 
   // Build a set of active session IDs for quick lookup
   const activeSessionIds = new Set(
     sessions.filter((s) => s.state === 'active' && s.background).map((s) => s.id),
   );
+
+  // Load agents on mount
+  useEffect(() => {
+    fetch('/api/agents')
+      .then((res) => res.json())
+      .then(setAgents)
+      .catch((err) => console.error('Failed to load agents:', err));
+  }, []);
 
   async function deleteTodo(todoId: string) {
     await fetch(`/api/todos/${todoId}`, { method: 'DELETE' });
@@ -56,8 +66,13 @@ export function TodoPanel({ trackId, todos, sessions, onUpdate }: Props) {
     onUpdate();
   }
 
-  async function dispatchTodo(todoId: string) {
-    await fetch(`/api/todos/${todoId}/dispatch`, { method: 'POST' });
+  async function dispatchTodo(todoId: string, agentId?: string) {
+    await fetch(`/api/todos/${todoId}/dispatch`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ agentId }),
+    });
+    setDispatchingTodoId(null);
     onUpdate();
   }
 
@@ -111,12 +126,21 @@ export function TodoPanel({ trackId, todos, sessions, onUpdate }: Props) {
                       {STATUS_LABELS[todo.status]}
                     </button>
                     {todo.refined && todo.status === 'ready' && (
-                      <button
-                        onClick={() => dispatchTodo(todo.id)}
-                        className="text-[10px] px-1.5 py-0.5 rounded bg-green-900 text-green-300 hover:bg-green-800"
-                      >
-                        Dispatch
-                      </button>
+                      <div className="relative">
+                        <button
+                          onClick={() => setDispatchingTodoId(dispatchingTodoId === todo.id ? null : todo.id)}
+                          className="text-[10px] px-1.5 py-0.5 rounded bg-green-900 text-green-300 hover:bg-green-800"
+                        >
+                          Dispatch
+                        </button>
+                        {dispatchingTodoId === todo.id && (
+                          <AgentDropdown
+                            agents={agents}
+                            onSelect={(agentId) => dispatchTodo(todo.id, agentId)}
+                            onClose={() => setDispatchingTodoId(null)}
+                          />
+                        )}
+                      </div>
                     )}
                     {todo.sessionId && activeSessionIds.has(todo.sessionId) ? (
                       <button
@@ -227,6 +251,45 @@ function AddTodoForm({
           Cancel
         </button>
       </div>
+    </div>
+  );
+}
+
+function AgentDropdown({
+  agents,
+  onSelect,
+  onClose,
+}: {
+  agents: Agent[];
+  onSelect: (agentId?: string) => void;
+  onClose: () => void;
+}) {
+  return (
+    <div className="absolute left-0 top-full mt-1 z-10 bg-gray-800 border border-gray-700 rounded shadow-lg min-w-[160px]">
+      <button
+        onClick={() => onSelect(undefined)}
+        className="w-full text-left px-3 py-1.5 text-xs text-gray-300 hover:bg-gray-700"
+      >
+        Default (no agent)
+      </button>
+      {agents.length > 0 && <div className="border-t border-gray-700" />}
+      {agents.map((agent) => (
+        <button
+          key={agent.id}
+          onClick={() => onSelect(agent.id)}
+          className="w-full text-left px-3 py-1.5 text-xs text-gray-300 hover:bg-gray-700"
+        >
+          <span className="font-medium">{agent.name}</span>
+          <span className="text-gray-500 ml-1">({agent.source})</span>
+        </button>
+      ))}
+      <div className="border-t border-gray-700" />
+      <button
+        onClick={onClose}
+        className="w-full text-left px-3 py-1.5 text-xs text-gray-500 hover:bg-gray-700"
+      >
+        Cancel
+      </button>
     </div>
   );
 }
