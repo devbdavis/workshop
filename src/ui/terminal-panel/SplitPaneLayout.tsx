@@ -1,4 +1,4 @@
-import { useRef, useCallback } from 'react';
+import { useRef, useCallback, useState } from 'react';
 import type { LayoutNode, LayoutNodeId, SessionId } from '@foundation/types';
 import type { Session } from '@foundation/types';
 import { TerminalPanel } from './TerminalPanel';
@@ -13,6 +13,7 @@ interface Props {
   onResize: (splitId: LayoutNodeId, newSizes: number[]) => void;
   onCreateSession: () => Promise<Session | null>;
   onDestroySession: (sessionId: string) => void;
+  onRenameSession: (sessionId: string, name: string) => void;
 }
 
 export function SplitPaneLayout({
@@ -24,6 +25,7 @@ export function SplitPaneLayout({
   onResize,
   onCreateSession,
   onDestroySession,
+  onRenameSession,
 }: Props) {
   if (node.type === 'leaf') {
     return (
@@ -35,6 +37,7 @@ export function SplitPaneLayout({
         onClose={onClose}
         onCreateSession={onCreateSession}
         onDestroySession={onDestroySession}
+        onRenameSession={onRenameSession}
       />
     );
   }
@@ -49,6 +52,7 @@ export function SplitPaneLayout({
       onResize={onResize}
       onCreateSession={onCreateSession}
       onDestroySession={onDestroySession}
+      onRenameSession={onRenameSession}
     />
   );
 }
@@ -63,10 +67,14 @@ interface LeafProps {
   onClose: (nodeId: LayoutNodeId) => void;
   onCreateSession: () => Promise<Session | null>;
   onDestroySession: (sessionId: string) => void;
+  onRenameSession: (sessionId: string, name: string) => void;
 }
 
-function LeafPane({ node, trackId, sessions, onSplit, onClose, onCreateSession, onDestroySession }: LeafProps) {
+function LeafPane({ node, trackId, sessions, onSplit, onClose, onCreateSession, onDestroySession, onRenameSession }: LeafProps) {
   const session = sessions.find((s) => s.id === node.sessionId);
+  const [editing, setEditing] = useState(false);
+  const [editValue, setEditValue] = useState('');
+  const inputRef = useRef<HTMLInputElement>(null);
 
   const handleSplit = useCallback(
     async (direction: 'horizontal' | 'vertical') => {
@@ -78,13 +86,54 @@ function LeafPane({ node, trackId, sessions, onSplit, onClose, onCreateSession, 
     [node.id, onSplit, onCreateSession],
   );
 
+  const displayName = session?.name || (session ? `session:${session.id.slice(0, 8)}` : 'empty');
+
+  const startEditing = useCallback(() => {
+    if (!session) return;
+    setEditValue(session.name || '');
+    setEditing(true);
+    // Focus input on next tick after render
+    requestAnimationFrame(() => inputRef.current?.focus());
+  }, [session]);
+
+  const commitEdit = useCallback(() => {
+    if (!session) return;
+    const trimmed = editValue.trim();
+    onRenameSession(session.id, trimmed);
+    setEditing(false);
+  }, [session, editValue, onRenameSession]);
+
+  const cancelEdit = useCallback(() => {
+    setEditing(false);
+  }, []);
+
   return (
     <div className="h-full w-full flex flex-col min-h-0 min-w-0">
       {/* Pane header */}
       <div className="flex items-center justify-between px-2 py-0.5 bg-gray-900 border-b border-gray-800 shrink-0">
-        <span className="text-xs text-gray-400 font-mono truncate">
-          {session ? `session:${session.id.slice(0, 8)}` : 'empty'}
-        </span>
+        {editing ? (
+          <input
+            ref={inputRef}
+            type="text"
+            value={editValue}
+            onChange={(e) => setEditValue(e.target.value)}
+            onBlur={commitEdit}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') commitEdit();
+              if (e.key === 'Escape') cancelEdit();
+            }}
+            className="text-xs text-gray-300 font-mono bg-gray-800 border border-gray-600 rounded px-1 py-0 outline-none focus:border-blue-500 min-w-0 w-40"
+            placeholder={session ? `session:${session.id.slice(0, 8)}` : ''}
+          />
+        ) : (
+          <span
+            className="text-xs text-gray-400 font-mono truncate cursor-pointer hover:text-gray-200"
+            onDoubleClick={startEditing}
+            title="Double-click to rename"
+          >
+            {displayName}
+          </span>
+        )}
         <div className="flex items-center gap-1">
           {session && (
             <span
@@ -150,6 +199,7 @@ interface SplitProps {
   onResize: (splitId: LayoutNodeId, newSizes: number[]) => void;
   onCreateSession: () => Promise<Session | null>;
   onDestroySession: (sessionId: string) => void;
+  onRenameSession: (sessionId: string, name: string) => void;
 }
 
 function SplitContainer({
@@ -161,6 +211,7 @@ function SplitContainer({
   onResize,
   onCreateSession,
   onDestroySession,
+  onRenameSession,
 }: SplitProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const sizesRef = useRef<number[]>(node.sizes);
@@ -230,6 +281,7 @@ function SplitContainer({
               onResize={onResize}
               onCreateSession={onCreateSession}
               onDestroySession={onDestroySession}
+              onRenameSession={onRenameSession}
             />
           </div>
           {i < node.children.length - 1 && (

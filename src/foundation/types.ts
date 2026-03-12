@@ -54,6 +54,7 @@ export type SessionState = 'active' | 'detached' | 'dead';
 export interface Session {
   id: SessionId;
   trackId: TrackId;
+  name?: string;
   tmuxSession: string;
   claudeResumeId?: string;
   systemPrompt?: string;

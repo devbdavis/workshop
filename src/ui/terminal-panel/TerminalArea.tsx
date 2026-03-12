@@ -7,9 +7,10 @@ interface Props {
   sessions: Session[];
   onDestroySession: (sessionId: string) => void;
   onCreateSession: () => Promise<Session | null>;
+  onRenameSession: (sessionId: string, name: string) => void;
 }
 
-export function TerminalArea({ trackId, sessions, onDestroySession, onCreateSession }: Props) {
+export function TerminalArea({ trackId, sessions, onDestroySession, onCreateSession, onRenameSession }: Props) {
   const foregroundSessions = sessions.filter((s) => !s.background);
   const backgroundSessions = sessions.filter((s) => s.background);
   const { layout, splitPane, closePane, resizePanes } = useTerminalLayout(trackId, sessions);
@@ -35,6 +36,7 @@ export function TerminalArea({ trackId, sessions, onDestroySession, onCreateSess
             onResize={resizePanes}
             onCreateSession={onCreateSession}
             onDestroySession={onDestroySession}
+            onRenameSession={onRenameSession}
           />
         </div>
       )}
@@ -58,7 +60,7 @@ function BackgroundAgentBar({
       <div className="flex gap-2 ml-auto">
         {sessions.map((s) => (
           <div key={s.id} className="flex items-center gap-1.5 text-xs">
-            <span className="text-gray-500 font-mono">{s.tmuxSession.slice(-8)}</span>
+            <span className="text-gray-500 font-mono">{s.name || s.tmuxSession.slice(-8)}</span>
             <span className="text-gray-600">
               tmux attach -t {s.tmuxSession}
             </span>

@@ -60,6 +60,20 @@ describe('Session Repository', () => {
       expect(session.systemPrompt).toBe('You are a helpful assistant');
     });
 
+    it('should create a session with a name', () => {
+      const track = createParentTrack();
+      const session = sessionRepo.create({
+        trackId: track.id,
+        tmuxSession: `tmux-named-${randomUUID()}`,
+        name: 'build-runner',
+        state: 'active',
+      });
+
+      expect(session.name).toBe('build-runner');
+      const found = sessionRepo.findById(session.id);
+      expect(found!.name).toBe('build-runner');
+    });
+
     it('should generate unique session IDs', () => {
       const track = createParentTrack();
       const s1 = sessionRepo.create({
@@ -210,6 +224,59 @@ describe('Session Repository', () => {
 
     it('should return null when updating state of non-existent session', () => {
       const result = sessionRepo.updateState('non-existent' as SessionId, 'dead');
+
+      expect(result).toBeNull();
+    });
+  });
+
+  describe('updateName', () => {
+    it('should update the session name', () => {
+      const track = createParentTrack();
+      const session = sessionRepo.create({
+        trackId: track.id,
+        tmuxSession: `tmux-name-${randomUUID()}`,
+        state: 'active',
+      });
+
+      const updated = sessionRepo.updateName(session.id, 'my-build-session');
+
+      expect(updated).not.toBeNull();
+      expect(updated!.name).toBe('my-build-session');
+    });
+
+    it('should persist the name so it can be retrieved later', () => {
+      const track = createParentTrack();
+      const session = sessionRepo.create({
+        trackId: track.id,
+        tmuxSession: `tmux-name-persist-${randomUUID()}`,
+        state: 'active',
+      });
+
+      sessionRepo.updateName(session.id, 'persistent-name');
+      const found = sessionRepo.findById(session.id);
+
+      expect(found).not.toBeNull();
+      expect(found!.name).toBe('persistent-name');
+    });
+
+    it('should allow setting name to empty string to clear it', () => {
+      const track = createParentTrack();
+      const session = sessionRepo.create({
+        trackId: track.id,
+        tmuxSession: `tmux-name-clear-${randomUUID()}`,
+        state: 'active',
+      });
+
+      sessionRepo.updateName(session.id, 'temp-name');
+      const updated = sessionRepo.updateName(session.id, '');
+
+      expect(updated).not.toBeNull();
+      // Empty string is falsy, so rowToSession converts to undefined
+      expect(updated!.name).toBeUndefined();
+    });
+
+    it('should return null when updating name of non-existent session', () => {
+      const result = sessionRepo.updateName('non-existent' as SessionId, 'some-name');
 
       expect(result).toBeNull();
     });
