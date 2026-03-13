@@ -11,6 +11,8 @@ export type TodoId = string & { readonly __brand: 'TodoId' };
 export type PermissionRequestId = string & { readonly __brand: 'PermissionRequestId' };
 export type AgentId = string & { readonly __brand: 'AgentId' };
 export type ScheduledTaskId = string & { readonly __brand: 'ScheduledTaskId' };
+export type WorkflowTicketId = string & { readonly __brand: 'WorkflowTicketId' };
+export type WorkflowTransitionId = string & { readonly __brand: 'WorkflowTransitionId' };
 
 // Track
 export interface Track {
@@ -252,6 +254,188 @@ export interface ScheduledTaskRun {
   error?: string;
   startedAt: string;
   completedAt?: string;
+}
+
+// Workflow Ticket
+export type WorkflowTicketType = 'epic' | 'task';
+
+export type EpicState =
+  | 'idea'
+  | 'triaging'
+  | 'needs-input'
+  | 'specced'
+  | 'spec-review'
+  | 'planning'
+  | 'plan-critique'
+  | 'plan-review'
+  | 'splitting'
+  | 'in-progress'
+  | 'integration-review'
+  | 'integration-fix'
+  | 'final-review'
+  | 'approved'
+  | 'merged'
+  | 'cancelled';
+
+export type TaskState =
+  | 'blocked'
+  | 'ready'
+  | 'in-progress'
+  | 'code-review'
+  | 'changes-requested'
+  | 'done'
+  | 'cancelled';
+
+export type WorkflowState = EpicState | TaskState;
+
+/** States that require human approval to advance */
+export type HumanGateState = 'spec-review' | 'plan-review' | 'final-review';
+
+export type AgentRole =
+  | 'triage'
+  | 'planner'
+  | 'plan-critic'
+  | 'splitter'
+  | 'implementer'
+  | 'code-reviewer'
+  | 'integration-reviewer'
+  | 'fixer';
+
+/** State-specific data for triaging */
+export interface TriagingData {
+  questions: Array<{ text: string; answered: boolean; answer?: string }>;
+  iteration: number;
+}
+
+/** State-specific data for needs-input */
+export interface NeedsInputData {
+  pendingQuestions: Array<{ text: string }>;
+}
+
+/** State-specific data for planning */
+export interface PlanningData {
+  planDraft?: string;
+  teamSessionIds: string[];
+  feedback?: string[];
+  iteration: number;
+}
+
+/** State-specific data for plan-critique */
+export interface PlanCritiqueData {
+  criticSessionIds: string[];
+  findings: Array<{ text: string; severity: 'blocking' | 'suggestion'; resolved: boolean }>;
+}
+
+/** State-specific data for splitting */
+export interface SplittingData {
+  plannerSessionId?: string;
+  childTicketIds: WorkflowTicketId[];
+}
+
+/** State-specific data for epic in-progress */
+export interface EpicInProgressData {
+  totalTasks: number;
+  completedTasks: number;
+  failedTasks: number;
+}
+
+/** State-specific data for integration-review */
+export interface IntegrationReviewData {
+  reviewerSessionIds: string[];
+  findings: Array<{ text: string; severity: 'blocking' | 'suggestion'; resolved: boolean }>;
+  iteration: number;
+}
+
+/** State-specific data for final-review */
+export interface FinalReviewData {
+  prLinks: string[];
+  reviewNotes?: string;
+}
+
+/** State-specific data for task code-review */
+export interface CodeReviewData {
+  reviewSessionId?: string;
+  findings: Array<{ text: string; severity: 'blocking' | 'suggestion' }>;
+}
+
+/** State-specific data for changes-requested */
+export interface ChangesRequestedData {
+  feedback: string[];
+  iteration: number;
+}
+
+export interface WorkflowTicket {
+  id: WorkflowTicketId;
+  type: WorkflowTicketType;
+  title: string;
+  description: string;
+  state: WorkflowState;
+  stateData?: Record<string, unknown>;
+
+  // Hierarchy
+  parentId?: WorkflowTicketId;
+  childIds?: WorkflowTicketId[];
+
+  // Relationships
+  trackId?: TrackId;
+  externalTicketId?: TicketId;
+
+  // Assignment
+  assignedAgentRole?: AgentRole;
+  assignedAgentIds?: AgentId[];
+  provider: SessionProvider;
+
+  // Metadata
+  priority: 'low' | 'medium' | 'high' | 'critical';
+  labels?: string[];
+  sortOrder: number;
+
+  // Audit
+  stateChangedAt: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+/** Actor who triggered a state transition */
+export type TransitionActor =
+  | { type: 'agent'; agentId?: string; sessionId?: string }
+  | { type: 'human'; userId?: string }
+  | { type: 'system'; reason: string };
+
+export interface WorkflowTransition {
+  id: WorkflowTransitionId;
+  ticketId: WorkflowTicketId;
+  fromState: WorkflowState;
+  toState: WorkflowState;
+  actor: TransitionActor;
+  comment?: string;
+  data?: Record<string, unknown>;
+  createdAt: string;
+}
+
+export interface TicketDependency {
+  id: string;
+  ticketId: WorkflowTicketId;
+  dependsOnId: WorkflowTicketId;
+  createdAt: string;
+  resolvedAt?: string;
+}
+
+/** Defines behavior and valid transitions for a workflow state */
+export interface StageDefinition {
+  state: WorkflowState;
+  ticketType: WorkflowTicketType;
+  agentActionable: boolean;
+  humanGate: boolean;
+  agentRole?: AgentRole;
+  agentCount?: number;
+  parallel?: boolean;
+  validTransitions: Array<{
+    to: WorkflowState;
+    trigger: 'agent-complete' | 'human-approve' | 'human-reject'
+      | 'auto' | 'all-deps-resolved' | 'all-tasks-done' | 'manual';
+    condition?: string;
+  }>;
 }
 
 // Agent
