@@ -17,5 +17,6 @@ export default defineConfig({
     environment: 'node',
     fileParallelism: false,
     globalSetup: ['tests/global-setup.ts'],
+    exclude: ['**/node_modules/**', '**/.claude/**'],
   },
 });

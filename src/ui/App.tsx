@@ -6,6 +6,8 @@ import { KanbanBoard } from './kanban/KanbanBoard';
 import { AgentsPage } from './agents/AgentsPage';
 import { SessionsPage } from './sessions/SessionsPage';
 import { ScheduledTasksPage } from './scheduled-tasks/ScheduledTasksPage';
+import { WorkflowPage } from './workflow/WorkflowPage';
+import { EpicDetail } from './workflow/EpicDetail';
 import { TopNav } from './TopNav';
 
 export function App() {
@@ -21,6 +23,8 @@ export function App() {
           <Route path="/agents" element={<AgentsPage />} />
           <Route path="/sessions" element={<SessionsPage />} />
           <Route path="/scheduled-tasks" element={<ScheduledTasksPage />} />
+          <Route path="/workflow" element={<WorkflowPage />} />
+          <Route path="/workflow/:id" element={<EpicDetail />} />
         </Routes>
       </div>
     </div>

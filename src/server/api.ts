@@ -28,6 +28,10 @@ import { createPermissionRouter } from './permission-routes.js';
 import { createAgentRouter } from './agent-routes.js';
 import { createVaultRouter } from './vault-routes.js';
 import { createScheduledTaskRouter } from './scheduled-task-routes.js';
+import { createWorkflowRouter } from './workflow-routes.js';
+import { createWorkflowTicketRepository, createWorkflowTransitionRepository } from '@infrastructure/persistence/workflow-repository.js';
+import { createTicketDependencyRepository } from '@infrastructure/persistence/workflow-dependency-repository.js';
+import { createWorkflowEngine } from '@application/workflow/engine.js';
 import { broadcast } from './events.js';
 
 export interface ApiRouterDeps {
@@ -127,6 +131,23 @@ export function createApiRouter(deps: ApiRouterDeps = {}): Router {
     scheduler: taskScheduler,
   });
   router.use(scheduledTaskRouter);
+
+  // Mount workflow sub-router
+  const workflowTickets = createWorkflowTicketRepository();
+  const workflowTransitions = createWorkflowTransitionRepository();
+  const ticketDependencies = createTicketDependencyRepository();
+  const workflowEngine = createWorkflowEngine({
+    tickets: workflowTickets,
+    transitions: workflowTransitions,
+    dependencies: ticketDependencies,
+  });
+  const workflowRouter = createWorkflowRouter({
+    engine: workflowEngine,
+    tickets: workflowTickets,
+    transitions: workflowTransitions,
+    dependencies: ticketDependencies,
+  });
+  router.use(workflowRouter);
 
   // Stop scheduler on shutdown
   process.on('SIGINT', () => taskScheduler.stop());

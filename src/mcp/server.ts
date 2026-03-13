@@ -14,6 +14,7 @@ import { z } from 'zod';
 import { registerTodoTools } from './todo-tools.js';
 import { registerVaultTools } from './vault-tools.js';
 import { registerScheduledTaskTools } from './scheduled-task-tools.js';
+import { registerWorkflowTools } from './workflow-tools.js';
 
 const API_URL = process.env.WORKSHOP_API_URL || 'http://localhost:3002';
 
@@ -266,6 +267,10 @@ registerVaultTools(server, api);
 // --- Scheduled Task & Automation Tools ---
 
 registerScheduledTaskTools(server, api);
+
+// --- Workflow Tools ---
+
+registerWorkflowTools(server, api);
 
 // Start
 
