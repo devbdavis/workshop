@@ -28,6 +28,7 @@ export type WorkflowTicketUpdate = Partial<
     | 'stateData'
     | 'trackId'
     | 'externalTicketId'
+    | 'executionSessionId'
     | 'assignedAgentRole'
     | 'assignedAgentIds'
     | 'provider'
@@ -48,6 +49,7 @@ export interface WorkflowTicketRepository {
   }): WorkflowTicket[];
   findChildren(parentId: WorkflowTicketId): WorkflowTicket[];
   findByState(state: WorkflowState): WorkflowTicket[];
+  findByExecutionSessionId(sessionId: string): WorkflowTicket | null;
   findHumanGatePending(): WorkflowTicket[];
   create(ticket: WorkflowTicketCreate): WorkflowTicket;
   update(id: WorkflowTicketId, data: WorkflowTicketUpdate): WorkflowTicket | null;

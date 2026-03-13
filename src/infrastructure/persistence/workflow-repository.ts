@@ -2,7 +2,7 @@ import { v4 as uuid } from 'uuid';
 import { getDatabase } from './database.js';
 import type {
   WorkflowTicket, WorkflowTicketId, WorkflowTransition, WorkflowTransitionId,
-  WorkflowState, WorkflowTicketType, TrackId, TicketId,
+  WorkflowState, WorkflowTicketType, TrackId, TicketId, SessionId,
   AgentId, AgentRole, SessionProvider, TransitionActor,
 } from '@foundation/types';
 import type {
@@ -17,13 +17,38 @@ import type {
 export function createWorkflowTicketRepository(): WorkflowTicketRepository {
   const db = getDatabase();
 
+  // Prepare statements once
+  const findByIdStmt = db.prepare('SELECT * FROM workflow_tickets WHERE id = ?');
+  const findChildrenStmt = db.prepare('SELECT * FROM workflow_tickets WHERE parent_id = ? ORDER BY sort_order ASC');
+  const findByStateStmt = db.prepare('SELECT * FROM workflow_tickets WHERE state = ? ORDER BY sort_order ASC, created_at DESC');
+  const findByExecSessionStmt = db.prepare('SELECT * FROM workflow_tickets WHERE execution_session_id = ? LIMIT 1');
+  const findHumanGatePendingStmt = db.prepare("SELECT * FROM workflow_tickets WHERE state IN ('spec-review', 'plan-review', 'final-review') ORDER BY sort_order ASC, created_at DESC");
+  const insertStmt = db.prepare(
+    `INSERT INTO workflow_tickets
+     (id, type, title, description, state, state_data, parent_id, track_id,
+      external_ticket_id, assigned_agent_role, assigned_agent_ids, provider,
+      priority, labels, sort_order, state_changed_at, created_at, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+  );
+  const updateStmt = db.prepare(
+    `UPDATE workflow_tickets SET
+       title = ?, description = ?, state = ?, state_data = ?, track_id = ?,
+       external_ticket_id = ?, execution_session_id = ?,
+       assigned_agent_role = ?, assigned_agent_ids = ?,
+       provider = ?, priority = ?, labels = ?, sort_order = ?,
+       state_changed_at = ?, updated_at = ?
+     WHERE id = ?`,
+  );
+  const deleteStmt = db.prepare('DELETE FROM workflow_tickets WHERE id = ?');
+
   return {
     findById(id: WorkflowTicketId): WorkflowTicket | null {
-      const row = db.prepare('SELECT * FROM workflow_tickets WHERE id = ?').get(id) as TicketRow | undefined;
+      const row = findByIdStmt.get(id) as TicketRow | undefined;
       return row ? rowToTicket(row) : null;
     },
 
     findAll(filters?): WorkflowTicket[] {
+      // Dynamic query - cannot be pre-prepared due to variable WHERE clauses
       const clauses: string[] = [];
       const params: unknown[] = [];
       if (filters?.type) { clauses.push('type = ?'); params.push(filters.type); }
@@ -36,30 +61,29 @@ export function createWorkflowTicketRepository(): WorkflowTicketRepository {
     },
 
     findChildren(parentId: WorkflowTicketId): WorkflowTicket[] {
-      const rows = db.prepare('SELECT * FROM workflow_tickets WHERE parent_id = ? ORDER BY sort_order ASC').all(parentId) as TicketRow[];
+      const rows = findChildrenStmt.all(parentId) as TicketRow[];
       return rows.map(rowToTicket);
     },
 
     findByState(state: WorkflowState): WorkflowTicket[] {
-      const rows = db.prepare('SELECT * FROM workflow_tickets WHERE state = ? ORDER BY sort_order ASC, created_at DESC').all(state) as TicketRow[];
+      const rows = findByStateStmt.all(state) as TicketRow[];
       return rows.map(rowToTicket);
     },
 
+    findByExecutionSessionId(sessionId: string): WorkflowTicket | null {
+      const row = findByExecSessionStmt.get(sessionId) as TicketRow | undefined;
+      return row ? rowToTicket(row) : null;
+    },
+
     findHumanGatePending(): WorkflowTicket[] {
-      const rows = db.prepare("SELECT * FROM workflow_tickets WHERE state IN ('spec-review', 'plan-review', 'final-review') ORDER BY sort_order ASC, created_at DESC").all() as TicketRow[];
+      const rows = findHumanGatePendingStmt.all() as TicketRow[];
       return rows.map(rowToTicket);
     },
 
     create(ticket: WorkflowTicketCreate): WorkflowTicket {
       const id = uuid() as WorkflowTicketId;
       const now = new Date().toISOString();
-      db.prepare(
-        `INSERT INTO workflow_tickets
-         (id, type, title, description, state, state_data, parent_id, track_id,
-          external_ticket_id, assigned_agent_role, assigned_agent_ids, provider,
-          priority, labels, sort_order, state_changed_at, created_at, updated_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      ).run(
+      insertStmt.run(
         id, ticket.type, ticket.title, ticket.description, ticket.state,
         ticket.stateData ? JSON.stringify(ticket.stateData) : null,
         ticket.parentId || null, ticket.trackId || null,
@@ -92,6 +116,7 @@ export function createWorkflowTicketRepository(): WorkflowTicketRepository {
         stateData: data.stateData !== undefined ? data.stateData : existing.stateData,
         trackId: data.trackId !== undefined ? data.trackId : existing.trackId,
         externalTicketId: data.externalTicketId !== undefined ? data.externalTicketId : existing.externalTicketId,
+        executionSessionId: data.executionSessionId !== undefined ? data.executionSessionId : existing.executionSessionId,
         assignedAgentRole: data.assignedAgentRole !== undefined ? data.assignedAgentRole : existing.assignedAgentRole,
         assignedAgentIds: data.assignedAgentIds !== undefined ? data.assignedAgentIds : existing.assignedAgentIds,
         provider: data.provider ?? existing.provider,
@@ -102,17 +127,11 @@ export function createWorkflowTicketRepository(): WorkflowTicketRepository {
         updatedAt: now,
       };
 
-      db.prepare(
-        `UPDATE workflow_tickets SET
-           title = ?, description = ?, state = ?, state_data = ?, track_id = ?,
-           external_ticket_id = ?, assigned_agent_role = ?, assigned_agent_ids = ?,
-           provider = ?, priority = ?, labels = ?, sort_order = ?,
-           state_changed_at = ?, updated_at = ?
-         WHERE id = ?`,
-      ).run(
+      updateStmt.run(
         merged.title, merged.description, merged.state,
         merged.stateData ? JSON.stringify(merged.stateData) : null,
         merged.trackId || null, merged.externalTicketId || null,
+        merged.executionSessionId || null,
         merged.assignedAgentRole || null,
         merged.assignedAgentIds ? JSON.stringify(merged.assignedAgentIds) : null,
         merged.provider, merged.priority,
@@ -123,7 +142,7 @@ export function createWorkflowTicketRepository(): WorkflowTicketRepository {
     },
 
     delete(id: WorkflowTicketId): boolean {
-      const result = db.prepare('DELETE FROM workflow_tickets WHERE id = ?').run(id);
+      const result = deleteStmt.run(id);
       return result.changes > 0;
     },
   };
@@ -136,19 +155,26 @@ export function createWorkflowTicketRepository(): WorkflowTicketRepository {
 export function createWorkflowTransitionRepository(): WorkflowTransitionRepository {
   const db = getDatabase();
 
+  // Prepare statements once
+  const findByTicketStmt = db.prepare('SELECT * FROM workflow_transitions WHERE ticket_id = ? ORDER BY created_at DESC');
+  const findByTicketWithLimitStmt = db.prepare('SELECT * FROM workflow_transitions WHERE ticket_id = ? ORDER BY created_at DESC LIMIT ?');
+  const findByIdStmt = db.prepare('SELECT * FROM workflow_transitions WHERE id = ?');
+  const insertStmt = db.prepare(
+    `INSERT INTO workflow_transitions
+     (id, ticket_id, from_state, to_state, actor_type, actor_id, session_id, comment, data, created_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+  );
+
   return {
     findByTicket(ticketId: WorkflowTicketId, limit?: number): WorkflowTransition[] {
-      const sql = limit
-        ? 'SELECT * FROM workflow_transitions WHERE ticket_id = ? ORDER BY created_at DESC LIMIT ?'
-        : 'SELECT * FROM workflow_transitions WHERE ticket_id = ? ORDER BY created_at DESC';
       const rows = (limit
-        ? db.prepare(sql).all(ticketId, limit)
-        : db.prepare(sql).all(ticketId)) as TransitionRow[];
+        ? findByTicketWithLimitStmt.all(ticketId, limit)
+        : findByTicketStmt.all(ticketId)) as TransitionRow[];
       return rows.map(rowToTransition);
     },
 
     findById(id: WorkflowTransitionId): WorkflowTransition | null {
-      const row = db.prepare('SELECT * FROM workflow_transitions WHERE id = ?').get(id) as TransitionRow | undefined;
+      const row = findByIdStmt.get(id) as TransitionRow | undefined;
       return row ? rowToTransition(row) : null;
     },
 
@@ -156,11 +182,7 @@ export function createWorkflowTransitionRepository(): WorkflowTransitionReposito
       const id = uuid() as WorkflowTransitionId;
       const now = new Date().toISOString();
       const actor = transition.actor;
-      db.prepare(
-        `INSERT INTO workflow_transitions
-         (id, ticket_id, from_state, to_state, actor_type, actor_id, session_id, comment, data, created_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      ).run(
+      insertStmt.run(
         id, transition.ticketId, transition.fromState, transition.toState,
         actor.type,
         actor.type === 'agent' ? actor.agentId || null : actor.type === 'human' ? actor.userId || null : null,
@@ -182,6 +204,7 @@ interface TicketRow {
   id: string; type: string; title: string; description: string;
   state: string; state_data: string | null; parent_id: string | null;
   track_id: string | null; external_ticket_id: string | null;
+  execution_session_id: string | null;
   assigned_agent_role: string | null; assigned_agent_ids: string | null;
   provider: string; priority: string; labels: string | null;
   sort_order: number; state_changed_at: string; created_at: string; updated_at: string;
@@ -209,6 +232,7 @@ function rowToTicket(row: TicketRow): WorkflowTicket {
     parentId: (row.parent_id as WorkflowTicketId) || undefined,
     trackId: (row.track_id as TrackId) || undefined,
     externalTicketId: (row.external_ticket_id as TicketId) || undefined,
+    executionSessionId: (row.execution_session_id as SessionId) || undefined,
     assignedAgentRole: (row.assigned_agent_role as AgentRole) || undefined,
     assignedAgentIds: safeJsonParse<AgentId[]>(row.assigned_agent_ids),
     provider: (row.provider as SessionProvider) || 'claude',
@@ -241,4 +265,3 @@ function rowToTransition(row: TransitionRow): WorkflowTransition {
     createdAt: row.created_at,
   };
 }
-
