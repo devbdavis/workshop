@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
-import type { Todo, TodoStatus, TodoPriority, Track } from '@foundation/types';
+import type { Todo, TodoStatus, TodoPriority, Track, Agent, SessionProvider } from '@foundation/types';
+import { DispatchDropdown } from '../track-view/DispatchDropdown';
 
 interface Props {
   todo: Todo | null;
@@ -7,7 +8,7 @@ interface Props {
   onClose: () => void;
   onSave: (todoId: string, data: Partial<Todo>) => void;
   onDelete: (todoId: string) => void;
-  onDispatch: (todoId: string) => void;
+  onDispatch: (todoId: string, agentId?: string, provider?: SessionProvider) => void;
 }
 
 const STATUSES: { value: TodoStatus; label: string }[] = [
@@ -30,6 +31,8 @@ export function TodoDetailModal({ todo, tracks, onClose, onSave, onDelete, onDis
   const [status, setStatus] = useState<TodoStatus>('backlog');
   const [priority, setPriority] = useState<TodoPriority>('medium');
   const [refined, setRefined] = useState(false);
+  const [agents, setAgents] = useState<Agent[]>([]);
+  const [showDispatch, setShowDispatch] = useState(false);
 
   useEffect(() => {
     if (todo) {
@@ -38,7 +41,17 @@ export function TodoDetailModal({ todo, tracks, onClose, onSave, onDelete, onDis
       setStatus(todo.status);
       setPriority(todo.priority);
       setRefined(todo.refined);
+      setShowDispatch(false);
     }
+  }, [todo]);
+
+  // Load agents when dispatch might be needed
+  useEffect(() => {
+    if (!todo) return;
+    fetch('/api/agents')
+      .then((res) => res.json())
+      .then(setAgents)
+      .catch(() => {});
   }, [todo]);
 
   useEffect(() => {
@@ -151,12 +164,25 @@ export function TodoDetailModal({ todo, tracks, onClose, onSave, onDelete, onDis
           </button>
           <div className="flex gap-2">
             {canDispatch && (
-              <button
-                onClick={() => onDispatch(todo.id)}
-                className="px-3 py-1.5 text-xs bg-green-700 hover:bg-green-600 text-white rounded-lg transition-colors"
-              >
-                Dispatch to Agent
-              </button>
+              <div className="relative">
+                <button
+                  onClick={() => setShowDispatch(!showDispatch)}
+                  className="px-3 py-1.5 text-xs bg-green-700 hover:bg-green-600 text-white rounded-lg transition-colors"
+                >
+                  Dispatch to Agent
+                </button>
+                {showDispatch && (
+                  <DispatchDropdown
+                    agents={agents}
+                    popUp
+                    onSelect={(agentId, provider) => {
+                      setShowDispatch(false);
+                      onDispatch(todo.id, agentId, provider);
+                    }}
+                    onClose={() => setShowDispatch(false)}
+                  />
+                )}
+              </div>
             )}
             <button
               onClick={handleSave}
