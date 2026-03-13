@@ -6,27 +6,32 @@ import type { PromptTemplate, TemplateId } from '@foundation/types';
 export function createPromptTemplateRepository(): PromptTemplateRepository {
   const db = getDatabase();
 
+  // Prepare statements once
+  const findAllStmt = db.prepare('SELECT * FROM prompt_templates ORDER BY created_at ASC');
+  const findByIdStmt = db.prepare('SELECT * FROM prompt_templates WHERE id = ?');
+  const insertStmt = db.prepare(
+    'INSERT INTO prompt_templates (id, name, description, content, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)',
+  );
+  const updateStmt = db.prepare(
+    'UPDATE prompt_templates SET name = ?, description = ?, content = ?, updated_at = ? WHERE id = ?',
+  );
+  const deleteStmt = db.prepare('DELETE FROM prompt_templates WHERE id = ?');
+
   return {
     findAll(): PromptTemplate[] {
-      const rows = db
-        .prepare('SELECT * FROM prompt_templates ORDER BY created_at ASC')
-        .all() as TemplateRow[];
+      const rows = findAllStmt.all() as TemplateRow[];
       return rows.map(rowToTemplate);
     },
 
     findById(id: TemplateId): PromptTemplate | null {
-      const row = db
-        .prepare('SELECT * FROM prompt_templates WHERE id = ?')
-        .get(id) as TemplateRow | undefined;
+      const row = findByIdStmt.get(id) as TemplateRow | undefined;
       return row ? rowToTemplate(row) : null;
     },
 
     create(data): PromptTemplate {
       const id = uuid() as TemplateId;
       const now = new Date().toISOString();
-      db.prepare(
-        'INSERT INTO prompt_templates (id, name, description, content, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)',
-      ).run(id, data.name, data.description || null, data.content, now, now);
+      insertStmt.run(id, data.name, data.description || null, data.content, now, now);
       return {
         id,
         name: data.name,
@@ -44,14 +49,12 @@ export function createPromptTemplateRepository(): PromptTemplateRepository {
       const name = data.name ?? existing.name;
       const description = data.description ?? existing.description;
       const content = data.content ?? existing.content;
-      db.prepare(
-        'UPDATE prompt_templates SET name = ?, description = ?, content = ?, updated_at = ? WHERE id = ?',
-      ).run(name, description || null, content, now, id);
+      updateStmt.run(name, description || null, content, now, id);
       return { ...existing, name, description, content, updatedAt: now };
     },
 
     delete(id: TemplateId): boolean {
-      const result = db.prepare('DELETE FROM prompt_templates WHERE id = ?').run(id);
+      const result = deleteStmt.run(id);
       return result.changes > 0;
     },
   };
