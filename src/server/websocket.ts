@@ -138,13 +138,20 @@ export function setupWebSocket(server: HttpServer): void {
         try {
           const ctrl = JSON.parse(msg) as { type: string; cols?: number; rows?: number };
           if (ctrl.type === 'resize' && ctrl.cols && ctrl.rows) {
+            // Validate cols/rows are integers in a safe range to prevent injection
+            const cols = Math.floor(Number(ctrl.cols));
+            const rows = Math.floor(Number(ctrl.rows));
+            if (!Number.isFinite(cols) || !Number.isFinite(rows) || cols < 1 || cols > 500 || rows < 1 || rows > 500) {
+              return;
+            }
+
             // Resize the pty
-            ptyProcess.resize(ctrl.cols, ctrl.rows);
+            ptyProcess.resize(cols, rows);
 
             // Also resize the tmux window so tmux knows the new dimensions
             try {
               execSync(
-                `tmux resize-window -t ${session.tmuxSession} -x ${ctrl.cols} -y ${ctrl.rows}`,
+                `tmux resize-window -t ${session.tmuxSession} -x ${cols} -y ${rows}`,
                 { stdio: 'pipe' },
               );
             } catch {

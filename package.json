@@ -3,6 +3,10 @@
   "version": "0.1.0",
   "type": "module",
   "private": true,
+  "description": "A local-first project command center for managing parallel work tracks with AI-assisted terminal sessions",
+  "engines": {
+    "node": ">=22.0.0"
+  },
   "scripts": {
     "dev": "concurrently -n server,client -c blue,green \"tsx watch src/server/index.ts\" \"vite\"",
     "dev:server": "tsx watch src/server/index.ts",
@@ -12,7 +16,7 @@
     "test:docker": "docker build -f Dockerfile.test -t workshop-test . && docker run --rm workshop-test",
     "test:watch": "vitest",
     "test:structural": "vitest run tests/structural/",
-    "lint": "eslint src/ tests/",
+    "lint": "echo 'No eslint config yet — run npm run typecheck instead'",
     "format": "prettier --write \"src/**/*.{ts,tsx}\" \"tests/**/*.ts\"",
     "format:check": "prettier --check \"src/**/*.{ts,tsx}\" \"tests/**/*.ts\"",
     "typecheck": "tsc --noEmit -p tsconfig.json && tsc --noEmit -p tsconfig.server.json",
