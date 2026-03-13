@@ -13,6 +13,7 @@ import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
 import { z } from 'zod';
 import { registerTodoTools } from './todo-tools.js';
 import { registerVaultTools } from './vault-tools.js';
+import { registerScheduledTaskTools } from './scheduled-task-tools.js';
 
 const API_URL = process.env.WORKSHOP_API_URL || 'http://localhost:3002';
 
@@ -261,6 +262,10 @@ registerTodoTools(server, api);
 // --- Vault Tools ---
 
 registerVaultTools(server, api);
+
+// --- Scheduled Task & Automation Tools ---
+
+registerScheduledTaskTools(server, api);
 
 // Start
 

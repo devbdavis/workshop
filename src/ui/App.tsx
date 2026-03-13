@@ -5,6 +5,7 @@ import { Settings } from './settings/Settings';
 import { KanbanBoard } from './kanban/KanbanBoard';
 import { AgentsPage } from './agents/AgentsPage';
 import { SessionsPage } from './sessions/SessionsPage';
+import { ScheduledTasksPage } from './scheduled-tasks/ScheduledTasksPage';
 import { TopNav } from './TopNav';
 
 export function App() {
@@ -19,6 +20,7 @@ export function App() {
           <Route path="/kanban" element={<KanbanBoard />} />
           <Route path="/agents" element={<AgentsPage />} />
           <Route path="/sessions" element={<SessionsPage />} />
+          <Route path="/scheduled-tasks" element={<ScheduledTasksPage />} />
         </Routes>
       </div>
     </div>

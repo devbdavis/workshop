@@ -17,14 +17,17 @@ import { createVaultReader } from '@infrastructure/vault/reader.js';
 import { createVaultWriter } from '@infrastructure/vault/writer.js';
 import { createVaultProvisioner } from '@infrastructure/vault/provisioner.js';
 import { slugifyTrackName } from '@infrastructure/vault/utils.js';
+import { createScheduledTaskRepository, createScheduledTaskRunRepository } from '@infrastructure/persistence/scheduled-task-repository.js';
 import { createSummaryGenerationService } from '@application/summary-generation/service.js';
 import { interpolateTemplate } from '@application/track-management/prompt-interpolation.js';
 import { composeVaultContext } from '@application/vault/compose-vault-context.js';
 import type { AutomationEngine } from '@application/automation-engine/engine.js';
+import { createTaskScheduler } from '@application/scheduler/task-scheduler.js';
 import { createTodoRouter } from './todo-routes.js';
 import { createPermissionRouter } from './permission-routes.js';
 import { createAgentRouter } from './agent-routes.js';
 import { createVaultRouter } from './vault-routes.js';
+import { createScheduledTaskRouter } from './scheduled-task-routes.js';
 import { broadcast } from './events.js';
 
 export interface ApiRouterDeps {
@@ -98,6 +101,36 @@ export function createApiRouter(deps: ApiRouterDeps = {}): Router {
   // Mount vault sub-router
   const vaultRouter = createVaultRouter({ vaultReader, vaultWriter, vaultProvisioner });
   router.use(vaultRouter);
+
+  // Mount scheduled task sub-router
+  const scheduledTasks = createScheduledTaskRepository();
+  const scheduledTaskRuns = createScheduledTaskRunRepository();
+  const taskScheduler = createTaskScheduler({
+    tasks: scheduledTasks,
+    runs: scheduledTaskRuns,
+    tracks,
+    sessions,
+    summaries,
+    tickets,
+    promptTemplates,
+    agents,
+    filesystemScanner,
+    projectRoot,
+    terminal,
+    broadcast: broadcast as (type: string, id: string) => void,
+  });
+  taskScheduler.start();
+
+  const scheduledTaskRouter = createScheduledTaskRouter({
+    tasks: scheduledTasks,
+    runs: scheduledTaskRuns,
+    scheduler: taskScheduler,
+  });
+  router.use(scheduledTaskRouter);
+
+  // Stop scheduler on shutdown
+  process.on('SIGINT', () => taskScheduler.stop());
+  process.on('SIGTERM', () => taskScheduler.stop());
 
   // --- Tracks ---
 
