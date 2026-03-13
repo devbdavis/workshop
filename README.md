@@ -1,5 +1,11 @@
 # Workshop
 
+> *This is my Workshop. There are many like it, but this one is mine.*
+> *My Workshop is my best friend. It is my life. I must master it as I must master my life.*
+> *Without me, my Workshop is useless. Without my Workshop, I am useless.*
+>
+> — Fab's Work Orchestration Creed
+
 A local-first project command center for managing parallel work tracks with AI-assisted terminal sessions.
 
 Workshop lets you organize development work into **tracks** — each with linked repos, terminal sessions, AI-generated summaries, and a workflow ticket pipeline. It provides a web UI for managing everything from a single dashboard, and an MCP server so Claude Code can interact with your tracks programmatically.
