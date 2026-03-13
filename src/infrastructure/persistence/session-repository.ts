@@ -1,7 +1,7 @@
 import { v4 as uuid } from 'uuid';
 import { getDatabase } from './database.js';
 import type { SessionRepository } from '@domain/session/repository';
-import type { Session, SessionId, SessionState, TrackId } from '@foundation/types';
+import type { Session, SessionId, SessionProvider, SessionState, TrackId } from '@foundation/types';
 
 export function createSessionRepository(): SessionRepository {
   const db = getDatabase();
@@ -30,9 +30,10 @@ export function createSessionRepository(): SessionRepository {
     create(data): Session {
       const id = uuid() as SessionId;
       const now = new Date().toISOString();
+      const provider = data.provider || 'claude';
       db.prepare(
-        'INSERT INTO sessions (id, track_id, name, tmux_session, claude_resume_id, system_prompt, state, background, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
-      ).run(id, data.trackId, data.name || null, data.tmuxSession, data.claudeResumeId || null, data.systemPrompt || null, data.state, data.background ? 1 : 0, now, now);
+        'INSERT INTO sessions (id, track_id, name, tmux_session, claude_resume_id, system_prompt, state, provider, background, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+      ).run(id, data.trackId, data.name || null, data.tmuxSession, data.claudeResumeId || null, data.systemPrompt || null, data.state, provider, data.background ? 1 : 0, now, now);
       return {
         id,
         trackId: data.trackId,
@@ -41,6 +42,7 @@ export function createSessionRepository(): SessionRepository {
         claudeResumeId: data.claudeResumeId,
         systemPrompt: data.systemPrompt,
         state: data.state,
+        provider,
         background: data.background ?? false,
         createdAt: now,
         updatedAt: now,
@@ -83,6 +85,7 @@ interface SessionRow {
   claude_resume_id: string | null;
   system_prompt: string | null;
   state: string;
+  provider: string | null;
   background: number;
   created_at: string;
   updated_at: string;
@@ -97,6 +100,7 @@ function rowToSession(row: SessionRow): Session {
     claudeResumeId: row.claude_resume_id || undefined,
     systemPrompt: row.system_prompt || undefined,
     state: row.state as SessionState,
+    provider: (row.provider as SessionProvider) || 'claude',
     background: row.background === 1,
     createdAt: row.created_at,
     updatedAt: row.updated_at,

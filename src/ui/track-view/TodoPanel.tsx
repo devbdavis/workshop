@@ -1,9 +1,10 @@
 import { useState, useEffect } from 'react';
-import type { Todo, TodoPriority, TodoStatus, Session, Agent } from '@foundation/types';
+import type { Todo, TodoPriority, TodoStatus, Session, Agent, Track } from '@foundation/types';
 import { TerminalModal } from './TerminalModal';
+import { TodoDetailModal } from '../kanban/TodoDetailModal';
 
 interface Props {
-  trackId: string;
+  track: Track;
   todos: Todo[];
   sessions: Session[];
   onUpdate: () => void;
@@ -31,12 +32,14 @@ const PRIORITY_COLORS: Record<TodoPriority, string> = {
   high: 'text-red-400',
 };
 
-export function TodoPanel({ trackId, todos, sessions, onUpdate }: Props) {
+export function TodoPanel({ track, todos, sessions, onUpdate }: Props) {
+  const trackId = track.id;
   const [showAdd, setShowAdd] = useState(false);
   const [terminalSessionId, setTerminalSessionId] = useState<string | null>(null);
   const [terminalTodoTitle, setTerminalTodoTitle] = useState('');
   const [agents, setAgents] = useState<Agent[]>([]);
   const [dispatchingTodoId, setDispatchingTodoId] = useState<string | null>(null);
+  const [editingTodo, setEditingTodo] = useState<Todo | null>(null);
   const activeTodos = todos.filter((t) => t.status !== 'done');
 
   // Build a set of active session IDs for quick lookup
@@ -86,6 +89,26 @@ export function TodoPanel({ trackId, todos, sessions, onUpdate }: Props) {
     onUpdate();
   }
 
+  async function saveTodo(todoId: string, data: Partial<Todo>) {
+    await fetch(`/api/todos/${todoId}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data),
+    });
+    setEditingTodo(null);
+    onUpdate();
+  }
+
+  async function dispatchTodoFromModal(todoId: string) {
+    await fetch(`/api/todos/${todoId}/dispatch`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({}),
+    });
+    setEditingTodo(null);
+    onUpdate();
+  }
+
   return (
     <div className="p-4 border-b border-gray-800">
       <div className="flex items-center justify-between mb-2">
@@ -112,7 +135,12 @@ export function TodoPanel({ trackId, todos, sessions, onUpdate }: Props) {
                     <span className={`text-xs ${PRIORITY_COLORS[todo.priority]}`}>
                       {todo.priority === 'high' ? '!!!' : todo.priority === 'medium' ? '!!' : '!'}
                     </span>
-                    <span className="text-gray-200 truncate">{todo.title}</span>
+                    <button
+                      onClick={() => setEditingTodo(todo)}
+                      className="text-gray-200 truncate text-left hover:text-blue-300 transition-colors"
+                    >
+                      {todo.title}
+                    </button>
                   </div>
                   <div className="flex items-center gap-1.5 mt-1">
                     <button
@@ -181,6 +209,18 @@ export function TodoPanel({ trackId, todos, sessions, onUpdate }: Props) {
           onClose={() => setTerminalSessionId(null)}
         />
       )}
+
+      <TodoDetailModal
+        todo={editingTodo}
+        tracks={[track]}
+        onClose={() => setEditingTodo(null)}
+        onSave={saveTodo}
+        onDelete={(todoId) => {
+          deleteTodo(todoId);
+          setEditingTodo(null);
+        }}
+        onDispatch={dispatchTodoFromModal}
+      />
     </div>
   );
 }

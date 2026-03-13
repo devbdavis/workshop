@@ -3,6 +3,7 @@ import { NavLink, useMatch } from 'react-router-dom';
 const navItems = [
   { to: '/', label: 'Tracks', end: true },
   { to: '/kanban', label: 'Kanban', end: false },
+  { to: '/sessions', label: 'Sessions', end: false },
   { to: '/agents', label: 'Agents', end: false },
   { to: '/settings', label: 'Settings', end: false },
 ];

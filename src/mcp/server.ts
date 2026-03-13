@@ -161,14 +161,16 @@ server.tool(
 
 server.tool(
   'workshop_create_session',
-  'Create a new Claude terminal session in a track. System prompt is auto-composed from track context + summary + template unless explicitly provided.',
+  'Create a new AI terminal session in a track. System prompt is auto-composed from track context + summary + template unless explicitly provided.',
   {
     trackId: z.string().describe('The track ID'),
     systemPrompt: z.string().optional().describe('Custom system prompt (overrides auto-compose)'),
+    provider: z.enum(['claude', 'codex']).optional().describe('AI CLI to use (default: claude)'),
   },
-  async ({ trackId, systemPrompt }) => {
+  async ({ trackId, systemPrompt, provider }) => {
     const body: Record<string, unknown> = {};
     if (systemPrompt) body.systemPrompt = systemPrompt;
+    if (provider) body.provider = provider;
     const session = await api(`/tracks/${trackId}/sessions`, {
       method: 'POST',
       body: JSON.stringify(body),

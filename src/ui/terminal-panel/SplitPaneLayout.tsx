@@ -86,6 +86,8 @@ function LeafPane({ node, trackId, sessions, onSplit, onClose, onCreateSession, 
     [node.id, onSplit, onCreateSession],
   );
 
+  const providerLabel = session?.provider === 'codex' ? 'codex' : 'claude';
+  const providerColor = session?.provider === 'codex' ? 'bg-emerald-400' : 'bg-orange-400';
   const displayName = session?.name || (session ? `session:${session.id.slice(0, 8)}` : 'empty');
 
   const startEditing = useCallback(() => {
@@ -127,10 +129,11 @@ function LeafPane({ node, trackId, sessions, onSplit, onClose, onCreateSession, 
           />
         ) : (
           <span
-            className="text-xs text-gray-400 font-mono truncate cursor-pointer hover:text-gray-200"
+            className="text-xs text-gray-400 font-mono truncate cursor-pointer hover:text-gray-200 flex items-center gap-1.5"
             onDoubleClick={startEditing}
             title="Double-click to rename"
           >
+            {session && <span className={`w-1.5 h-1.5 rounded-full ${providerColor} shrink-0`} title={providerLabel} />}
             {displayName}
           </span>
         )}

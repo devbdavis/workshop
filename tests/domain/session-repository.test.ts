@@ -60,6 +60,33 @@ describe('Session Repository', () => {
       expect(session.systemPrompt).toBe('You are a helpful assistant');
     });
 
+    it('should default provider to claude', () => {
+      const track = createParentTrack();
+      const session = sessionRepo.create({
+        trackId: track.id,
+        tmuxSession: `tmux-provider-default-${randomUUID()}`,
+        state: 'active',
+      });
+
+      expect(session.provider).toBe('claude');
+      const found = sessionRepo.findById(session.id);
+      expect(found!.provider).toBe('claude');
+    });
+
+    it('should create a codex session when provider is codex', () => {
+      const track = createParentTrack();
+      const session = sessionRepo.create({
+        trackId: track.id,
+        tmuxSession: `tmux-codex-${randomUUID()}`,
+        state: 'active',
+        provider: 'codex',
+      });
+
+      expect(session.provider).toBe('codex');
+      const found = sessionRepo.findById(session.id);
+      expect(found!.provider).toBe('codex');
+    });
+
     it('should create a session with a name', () => {
       const track = createParentTrack();
       const session = sessionRepo.create({

@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import type { TrackId, SessionId, RepoId, AutomationRuleId, TemplateId, TerminalLayout } from '@foundation/types';
+import type { TrackId, SessionId, SessionProvider, RepoId, AutomationRuleId, TemplateId, TerminalLayout } from '@foundation/types';
 import { createTrackRepository } from '@infrastructure/persistence/track-repository.js';
 import { createSessionRepository } from '@infrastructure/persistence/session-repository.js';
 import { createSummaryRepository } from '@infrastructure/persistence/summary-repository.js';
@@ -38,7 +38,21 @@ export function createApiRouter(deps: ApiRouterDeps = {}): Router {
   const filesystemScanner = createFilesystemAgentScanner();
   const projectRoot = process.cwd();
   const terminal = createTerminalManager(sessions);
-  terminal.syncSessionStates();
+
+  // Sync session states on startup and periodically (every 30s).
+  // Dead tmux sessions are removed from the DB and events broadcast to connected clients.
+  function runSessionSync() {
+    const result = terminal.syncSessionStates();
+    for (const { trackId } of result.cleaned) {
+      broadcast('session:deleted', trackId);
+    }
+  }
+  runSessionSync();
+  const syncInterval = setInterval(runSessionSync, 30_000);
+  // Clean up interval when the router's parent process exits
+  process.on('SIGINT', () => clearInterval(syncInterval));
+  process.on('SIGTERM', () => clearInterval(syncInterval));
+
   const gitAdapter = createGitAdapter();
   const summaryGeneration = createSummaryGenerationService({
     trackRepo: tracks,
@@ -207,6 +221,13 @@ export function createApiRouter(deps: ApiRouterDeps = {}): Router {
 
   // --- Sessions ---
 
+  router.get('/sessions', (_req, res) => {
+    // Sync before returning so the client always sees fresh state
+    runSessionSync();
+    const allSessions = sessions.findAll();
+    res.json(allSessions);
+  });
+
   router.get('/tracks/:id/sessions', (req, res) => {
     const trackSessions = sessions.findByTrack(req.params.id as TrackId);
     res.json(trackSessions);
@@ -252,8 +273,12 @@ export function createApiRouter(deps: ApiRouterDeps = {}): Router {
         }
       }
 
+      // Validate provider if provided
+      const provider: SessionProvider = req.body?.provider === 'codex' ? 'codex' : 'claude';
+
       const session = await terminal.createSession(trackId, {
         systemPrompt,
+        provider,
         workingDirectory: track.repos?.[0]?.path,
       });
       broadcast('session:created', trackId);

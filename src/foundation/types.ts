@@ -50,6 +50,7 @@ export interface TrackPath {
 
 // Session
 export type SessionState = 'active' | 'detached' | 'dead';
+export type SessionProvider = 'claude' | 'codex';
 
 export interface Session {
   id: SessionId;
@@ -59,6 +60,8 @@ export interface Session {
   claudeResumeId?: string;
   systemPrompt?: string;
   state: SessionState;
+  /** Which AI CLI to use for this session */
+  provider: SessionProvider;
   /** Background sessions run agents silently — not shown in the main terminal area */
   background: boolean;
   createdAt: string;

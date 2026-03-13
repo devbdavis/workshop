@@ -3,7 +3,7 @@ import { writeFileSync, mkdirSync, rmSync, existsSync, chmodSync } from 'fs';
 import path from 'path';
 import { v4 as uuid } from 'uuid';
 import type { SessionRepository } from '@domain/session/repository';
-import type { Session, SessionId, TrackId } from '@foundation/types';
+import type { Session, SessionId, SessionProvider, TrackId } from '@foundation/types';
 
 /** Directory for per-session data (prompt files, hook config, etc.) */
 const SESSION_DATA_DIR = path.join(
@@ -18,21 +18,27 @@ const WORKSHOP_API_URL = process.env.WORKSHOP_API_URL || 'http://localhost:3002'
 export interface CreateSessionOptions {
   systemPrompt?: string;
   workingDirectory?: string;
-  /** If true, do not start Claude Code in the tmux session. Defaults to false. */
+  /** Which AI CLI to use. Defaults to 'claude'. */
+  provider?: SessionProvider;
+  /** If true, do not start the AI CLI in the tmux session. Defaults to false. */
   skipClaude?: boolean;
   /** If true, the session runs in the background with permission hooks. Defaults to false. */
   background?: boolean;
   /** Todo ID if dispatched from a todo (used in system prompt extension). */
   todoId?: string;
-  /** Initial prompt to send to Claude (the task to work on). */
+  /** Initial prompt to send to the AI CLI (the task to work on). */
   initialPrompt?: string;
+}
+
+export interface SyncResult {
+  cleaned: { sessionId: SessionId; trackId: TrackId }[];
 }
 
 export interface TerminalManager {
   createSession(trackId: TrackId, options?: CreateSessionOptions): Promise<Session>;
   destroySession(sessionId: SessionId): Promise<void>;
   isSessionAlive(session: Session): boolean;
-  syncSessionStates(): void;
+  syncSessionStates(): SyncResult;
 }
 
 export function createTerminalManager(sessionRepo: SessionRepository): TerminalManager {
@@ -107,8 +113,84 @@ export function createTerminalManager(sessionRepo: SessionRepository): TerminalM
     return prompt + instructions.join('\n');
   }
 
+  /** Build launcher script lines for a Claude Code session */
+  function buildClaudeLauncher(
+    lines: string[],
+    sessionId: string,
+    sessionDir: string,
+    options?: CreateSessionOptions,
+  ): void {
+    const claudeArgs = ['claude'];
+
+    if (options?.systemPrompt) {
+      let prompt = options.systemPrompt;
+      if (options.background) {
+        prompt = appendBackgroundInstructions(prompt, options.todoId);
+      }
+      const promptFile = path.join(sessionDir, 'system-prompt.md');
+      writeFileSync(promptFile, prompt, 'utf-8');
+      claudeArgs.push('--system-prompt-file', JSON.stringify(promptFile));
+    }
+
+    if (options?.background) {
+      const settingsFile = writeHookSettings(sessionDir, sessionId);
+      claudeArgs.push('--settings', JSON.stringify(settingsFile));
+    }
+
+    if (options?.initialPrompt) {
+      const promptMsgFile = path.join(sessionDir, 'initial-prompt.txt');
+      writeFileSync(promptMsgFile, options.initialPrompt, 'utf-8');
+      lines.push(`exec ${claudeArgs.join(' ')} -p "$(cat ${JSON.stringify(promptMsgFile)})"`);
+    } else {
+      lines.push(`exec ${claudeArgs.join(' ')}`);
+    }
+  }
+
+  /** Build launcher script lines for a Codex CLI session */
+  function buildCodexLauncher(
+    lines: string[],
+    sessionDir: string,
+    cwd: string,
+    options?: CreateSessionOptions,
+  ): void {
+    // Codex doesn't have --system-prompt-file. We write the system prompt to a
+    // file and pass it as the initial [PROMPT] argument so codex sees the context.
+    // For background agents we use `codex exec --full-auto`.
+    const codexArgs = ['codex'];
+    const promptFile = path.join(sessionDir, 'system-prompt.md');
+
+    if (options?.background) {
+      // Use non-interactive exec mode with full-auto sandbox
+      codexArgs.push('exec', '--full-auto', '-C', JSON.stringify(cwd));
+
+      let fullPrompt = '';
+      if (options?.systemPrompt) {
+        let prompt = options.systemPrompt;
+        prompt = appendBackgroundInstructions(prompt, options.todoId);
+        fullPrompt += prompt + '\n\n---\n\n';
+      }
+      if (options?.initialPrompt) {
+        fullPrompt += options.initialPrompt;
+      }
+
+      writeFileSync(promptFile, fullPrompt, 'utf-8');
+      lines.push(`exec ${codexArgs.join(' ')} "$(cat ${JSON.stringify(promptFile)})"`);
+    } else {
+      // Interactive mode
+      codexArgs.push('-C', JSON.stringify(cwd));
+
+      if (options?.systemPrompt) {
+        writeFileSync(promptFile, options.systemPrompt, 'utf-8');
+        lines.push(`exec ${codexArgs.join(' ')} "$(cat ${JSON.stringify(promptFile)})"`);
+      } else {
+        lines.push(`exec ${codexArgs.join(' ')}`);
+      }
+    }
+  }
+
   return {
     async createSession(trackId: TrackId, options?: CreateSessionOptions): Promise<Session> {
+      const provider = options?.provider || 'claude';
       const tmuxName = `workshop-${uuid().slice(0, 8)}`;
       const cwd = options?.workingDirectory || process.env.HOME || '/tmp';
 
@@ -125,6 +207,7 @@ export function createTerminalManager(sessionRepo: SessionRepository): TerminalM
         tmuxSession: tmuxName,
         systemPrompt: options?.systemPrompt,
         state: 'active',
+        provider,
         background: options?.background ?? false,
       });
 
@@ -132,32 +215,11 @@ export function createTerminalManager(sessionRepo: SessionRepository): TerminalM
         const sessionDir = getSessionDir(session.id);
         const launcherFile = path.join(sessionDir, 'launch.sh');
         const launcherLines = ['#!/bin/bash', 'set -e', ''];
-        const claudeArgs = ['claude'];
 
-        if (options?.systemPrompt) {
-          let prompt = options.systemPrompt;
-          if (options.background) {
-            prompt = appendBackgroundInstructions(prompt, options.todoId);
-          }
-          const promptFile = path.join(sessionDir, 'system-prompt.md');
-          writeFileSync(promptFile, prompt, 'utf-8');
-          claudeArgs.push('--system-prompt-file', JSON.stringify(promptFile));
-        }
-
-        if (options?.background) {
-          const settingsFile = writeHookSettings(sessionDir, session.id);
-          claudeArgs.push('--settings', JSON.stringify(settingsFile));
-        }
-
-        // For background agents, use -p with the initial prompt piped from a file.
-        // Claude runs the task autonomously and exits when done.
-        // The user can still attach to the tmux session to monitor output.
-        if (options?.initialPrompt) {
-          const promptMsgFile = path.join(sessionDir, 'initial-prompt.txt');
-          writeFileSync(promptMsgFile, options.initialPrompt, 'utf-8');
-          launcherLines.push(`exec ${claudeArgs.join(' ')} -p "$(cat ${JSON.stringify(promptMsgFile)})"`);
+        if (provider === 'codex') {
+          buildCodexLauncher(launcherLines, sessionDir, cwd, options);
         } else {
-          launcherLines.push(`exec ${claudeArgs.join(' ')}`);
+          buildClaudeLauncher(launcherLines, session.id, sessionDir, options);
         }
 
         writeFileSync(launcherFile, launcherLines.join('\n') + '\n', 'utf-8');
@@ -196,9 +258,9 @@ export function createTerminalManager(sessionRepo: SessionRepository): TerminalM
       }
     },
 
-    syncSessionStates(): void {
+    syncSessionStates(): SyncResult {
       const allSessions = sessionRepo.findAll();
-      let cleaned = 0;
+      const cleaned: SyncResult['cleaned'] = [];
       for (const session of allSessions) {
         const alive = this.isSessionAlive(session);
         if (!alive && session.state !== 'dead') {
@@ -209,14 +271,15 @@ export function createTerminalManager(sessionRepo: SessionRepository): TerminalM
           }
           cleanSessionDir(session.id);
           sessionRepo.delete(session.id);
-          cleaned++;
+          cleaned.push({ sessionId: session.id, trackId: session.trackId });
         } else if (alive && session.state === 'dead') {
           sessionRepo.updateState(session.id, 'active');
         }
       }
-      if (cleaned > 0) {
-        console.log(`Session sync: cleaned up ${cleaned} dead session(s)`);
+      if (cleaned.length > 0) {
+        console.log(`Session sync: cleaned up ${cleaned.length} dead session(s)`);
       }
+      return { cleaned };
     },
   };
 }
