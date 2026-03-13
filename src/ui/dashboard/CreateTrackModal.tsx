@@ -35,11 +35,11 @@ export function CreateTrackModal({ onClose, onCreated }: Props) {
     <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50">
       <form
         onSubmit={handleSubmit}
-        className="bg-gray-900 border border-gray-700 rounded-xl p-6 w-full max-w-md"
+        className="bg-gray-900 border border-gray-700 rounded-xl p-6 w-[80vw] h-[80vh] resize overflow-hidden flex flex-col"
       >
-        <h2 className="text-lg font-semibold mb-4">New Project Track</h2>
+        <h2 className="text-lg font-semibold mb-4 shrink-0">New Project Track</h2>
 
-        <label className="block mb-4">
+        <label className="block mb-4 shrink-0">
           <span className="text-sm text-gray-400">Name</span>
           <input
             type="text"
@@ -50,17 +50,16 @@ export function CreateTrackModal({ onClose, onCreated }: Props) {
           />
         </label>
 
-        <label className="block mb-6">
-          <span className="text-sm text-gray-400">Description (optional)</span>
+        <label className="flex-1 flex flex-col mb-6 min-h-0">
+          <span className="text-sm text-gray-400 shrink-0">Description (optional)</span>
           <textarea
             value={description}
             onChange={(e) => setDescription(e.target.value)}
-            rows={3}
-            className="mt-1 block w-full px-3 py-2 bg-gray-800 border border-gray-700 rounded-lg text-gray-100 focus:outline-none focus:border-blue-500 resize-none"
+            className="mt-1 flex-1 w-full px-3 py-2 bg-gray-800 border border-gray-700 rounded-lg text-gray-100 focus:outline-none focus:border-blue-500 resize-none"
           />
         </label>
 
-        <div className="flex justify-end gap-3">
+        <div className="flex justify-end gap-3 shrink-0">
           <button
             type="button"
             onClick={onClose}
