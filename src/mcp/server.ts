@@ -238,6 +238,57 @@ server.tool(
   },
 );
 
+// --- Add Path to Track ---
+
+server.tool(
+  'workshop_add_path',
+  'Add a filesystem path to a track',
+  {
+    trackId: z.string().describe('The track ID'),
+    path: z.string().describe('Absolute filesystem path to add'),
+    label: z.string().optional().describe('Optional label for this path'),
+  },
+  async ({ trackId, path, label }) => {
+    const body: Record<string, unknown> = { path };
+    if (label) body.label = label;
+    const result = await api(`/tracks/${trackId}/paths`, {
+      method: 'POST',
+      body: JSON.stringify(body),
+    });
+    return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
+  },
+);
+
+// --- Remove Repo from Track ---
+
+server.tool(
+  'workshop_remove_repo',
+  'Remove a git repository from a track',
+  {
+    trackId: z.string().describe('The track ID'),
+    repoId: z.string().describe('The repo ID to remove'),
+  },
+  async ({ trackId, repoId }) => {
+    await api(`/tracks/${trackId}/repos/${repoId}`, { method: 'DELETE' });
+    return { content: [{ type: 'text', text: `Repo ${repoId} removed from track ${trackId}.` }] };
+  },
+);
+
+// --- Remove Path from Track ---
+
+server.tool(
+  'workshop_remove_path',
+  'Remove a filesystem path from a track',
+  {
+    trackId: z.string().describe('The track ID'),
+    pathId: z.string().describe('The path ID to remove'),
+  },
+  async ({ trackId, pathId }) => {
+    await api(`/tracks/${trackId}/paths/${pathId}`, { method: 'DELETE' });
+    return { content: [{ type: 'text', text: `Path ${pathId} removed from track ${trackId}.` }] };
+  },
+);
+
 // --- Create Track ---
 
 server.tool(
