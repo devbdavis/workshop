@@ -313,6 +313,18 @@ function runMigrations(db: Database.Database): void {
     // Tables already exist — safe to ignore
   }
 
+  // Migration: add execution tracking columns to workflow_tickets
+  try {
+    db.exec(`ALTER TABLE workflow_tickets ADD COLUMN execution_session_id TEXT;`);
+  } catch {
+    // Column already exists — safe to ignore
+  }
+  try {
+    db.exec(`ALTER TABLE workflow_tickets ADD COLUMN execution_data TEXT;`);
+  } catch {
+    // Column already exists — safe to ignore
+  }
+
   // Seed default prompt templates if the table is empty
   seedDefaultTemplates(db);
 }

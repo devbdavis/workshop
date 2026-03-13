@@ -32,6 +32,8 @@ import { createWorkflowRouter } from './workflow-routes.js';
 import { createWorkflowTicketRepository, createWorkflowTransitionRepository } from '@infrastructure/persistence/workflow-repository.js';
 import { createTicketDependencyRepository } from '@infrastructure/persistence/workflow-dependency-repository.js';
 import { createWorkflowEngine } from '@application/workflow/engine.js';
+import { createExecutionDispatcher } from '@application/workflow/execution-dispatcher.js';
+import { createExecutionHookRouter } from './execution-hook-routes.js';
 import { broadcast } from './events.js';
 
 export interface ApiRouterDeps {
@@ -141,13 +143,30 @@ export function createApiRouter(deps: ApiRouterDeps = {}): Router {
     transitions: workflowTransitions,
     dependencies: ticketDependencies,
   });
+
+  // Execution dispatcher — auto-dispatches execution sessions on plan-review approval
+  const executionDispatcher = createExecutionDispatcher({
+    tickets: workflowTickets,
+    tracks,
+    summaries,
+    terminal,
+  });
+
   const workflowRouter = createWorkflowRouter({
     engine: workflowEngine,
     tickets: workflowTickets,
     transitions: workflowTransitions,
     dependencies: ticketDependencies,
+    executionDispatcher,
   });
   router.use(workflowRouter);
+
+  // Execution hook routes (SubagentStop + SessionEnd callbacks)
+  const executionHookRouter = createExecutionHookRouter({
+    engine: workflowEngine,
+    tickets: workflowTickets,
+  });
+  router.use(executionHookRouter);
 
   // Stop scheduler on shutdown
   process.on('SIGINT', () => taskScheduler.stop());

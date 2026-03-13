@@ -169,7 +169,7 @@ describe('WorkflowEngine', () => {
       engine.transition(epic.id, 'plan-review', { type: 'agent' });
 
       const approved = engine.approve(epic.id);
-      expect(approved.state).toBe('splitting');
+      expect(approved.state).toBe('executing');
     });
 
     it('should throw when not at a human gate', () => {
@@ -263,8 +263,10 @@ describe('WorkflowEngine', () => {
       engine.transition(epic.id, 'planning', { type: 'human' });
       engine.transition(epic.id, 'plan-critique', { type: 'agent' });
       engine.transition(epic.id, 'plan-review', { type: 'agent' });
-      engine.transition(epic.id, 'splitting', { type: 'human' });
-      engine.transition(epic.id, 'in-progress', { type: 'agent' });
+      engine.approve(epic.id); // plan-review -> executing
+      // Place epic directly into in-progress (simulating execution dispatcher
+      // having split and dispatched tasks)
+      tickets.update(epic.id, { state: 'in-progress' });
 
       const t1 = engine.createTask({ title: 'T1', description: 'X', parentId: epic.id });
       const t2 = engine.createTask({ title: 'T2', description: 'X', parentId: epic.id });

@@ -6,6 +6,7 @@ import type {
   TicketDependencyRepository,
 } from '@domain/workflow/repository';
 import type { WorkflowEngine } from '@application/workflow/engine.js';
+import type { ExecutionDispatcher } from '@application/workflow/execution-dispatcher.js';
 import { broadcast } from './events.js';
 
 export interface WorkflowRouterDeps {
@@ -13,11 +14,13 @@ export interface WorkflowRouterDeps {
   tickets: WorkflowTicketRepository;
   transitions: WorkflowTransitionRepository;
   dependencies: TicketDependencyRepository;
+  /** Optional — if provided, plan-review approval auto-dispatches execution */
+  executionDispatcher?: ExecutionDispatcher;
 }
 
 export function createWorkflowRouter(deps: WorkflowRouterDeps): Router {
   const router = Router();
-  const { engine, tickets, transitions, dependencies } = deps;
+  const { engine, tickets, transitions, dependencies, executionDispatcher } = deps;
 
   // --- List all workflow tickets ---
 
@@ -185,13 +188,37 @@ export function createWorkflowRouter(deps: WorkflowRouterDeps): Router {
 
   // --- Approve at human gate ---
 
-  router.post('/workflow/tickets/:id/approve', (req, res) => {
+  router.post('/workflow/tickets/:id/approve', async (req, res) => {
     const ticketId = req.params.id as WorkflowTicketId;
     const { comment } = req.body || {};
 
     try {
       const updated = engine.approve(ticketId, comment);
       broadcast('workflow:approved', ticketId);
+
+      // If the ticket transitioned to 'executing', dispatch the execution pipeline
+      if (updated.state === 'executing' && executionDispatcher) {
+        try {
+          await executionDispatcher.dispatch(updated.id);
+          broadcast('workflow:transitioned', ticketId);
+        } catch (dispatchErr) {
+          console.error('Failed to dispatch execution:', dispatchErr);
+          // Transition to execution-failed so the ticket doesn't get stuck
+          try {
+            engine.transition(
+              updated.id,
+              'execution-failed',
+              { type: 'system', reason: 'Dispatch failed' },
+              dispatchErr instanceof Error ? dispatchErr.message : 'Failed to dispatch execution session',
+            );
+            broadcast('workflow:transitioned', ticketId);
+          } catch {
+            // Last resort — log and let the user handle it
+            console.error('Failed to mark ticket as execution-failed:', ticketId);
+          }
+        }
+      }
+
       res.json(updated);
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Approval failed';

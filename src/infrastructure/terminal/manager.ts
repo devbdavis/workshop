@@ -30,6 +30,8 @@ export interface CreateSessionOptions {
   initialPrompt?: string;
   /** If true, skip permission hooks and run with --dangerously-skip-permissions. */
   dangerouslySkipPermissions?: boolean;
+  /** Workflow ticket ID — if set, adds SubagentStop + SessionEnd hooks for execution tracking */
+  executionTicketId?: string;
 }
 
 export interface SyncResult {
@@ -63,27 +65,61 @@ export function createTerminalManager(sessionRepo: SessionRepository): TerminalM
     }
   }
 
-  /** Write a Claude Code settings file with the permission hook for background agents */
-  function writeHookSettings(sessionDir: string, sessionId: string): string {
+  /** Write a Claude Code settings file with permission + optional execution hooks */
+  function writeHookSettings(
+    sessionDir: string,
+    sessionId: string,
+    executionTicketId?: string,
+  ): string {
     const settingsFile = path.join(sessionDir, 'settings.json');
-    const settings = {
-      hooks: {
-        PreToolUse: [
-          {
-            matcher: 'Bash|Edit|Write|NotebookEdit',
-            hooks: [
-              {
-                type: 'http',
-                url: `${WORKSHOP_API_URL}/api/hooks/permission`,
-                headers: {
-                  'X-Workshop-Session': sessionId,
-                },
-              },
-            ],
-          },
-        ],
-      },
+
+    // Base hooks: PreToolUse for permission control
+    const hooks: Record<string, unknown[]> = {
+      PreToolUse: [
+        {
+          matcher: 'Bash|Edit|Write|NotebookEdit',
+          hooks: [
+            {
+              type: 'http',
+              url: `${WORKSHOP_API_URL}/api/hooks/permission`,
+              headers: { 'X-Workshop-Session': sessionId },
+            },
+          ],
+        },
+      ],
     };
+
+    // Execution hooks: SubagentStop + SessionEnd (only for execution sessions)
+    if (executionTicketId) {
+      hooks.SubagentStop = [
+        {
+          hooks: [
+            {
+              type: 'http',
+              url: `${WORKSHOP_API_URL}/api/hooks/agent-progress`,
+              headers: {
+                'X-Workshop-Session': sessionId,
+                'X-Workshop-Ticket': executionTicketId,
+              },
+            },
+          ],
+        },
+      ];
+
+      const hookScript = path.resolve(__dirname, '../../../scripts/session-end-hook.sh');
+      hooks.SessionEnd = [
+        {
+          hooks: [
+            {
+              type: 'command',
+              command: `WORKSHOP_API_URL=${WORKSHOP_API_URL} ${hookScript}`,
+            },
+          ],
+        },
+      ];
+    }
+
+    const settings = { hooks };
     writeFileSync(settingsFile, JSON.stringify(settings, null, 2), 'utf-8');
     return settingsFile;
   }
@@ -138,7 +174,7 @@ export function createTerminalManager(sessionRepo: SessionRepository): TerminalM
       if (options.dangerouslySkipPermissions) {
         claudeArgs.push('--dangerously-skip-permissions');
       } else {
-        const settingsFile = writeHookSettings(sessionDir, sessionId);
+        const settingsFile = writeHookSettings(sessionDir, sessionId, options?.executionTicketId);
         claudeArgs.push('--settings', JSON.stringify(settingsFile));
       }
     }
