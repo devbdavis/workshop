@@ -70,12 +70,12 @@ export function createExecutionDispatcher(
         },
       );
 
-      // Bind session to ticket via stateData (executionSessionId is not in
-      // WorkflowTicketUpdate yet, so we store it in the stateData record)
+      // Bind session to ticket — executionSessionId as top-level field (used by
+      // session-end safety net hook to find the ticket) plus progress in stateData
       tickets.update(ticket.id, {
+        executionSessionId: session.id,
         stateData: {
           ...(ticket.stateData || {}),
-          executionSessionId: session.id,
           agentProgress: [],
         },
       });

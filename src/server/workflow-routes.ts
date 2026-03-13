@@ -193,24 +193,25 @@ export function createWorkflowRouter(deps: WorkflowRouterDeps): Router {
     const { comment } = req.body || {};
 
     try {
-      const updated = engine.approve(ticketId, comment);
+      let current = engine.approve(ticketId, comment);
       broadcast('workflow:approved', ticketId);
 
       // If the ticket transitioned to 'executing', dispatch the execution pipeline
-      if (updated.state === 'executing' && executionDispatcher) {
+      if (current.state === 'executing' && executionDispatcher) {
         try {
-          await executionDispatcher.dispatch(updated.id);
+          await executionDispatcher.dispatch(current.id);
           broadcast('workflow:transitioned', ticketId);
         } catch (dispatchErr) {
           console.error('Failed to dispatch execution:', dispatchErr);
           // Transition to execution-failed so the ticket doesn't get stuck
           try {
-            engine.transition(
-              updated.id,
+            const failed = engine.transition(
+              current.id,
               'execution-failed',
               { type: 'system', reason: 'Dispatch failed' },
               dispatchErr instanceof Error ? dispatchErr.message : 'Failed to dispatch execution session',
             );
+            current = failed;
             broadcast('workflow:transitioned', ticketId);
           } catch {
             // Last resort — log and let the user handle it
@@ -219,7 +220,8 @@ export function createWorkflowRouter(deps: WorkflowRouterDeps): Router {
         }
       }
 
-      res.json(updated);
+      // Always return the latest ticket state
+      res.json(current);
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Approval failed';
       res.status(400).json({ error: message });
