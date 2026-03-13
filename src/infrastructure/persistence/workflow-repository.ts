@@ -2,7 +2,7 @@ import { v4 as uuid } from 'uuid';
 import { getDatabase } from './database.js';
 import type {
   WorkflowTicket, WorkflowTicketId, WorkflowTransition, WorkflowTransitionId,
-  WorkflowState, WorkflowTicketType, TrackId, TicketId,
+  WorkflowState, WorkflowTicketType, TrackId, TicketId, SessionId,
   AgentId, AgentRole, SessionProvider, TransitionActor,
 } from '@foundation/types';
 import type {
@@ -92,6 +92,7 @@ export function createWorkflowTicketRepository(): WorkflowTicketRepository {
         stateData: data.stateData !== undefined ? data.stateData : existing.stateData,
         trackId: data.trackId !== undefined ? data.trackId : existing.trackId,
         externalTicketId: data.externalTicketId !== undefined ? data.externalTicketId : existing.externalTicketId,
+        executionSessionId: data.executionSessionId !== undefined ? data.executionSessionId : existing.executionSessionId,
         assignedAgentRole: data.assignedAgentRole !== undefined ? data.assignedAgentRole : existing.assignedAgentRole,
         assignedAgentIds: data.assignedAgentIds !== undefined ? data.assignedAgentIds : existing.assignedAgentIds,
         provider: data.provider ?? existing.provider,
@@ -105,7 +106,8 @@ export function createWorkflowTicketRepository(): WorkflowTicketRepository {
       db.prepare(
         `UPDATE workflow_tickets SET
            title = ?, description = ?, state = ?, state_data = ?, track_id = ?,
-           external_ticket_id = ?, assigned_agent_role = ?, assigned_agent_ids = ?,
+           external_ticket_id = ?, execution_session_id = ?,
+           assigned_agent_role = ?, assigned_agent_ids = ?,
            provider = ?, priority = ?, labels = ?, sort_order = ?,
            state_changed_at = ?, updated_at = ?
          WHERE id = ?`,
@@ -113,6 +115,7 @@ export function createWorkflowTicketRepository(): WorkflowTicketRepository {
         merged.title, merged.description, merged.state,
         merged.stateData ? JSON.stringify(merged.stateData) : null,
         merged.trackId || null, merged.externalTicketId || null,
+        merged.executionSessionId || null,
         merged.assignedAgentRole || null,
         merged.assignedAgentIds ? JSON.stringify(merged.assignedAgentIds) : null,
         merged.provider, merged.priority,
@@ -182,6 +185,7 @@ interface TicketRow {
   id: string; type: string; title: string; description: string;
   state: string; state_data: string | null; parent_id: string | null;
   track_id: string | null; external_ticket_id: string | null;
+  execution_session_id: string | null; execution_data: string | null;
   assigned_agent_role: string | null; assigned_agent_ids: string | null;
   provider: string; priority: string; labels: string | null;
   sort_order: number; state_changed_at: string; created_at: string; updated_at: string;
@@ -209,6 +213,7 @@ function rowToTicket(row: TicketRow): WorkflowTicket {
     parentId: (row.parent_id as WorkflowTicketId) || undefined,
     trackId: (row.track_id as TrackId) || undefined,
     externalTicketId: (row.external_ticket_id as TicketId) || undefined,
+    executionSessionId: (row.execution_session_id as SessionId) || undefined,
     assignedAgentRole: (row.assigned_agent_role as AgentRole) || undefined,
     assignedAgentIds: safeJsonParse<AgentId[]>(row.assigned_agent_ids),
     provider: (row.provider as SessionProvider) || 'claude',

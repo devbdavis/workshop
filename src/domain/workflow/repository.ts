@@ -28,6 +28,7 @@ export type WorkflowTicketUpdate = Partial<
     | 'stateData'
     | 'trackId'
     | 'externalTicketId'
+    | 'executionSessionId'
     | 'assignedAgentRole'
     | 'assignedAgentIds'
     | 'provider'

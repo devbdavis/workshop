@@ -16,8 +16,8 @@ describe('workflow state machine', () => {
   // EPIC_STAGES
   // ---------------------------------------------------------------------------
   describe('EPIC_STAGES', () => {
-    it('should define 16 stages (including cancelled, merged)', () => {
-      expect(EPIC_STAGES).toHaveLength(16);
+    it('should define 18 stages (including cancelled, merged)', () => {
+      expect(EPIC_STAGES).toHaveLength(18);
     });
 
     it('all stages should have ticketType epic', () => {
@@ -166,6 +166,26 @@ describe('workflow state machine', () => {
 
     it('epic: plan-critique -> planning is valid (blocking findings)', () => {
       expect(isValidTransition('epic', 'plan-critique', 'planning')).toBe(true);
+    });
+
+    it('epic: plan-review -> executing is valid (approve)', () => {
+      expect(isValidTransition('epic', 'plan-review', 'executing')).toBe(true);
+    });
+
+    it('epic: executing -> integration-review is valid (execution-complete)', () => {
+      expect(isValidTransition('epic', 'executing', 'integration-review')).toBe(true);
+    });
+
+    it('epic: executing -> execution-failed is valid', () => {
+      expect(isValidTransition('epic', 'executing', 'execution-failed')).toBe(true);
+    });
+
+    it('epic: execution-failed -> executing is valid (retry)', () => {
+      expect(isValidTransition('epic', 'execution-failed', 'executing')).toBe(true);
+    });
+
+    it('epic: execution-failed -> planning is valid (rework)', () => {
+      expect(isValidTransition('epic', 'execution-failed', 'planning')).toBe(true);
     });
 
     it('epic: in-progress -> integration-review is valid', () => {
@@ -328,8 +348,8 @@ describe('workflow state machine', () => {
   // getStatesForType
   // ---------------------------------------------------------------------------
   describe('getStatesForType', () => {
-    it('epic returns 16 states', () => {
-      expect(getStatesForType('epic')).toHaveLength(16);
+    it('epic returns 18 states', () => {
+      expect(getStatesForType('epic')).toHaveLength(18);
     });
 
     it('task returns 7 states', () => {
