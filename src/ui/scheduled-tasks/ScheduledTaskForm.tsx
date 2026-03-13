@@ -133,8 +133,8 @@ export function ScheduledTaskForm({ task, tracks, agents, onSave, onClose }: Pro
 
   return (
     <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4">
-      <div className="bg-gray-900 border border-gray-700 rounded-lg w-full max-w-2xl max-h-[90vh] overflow-y-auto">
-        <div className="flex items-center justify-between px-5 py-3 border-b border-gray-800">
+      <div className="bg-gray-900 border border-gray-700 rounded-lg w-[80vw] h-[80vh] resize overflow-hidden flex flex-col">
+        <div className="flex items-center justify-between px-5 py-3 border-b border-gray-800 shrink-0">
           <h2 className="text-sm font-semibold">
             {task ? 'Edit Scheduled Task' : 'New Scheduled Task'}
           </h2>
@@ -143,7 +143,7 @@ export function ScheduledTaskForm({ task, tracks, agents, onSave, onClose }: Pro
           </button>
         </div>
 
-        <div className="p-5 space-y-4">
+        <div className="p-5 space-y-4 flex-1 overflow-y-auto">
           {/* Name */}
           <Field label="Name">
             <input
@@ -442,7 +442,7 @@ export function ScheduledTaskForm({ task, tracks, agents, onSave, onClose }: Pro
         </div>
 
         {/* Footer */}
-        <div className="flex items-center justify-end gap-2 px-5 py-3 border-t border-gray-800">
+        <div className="flex items-center justify-end gap-2 px-5 py-3 border-t border-gray-800 shrink-0">
           <button
             onClick={onClose}
             className="px-4 py-1.5 text-xs text-gray-400 hover:text-gray-200 transition-colors"

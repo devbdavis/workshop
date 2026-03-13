@@ -74,16 +74,15 @@ export function TodoDetailModal({ todo, tracks, onClose, onSave, onDelete, onDis
   return (
     <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50" onClick={onClose}>
       <div
-        className="bg-gray-900 border border-gray-700 rounded-xl w-full max-w-3xl mx-4 overflow-hidden resize"
-        style={{ minWidth: '24rem', minHeight: '20rem' }}
+        className="bg-gray-900 border border-gray-700 rounded-xl w-[80vw] h-[80vh] mx-4 overflow-hidden resize flex flex-col"
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="flex items-center justify-between px-5 py-3 border-b border-gray-800">
+        <div className="flex items-center justify-between px-5 py-3 border-b border-gray-800 shrink-0">
           <h2 className="text-sm font-semibold text-gray-200">Edit Todo</h2>
           <button onClick={onClose} className="text-gray-500 hover:text-gray-300 text-lg">&times;</button>
         </div>
 
-        <div className="p-5 space-y-4">
+        <div className="p-5 space-y-4 flex-1 overflow-y-auto">
           <div className="text-xs text-gray-500">
             Track: <span className="text-gray-300">{trackName}</span>
           </div>
@@ -155,7 +154,7 @@ export function TodoDetailModal({ todo, tracks, onClose, onSave, onDelete, onDis
           )}
         </div>
 
-        <div className="flex items-center justify-between px-5 py-3 border-t border-gray-800">
+        <div className="flex items-center justify-between px-5 py-3 border-t border-gray-800 shrink-0">
           <button
             onClick={() => onDelete(todo.id)}
             className="text-xs text-red-400 hover:text-red-300"
