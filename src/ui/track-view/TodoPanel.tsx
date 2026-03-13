@@ -1,7 +1,8 @@
 import { useState, useEffect } from 'react';
-import type { Todo, TodoPriority, TodoStatus, Session, Agent, Track } from '@foundation/types';
+import type { Todo, TodoPriority, TodoStatus, Session, Agent, Track, SessionProvider } from '@foundation/types';
 import { TerminalModal } from './TerminalModal';
 import { TodoDetailModal } from '../kanban/TodoDetailModal';
+import { DispatchDropdown } from './DispatchDropdown';
 
 interface Props {
   track: Track;
@@ -69,11 +70,11 @@ export function TodoPanel({ track, todos, sessions, onUpdate }: Props) {
     onUpdate();
   }
 
-  async function dispatchTodo(todoId: string, agentId?: string) {
+  async function dispatchTodo(todoId: string, agentId?: string, provider?: SessionProvider) {
     await fetch(`/api/todos/${todoId}/dispatch`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ agentId }),
+      body: JSON.stringify({ agentId, provider }),
     });
     setDispatchingTodoId(null);
     onUpdate();
@@ -99,11 +100,11 @@ export function TodoPanel({ track, todos, sessions, onUpdate }: Props) {
     onUpdate();
   }
 
-  async function dispatchTodoFromModal(todoId: string) {
+  async function dispatchTodoFromModal(todoId: string, agentId?: string, provider?: SessionProvider) {
     await fetch(`/api/todos/${todoId}/dispatch`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({}),
+      body: JSON.stringify({ agentId, provider }),
     });
     setEditingTodo(null);
     onUpdate();
@@ -162,9 +163,9 @@ export function TodoPanel({ track, todos, sessions, onUpdate }: Props) {
                           Dispatch
                         </button>
                         {dispatchingTodoId === todo.id && (
-                          <AgentDropdown
+                          <DispatchDropdown
                             agents={agents}
-                            onSelect={(agentId) => dispatchTodo(todo.id, agentId)}
+                            onSelect={(agentId, provider) => dispatchTodo(todo.id, agentId, provider)}
                             onClose={() => setDispatchingTodoId(null)}
                           />
                         )}
@@ -295,41 +296,3 @@ function AddTodoForm({
   );
 }
 
-function AgentDropdown({
-  agents,
-  onSelect,
-  onClose,
-}: {
-  agents: Agent[];
-  onSelect: (agentId?: string) => void;
-  onClose: () => void;
-}) {
-  return (
-    <div className="absolute left-0 top-full mt-1 z-10 bg-gray-800 border border-gray-700 rounded shadow-lg min-w-[160px]">
-      <button
-        onClick={() => onSelect(undefined)}
-        className="w-full text-left px-3 py-1.5 text-xs text-gray-300 hover:bg-gray-700"
-      >
-        Default (no agent)
-      </button>
-      {agents.length > 0 && <div className="border-t border-gray-700" />}
-      {agents.map((agent) => (
-        <button
-          key={agent.id}
-          onClick={() => onSelect(agent.id)}
-          className="w-full text-left px-3 py-1.5 text-xs text-gray-300 hover:bg-gray-700"
-        >
-          <span className="font-medium">{agent.name}</span>
-          <span className="text-gray-500 ml-1">({agent.source})</span>
-        </button>
-      ))}
-      <div className="border-t border-gray-700" />
-      <button
-        onClick={onClose}
-        className="w-full text-left px-3 py-1.5 text-xs text-gray-500 hover:bg-gray-700"
-      >
-        Cancel
-      </button>
-    </div>
-  );
-}

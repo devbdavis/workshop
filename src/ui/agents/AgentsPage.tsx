@@ -128,6 +128,7 @@ export function AgentsPage() {
           onEdit={setEditingId}
           onUpdate={handleUpdate}
           onDelete={handleDelete}
+          defaultCollapsed
         />
 
         <AgentSection
@@ -138,6 +139,7 @@ export function AgentsPage() {
           onEdit={setEditingId}
           onUpdate={handleUpdate}
           onDelete={handleDelete}
+          defaultCollapsed
         />
 
         <AgentSection
@@ -173,36 +175,56 @@ interface AgentSectionProps {
   onEdit: (id: string | null) => void;
   onUpdate: (id: string, data: AgentFormData) => void;
   onDelete: (id: string) => void;
+  defaultCollapsed?: boolean;
 }
 
-function AgentSection({ title, subtitle, agents, editingId, onEdit, onUpdate, onDelete }: AgentSectionProps) {
+function AgentSection({ title, subtitle, agents, editingId, onEdit, onUpdate, onDelete, defaultCollapsed = false }: AgentSectionProps) {
+  const [collapsed, setCollapsed] = useState(defaultCollapsed);
+
   if (agents.length === 0) return null;
 
   return (
     <section className="bg-gray-900 border border-gray-800 rounded-lg p-6">
-      <div className="mb-4">
-        <h2 className="text-lg font-semibold">{title}</h2>
-        <p className="text-sm text-gray-400">{subtitle}</p>
-      </div>
-      <div className="space-y-3">
-        {agents.map((agent) =>
-          editingId === agent.id ? (
-            <AgentForm
-              key={agent.id}
-              initial={agent}
-              onSave={(data) => onUpdate(agent.id, data)}
-              onCancel={() => onEdit(null)}
-            />
-          ) : (
-            <AgentCard
-              key={agent.id}
-              agent={agent}
-              onEdit={() => onEdit(agent.id)}
-              onDelete={() => onDelete(agent.id)}
-            />
-          ),
-        )}
-      </div>
+      <button
+        onClick={() => setCollapsed(!collapsed)}
+        className="w-full flex items-center justify-between text-left group"
+      >
+        <div>
+          <h2 className="text-lg font-semibold group-hover:text-blue-300 transition-colors">
+            {title}
+            <span className="ml-2 text-sm font-normal text-gray-500">({agents.length})</span>
+          </h2>
+          <p className="text-sm text-gray-400">{subtitle}</p>
+        </div>
+        <svg
+          className={`w-5 h-5 text-gray-500 transition-transform ${collapsed ? '' : 'rotate-180'}`}
+          viewBox="0 0 20 20"
+          fill="currentColor"
+        >
+          <path fillRule="evenodd" d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" clipRule="evenodd" />
+        </svg>
+      </button>
+      {!collapsed && (
+        <div className="space-y-3 mt-4">
+          {agents.map((agent) =>
+            editingId === agent.id ? (
+              <AgentForm
+                key={agent.id}
+                initial={agent}
+                onSave={(data) => onUpdate(agent.id, data)}
+                onCancel={() => onEdit(null)}
+              />
+            ) : (
+              <AgentCard
+                key={agent.id}
+                agent={agent}
+                onEdit={() => onEdit(agent.id)}
+                onDelete={() => onDelete(agent.id)}
+              />
+            ),
+          )}
+        </div>
+      )}
     </section>
   );
 }
