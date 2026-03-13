@@ -6,14 +6,42 @@ import type { Track, TrackId, TrackRepo, TrackPath, RepoId, PathId, TemplateId, 
 export function createTrackRepository(): TrackRepository {
   const db = getDatabase();
 
+  // Prepare statements once
+  const findAllStmt = db.prepare('SELECT * FROM tracks WHERE status != ? ORDER BY updated_at DESC');
+  const findByIdStmt = db.prepare('SELECT * FROM tracks WHERE id = ?');
+  const insertStmt = db.prepare(
+    'INSERT INTO tracks (id, name, description, context, status, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)',
+  );
+  const updateStmt = db.prepare(
+    'UPDATE tracks SET name = ?, description = ?, context = ?, status = ?, updated_at = ? WHERE id = ?',
+  );
+  const deleteStmt = db.prepare('DELETE FROM tracks WHERE id = ?');
+  const setDefaultPromptTemplateStmt = db.prepare(
+    'UPDATE tracks SET default_prompt_template_id = ?, updated_at = ? WHERE id = ?',
+  );
+  const insertRepoStmt = db.prepare(
+    'INSERT INTO track_repos (id, track_id, path, remote_url, created_at) VALUES (?, ?, ?, ?, ?)',
+  );
+  const deleteRepoStmt = db.prepare('DELETE FROM track_repos WHERE id = ?');
+  const findReposByTrackStmt = db.prepare('SELECT * FROM track_repos WHERE track_id = ?');
+  const insertPathStmt = db.prepare(
+    'INSERT INTO track_paths (id, track_id, path, label, created_at) VALUES (?, ?, ?, ?, ?)',
+  );
+  const deletePathStmt = db.prepare('DELETE FROM track_paths WHERE id = ?');
+  const findPathsByTrackStmt = db.prepare('SELECT * FROM track_paths WHERE track_id = ?');
+  const getTerminalLayoutStmt = db.prepare('SELECT terminal_layout FROM tracks WHERE id = ?');
+  const setTerminalLayoutStmt = db.prepare(
+    'UPDATE tracks SET terminal_layout = ?, updated_at = ? WHERE id = ?',
+  );
+
   return {
     findAll(): Track[] {
-      const rows = db.prepare('SELECT * FROM tracks WHERE status != ? ORDER BY updated_at DESC').all('archived') as TrackRow[];
+      const rows = findAllStmt.all('archived') as TrackRow[];
       return rows.map(rowToTrack);
     },
 
     findById(id: TrackId): Track | null {
-      const row = db.prepare('SELECT * FROM tracks WHERE id = ?').get(id) as TrackRow | undefined;
+      const row = findByIdStmt.get(id) as TrackRow | undefined;
       if (!row) return null;
       const track = rowToTrack(row);
       track.repos = this.findReposByTrack(id);
@@ -24,9 +52,7 @@ export function createTrackRepository(): TrackRepository {
     create(data): Track {
       const id = uuid() as TrackId;
       const now = new Date().toISOString();
-      db.prepare(
-        'INSERT INTO tracks (id, name, description, context, status, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)',
-      ).run(id, data.name, data.description || null, data.context || null, data.status || 'active', now, now);
+      insertStmt.run(id, data.name, data.description || null, data.context || null, data.status || 'active', now, now);
       return { id, name: data.name, description: data.description, context: data.context, status: data.status || 'active', createdAt: now, updatedAt: now };
     },
 
@@ -38,64 +64,56 @@ export function createTrackRepository(): TrackRepository {
       const description = data.description ?? existing.description;
       const context = data.context !== undefined ? data.context : existing.context;
       const status = data.status ?? existing.status;
-      db.prepare(
-        'UPDATE tracks SET name = ?, description = ?, context = ?, status = ?, updated_at = ? WHERE id = ?',
-      ).run(name, description || null, context || null, status, now, id);
+      updateStmt.run(name, description || null, context || null, status, now, id);
       return { ...existing, name, description, context, status, updatedAt: now };
     },
 
     delete(id: TrackId): boolean {
-      const result = db.prepare('DELETE FROM tracks WHERE id = ?').run(id);
+      const result = deleteStmt.run(id);
       return result.changes > 0;
     },
 
     setDefaultPromptTemplate(trackId: TrackId, templateId: TemplateId | null): boolean {
-      const result = db.prepare(
-        'UPDATE tracks SET default_prompt_template_id = ?, updated_at = ? WHERE id = ?',
-      ).run(templateId, new Date().toISOString(), trackId);
+      const result = setDefaultPromptTemplateStmt.run(templateId, new Date().toISOString(), trackId);
       return result.changes > 0;
     },
 
     addRepo(trackId: TrackId, path: string, remoteUrl?: string): TrackRepo {
       const id = uuid() as RepoId;
       const now = new Date().toISOString();
-      db.prepare(
-        'INSERT INTO track_repos (id, track_id, path, remote_url, created_at) VALUES (?, ?, ?, ?, ?)',
-      ).run(id, trackId, path, remoteUrl || null, now);
+      insertRepoStmt.run(id, trackId, path, remoteUrl || null, now);
       return { id, trackId, path, remoteUrl, createdAt: now };
     },
 
     removeRepo(repoId: RepoId): boolean {
-      const result = db.prepare('DELETE FROM track_repos WHERE id = ?').run(repoId);
+      const result = deleteRepoStmt.run(repoId);
       return result.changes > 0;
     },
 
     findReposByTrack(trackId: TrackId): TrackRepo[] {
-      const rows = db.prepare('SELECT * FROM track_repos WHERE track_id = ?').all(trackId) as RepoRow[];
+      const rows = findReposByTrackStmt.all(trackId) as RepoRow[];
       return rows.map(rowToRepo);
     },
 
     addPath(trackId: TrackId, path: string, label?: string): TrackPath {
       const id = uuid() as PathId;
       const now = new Date().toISOString();
-      db.prepare(
-        'INSERT INTO track_paths (id, track_id, path, label, created_at) VALUES (?, ?, ?, ?, ?)',
-      ).run(id, trackId, path, label || null, now);
+      insertPathStmt.run(id, trackId, path, label || null, now);
       return { id, trackId, path, label, createdAt: now };
     },
 
     removePath(pathId: PathId): boolean {
-      const result = db.prepare('DELETE FROM track_paths WHERE id = ?').run(pathId);
+      const result = deletePathStmt.run(pathId);
       return result.changes > 0;
     },
 
     findPathsByTrack(trackId: TrackId): TrackPath[] {
-      const rows = db.prepare('SELECT * FROM track_paths WHERE track_id = ?').all(trackId) as PathRow[];
+      const rows = findPathsByTrackStmt.all(trackId) as PathRow[];
       return rows.map(rowToPath);
     },
 
     getTerminalLayout(trackId: TrackId): TerminalLayout | null {
-      const row = db.prepare('SELECT terminal_layout FROM tracks WHERE id = ?').get(trackId) as { terminal_layout: string | null } | undefined;
+      const row = getTerminalLayoutStmt.get(trackId) as { terminal_layout: string | null } | undefined;
       if (!row || !row.terminal_layout) return null;
       try {
         return JSON.parse(row.terminal_layout) as TerminalLayout;
@@ -106,9 +124,7 @@ export function createTrackRepository(): TrackRepository {
 
     setTerminalLayout(trackId: TrackId, layout: TerminalLayout | null): boolean {
       const json = layout ? JSON.stringify(layout) : null;
-      const result = db.prepare(
-        'UPDATE tracks SET terminal_layout = ?, updated_at = ? WHERE id = ?',
-      ).run(json, new Date().toISOString(), trackId);
+      const result = setTerminalLayoutStmt.run(json, new Date().toISOString(), trackId);
       return result.changes > 0;
     },
   };

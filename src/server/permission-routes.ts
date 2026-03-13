@@ -224,3 +224,8 @@ function makeHookResponse(
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
+
+/** Remove a session from the auto-approved set (e.g. when the session is destroyed). */
+export function clearAutoApproval(sessionId: string): void {
+  autoApprovedSessions.delete(sessionId);
+}

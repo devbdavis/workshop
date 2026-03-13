@@ -6,18 +6,27 @@ import type { Agent, AgentId } from '@foundation/types';
 export function createAgentRepository(): AgentRepository {
   const db = getDatabase();
 
+  // Prepare statements once
+  const findAllStmt = db.prepare('SELECT * FROM agents ORDER BY created_at ASC');
+  const findByIdStmt = db.prepare('SELECT * FROM agents WHERE id = ?');
+  const insertStmt = db.prepare(
+    `INSERT INTO agents (id, name, description, model, color, system_prompt, allowed_tools, max_turns, created_at, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+  );
+  const updateStmt = db.prepare(
+    `UPDATE agents SET name = ?, description = ?, model = ?, color = ?, system_prompt = ?, allowed_tools = ?, max_turns = ?, updated_at = ?
+     WHERE id = ?`,
+  );
+  const deleteStmt = db.prepare('DELETE FROM agents WHERE id = ?');
+
   return {
     findAll(): Agent[] {
-      const rows = db
-        .prepare('SELECT * FROM agents ORDER BY created_at ASC')
-        .all() as AgentRow[];
+      const rows = findAllStmt.all() as AgentRow[];
       return rows.map(rowToAgent);
     },
 
     findById(id: AgentId): Agent | null {
-      const row = db
-        .prepare('SELECT * FROM agents WHERE id = ?')
-        .get(id) as AgentRow | undefined;
+      const row = findByIdStmt.get(id) as AgentRow | undefined;
       return row ? rowToAgent(row) : null;
     },
 
@@ -25,10 +34,7 @@ export function createAgentRepository(): AgentRepository {
       const id = uuid() as AgentId;
       const now = new Date().toISOString();
       const allowedToolsJson = data.allowedTools ? JSON.stringify(data.allowedTools) : null;
-      db.prepare(
-        `INSERT INTO agents (id, name, description, model, color, system_prompt, allowed_tools, max_turns, created_at, updated_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      ).run(
+      insertStmt.run(
         id,
         data.name,
         data.description,
@@ -67,10 +73,7 @@ export function createAgentRepository(): AgentRepository {
       const allowedTools = data.allowedTools !== undefined ? data.allowedTools : existing.allowedTools;
       const maxTurns = data.maxTurns !== undefined ? data.maxTurns : existing.maxTurns;
       const allowedToolsJson = allowedTools ? JSON.stringify(allowedTools) : null;
-      db.prepare(
-        `UPDATE agents SET name = ?, description = ?, model = ?, color = ?, system_prompt = ?, allowed_tools = ?, max_turns = ?, updated_at = ?
-         WHERE id = ?`,
-      ).run(name, description, model || null, color || null, systemPrompt, allowedToolsJson, maxTurns ?? null, now, id);
+      updateStmt.run(name, description, model || null, color || null, systemPrompt, allowedToolsJson, maxTurns ?? null, now, id);
       return {
         ...existing,
         name,
@@ -85,7 +88,7 @@ export function createAgentRepository(): AgentRepository {
     },
 
     delete(id: AgentId): boolean {
-      const result = db.prepare('DELETE FROM agents WHERE id = ?').run(id);
+      const result = deleteStmt.run(id);
       return result.changes > 0;
     },
   };

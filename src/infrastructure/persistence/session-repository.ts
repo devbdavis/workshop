@@ -6,24 +6,37 @@ import type { Session, SessionId, SessionProvider, SessionState, TrackId } from 
 export function createSessionRepository(): SessionRepository {
   const db = getDatabase();
 
+  // Prepare statements once
+  const findByIdStmt = db.prepare('SELECT * FROM sessions WHERE id = ?');
+  const findByTrackStmt = db.prepare('SELECT * FROM sessions WHERE track_id = ? ORDER BY created_at DESC');
+  const findByTmuxSessionStmt = db.prepare('SELECT * FROM sessions WHERE tmux_session = ?');
+  const findAllStmt = db.prepare('SELECT * FROM sessions ORDER BY created_at DESC');
+  const insertStmt = db.prepare(
+    'INSERT INTO sessions (id, track_id, name, tmux_session, claude_resume_id, system_prompt, state, provider, background, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+  );
+  const updateStateStmt = db.prepare('UPDATE sessions SET state = ?, updated_at = ? WHERE id = ?');
+  const updateNameStmt = db.prepare('UPDATE sessions SET name = ?, updated_at = ? WHERE id = ?');
+  const updateClaudeResumeIdStmt = db.prepare('UPDATE sessions SET claude_resume_id = ?, updated_at = ? WHERE id = ?');
+  const deleteStmt = db.prepare('DELETE FROM sessions WHERE id = ?');
+
   return {
     findById(id: SessionId): Session | null {
-      const row = db.prepare('SELECT * FROM sessions WHERE id = ?').get(id) as SessionRow | undefined;
+      const row = findByIdStmt.get(id) as SessionRow | undefined;
       return row ? rowToSession(row) : null;
     },
 
     findByTrack(trackId: TrackId): Session[] {
-      const rows = db.prepare('SELECT * FROM sessions WHERE track_id = ? ORDER BY created_at DESC').all(trackId) as SessionRow[];
+      const rows = findByTrackStmt.all(trackId) as SessionRow[];
       return rows.map(rowToSession);
     },
 
     findByTmuxSession(tmuxSession: string): Session | null {
-      const row = db.prepare('SELECT * FROM sessions WHERE tmux_session = ?').get(tmuxSession) as SessionRow | undefined;
+      const row = findByTmuxSessionStmt.get(tmuxSession) as SessionRow | undefined;
       return row ? rowToSession(row) : null;
     },
 
     findAll(): Session[] {
-      const rows = db.prepare('SELECT * FROM sessions ORDER BY created_at DESC').all() as SessionRow[];
+      const rows = findAllStmt.all() as SessionRow[];
       return rows.map(rowToSession);
     },
 
@@ -31,9 +44,7 @@ export function createSessionRepository(): SessionRepository {
       const id = uuid() as SessionId;
       const now = new Date().toISOString();
       const provider = data.provider || 'claude';
-      db.prepare(
-        'INSERT INTO sessions (id, track_id, name, tmux_session, claude_resume_id, system_prompt, state, provider, background, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
-      ).run(id, data.trackId, data.name || null, data.tmuxSession, data.claudeResumeId || null, data.systemPrompt || null, data.state, provider, data.background ? 1 : 0, now, now);
+      insertStmt.run(id, data.trackId, data.name || null, data.tmuxSession, data.claudeResumeId || null, data.systemPrompt || null, data.state, provider, data.background ? 1 : 0, now, now);
       return {
         id,
         trackId: data.trackId,
@@ -51,27 +62,27 @@ export function createSessionRepository(): SessionRepository {
 
     updateState(id: SessionId, state: SessionState): Session | null {
       const now = new Date().toISOString();
-      const result = db.prepare('UPDATE sessions SET state = ?, updated_at = ? WHERE id = ?').run(state, now, id);
+      const result = updateStateStmt.run(state, now, id);
       if (result.changes === 0) return null;
       return this.findById(id);
     },
 
     updateName(id: SessionId, name: string): Session | null {
       const now = new Date().toISOString();
-      const result = db.prepare('UPDATE sessions SET name = ?, updated_at = ? WHERE id = ?').run(name, now, id);
+      const result = updateNameStmt.run(name, now, id);
       if (result.changes === 0) return null;
       return this.findById(id);
     },
 
     updateClaudeResumeId(id: SessionId, claudeResumeId: string): Session | null {
       const now = new Date().toISOString();
-      const result = db.prepare('UPDATE sessions SET claude_resume_id = ?, updated_at = ? WHERE id = ?').run(claudeResumeId, now, id);
+      const result = updateClaudeResumeIdStmt.run(claudeResumeId, now, id);
       if (result.changes === 0) return null;
       return this.findById(id);
     },
 
     delete(id: SessionId): boolean {
-      const result = db.prepare('DELETE FROM sessions WHERE id = ?').run(id);
+      const result = deleteStmt.run(id);
       return result.changes > 0;
     },
   };
