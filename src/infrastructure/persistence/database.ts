@@ -313,16 +313,9 @@ function runMigrations(db: Database.Database): void {
     // Tables already exist — safe to ignore
   }
 
-  // Migration: add execution tracking columns to workflow_tickets
+  // Migration: add execution_session_id column to workflow_tickets
   try {
     db.exec(`ALTER TABLE workflow_tickets ADD COLUMN execution_session_id TEXT;`);
-  } catch {
-    // Column already exists — safe to ignore
-  }
-  try {
-    // Note: execution_data column is intentionally unused — execution progress is stored
-    // in the stateData JSON field (as ExecutionData). Column kept for potential future use.
-    db.exec(`ALTER TABLE workflow_tickets ADD COLUMN execution_data TEXT;`);
   } catch {
     // Column already exists — safe to ignore
   }

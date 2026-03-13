@@ -14,7 +14,7 @@ export interface WorkflowRouterDeps {
   tickets: WorkflowTicketRepository;
   transitions: WorkflowTransitionRepository;
   dependencies: TicketDependencyRepository;
-  /** Optional — if provided, plan-review approval auto-dispatches execution */
+  /** If provided, plan-review approval auto-dispatches execution */
   executionDispatcher?: ExecutionDispatcher;
 }
 
@@ -193,35 +193,14 @@ export function createWorkflowRouter(deps: WorkflowRouterDeps): Router {
     const { comment } = req.body || {};
 
     try {
-      let current = engine.approve(ticketId, comment);
-      broadcast('workflow:approved', ticketId);
-
-      // If the ticket transitioned to 'executing', dispatch the execution pipeline
-      if (current.state === 'executing' && executionDispatcher) {
-        try {
-          await executionDispatcher.dispatch(current.id);
-          broadcast('workflow:transitioned', ticketId);
-        } catch (dispatchErr) {
-          console.error('Failed to dispatch execution:', dispatchErr);
-          // Transition to execution-failed so the ticket doesn't get stuck
-          try {
-            const failed = engine.transition(
-              current.id,
-              'execution-failed',
-              { type: 'system', reason: 'Dispatch failed' },
-              dispatchErr instanceof Error ? dispatchErr.message : 'Failed to dispatch execution session',
-            );
-            current = failed;
-            broadcast('workflow:transitioned', ticketId);
-          } catch {
-            // Last resort — log and let the user handle it
-            console.error('Failed to mark ticket as execution-failed:', ticketId);
-          }
-        }
+      let updated;
+      if (executionDispatcher) {
+        updated = await executionDispatcher.approveWithExecution(ticketId, comment);
+      } else {
+        updated = engine.approve(ticketId, comment);
       }
-
-      // Always return the latest ticket state
-      res.json(current);
+      broadcast('workflow:approved', ticketId);
+      res.json(updated);
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Approval failed';
       res.status(400).json({ error: message });

@@ -108,7 +108,7 @@ export const EPIC_STAGES: StageDefinition[] = [
   {
     state: 'executing',
     ticketType: 'epic',
-    agentActionable: false,  // dispatch handled by execution-dispatcher, not generic agent dispatch
+    agentActionable: false,
     humanGate: false,
     validTransitions: [
       { to: 'integration-review', trigger: 'execution-complete' },
