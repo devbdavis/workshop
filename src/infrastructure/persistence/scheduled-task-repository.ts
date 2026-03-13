@@ -20,30 +20,47 @@ import type {
 export function createScheduledTaskRepository(): ScheduledTaskRepository {
   const db = getDatabase();
 
+  // Prepare statements once
+  const findByIdStmt = db.prepare('SELECT * FROM scheduled_tasks WHERE id = ?');
+  const findAllStmt = db.prepare('SELECT * FROM scheduled_tasks ORDER BY created_at DESC');
+  const findEnabledStmt = db.prepare('SELECT * FROM scheduled_tasks WHERE enabled = 1 ORDER BY created_at DESC');
+  const findByTrackStmt = db.prepare('SELECT * FROM scheduled_tasks WHERE track_id = ? ORDER BY created_at DESC');
+  const insertStmt = db.prepare(
+    `INSERT INTO scheduled_tasks
+     (id, name, description, schedule_config, cron_expression, schedule_description,
+      track_id, agent_id, provider, task_prompt, system_prompt_override, enabled,
+      run_count, created_at, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?)`,
+  );
+  const updateStmt = db.prepare(
+    `UPDATE scheduled_tasks SET
+       name = ?, description = ?, schedule_config = ?, cron_expression = ?,
+       schedule_description = ?, track_id = ?, agent_id = ?, provider = ?,
+       task_prompt = ?, system_prompt_override = ?, enabled = ?,
+       last_run_at = ?, last_run_status = ?, last_session_id = ?,
+       run_count = ?, updated_at = ?
+     WHERE id = ?`,
+  );
+  const deleteStmt = db.prepare('DELETE FROM scheduled_tasks WHERE id = ?');
+
   return {
     findById(id: ScheduledTaskId): ScheduledTask | null {
-      const row = db.prepare('SELECT * FROM scheduled_tasks WHERE id = ?').get(id) as TaskRow | undefined;
+      const row = findByIdStmt.get(id) as TaskRow | undefined;
       return row ? rowToTask(row) : null;
     },
 
     findAll(): ScheduledTask[] {
-      const rows = db
-        .prepare('SELECT * FROM scheduled_tasks ORDER BY created_at DESC')
-        .all() as TaskRow[];
+      const rows = findAllStmt.all() as TaskRow[];
       return rows.map(rowToTask);
     },
 
     findEnabled(): ScheduledTask[] {
-      const rows = db
-        .prepare('SELECT * FROM scheduled_tasks WHERE enabled = 1 ORDER BY created_at DESC')
-        .all() as TaskRow[];
+      const rows = findEnabledStmt.all() as TaskRow[];
       return rows.map(rowToTask);
     },
 
     findByTrack(trackId: TrackId): ScheduledTask[] {
-      const rows = db
-        .prepare('SELECT * FROM scheduled_tasks WHERE track_id = ? ORDER BY created_at DESC')
-        .all(trackId) as TaskRow[];
+      const rows = findByTrackStmt.all(trackId) as TaskRow[];
       return rows.map(rowToTask);
     },
 
@@ -51,13 +68,7 @@ export function createScheduledTaskRepository(): ScheduledTaskRepository {
       const id = uuid() as ScheduledTaskId;
       const now = new Date().toISOString();
 
-      db.prepare(
-        `INSERT INTO scheduled_tasks
-         (id, name, description, schedule_config, cron_expression, schedule_description,
-          track_id, agent_id, provider, task_prompt, system_prompt_override, enabled,
-          run_count, created_at, updated_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?)`,
-      ).run(
+      insertStmt.run(
         id,
         data.name,
         data.description || null,
@@ -118,15 +129,7 @@ export function createScheduledTaskRepository(): ScheduledTaskRepository {
         runCount: data.runCount !== undefined ? data.runCount : existing.runCount,
       };
 
-      db.prepare(
-        `UPDATE scheduled_tasks SET
-           name = ?, description = ?, schedule_config = ?, cron_expression = ?,
-           schedule_description = ?, track_id = ?, agent_id = ?, provider = ?,
-           task_prompt = ?, system_prompt_override = ?, enabled = ?,
-           last_run_at = ?, last_run_status = ?, last_session_id = ?,
-           run_count = ?, updated_at = ?
-         WHERE id = ?`,
-      ).run(
+      updateStmt.run(
         merged.name,
         merged.description || null,
         JSON.stringify(merged.scheduleConfig),
@@ -150,7 +153,7 @@ export function createScheduledTaskRepository(): ScheduledTaskRepository {
     },
 
     delete(id: ScheduledTaskId): boolean {
-      const result = db.prepare('DELETE FROM scheduled_tasks WHERE id = ?').run(id);
+      const result = deleteStmt.run(id);
       return result.changes > 0;
     },
   };
@@ -161,21 +164,27 @@ export function createScheduledTaskRepository(): ScheduledTaskRepository {
 export function createScheduledTaskRunRepository(): ScheduledTaskRunRepository {
   const db = getDatabase();
 
+  // Prepare statements once
+  const findByTaskStmt = db.prepare('SELECT * FROM scheduled_task_runs WHERE task_id = ? ORDER BY started_at DESC LIMIT ?');
+  const insertStmt = db.prepare(
+    `INSERT INTO scheduled_task_runs (id, task_id, session_id, status, error, started_at, completed_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?)`,
+  );
+  const completeStmt = db.prepare(
+    'UPDATE scheduled_task_runs SET status = ?, error = ?, completed_at = ? WHERE id = ?',
+  );
+  const findRunByIdStmt = db.prepare('SELECT * FROM scheduled_task_runs WHERE id = ?');
+
   return {
     findByTask(taskId: ScheduledTaskId, limit = 50): ScheduledTaskRun[] {
-      const rows = db
-        .prepare('SELECT * FROM scheduled_task_runs WHERE task_id = ? ORDER BY started_at DESC LIMIT ?')
-        .all(taskId, limit) as RunRow[];
+      const rows = findByTaskStmt.all(taskId, limit) as RunRow[];
       return rows.map(rowToRun);
     },
 
     create(data): ScheduledTaskRun {
       const id = uuid();
 
-      db.prepare(
-        `INSERT INTO scheduled_task_runs (id, task_id, session_id, status, error, started_at, completed_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?)`,
-      ).run(
+      insertStmt.run(
         id,
         data.taskId,
         data.sessionId || null,
@@ -191,13 +200,11 @@ export function createScheduledTaskRunRepository(): ScheduledTaskRunRepository {
     complete(id, status, error): ScheduledTaskRun | null {
       const now = new Date().toISOString();
 
-      const result = db.prepare(
-        'UPDATE scheduled_task_runs SET status = ?, error = ?, completed_at = ? WHERE id = ?',
-      ).run(status, error || null, now, id);
+      const result = completeStmt.run(status, error || null, now, id);
 
       if (result.changes === 0) return null;
 
-      const row = db.prepare('SELECT * FROM scheduled_task_runs WHERE id = ?').get(id) as RunRow | undefined;
+      const row = findRunByIdStmt.get(id) as RunRow | undefined;
       return row ? rowToRun(row) : null;
     },
   };

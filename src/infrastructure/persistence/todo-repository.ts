@@ -6,37 +6,46 @@ import type { Todo, TodoId, TodoStatus, TrackId, SessionId, AgentId } from '@fou
 export function createTodoRepository(): TodoRepository {
   const db = getDatabase();
 
+  // Prepare statements once
+  const findByIdStmt = db.prepare('SELECT * FROM todos WHERE id = ?');
+  const findByTrackStmt = db.prepare('SELECT * FROM todos WHERE track_id = ? ORDER BY sort_order ASC, created_at DESC');
+  const findAllStmt = db.prepare('SELECT * FROM todos ORDER BY sort_order ASC, created_at DESC');
+  const findByStatusStmt = db.prepare('SELECT * FROM todos WHERE status = ? ORDER BY sort_order ASC, created_at DESC');
+  const findBySessionStmt = db.prepare('SELECT * FROM todos WHERE session_id = ?');
+  const insertStmt = db.prepare(
+    `INSERT INTO todos (id, track_id, title, description, status, priority, refined, session_id, agent_id, sort_order, created_at, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+  );
+  const updateStmt = db.prepare(
+    `UPDATE todos
+     SET title = ?, description = ?, status = ?, priority = ?, refined = ?, session_id = ?, agent_id = ?, sort_order = ?, updated_at = ?
+     WHERE id = ?`,
+  );
+  const deleteStmt = db.prepare('DELETE FROM todos WHERE id = ?');
+
   return {
     findById(id: TodoId): Todo | null {
-      const row = db.prepare('SELECT * FROM todos WHERE id = ?').get(id) as TodoRow | undefined;
+      const row = findByIdStmt.get(id) as TodoRow | undefined;
       return row ? rowToTodo(row) : null;
     },
 
     findByTrack(trackId: TrackId): Todo[] {
-      const rows = db
-        .prepare('SELECT * FROM todos WHERE track_id = ? ORDER BY sort_order ASC, created_at DESC')
-        .all(trackId) as TodoRow[];
+      const rows = findByTrackStmt.all(trackId) as TodoRow[];
       return rows.map(rowToTodo);
     },
 
     findAll(): Todo[] {
-      const rows = db
-        .prepare('SELECT * FROM todos ORDER BY sort_order ASC, created_at DESC')
-        .all() as TodoRow[];
+      const rows = findAllStmt.all() as TodoRow[];
       return rows.map(rowToTodo);
     },
 
     findByStatus(status: TodoStatus): Todo[] {
-      const rows = db
-        .prepare('SELECT * FROM todos WHERE status = ? ORDER BY sort_order ASC, created_at DESC')
-        .all(status) as TodoRow[];
+      const rows = findByStatusStmt.all(status) as TodoRow[];
       return rows.map(rowToTodo);
     },
 
     findBySession(sessionId: SessionId): Todo | null {
-      const row = db
-        .prepare('SELECT * FROM todos WHERE session_id = ?')
-        .get(sessionId) as TodoRow | undefined;
+      const row = findBySessionStmt.get(sessionId) as TodoRow | undefined;
       return row ? rowToTodo(row) : null;
     },
 
@@ -44,10 +53,7 @@ export function createTodoRepository(): TodoRepository {
       const id = uuid() as TodoId;
       const now = new Date().toISOString();
 
-      db.prepare(
-        `INSERT INTO todos (id, track_id, title, description, status, priority, refined, session_id, agent_id, sort_order, created_at, updated_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      ).run(
+      insertStmt.run(
         id,
         data.trackId,
         data.title,
@@ -92,11 +98,7 @@ export function createTodoRepository(): TodoRepository {
       const agentId = data.agentId !== undefined ? data.agentId : existing.agentId;
       const sortOrder = data.sortOrder ?? existing.sortOrder;
 
-      db.prepare(
-        `UPDATE todos
-         SET title = ?, description = ?, status = ?, priority = ?, refined = ?, session_id = ?, agent_id = ?, sort_order = ?, updated_at = ?
-         WHERE id = ?`,
-      ).run(
+      updateStmt.run(
         title,
         description || null,
         status,
@@ -124,7 +126,7 @@ export function createTodoRepository(): TodoRepository {
     },
 
     delete(id: TodoId): boolean {
-      const result = db.prepare('DELETE FROM todos WHERE id = ?').run(id);
+      const result = deleteStmt.run(id);
       return result.changes > 0;
     },
   };

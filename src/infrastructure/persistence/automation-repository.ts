@@ -14,30 +14,40 @@ import type {
 export function createAutomationRuleRepository(): AutomationRuleRepository {
   const db = getDatabase();
 
+  // Prepare statements once
+  const findByIdStmt = db.prepare('SELECT * FROM automation_rules WHERE id = ?');
+  const findByTrackStmt = db.prepare('SELECT * FROM automation_rules WHERE track_id = ? ORDER BY created_at DESC');
+  const findByTriggerTypeStmt = db.prepare('SELECT * FROM automation_rules WHERE trigger_type = ? ORDER BY created_at DESC');
+  const findEnabledStmt = db.prepare('SELECT * FROM automation_rules WHERE enabled = 1 ORDER BY created_at DESC');
+  const insertStmt = db.prepare(
+    `INSERT INTO automation_rules (id, track_id, name, trigger_type, trigger_config, action_type, action_config, enabled, created_at, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+  );
+  const updateStmt = db.prepare(
+    `UPDATE automation_rules
+     SET name = ?, trigger_type = ?, trigger_config = ?, action_type = ?, action_config = ?, enabled = ?, updated_at = ?
+     WHERE id = ?`,
+  );
+  const deleteStmt = db.prepare('DELETE FROM automation_rules WHERE id = ?');
+
   return {
     findById(id: AutomationRuleId): AutomationRule | null {
-      const row = db.prepare('SELECT * FROM automation_rules WHERE id = ?').get(id) as RuleRow | undefined;
+      const row = findByIdStmt.get(id) as RuleRow | undefined;
       return row ? rowToRule(row) : null;
     },
 
     findByTrack(trackId: TrackId): AutomationRule[] {
-      const rows = db
-        .prepare('SELECT * FROM automation_rules WHERE track_id = ? ORDER BY created_at DESC')
-        .all(trackId) as RuleRow[];
+      const rows = findByTrackStmt.all(trackId) as RuleRow[];
       return rows.map(rowToRule);
     },
 
     findByTriggerType(triggerType: TriggerType): AutomationRule[] {
-      const rows = db
-        .prepare('SELECT * FROM automation_rules WHERE trigger_type = ? ORDER BY created_at DESC')
-        .all(triggerType) as RuleRow[];
+      const rows = findByTriggerTypeStmt.all(triggerType) as RuleRow[];
       return rows.map(rowToRule);
     },
 
     findEnabled(): AutomationRule[] {
-      const rows = db
-        .prepare('SELECT * FROM automation_rules WHERE enabled = 1 ORDER BY created_at DESC')
-        .all() as RuleRow[];
+      const rows = findEnabledStmt.all() as RuleRow[];
       return rows.map(rowToRule);
     },
 
@@ -47,10 +57,7 @@ export function createAutomationRuleRepository(): AutomationRuleRepository {
       const triggerConfig = data.triggerConfig ? JSON.stringify(data.triggerConfig) : null;
       const actionConfig = data.actionConfig ? JSON.stringify(data.actionConfig) : null;
 
-      db.prepare(
-        `INSERT INTO automation_rules (id, track_id, name, trigger_type, trigger_config, action_type, action_config, enabled, created_at, updated_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      ).run(id, data.trackId, data.name, data.triggerType, triggerConfig, data.actionType, actionConfig, data.enabled ? 1 : 0, now, now);
+      insertStmt.run(id, data.trackId, data.name, data.triggerType, triggerConfig, data.actionType, actionConfig, data.enabled ? 1 : 0, now, now);
 
       return {
         id,
@@ -78,11 +85,7 @@ export function createAutomationRuleRepository(): AutomationRuleRepository {
       const actionConfig = data.actionConfig !== undefined ? data.actionConfig : existing.actionConfig;
       const enabled = data.enabled !== undefined ? data.enabled : existing.enabled;
 
-      db.prepare(
-        `UPDATE automation_rules
-         SET name = ?, trigger_type = ?, trigger_config = ?, action_type = ?, action_config = ?, enabled = ?, updated_at = ?
-         WHERE id = ?`,
-      ).run(
+      updateStmt.run(
         name,
         triggerType,
         triggerConfig ? JSON.stringify(triggerConfig) : null,
@@ -97,7 +100,7 @@ export function createAutomationRuleRepository(): AutomationRuleRepository {
     },
 
     delete(id: AutomationRuleId): boolean {
-      const result = db.prepare('DELETE FROM automation_rules WHERE id = ?').run(id);
+      const result = deleteStmt.run(id);
       return result.changes > 0;
     },
   };
@@ -108,11 +111,20 @@ export function createAutomationRuleRepository(): AutomationRuleRepository {
 export function createAutomationRunRepository(): AutomationRunRepository {
   const db = getDatabase();
 
+  // Prepare statements once
+  const findByRuleStmt = db.prepare('SELECT * FROM automation_runs WHERE rule_id = ? ORDER BY started_at DESC');
+  const insertStmt = db.prepare(
+    `INSERT INTO automation_runs (id, rule_id, status, result, started_at, completed_at)
+     VALUES (?, ?, ?, ?, ?, ?)`,
+  );
+  const completeStmt = db.prepare(
+    'UPDATE automation_runs SET status = ?, result = ?, completed_at = ? WHERE id = ?',
+  );
+  const findRunByIdStmt = db.prepare('SELECT * FROM automation_runs WHERE id = ?');
+
   return {
     findByRule(ruleId: AutomationRuleId): AutomationRun[] {
-      const rows = db
-        .prepare('SELECT * FROM automation_runs WHERE rule_id = ? ORDER BY started_at DESC')
-        .all(ruleId) as RunRow[];
+      const rows = findByRuleStmt.all(ruleId) as RunRow[];
       return rows.map(rowToRun);
     },
 
@@ -120,10 +132,7 @@ export function createAutomationRunRepository(): AutomationRunRepository {
       const id = uuid();
       const resultJson = data.result ? JSON.stringify(data.result) : null;
 
-      db.prepare(
-        `INSERT INTO automation_runs (id, rule_id, status, result, started_at, completed_at)
-         VALUES (?, ?, ?, ?, ?, ?)`,
-      ).run(id, data.ruleId, data.status, resultJson, data.startedAt, data.completedAt || null);
+      insertStmt.run(id, data.ruleId, data.status, resultJson, data.startedAt, data.completedAt || null);
 
       return { id, ruleId: data.ruleId, status: data.status, result: data.result, startedAt: data.startedAt, completedAt: data.completedAt };
     },
@@ -132,13 +141,11 @@ export function createAutomationRunRepository(): AutomationRunRepository {
       const now = new Date().toISOString();
       const resultJson = result ? JSON.stringify(result) : null;
 
-      const updateResult = db.prepare(
-        'UPDATE automation_runs SET status = ?, result = ?, completed_at = ? WHERE id = ?',
-      ).run(status, resultJson, now, id);
+      const updateResult = completeStmt.run(status, resultJson, now, id);
 
       if (updateResult.changes === 0) return null;
 
-      const row = db.prepare('SELECT * FROM automation_runs WHERE id = ?').get(id) as RunRow | undefined;
+      const row = findRunByIdStmt.get(id) as RunRow | undefined;
       return row ? rowToRun(row) : null;
     },
   };
