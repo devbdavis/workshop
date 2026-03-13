@@ -4,6 +4,7 @@ const navItems = [
   { to: '/', label: 'Tracks', end: true },
   { to: '/kanban', label: 'Kanban', end: false },
   { to: '/sessions', label: 'Sessions', end: false },
+  { to: '/scheduled-tasks', label: 'Schedules', end: false },
   { to: '/agents', label: 'Agents', end: false },
   { to: '/settings', label: 'Settings', end: false },
 ];

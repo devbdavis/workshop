@@ -216,6 +216,44 @@ function runMigrations(db: Database.Database): void {
     // Column already exists — safe to ignore
   }
 
+  // Migration: create scheduled_tasks table
+  try {
+    db.exec(`
+      CREATE TABLE scheduled_tasks (
+        id TEXT PRIMARY KEY,
+        name TEXT NOT NULL,
+        description TEXT,
+        schedule_config TEXT NOT NULL,
+        cron_expression TEXT NOT NULL,
+        schedule_description TEXT NOT NULL DEFAULT '',
+        track_id TEXT REFERENCES tracks(id) ON DELETE SET NULL,
+        agent_id TEXT,
+        provider TEXT NOT NULL DEFAULT 'claude',
+        task_prompt TEXT NOT NULL,
+        system_prompt_override TEXT,
+        enabled INTEGER NOT NULL DEFAULT 1,
+        last_run_at TEXT,
+        last_run_status TEXT,
+        last_session_id TEXT,
+        run_count INTEGER NOT NULL DEFAULT 0,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      );
+
+      CREATE TABLE scheduled_task_runs (
+        id TEXT PRIMARY KEY,
+        task_id TEXT NOT NULL REFERENCES scheduled_tasks(id) ON DELETE CASCADE,
+        session_id TEXT REFERENCES sessions(id) ON DELETE SET NULL,
+        status TEXT NOT NULL,
+        error TEXT,
+        started_at TEXT NOT NULL,
+        completed_at TEXT
+      );
+    `);
+  } catch {
+    // Tables already exist — safe to ignore
+  }
+
   // Seed default prompt templates if the table is empty
   seedDefaultTemplates(db);
 }

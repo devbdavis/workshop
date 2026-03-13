@@ -10,6 +10,7 @@ export type TemplateId = string & { readonly __brand: 'TemplateId' };
 export type TodoId = string & { readonly __brand: 'TodoId' };
 export type PermissionRequestId = string & { readonly __brand: 'PermissionRequestId' };
 export type AgentId = string & { readonly __brand: 'AgentId' };
+export type ScheduledTaskId = string & { readonly __brand: 'ScheduledTaskId' };
 
 // Track
 export interface Track {
@@ -190,6 +191,67 @@ export interface PromptTemplate {
   content: string;
   createdAt: string;
   updatedAt: string;
+}
+
+// Scheduled Task
+export type SchedulePreset = 'interval' | 'daily' | 'weekly' | 'monthly' | 'cron';
+
+export interface ScheduleConfig {
+  preset: SchedulePreset;
+  /** For preset=interval: run every N minutes */
+  intervalMinutes?: number;
+  /** HH:MM time for daily/weekly/monthly */
+  time?: string;
+  /** Days of week: 0=Sun..6=Sat. For daily preset (e.g. workdays=[1,2,3,4,5]) */
+  daysOfWeek?: number[];
+  /** For weekly: which day (0-6) */
+  dayOfWeek?: number;
+  /** For monthly: how to pick the day */
+  monthRule?: 'day-of-month' | 'weekday-of-month';
+  /** For monthly day-of-month: 1-31 */
+  dayOfMonth?: number;
+  /** For monthly weekday-of-month: 1-4 or -1 for last (combined with dayOfWeek) */
+  weekOfMonth?: number;
+  /** For preset=cron: raw cron expression */
+  cronExpression?: string;
+}
+
+export interface ScheduledTask {
+  id: ScheduledTaskId;
+  name: string;
+  description?: string;
+  // Schedule
+  scheduleConfig: ScheduleConfig;
+  /** The resolved cron expression used by node-cron */
+  cronExpression: string;
+  /** Human-readable schedule description */
+  scheduleDescription: string;
+  // Execution
+  trackId?: TrackId;
+  agentId?: AgentId;
+  provider: SessionProvider;
+  /** The task prompt / instruction sent to the agent */
+  taskPrompt: string;
+  /** If set, used instead of auto-composed prompt */
+  systemPromptOverride?: string;
+  // State
+  enabled: boolean;
+  lastRunAt?: string;
+  lastRunStatus?: 'running' | 'completed' | 'failed';
+  lastSessionId?: SessionId;
+  runCount: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface ScheduledTaskRun {
+  id: string;
+  taskId: ScheduledTaskId;
+  sessionId?: SessionId;
+  status: 'running' | 'completed' | 'failed';
+  error?: string;
+  startedAt: string;
+  completedAt?: string;
 }
 
 // Agent
