@@ -11,23 +11,32 @@ import type {
 export function createPermissionRequestRepository(): PermissionRequestRepository {
   const db = getDatabase();
 
+  // Prepare statements once
+  const findByIdStmt = db.prepare('SELECT * FROM permission_requests WHERE id = ?');
+  const findBySessionStmt = db.prepare('SELECT * FROM permission_requests WHERE session_id = ? ORDER BY created_at DESC');
+  const findPendingBySessionStmt = db.prepare("SELECT * FROM permission_requests WHERE session_id = ? AND decision = 'pending' ORDER BY created_at ASC");
+  const insertStmt = db.prepare(
+    `INSERT INTO permission_requests (id, session_id, tool_name, tool_input, decision, decision_reason, user_comment, created_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+  );
+  const resolveStmt = db.prepare(
+    'UPDATE permission_requests SET decision = ?, decision_reason = ?, user_comment = ?, resolved_at = ? WHERE id = ?',
+  );
+  const deleteStmt = db.prepare('DELETE FROM permission_requests WHERE id = ?');
+
   return {
     findById(id: PermissionRequestId): PermissionRequest | null {
-      const row = db.prepare('SELECT * FROM permission_requests WHERE id = ?').get(id) as Row | undefined;
+      const row = findByIdStmt.get(id) as Row | undefined;
       return row ? rowToPermission(row) : null;
     },
 
     findBySession(sessionId: SessionId): PermissionRequest[] {
-      const rows = db
-        .prepare('SELECT * FROM permission_requests WHERE session_id = ? ORDER BY created_at DESC')
-        .all(sessionId) as Row[];
+      const rows = findBySessionStmt.all(sessionId) as Row[];
       return rows.map(rowToPermission);
     },
 
     findPendingBySession(sessionId: SessionId): PermissionRequest[] {
-      const rows = db
-        .prepare("SELECT * FROM permission_requests WHERE session_id = ? AND decision = 'pending' ORDER BY created_at ASC")
-        .all(sessionId) as Row[];
+      const rows = findPendingBySessionStmt.all(sessionId) as Row[];
       return rows.map(rowToPermission);
     },
 
@@ -35,10 +44,7 @@ export function createPermissionRequestRepository(): PermissionRequestRepository
       const id = uuid() as PermissionRequestId;
       const now = new Date().toISOString();
 
-      db.prepare(
-        `INSERT INTO permission_requests (id, session_id, tool_name, tool_input, decision, decision_reason, user_comment, created_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-      ).run(
+      insertStmt.run(
         id,
         data.sessionId,
         data.toolName,
@@ -66,9 +72,7 @@ export function createPermissionRequestRepository(): PermissionRequestRepository
       if (!existing) return null;
 
       const now = new Date().toISOString();
-      db.prepare(
-        'UPDATE permission_requests SET decision = ?, decision_reason = ?, user_comment = ?, resolved_at = ? WHERE id = ?',
-      ).run(decision, reason || null, comment || null, now, id);
+      resolveStmt.run(decision, reason || null, comment || null, now, id);
 
       return {
         ...existing,
@@ -80,7 +84,7 @@ export function createPermissionRequestRepository(): PermissionRequestRepository
     },
 
     delete(id: PermissionRequestId): boolean {
-      const result = db.prepare('DELETE FROM permission_requests WHERE id = ?').run(id);
+      const result = deleteStmt.run(id);
       return result.changes > 0;
     },
   };

@@ -6,23 +6,27 @@ import type { TrackSummary, SummaryId, TrackId } from '@foundation/types';
 export function createSummaryRepository(): SummaryRepository {
   const db = getDatabase();
 
+  // Prepare statements once
+  const findLatestStmt = db.prepare('SELECT * FROM summaries WHERE track_id = ? ORDER BY version DESC LIMIT 1');
+  const findByIdStmt = db.prepare('SELECT * FROM summaries WHERE id = ?');
+  const findAllByTrackStmt = db.prepare('SELECT * FROM summaries WHERE track_id = ? ORDER BY version DESC');
+  const insertStmt = db.prepare(
+    'INSERT INTO summaries (id, track_id, content, version, created_at) VALUES (?, ?, ?, ?, ?)',
+  );
+
   return {
     findLatest(trackId: TrackId): TrackSummary | null {
-      const row = db
-        .prepare('SELECT * FROM summaries WHERE track_id = ? ORDER BY version DESC LIMIT 1')
-        .get(trackId) as SummaryRow | undefined;
+      const row = findLatestStmt.get(trackId) as SummaryRow | undefined;
       return row ? rowToSummary(row) : null;
     },
 
     findById(id: SummaryId): TrackSummary | null {
-      const row = db.prepare('SELECT * FROM summaries WHERE id = ?').get(id) as SummaryRow | undefined;
+      const row = findByIdStmt.get(id) as SummaryRow | undefined;
       return row ? rowToSummary(row) : null;
     },
 
     findAllByTrack(trackId: TrackId): TrackSummary[] {
-      const rows = db
-        .prepare('SELECT * FROM summaries WHERE track_id = ? ORDER BY version DESC')
-        .all(trackId) as SummaryRow[];
+      const rows = findAllByTrackStmt.all(trackId) as SummaryRow[];
       return rows.map(rowToSummary);
     },
 
@@ -34,9 +38,7 @@ export function createSummaryRepository(): SummaryRepository {
       const latest = this.findLatest(trackId);
       const version = latest ? latest.version + 1 : 1;
 
-      db.prepare(
-        'INSERT INTO summaries (id, track_id, content, version, created_at) VALUES (?, ?, ?, ?, ?)',
-      ).run(id, trackId, content, version, now);
+      insertStmt.run(id, trackId, content, version, now);
 
       return { id, trackId, content, version, createdAt: now };
     },
