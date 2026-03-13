@@ -98,7 +98,7 @@ export function createWorkflowTicketRepository(): WorkflowTicketRepository {
         priority: data.priority ?? existing.priority,
         labels: data.labels !== undefined ? data.labels : existing.labels,
         sortOrder: data.sortOrder ?? existing.sortOrder,
-        stateChangedAt: stateChanged ? now : (data.stateChangedAt ?? existing.stateChangedAt),
+        stateChangedAt: data.stateChangedAt ?? (stateChanged ? now : existing.stateChangedAt),
         updatedAt: now,
       };
 
