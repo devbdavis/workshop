@@ -320,6 +320,8 @@ function runMigrations(db: Database.Database): void {
     // Column already exists — safe to ignore
   }
   try {
+    // Note: execution_data column is intentionally unused — execution progress is stored
+    // in the stateData JSON field (as ExecutionData). Column kept for potential future use.
     db.exec(`ALTER TABLE workflow_tickets ADD COLUMN execution_data TEXT;`);
   } catch {
     // Column already exists — safe to ignore

@@ -185,7 +185,7 @@ interface TicketRow {
   id: string; type: string; title: string; description: string;
   state: string; state_data: string | null; parent_id: string | null;
   track_id: string | null; external_ticket_id: string | null;
-  execution_session_id: string | null; execution_data: string | null;
+  execution_session_id: string | null;
   assigned_agent_role: string | null; assigned_agent_ids: string | null;
   provider: string; priority: string; labels: string | null;
   sort_order: number; state_changed_at: string; created_at: string; updated_at: string;
