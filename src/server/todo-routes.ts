@@ -8,7 +8,10 @@ import type { TicketRepository } from '@domain/ticket/repository';
 import type { PromptTemplateRepository } from '@domain/prompt-template/repository';
 import type { AgentRepository } from '@domain/agent/repository';
 import type { FilesystemAgentScanner } from '@infrastructure/agents/filesystem-scanner.js';
+import type { VaultReader } from '@infrastructure/vault/reader.js';
+import { slugifyTrackName } from '@infrastructure/vault/utils.js';
 import { interpolateTemplate } from '@application/track-management/prompt-interpolation.js';
+import { composeVaultContext } from '@application/vault/compose-vault-context.js';
 import { broadcast } from './events.js';
 
 export interface TodoRouterDeps {
@@ -27,11 +30,12 @@ export interface TodoRouterDeps {
       opts?: { systemPrompt?: string; workingDirectory?: string; background?: boolean; todoId?: string; initialPrompt?: string; provider?: SessionProvider; dangerouslySkipPermissions?: boolean },
     ) => Promise<{ id: SessionId; trackId: TrackId; tmuxSession: string; state: string }>;
   };
+  vaultReader: VaultReader;
 }
 
 export function createTodoRouter(deps: TodoRouterDeps): Router {
   const router = Router();
-  const { todos, tracks, sessions, summaries, tickets, promptTemplates, agents, filesystemScanner, projectRoot, terminal } = deps;
+  const { todos, tracks, sessions, summaries, tickets, promptTemplates, agents, filesystemScanner, projectRoot, terminal, vaultReader } = deps;
 
   // --- List all todos (with optional filters) ---
 
@@ -166,6 +170,13 @@ export function createTodoRouter(deps: TodoRouterDeps): Router {
 
       if (track.context) {
         parts.push(track.context);
+      }
+
+      // Vault memory (persistent Obsidian notes)
+      const trackSlug = slugifyTrackName(track.name);
+      const vaultContext = composeVaultContext(vaultReader, trackSlug);
+      if (vaultContext) {
+        parts.push(vaultContext);
       }
 
       const summary = summaries.findLatest(todo.trackId);
