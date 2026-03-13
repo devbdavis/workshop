@@ -24,7 +24,7 @@ import { composeVaultContext } from '@application/vault/compose-vault-context.js
 import type { AutomationEngine } from '@application/automation-engine/engine.js';
 import { createTaskScheduler } from '@application/scheduler/task-scheduler.js';
 import { createTodoRouter } from './todo-routes.js';
-import { createPermissionRouter } from './permission-routes.js';
+import { createPermissionRouter, clearAutoApproval } from './permission-routes.js';
 import { createAgentRouter } from './agent-routes.js';
 import { createVaultRouter } from './vault-routes.js';
 import { createScheduledTaskRouter } from './scheduled-task-routes.js';
@@ -32,7 +32,10 @@ import { createWorkflowRouter } from './workflow-routes.js';
 import { createWorkflowTicketRepository, createWorkflowTransitionRepository } from '@infrastructure/persistence/workflow-repository.js';
 import { createTicketDependencyRepository } from '@infrastructure/persistence/workflow-dependency-repository.js';
 import { createWorkflowEngine } from '@application/workflow/engine.js';
+import { createExecutionDispatcher } from '@application/workflow/execution-dispatcher.js';
+import { createExecutionHookRouter } from './execution-hook-routes.js';
 import { broadcast } from './events.js';
+import { pruneOldRows } from '@infrastructure/persistence/db-pruning.js';
 
 export interface ApiRouterDeps {
   automationEngine?: AutomationEngine;
@@ -55,17 +58,29 @@ export function createApiRouter(deps: ApiRouterDeps = {}): Router {
 
   // Sync session states on startup and periodically (every 30s).
   // Dead tmux sessions are removed from the DB and events broadcast to connected clients.
+  let lastPruneTime = 0;
+  const PRUNE_INTERVAL = 3600_000; // 1 hour
+
   function runSessionSync() {
     const result = terminal.syncSessionStates();
-    for (const { trackId } of result.cleaned) {
+    for (const { sessionId, trackId } of result.cleaned) {
+      clearAutoApproval(sessionId);
       broadcast('session:deleted', trackId);
+    }
+
+    // Prune old DB rows periodically (once per hour)
+    const now = Date.now();
+    if (now - lastPruneTime > PRUNE_INTERVAL) {
+      lastPruneTime = now;
+      const pruneResult = pruneOldRows();
+      const total = Object.values(pruneResult.pruned).reduce((a, b) => a + b, 0);
+      if (total > 0) {
+        console.log('DB pruning:', pruneResult.pruned);
+      }
     }
   }
   runSessionSync();
   const syncInterval = setInterval(runSessionSync, 30_000);
-  // Clean up interval when the router's parent process exits
-  process.on('SIGINT', () => clearInterval(syncInterval));
-  process.on('SIGTERM', () => clearInterval(syncInterval));
 
   const gitAdapter = createGitAdapter();
   const vaultReader = createVaultReader(VAULT_ROOT);
@@ -141,17 +156,35 @@ export function createApiRouter(deps: ApiRouterDeps = {}): Router {
     transitions: workflowTransitions,
     dependencies: ticketDependencies,
   });
+  const executionDispatcher = createExecutionDispatcher({
+    engine: workflowEngine,
+    tickets: workflowTickets,
+    tracks,
+    summaries,
+    terminal,
+  });
   const workflowRouter = createWorkflowRouter({
     engine: workflowEngine,
     tickets: workflowTickets,
     transitions: workflowTransitions,
     dependencies: ticketDependencies,
+    executionDispatcher,
   });
   router.use(workflowRouter);
 
-  // Stop scheduler on shutdown
-  process.on('SIGINT', () => taskScheduler.stop());
-  process.on('SIGTERM', () => taskScheduler.stop());
+  const executionHookRouter = createExecutionHookRouter({
+    engine: workflowEngine,
+    tickets: workflowTickets,
+  });
+  router.use(executionHookRouter);
+
+  // Consolidated shutdown cleanup
+  function cleanup() {
+    clearInterval(syncInterval);
+    taskScheduler.stop();
+  }
+  process.on('SIGINT', cleanup);
+  process.on('SIGTERM', cleanup);
 
   // --- Tracks ---
 
@@ -402,6 +435,7 @@ export function createApiRouter(deps: ApiRouterDeps = {}): Router {
 
   router.delete('/tracks/:trackId/sessions/:sessionId', async (req, res) => {
     try {
+      clearAutoApproval(req.params.sessionId);
       await terminal.destroySession(req.params.sessionId as SessionId);
       broadcast('session:deleted', req.params.trackId as TrackId);
       res.status(204).send();

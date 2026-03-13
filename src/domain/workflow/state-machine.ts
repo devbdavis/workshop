@@ -100,8 +100,30 @@ export const EPIC_STAGES: StageDefinition[] = [
     agentActionable: false,
     humanGate: true,
     validTransitions: [
-      { to: 'splitting', trigger: 'human-approve' },
+      { to: 'executing', trigger: 'human-approve' },
       { to: 'planning', trigger: 'human-reject', condition: 'Feedback attached' },
+      { to: 'cancelled', trigger: 'manual' },
+    ],
+  },
+  {
+    state: 'executing',
+    ticketType: 'epic',
+    agentActionable: false,
+    humanGate: false,
+    validTransitions: [
+      { to: 'integration-review', trigger: 'execution-complete' },
+      { to: 'execution-failed', trigger: 'execution-failed' },
+      { to: 'cancelled', trigger: 'manual' },
+    ],
+  },
+  {
+    state: 'execution-failed',
+    ticketType: 'epic',
+    agentActionable: false,
+    humanGate: false,
+    validTransitions: [
+      { to: 'executing', trigger: 'manual', condition: 'Retry execution' },
+      { to: 'planning', trigger: 'manual', condition: 'Rework plan' },
       { to: 'cancelled', trigger: 'manual' },
     ],
   },

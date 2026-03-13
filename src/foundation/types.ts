@@ -268,6 +268,8 @@ export type EpicState =
   | 'planning'
   | 'plan-critique'
   | 'plan-review'
+  | 'executing'
+  | 'execution-failed'
   | 'splitting'
   | 'in-progress'
   | 'integration-review'
@@ -364,6 +366,20 @@ export interface ChangesRequestedData {
   iteration: number;
 }
 
+/** Structured data from the execution pipeline */
+export interface ExecutionData {
+  prUrls?: string[];
+  ciStatus?: 'pending' | 'passed' | 'failed';
+  agentProgress?: Array<{
+    role: string;
+    status: 'running' | 'completed' | 'failed';
+    completedAt?: string;
+    summary?: string;
+  }>;
+  implementationSummary?: string;
+  deviations?: string;
+}
+
 export interface WorkflowTicket {
   id: WorkflowTicketId;
   type: WorkflowTicketType;
@@ -379,6 +395,7 @@ export interface WorkflowTicket {
   // Relationships
   trackId?: TrackId;
   externalTicketId?: TicketId;
+  executionSessionId?: SessionId;
 
   // Assignment
   assignedAgentRole?: AgentRole;
@@ -433,7 +450,8 @@ export interface StageDefinition {
   validTransitions: Array<{
     to: WorkflowState;
     trigger: 'agent-complete' | 'human-approve' | 'human-reject'
-      | 'auto' | 'all-deps-resolved' | 'all-tasks-done' | 'manual';
+      | 'auto' | 'all-deps-resolved' | 'all-tasks-done' | 'manual'
+      | 'execution-complete' | 'execution-failed';
     condition?: string;
   }>;
 }

@@ -6,6 +6,7 @@ import type {
   TicketDependencyRepository,
 } from '@domain/workflow/repository';
 import type { WorkflowEngine } from '@application/workflow/engine.js';
+import type { ExecutionDispatcher } from '@application/workflow/execution-dispatcher.js';
 import { broadcast } from './events.js';
 
 export interface WorkflowRouterDeps {
@@ -13,11 +14,13 @@ export interface WorkflowRouterDeps {
   tickets: WorkflowTicketRepository;
   transitions: WorkflowTransitionRepository;
   dependencies: TicketDependencyRepository;
+  /** If provided, plan-review approval auto-dispatches execution */
+  executionDispatcher?: ExecutionDispatcher;
 }
 
 export function createWorkflowRouter(deps: WorkflowRouterDeps): Router {
   const router = Router();
-  const { engine, tickets, transitions, dependencies } = deps;
+  const { engine, tickets, transitions, dependencies, executionDispatcher } = deps;
 
   // --- List all workflow tickets ---
 
@@ -185,12 +188,17 @@ export function createWorkflowRouter(deps: WorkflowRouterDeps): Router {
 
   // --- Approve at human gate ---
 
-  router.post('/workflow/tickets/:id/approve', (req, res) => {
+  router.post('/workflow/tickets/:id/approve', async (req, res) => {
     const ticketId = req.params.id as WorkflowTicketId;
     const { comment } = req.body || {};
 
     try {
-      const updated = engine.approve(ticketId, comment);
+      let updated;
+      if (executionDispatcher) {
+        updated = await executionDispatcher.approveWithExecution(ticketId, comment);
+      } else {
+        updated = engine.approve(ticketId, comment);
+      }
       broadcast('workflow:approved', ticketId);
       res.json(updated);
     } catch (err) {
