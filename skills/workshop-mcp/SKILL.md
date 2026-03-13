@@ -28,6 +28,10 @@ You have access to Workshop MCP tools that let you interact with the Workshop pr
 | `mcp__workshop__workshop_update_todo` | Update todo fields |
 | `mcp__workshop__workshop_dispatch_todo` | Dispatch a refined todo to a background agent |
 | `mcp__workshop__workshop_delete_todo` | Delete a todo |
+| `mcp__workshop__workshop_vault_read` | Read a file from a track's Obsidian vault |
+| `mcp__workshop__workshop_vault_list` | List .md files in a track's vault folder |
+| `mcp__workshop__workshop_vault_write` | Write/overwrite a vault file |
+| `mcp__workshop__workshop_vault_append` | Append a section to a vault file |
 
 ## Important: Todos Are Just Todos
 
@@ -39,8 +43,9 @@ When the user asks to **create a todo**, your job is to create it and stop. Do N
 Each track has a `context` field — freeform text describing the project, current focus, important notes, and any instructions for Claude sessions. When a new Claude session is created in a track, the system prompt is auto-composed from:
 
 1. **Track context** (freeform text)
-2. **Latest summary** (AI-generated project status)
-3. **Prompt template** (if configured, interpolated with track data)
+2. **Vault memory** (persistent Obsidian notes — decisions, learnings, overview)
+3. **Latest summary** (AI-generated project status)
+4. **Prompt template** (if configured, interpolated with track data)
 
 ### Workflow: Setting Context for a Track
 
@@ -65,6 +70,41 @@ Each track has a `context` field — freeform text describing the project, curre
 2. Refresh the summary to get current project status
 3. Preview the composed prompt to verify everything looks right
 4. Create sessions — they'll automatically get the full context
+
+## Vault Memory (Obsidian)
+
+Each track has a persistent Obsidian vault folder at `Workshop/{track-slug}/` in the WorkflowDocs vault. This provides long-term memory that persists across sessions.
+
+### Folder Structure
+
+```
+Workshop/
+  kms-load-testing/
+    _overview.md       # Track overview and context
+    decisions.md       # Architectural/design decisions
+    learnings.md       # Gotchas, patterns, lessons learned
+    progress.md        # Session progress log
+    *.md               # Additional topic-specific notes
+```
+
+### When to Write to the Vault
+
+- **Architectural/design decisions** -> append to `decisions.md` with a `### ` heading
+- **Gotchas, patterns, lessons** -> append to `learnings.md` with a `### ` heading
+- **Session progress** -> append to `progress.md` with a `### ` heading
+- **New topics** -> create new `.md` files as needed
+
+### How to Use
+
+1. The track slug is the kebab-case version of the track name (e.g. "KMS Load Testing" -> "kms-load-testing")
+2. Use `workshop_vault_read` and `workshop_vault_list` to explore existing notes
+3. Use `workshop_vault_append` to add entries to existing files (preferred for decisions/learnings/progress)
+4. Use `workshop_vault_write` to create new files or overwrite existing ones
+5. Use `[[note-name]]` WikiLinks to cross-reference other notes in the vault
+
+### Auto-injection
+
+Vault content (overview, recent decisions, recent learnings) is automatically injected into session system prompts. Agents don't need to manually read the vault on startup — it's already in their context.
 
 ## Workshop Server
 
