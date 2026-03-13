@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import type { TrackId, SessionId, SessionProvider, RepoId, AutomationRuleId, TemplateId, TerminalLayout } from '@foundation/types';
+import { VAULT_ROOT } from '@foundation/config.js';
 import { createTrackRepository } from '@infrastructure/persistence/track-repository.js';
 import { createSessionRepository } from '@infrastructure/persistence/session-repository.js';
 import { createSummaryRepository } from '@infrastructure/persistence/summary-repository.js';
@@ -12,12 +13,18 @@ import { createAgentRepository } from '@infrastructure/persistence/agent-reposit
 import { createTerminalManager } from '@infrastructure/terminal/manager.js';
 import { createGitAdapter } from '@infrastructure/git/git-adapter.js';
 import { createFilesystemAgentScanner } from '@infrastructure/agents/filesystem-scanner.js';
+import { createVaultReader } from '@infrastructure/vault/reader.js';
+import { createVaultWriter } from '@infrastructure/vault/writer.js';
+import { createVaultProvisioner } from '@infrastructure/vault/provisioner.js';
+import { slugifyTrackName } from '@infrastructure/vault/utils.js';
 import { createSummaryGenerationService } from '@application/summary-generation/service.js';
 import { interpolateTemplate } from '@application/track-management/prompt-interpolation.js';
+import { composeVaultContext } from '@application/vault/compose-vault-context.js';
 import type { AutomationEngine } from '@application/automation-engine/engine.js';
 import { createTodoRouter } from './todo-routes.js';
 import { createPermissionRouter } from './permission-routes.js';
 import { createAgentRouter } from './agent-routes.js';
+import { createVaultRouter } from './vault-routes.js';
 import { broadcast } from './events.js';
 
 export interface ApiRouterDeps {
@@ -54,6 +61,9 @@ export function createApiRouter(deps: ApiRouterDeps = {}): Router {
   process.on('SIGTERM', () => clearInterval(syncInterval));
 
   const gitAdapter = createGitAdapter();
+  const vaultReader = createVaultReader(VAULT_ROOT);
+  const vaultWriter = createVaultWriter(VAULT_ROOT);
+  const vaultProvisioner = createVaultProvisioner(VAULT_ROOT);
   const summaryGeneration = createSummaryGenerationService({
     trackRepo: tracks,
     ticketRepo: tickets,
@@ -73,6 +83,7 @@ export function createApiRouter(deps: ApiRouterDeps = {}): Router {
     filesystemScanner,
     projectRoot,
     terminal,
+    vaultReader,
   });
   router.use(todoRouter);
 
@@ -83,6 +94,10 @@ export function createApiRouter(deps: ApiRouterDeps = {}): Router {
   // Mount agent sub-router
   const agentRouter = createAgentRouter({ agents, filesystemScanner, projectRoot });
   router.use(agentRouter);
+
+  // Mount vault sub-router
+  const vaultRouter = createVaultRouter({ vaultReader, vaultWriter, vaultProvisioner });
+  router.use(vaultRouter);
 
   // --- Tracks ---
 
@@ -97,6 +112,16 @@ export function createApiRouter(deps: ApiRouterDeps = {}): Router {
       return;
     }
     const track = tracks.create({ name, description, status: 'active' });
+
+    // Auto-provision vault folder for the new track
+    try {
+      const trackSlug = slugifyTrackName(track.name);
+      vaultProvisioner.provisionTrack(trackSlug, track.name);
+    } catch (err) {
+      console.error('Failed to auto-provision vault folder:', err);
+      // Non-fatal — track creation still succeeds
+    }
+
     broadcast('track:created', track.id);
     res.status(201).json(track);
   });
@@ -252,13 +277,20 @@ export function createApiRouter(deps: ApiRouterDeps = {}): Router {
           parts.push(track.context);
         }
 
-        // 2. Latest summary
+        // 2. Vault memory (persistent Obsidian notes)
+        const trackSlug = slugifyTrackName(track.name);
+        const vaultContext = composeVaultContext(vaultReader, trackSlug);
+        if (vaultContext) {
+          parts.push(vaultContext);
+        }
+
+        // 3. Latest summary
         const summary = summaries.findLatest(trackId);
         if (summary) {
           parts.push(`## Current Status\n\n${summary.content}`);
         }
 
-        // 3. Interpolated prompt template
+        // 4. Interpolated prompt template
         if (track.defaultPromptTemplateId) {
           const template = promptTemplates.findById(track.defaultPromptTemplateId);
           if (template) {

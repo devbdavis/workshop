@@ -12,6 +12,7 @@ import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { z } from 'zod';
 import { registerTodoTools } from './todo-tools.js';
+import { registerVaultTools } from './vault-tools.js';
 
 const API_URL = process.env.WORKSHOP_API_URL || 'http://localhost:3002';
 
@@ -256,6 +257,10 @@ server.tool(
 // --- Todo Tools ---
 
 registerTodoTools(server, api);
+
+// --- Vault Tools ---
+
+registerVaultTools(server, api);
 
 // Start
 
