@@ -28,6 +28,8 @@ export interface CreateSessionOptions {
   todoId?: string;
   /** Initial prompt to send to the AI CLI (the task to work on). */
   initialPrompt?: string;
+  /** If true, skip permission hooks and run with --dangerously-skip-permissions. */
+  dangerouslySkipPermissions?: boolean;
 }
 
 export interface SyncResult {
@@ -133,8 +135,12 @@ export function createTerminalManager(sessionRepo: SessionRepository): TerminalM
     }
 
     if (options?.background) {
-      const settingsFile = writeHookSettings(sessionDir, sessionId);
-      claudeArgs.push('--settings', JSON.stringify(settingsFile));
+      if (options.dangerouslySkipPermissions) {
+        claudeArgs.push('--dangerously-skip-permissions');
+      } else {
+        const settingsFile = writeHookSettings(sessionDir, sessionId);
+        claudeArgs.push('--settings', JSON.stringify(settingsFile));
+      }
     }
 
     if (options?.initialPrompt) {

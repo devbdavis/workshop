@@ -24,7 +24,7 @@ export interface TodoRouterDeps {
   terminal: {
     createSession: (
       trackId: TrackId,
-      opts?: { systemPrompt?: string; workingDirectory?: string; background?: boolean; todoId?: string; initialPrompt?: string; provider?: SessionProvider },
+      opts?: { systemPrompt?: string; workingDirectory?: string; background?: boolean; todoId?: string; initialPrompt?: string; provider?: SessionProvider; dangerouslySkipPermissions?: boolean },
     ) => Promise<{ id: SessionId; trackId: TrackId; tmuxSession: string; state: string }>;
   };
 }
@@ -144,9 +144,10 @@ export function createTodoRouter(deps: TodoRouterDeps): Router {
         return;
       }
 
-      // Accept optional agentId and provider from request body
+      // Accept optional agentId, provider, and permission skip from request body
       const agentId = req.body?.agentId as AgentId | undefined;
       const provider: SessionProvider = req.body?.provider === 'codex' ? 'codex' : 'claude';
+      const dangerouslySkipPermissions = req.body?.dangerouslySkipPermissions === true;
 
       // Compose system prompt: agent + track context + summary + template + todo task
       const parts: string[] = [];
@@ -196,6 +197,7 @@ export function createTodoRouter(deps: TodoRouterDeps): Router {
         todoId: todo.id,
         initialPrompt: taskPrompt,
         provider,
+        dangerouslySkipPermissions,
       });
 
       // Update todo status, link session, and store agent reference

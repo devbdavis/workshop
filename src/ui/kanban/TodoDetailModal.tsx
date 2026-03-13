@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
-import type { Todo, TodoStatus, TodoPriority, Track, Agent, SessionProvider } from '@foundation/types';
-import { DispatchDropdown } from '../track-view/DispatchDropdown';
+import type { Todo, TodoStatus, TodoPriority, Track, Agent } from '@foundation/types';
+import { DispatchDropdown, type DispatchOptions } from '../track-view/DispatchDropdown';
 
 interface Props {
   todo: Todo | null;
@@ -8,7 +8,7 @@ interface Props {
   onClose: () => void;
   onSave: (todoId: string, data: Partial<Todo>) => void;
   onDelete: (todoId: string) => void;
-  onDispatch: (todoId: string, agentId?: string, provider?: SessionProvider) => void;
+  onDispatch: (todoId: string, opts: DispatchOptions) => void;
 }
 
 const STATUSES: { value: TodoStatus; label: string }[] = [
@@ -175,9 +175,9 @@ export function TodoDetailModal({ todo, tracks, onClose, onSave, onDelete, onDis
                   <DispatchDropdown
                     agents={agents}
                     popUp
-                    onSelect={(agentId, provider) => {
+                    onSelect={(opts) => {
                       setShowDispatch(false);
-                      onDispatch(todo.id, agentId, provider);
+                      onDispatch(todo.id, opts);
                     }}
                     onClose={() => setShowDispatch(false)}
                   />
