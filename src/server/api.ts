@@ -146,6 +146,7 @@ export function createApiRouter(deps: ApiRouterDeps = {}): Router {
 
   // Execution dispatcher — auto-dispatches execution sessions on plan-review approval
   const executionDispatcher = createExecutionDispatcher({
+    engine: workflowEngine,
     tickets: workflowTickets,
     tracks,
     summaries,

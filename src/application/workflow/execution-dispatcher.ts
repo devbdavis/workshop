@@ -1,29 +1,35 @@
 /**
- * Dispatches the execution pipeline when a workflow plan is approved.
+ * Application service that orchestrates execution dispatch after plan-review approval.
  *
- * Composes a handover package (spec + plan + track context) into a system prompt,
- * creates a background session with execution hooks, and binds the session to the ticket.
+ * Owns the full "approve → dispatch → compensate on failure" flow so the HTTP layer
+ * stays thin and any caller of approveWithExecution gets consistent behavior.
  */
 import type {
   WorkflowTicket,
   WorkflowTicketId,
+  ExecutionData,
   TrackId,
 } from '@foundation/types';
 import type { WorkflowTicketRepository } from '@domain/workflow/repository';
 import type { TrackRepository } from '@domain/track/repository';
 import type { SummaryRepository } from '@domain/summary/repository';
 import type { TerminalManager } from '@infrastructure/terminal/manager.js';
+import type { WorkflowEngine } from './engine.js';
 
 // ---------------------------------------------------------------------------
 // Public interface
 // ---------------------------------------------------------------------------
 
 export interface ExecutionDispatcher {
-  /** Dispatch execution for a ticket that just transitioned to 'executing' */
+  /** Approve a ticket at a human gate — if the result is 'executing', dispatch automatically. */
+  approveWithExecution(ticketId: WorkflowTicketId, comment?: string): Promise<WorkflowTicket>;
+
+  /** Dispatch execution for a ticket already in 'executing' state (e.g. retry). */
   dispatch(ticketId: WorkflowTicketId): Promise<void>;
 }
 
 export interface ExecutionDispatcherDeps {
+  engine: WorkflowEngine;
   tickets: WorkflowTicketRepository;
   tracks: TrackRepository;
   summaries: SummaryRepository;
@@ -37,9 +43,79 @@ export interface ExecutionDispatcherDeps {
 export function createExecutionDispatcher(
   deps: ExecutionDispatcherDeps,
 ): ExecutionDispatcher {
-  const { tickets, tracks, summaries, terminal } = deps;
+  const { engine, tickets, tracks, summaries, terminal } = deps;
+
+  async function dispatchExecution(ticket: WorkflowTicket): Promise<void> {
+    const systemPrompt = composeExecutionPrompt(ticket, deps);
+
+    const repos = ticket.trackId
+      ? tracks.findReposByTrack(ticket.trackId)
+      : [];
+    if (repos.length === 0) {
+      throw new Error(
+        `Cannot dispatch execution for ticket ${ticket.id}: no repositories configured on track`,
+      );
+    }
+    const workingDir = repos[0].path;
+
+    const session = await terminal.createSession(
+      ticket.trackId || ('_execution' as TrackId),
+      {
+        systemPrompt,
+        background: true,
+        initialPrompt: buildInitialPrompt(ticket),
+        workingDirectory: workingDir,
+        executionTicketId: ticket.id,
+      },
+    );
+
+    tickets.update(ticket.id, {
+      executionSessionId: session.id,
+      stateData: {
+        ...(ticket.stateData || {}),
+        agentProgress: [],
+      } satisfies ExecutionData & Record<string, unknown>,
+    });
+
+    console.log(
+      `Execution dispatched for ticket ${ticket.id} → session ${session.id}`,
+    );
+  }
 
   return {
+    async approveWithExecution(
+      ticketId: WorkflowTicketId,
+      comment?: string,
+    ): Promise<WorkflowTicket> {
+      let current = engine.approve(ticketId, comment);
+
+      if (current.state !== 'executing') {
+        return current;
+      }
+
+      try {
+        await dispatchExecution(current);
+        // Re-read to get the updated executionSessionId
+        current = tickets.findById(ticketId) || current;
+      } catch (dispatchErr) {
+        console.error('Failed to dispatch execution:', dispatchErr);
+        try {
+          current = engine.transition(
+            current.id,
+            'execution-failed',
+            { type: 'system', reason: 'Dispatch failed' },
+            dispatchErr instanceof Error
+              ? dispatchErr.message
+              : 'Failed to dispatch execution session',
+          );
+        } catch {
+          console.error('Failed to mark ticket as execution-failed:', ticketId);
+        }
+      }
+
+      return current;
+    },
+
     async dispatch(ticketId: WorkflowTicketId): Promise<void> {
       const ticket = tickets.findById(ticketId);
       if (!ticket) throw new Error(`Ticket not found: ${ticketId}`);
@@ -48,41 +124,7 @@ export function createExecutionDispatcher(
           `Ticket ${ticketId} is not in 'executing' state (current: ${ticket.state})`,
         );
       }
-
-      // Compose the handover system prompt
-      const systemPrompt = composeExecutionPrompt(ticket, deps);
-
-      // Determine working directory from track repos
-      const repos = ticket.trackId
-        ? tracks.findReposByTrack(ticket.trackId)
-        : [];
-      const workingDir = repos[0]?.path || process.env.HOME || '/tmp';
-
-      // Create background session with execution hooks
-      const session = await terminal.createSession(
-        ticket.trackId || ('_execution' as TrackId),
-        {
-          systemPrompt,
-          background: true,
-          initialPrompt: buildInitialPrompt(ticket),
-          workingDirectory: workingDir,
-          executionTicketId: ticket.id,
-        },
-      );
-
-      // Bind session to ticket — executionSessionId as top-level field (used by
-      // session-end safety net hook to find the ticket) plus progress in stateData
-      tickets.update(ticket.id, {
-        executionSessionId: session.id,
-        stateData: {
-          ...(ticket.stateData || {}),
-          agentProgress: [],
-        },
-      });
-
-      console.log(
-        `Execution dispatched for ticket ${ticket.id} → session ${session.id}`,
-      );
+      await dispatchExecution(ticket);
     },
   };
 }
@@ -98,7 +140,6 @@ function composeExecutionPrompt(
   const { tracks, summaries } = deps;
   const parts: string[] = [];
 
-  // Header
   parts.push(
     '# Execution Context',
     '',
@@ -107,17 +148,14 @@ function composeExecutionPrompt(
     `Workflow Ticket ID: ${ticket.id}`,
   );
 
-  // Approved spec
   parts.push('', '## Approved Specification', '', ticket.description || '(no description)');
 
-  // Approved plan from stateData
-  const planDraft = (ticket.stateData as Record<string, unknown> | undefined)
-    ?.planDraft;
+  const stateData = ticket.stateData as Record<string, unknown> | undefined;
+  const planDraft = stateData?.planDraft;
   if (planDraft && typeof planDraft === 'string') {
     parts.push('', '## Approved Implementation Plan', '', planDraft);
   }
 
-  // Track context
   if (ticket.trackId) {
     const track = tracks.findById(ticket.trackId);
     if (track) {
@@ -137,7 +175,6 @@ function composeExecutionPrompt(
         );
       }
 
-      // Latest summary
       const summary = summaries.findLatest(ticket.trackId);
       if (summary) {
         parts.push('', '## Current Project Status', '', summary.content);
@@ -145,7 +182,6 @@ function composeExecutionPrompt(
     }
   }
 
-  // Instructions for context passing
   parts.push(
     '',
     '## IMPORTANT: Context Passing',

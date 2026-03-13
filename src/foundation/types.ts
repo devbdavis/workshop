@@ -368,20 +368,15 @@ export interface ChangesRequestedData {
 
 /** Structured data from the execution pipeline */
 export interface ExecutionData {
-  /** PR URLs created by the execution pipeline */
   prUrls?: string[];
-  /** CI check status */
   ciStatus?: 'pending' | 'passed' | 'failed';
-  /** Progress of each agent in the pipeline */
   agentProgress?: Array<{
     role: string;
     status: 'running' | 'completed' | 'failed';
     completedAt?: string;
     summary?: string;
   }>;
-  /** Summary of what was implemented */
   implementationSummary?: string;
-  /** Deviations from the approved plan */
   deviations?: string;
 }
 
@@ -456,7 +451,7 @@ export interface StageDefinition {
     to: WorkflowState;
     trigger: 'agent-complete' | 'human-approve' | 'human-reject'
       | 'auto' | 'all-deps-resolved' | 'all-tasks-done' | 'manual'
-      | 'execution-complete' | 'execution-failed' | 'execution-timeout';
+      | 'execution-complete' | 'execution-failed';
     condition?: string;
   }>;
 }

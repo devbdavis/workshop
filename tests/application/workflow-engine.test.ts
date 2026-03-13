@@ -264,8 +264,7 @@ describe('WorkflowEngine', () => {
       engine.transition(epic.id, 'plan-critique', { type: 'agent' });
       engine.transition(epic.id, 'plan-review', { type: 'agent' });
       engine.approve(epic.id); // plan-review -> executing
-      // Place epic directly into in-progress (simulating execution dispatcher
-      // having split and dispatched tasks)
+      // Place epic directly into in-progress (execution dispatcher handles this in prod)
       tickets.update(epic.id, { state: 'in-progress' });
 
       const t1 = engine.createTask({ title: 'T1', description: 'X', parentId: epic.id });

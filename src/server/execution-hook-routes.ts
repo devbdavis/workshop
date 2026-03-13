@@ -5,7 +5,7 @@
  * - /hooks/session-end — SessionEnd command hook callback: safety net for completion
  */
 import { Router } from 'express';
-import type { WorkflowTicketId, SessionId, ExecutionData } from '@foundation/types';
+import type { WorkflowTicketId, ExecutionData } from '@foundation/types';
 import type { WorkflowTicketRepository } from '@domain/workflow/repository';
 import type { WorkflowEngine } from '@application/workflow/engine.js';
 import { broadcast } from './events.js';
@@ -21,7 +21,7 @@ export function createExecutionHookRouter(deps: ExecutionHookRouterDeps): Router
 
   /**
    * SubagentStop hook — Claude Code sends this when a Task-spawned sub-agent completes.
-   * Updates the ticket's execution_data.agentProgress to track pipeline progress.
+   * Updates the ticket's stateData.agentProgress to track pipeline progress.
    */
   router.post('/hooks/agent-progress', (req, res) => {
     try {
@@ -29,7 +29,6 @@ export function createExecutionHookRouter(deps: ExecutionHookRouterDeps): Router
       const sessionId = req.headers['x-workshop-session'] as string | undefined;
 
       if (!ticketId || !sessionId) {
-        // Not a tracked execution session — ignore silently
         res.json({});
         return;
       }
@@ -40,14 +39,11 @@ export function createExecutionHookRouter(deps: ExecutionHookRouterDeps): Router
         return;
       }
 
-      // Extract agent info from the hook payload
-      // SubagentStop payload includes: hook_event_name, subagent_type, subagent_result
       const { subagent_type, subagent_result } = req.body;
       const agentRole = subagent_type || 'unknown';
 
-      // Update execution data with agent progress
-      const existingData = (ticket.stateData as ExecutionData) || {};
-      const agentProgress = existingData.agentProgress || [];
+      const existingData = (ticket.stateData || {}) as ExecutionData & Record<string, unknown>;
+      const agentProgress = [...(existingData.agentProgress || [])];
 
       agentProgress.push({
         role: agentRole,
@@ -66,14 +62,13 @@ export function createExecutionHookRouter(deps: ExecutionHookRouterDeps): Router
       res.json({});
     } catch (err) {
       console.error('Agent progress hook error:', err);
-      res.json({}); // Non-blocking — don't fail the hook
+      res.json({});
     }
   });
 
   /**
    * SessionEnd hook — called by scripts/session-end-hook.sh when a Claude Code session ends.
-   * Acts as a safety net: if the executing agent didn't self-report via MCP, this
-   * transitions the ticket to execution-failed so it doesn't get stuck.
+   * Safety net: if the executing agent didn't self-report via MCP, transition to execution-failed.
    */
   router.post('/hooks/session-end', (req, res) => {
     try {
@@ -84,44 +79,35 @@ export function createExecutionHookRouter(deps: ExecutionHookRouterDeps): Router
         return;
       }
 
-      // Find any workflow ticket bound to this execution session
-      const executingTickets = tickets.findByState('executing');
-      const boundTicket = executingTickets.find(
-        (t) => t.executionSessionId === session_id,
-      );
+      const boundTicket = tickets.findByExecutionSessionId(session_id);
 
-      if (!boundTicket) {
-        // No ticket bound to this session — nothing to do
+      if (!boundTicket || boundTicket.state !== 'executing') {
         res.json({ ok: true });
         return;
       }
 
-      // If ticket is still in 'executing' state, the agent didn't self-report.
-      // Transition to execution-failed as a safety net.
-      if (boundTicket.state === 'executing') {
-        console.warn(
-          `Execution session ${session_id} ended without reporting results. ` +
-          `Marking ticket ${boundTicket.id} as execution-failed.`,
-        );
+      console.warn(
+        `Execution session ${session_id} ended without reporting results. ` +
+        `Marking ticket ${boundTicket.id} as execution-failed.`,
+      );
 
-        try {
-          engine.transition(
-            boundTicket.id,
-            'execution-failed',
-            { type: 'system', reason: 'Session ended without completion report' },
-            'Execution session terminated before reporting results. ' +
-            'The agent may have crashed or timed out.',
-          );
-          broadcast('workflow:transitioned', boundTicket.id);
-        } catch (transitionErr) {
-          console.error('Failed to transition ticket on session end:', transitionErr);
-        }
+      try {
+        engine.transition(
+          boundTicket.id,
+          'execution-failed',
+          { type: 'system', reason: 'Session ended without completion report' },
+          'Execution session terminated before reporting results. ' +
+          'The agent may have crashed or timed out.',
+        );
+        broadcast('workflow:transitioned', boundTicket.id);
+      } catch (transitionErr) {
+        console.error('Failed to transition ticket on session end:', transitionErr);
       }
 
       res.json({ ok: true });
     } catch (err) {
       console.error('Session end hook error:', err);
-      res.json({ ok: true }); // Non-blocking
+      res.json({ ok: true });
     }
   });
 

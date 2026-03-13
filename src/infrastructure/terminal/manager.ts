@@ -73,7 +73,6 @@ export function createTerminalManager(sessionRepo: SessionRepository): TerminalM
   ): string {
     const settingsFile = path.join(sessionDir, 'settings.json');
 
-    // Base hooks: PreToolUse for permission control
     const hooks: Record<string, unknown[]> = {
       PreToolUse: [
         {
@@ -89,7 +88,6 @@ export function createTerminalManager(sessionRepo: SessionRepository): TerminalM
       ],
     };
 
-    // Execution hooks: SubagentStop + SessionEnd (only for execution sessions)
     if (executionTicketId) {
       hooks.SubagentStop = [
         {
