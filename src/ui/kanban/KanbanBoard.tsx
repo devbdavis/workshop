@@ -10,7 +10,8 @@ import {
   type DragEndEvent,
   type DragOverEvent,
 } from '@dnd-kit/core';
-import type { Todo, TodoStatus, Track, SessionProvider } from '@foundation/types';
+import type { Todo, TodoStatus, Track } from '@foundation/types';
+import type { DispatchOptions } from '../track-view/DispatchDropdown';
 import { KanbanColumn } from './KanbanColumn';
 import { KanbanCard } from './KanbanCard';
 import { TodoDetailModal } from './TodoDetailModal';
@@ -147,11 +148,11 @@ export function KanbanBoard() {
     loadData();
   }
 
-  async function handleDispatchTodo(todoId: string, agentId?: string, provider?: SessionProvider) {
+  async function handleDispatchTodo(todoId: string, opts: DispatchOptions) {
     await fetch(`/api/todos/${todoId}/dispatch`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ agentId, provider }),
+      body: JSON.stringify(opts),
     });
     setSelectedTodo(null);
     loadData();

@@ -1,8 +1,8 @@
 import { useState, useEffect } from 'react';
-import type { Todo, TodoPriority, TodoStatus, Session, Agent, Track, SessionProvider } from '@foundation/types';
+import type { Todo, TodoPriority, TodoStatus, Session, Agent, Track } from '@foundation/types';
 import { TerminalModal } from './TerminalModal';
 import { TodoDetailModal } from '../kanban/TodoDetailModal';
-import { DispatchDropdown } from './DispatchDropdown';
+import { DispatchDropdown, type DispatchOptions } from './DispatchDropdown';
 
 interface Props {
   track: Track;
@@ -70,11 +70,11 @@ export function TodoPanel({ track, todos, sessions, onUpdate }: Props) {
     onUpdate();
   }
 
-  async function dispatchTodo(todoId: string, agentId?: string, provider?: SessionProvider) {
+  async function dispatchTodo(todoId: string, opts: DispatchOptions) {
     await fetch(`/api/todos/${todoId}/dispatch`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ agentId, provider }),
+      body: JSON.stringify(opts),
     });
     setDispatchingTodoId(null);
     onUpdate();
@@ -100,11 +100,11 @@ export function TodoPanel({ track, todos, sessions, onUpdate }: Props) {
     onUpdate();
   }
 
-  async function dispatchTodoFromModal(todoId: string, agentId?: string, provider?: SessionProvider) {
+  async function dispatchTodoFromModal(todoId: string, opts: DispatchOptions) {
     await fetch(`/api/todos/${todoId}/dispatch`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ agentId, provider }),
+      body: JSON.stringify(opts),
     });
     setEditingTodo(null);
     onUpdate();
@@ -165,7 +165,7 @@ export function TodoPanel({ track, todos, sessions, onUpdate }: Props) {
                         {dispatchingTodoId === todo.id && (
                           <DispatchDropdown
                             agents={agents}
-                            onSelect={(agentId, provider) => dispatchTodo(todo.id, agentId, provider)}
+                            onSelect={(opts) => dispatchTodo(todo.id, opts)}
                             onClose={() => setDispatchingTodoId(null)}
                           />
                         )}
