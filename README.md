@@ -6,6 +6,18 @@
 >
 > — Fab's Work Orchestration Creed
 
+### Why build your own?
+
+Building a personal workshop is the "hello world" of AI-assisted development in 2026. Everyone's workflow is different, and the best orchestration layer is the one shaped around how *you* think and work.
+
+There's a common baseline worth having — scheduling tasks, human review checkpoints, context composition for agent sessions. Company-level guidelines around tech stack choices, test-driven development, and quality standards are in the works and will layer on top. Beyond that foundation, go wild. Make it weird. Make it yours.
+
+This repo is here as inspiration and a starting point. Read the code, steal the ideas, disagree with half of it, and build something better. Or just clone it and start hacking — it's a solid foundation either way.
+
+New here? The [Setup Guide](docs/setup-guide.md) gets all the external pieces wired up, and [Creating Tracks](docs/creating-tracks.md) walks through actual usage.
+
+---
+
 A local-first project command center for managing parallel work tracks with AI-assisted terminal sessions.
 
 Workshop lets you organize development work into **tracks** — each with linked repos, terminal sessions, AI-generated summaries, and a workflow ticket pipeline. It provides a web UI for managing everything from a single dashboard, and an MCP server so Claude Code can interact with your tracks programmatically.
