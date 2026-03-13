@@ -1,6 +1,6 @@
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useRef } from 'react';
 import { useParams, Link } from 'react-router-dom';
-import type { Track, Session, TrackSummary, ExternalTicket, Todo, PermissionRequest } from '@foundation/types';
+import type { Track, Session, SessionProvider, TrackSummary, ExternalTicket, Todo, PermissionRequest } from '@foundation/types';
 import { SummaryPanel } from './SummaryPanel';
 import { ContextPanel } from './ContextPanel';
 import { TicketPanel } from './TicketPanel';
@@ -85,10 +85,14 @@ export function TrackView() {
     return () => ws.close();
   }, [trackId, loadTrack]);
 
-  async function createSession(): Promise<Session | null> {
+  async function createSession(provider: SessionProvider = 'claude'): Promise<Session | null> {
     if (!trackId) return null;
     try {
-      const res = await fetch(`/api/tracks/${trackId}/sessions`, { method: 'POST' });
+      const res = await fetch(`/api/tracks/${trackId}/sessions`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ provider }),
+      });
       if (res.ok) {
         const session: Session = await res.json();
         setSessions((prev) => [...prev, session]);
@@ -177,12 +181,7 @@ export function TrackView() {
           </span>
         )}
         <div className="ml-auto">
-          <button
-            onClick={createSession}
-            className="px-3 py-1.5 text-sm bg-blue-600 hover:bg-blue-500 rounded-lg transition-colors"
-          >
-            New Session
-          </button>
+          <NewSessionButton onCreateSession={createSession} />
         </div>
       </header>
 
@@ -222,7 +221,7 @@ export function TrackView() {
               <ContextPanel track={track} onUpdate={loadTrack} />
             </>
           ) : sidebarTab === 'todos' ? (
-            <TodoPanel trackId={track.id} todos={todos} sessions={sessions} onUpdate={loadTrack} />
+            <TodoPanel track={track} todos={todos} sessions={sessions} onUpdate={loadTrack} />
           ) : (
             <TrackConfig track={track} onUpdate={loadTrack} />
           )}
@@ -239,12 +238,64 @@ export function TrackView() {
               trackId={track.id}
               sessions={sessions}
               onDestroySession={destroySession}
-              onCreateSession={createSession}
+              onCreateSession={() => createSession()}
               onRenameSession={renameSession}
             />
           </div>
         </main>
       </div>
+    </div>
+  );
+}
+
+function NewSessionButton({ onCreateSession }: { onCreateSession: (provider: SessionProvider) => Promise<Session | null> }) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+
+  // Close dropdown when clicking outside
+  useEffect(() => {
+    if (!open) return;
+    function handleClick(e: MouseEvent) {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    }
+    document.addEventListener('mousedown', handleClick);
+    return () => document.removeEventListener('mousedown', handleClick);
+  }, [open]);
+
+  return (
+    <div ref={ref} className="relative inline-flex">
+      <button
+        onClick={() => onCreateSession('claude')}
+        className="px-3 py-1.5 text-sm bg-blue-600 hover:bg-blue-500 rounded-l-lg transition-colors"
+      >
+        New Session
+      </button>
+      <button
+        onClick={() => setOpen(!open)}
+        className="px-1.5 py-1.5 text-sm bg-blue-600 hover:bg-blue-500 rounded-r-lg border-l border-blue-500 transition-colors"
+      >
+        <svg className="w-3 h-3" viewBox="0 0 12 12" fill="currentColor">
+          <path d="M3 5l3 3 3-3H3z" />
+        </svg>
+      </button>
+      {open && (
+        <div className="absolute right-0 top-full mt-1 bg-gray-800 border border-gray-700 rounded-lg shadow-lg py-1 z-50 min-w-[140px]">
+          <button
+            onClick={() => { onCreateSession('claude'); setOpen(false); }}
+            className="w-full text-left px-3 py-1.5 text-sm hover:bg-gray-700 flex items-center gap-2"
+          >
+            <span className="w-2 h-2 rounded-full bg-orange-400" />
+            Claude
+          </button>
+          <button
+            onClick={() => { onCreateSession('codex'); setOpen(false); }}
+            className="w-full text-left px-3 py-1.5 text-sm hover:bg-gray-700 flex items-center gap-2"
+          >
+            <span className="w-2 h-2 rounded-full bg-emerald-400" />
+            Codex
+          </button>
+        </div>
+      )}
     </div>
   );
 }
