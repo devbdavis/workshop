@@ -254,6 +254,65 @@ function runMigrations(db: Database.Database): void {
     // Tables already exist — safe to ignore
   }
 
+  // Migration: create workflow_tickets, workflow_transitions, and ticket_dependencies tables
+  try {
+    db.exec(`
+      CREATE TABLE workflow_tickets (
+        id TEXT PRIMARY KEY,
+        type TEXT NOT NULL CHECK(type IN ('epic', 'task')),
+        title TEXT NOT NULL,
+        description TEXT NOT NULL DEFAULT '',
+        state TEXT NOT NULL,
+        state_data TEXT,
+        parent_id TEXT REFERENCES workflow_tickets(id) ON DELETE CASCADE,
+        track_id TEXT REFERENCES tracks(id) ON DELETE SET NULL,
+        external_ticket_id TEXT REFERENCES tickets(id) ON DELETE SET NULL,
+        assigned_agent_role TEXT,
+        assigned_agent_ids TEXT,
+        provider TEXT NOT NULL DEFAULT 'claude',
+        priority TEXT NOT NULL DEFAULT 'medium',
+        labels TEXT,
+        sort_order INTEGER NOT NULL DEFAULT 0,
+        state_changed_at TEXT NOT NULL,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      );
+
+      CREATE INDEX idx_wf_tickets_parent ON workflow_tickets(parent_id);
+      CREATE INDEX idx_wf_tickets_state ON workflow_tickets(state);
+      CREATE INDEX idx_wf_tickets_track ON workflow_tickets(track_id);
+      CREATE INDEX idx_wf_tickets_type_state ON workflow_tickets(type, state);
+
+      CREATE TABLE workflow_transitions (
+        id TEXT PRIMARY KEY,
+        ticket_id TEXT NOT NULL REFERENCES workflow_tickets(id) ON DELETE CASCADE,
+        from_state TEXT NOT NULL,
+        to_state TEXT NOT NULL,
+        actor_type TEXT NOT NULL,
+        actor_id TEXT,
+        session_id TEXT,
+        comment TEXT,
+        data TEXT,
+        created_at TEXT NOT NULL
+      );
+
+      CREATE INDEX idx_wf_transitions_ticket ON workflow_transitions(ticket_id);
+
+      CREATE TABLE ticket_dependencies (
+        id TEXT PRIMARY KEY,
+        ticket_id TEXT NOT NULL REFERENCES workflow_tickets(id) ON DELETE CASCADE,
+        depends_on_id TEXT NOT NULL REFERENCES workflow_tickets(id) ON DELETE CASCADE,
+        created_at TEXT NOT NULL,
+        resolved_at TEXT
+      );
+
+      CREATE INDEX idx_ticket_deps_ticket ON ticket_dependencies(ticket_id);
+      CREATE INDEX idx_ticket_deps_depends ON ticket_dependencies(depends_on_id);
+    `);
+  } catch {
+    // Tables already exist — safe to ignore
+  }
+
   // Seed default prompt templates if the table is empty
   seedDefaultTemplates(db);
 }
