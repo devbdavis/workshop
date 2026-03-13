@@ -18,25 +18,25 @@ Manage the Workshop production server running at `~/.workshop/` with a persisten
 The management script lives in the workshop project:
 
 ```
-/Users/fabian.haupt/projects/workshop/scripts/workshop.sh {start|stop|restart|status|logs}
+scripts/workshop.sh {start|stop|restart|status|logs}
 ```
 
 ### Start
 
 ```bash
-/Users/fabian.haupt/projects/workshop/scripts/workshop.sh start
+scripts/workshop.sh start
 ```
 
 ### Stop
 
 ```bash
-/Users/fabian.haupt/projects/workshop/scripts/workshop.sh stop
+scripts/workshop.sh stop
 ```
 
 ### Restart
 
 ```bash
-/Users/fabian.haupt/projects/workshop/scripts/workshop.sh restart
+scripts/workshop.sh restart
 ```
 
 Use restart after making code changes to `src/server/` or `src/infrastructure/` that affect the backend.
@@ -44,7 +44,7 @@ Use restart after making code changes to `src/server/` or `src/infrastructure/` 
 **After frontend changes**: You must also rebuild the production client before restarting:
 
 ```bash
-cd /Users/fabian.haupt/projects/workshop && npm run build && /Users/fabian.haupt/projects/workshop/scripts/workshop.sh restart
+npm run build && scripts/workshop.sh restart
 ```
 
 The production server serves static files from `dist/client/`. If you only restart without rebuilding, the UI will be stale.
@@ -52,7 +52,7 @@ The production server serves static files from `dist/client/`. If you only resta
 ### Status
 
 ```bash
-/Users/fabian.haupt/projects/workshop/scripts/workshop.sh status
+scripts/workshop.sh status
 ```
 
 ### View Logs

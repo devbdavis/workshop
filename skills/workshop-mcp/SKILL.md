@@ -110,6 +110,6 @@ Vault content (overview, recent decisions, recent learnings) is automatically in
 
 The Workshop server must be running for MCP tools to work. It runs on port 3002 (production) or 3001 (dev).
 
-- Check status: `/Users/fabian.haupt/projects/workshop/scripts/workshop.sh status`
-- Start: `/Users/fabian.haupt/projects/workshop/scripts/workshop.sh start`
-- After backend code changes: `/Users/fabian.haupt/projects/workshop/scripts/workshop.sh restart`
+- Check status: `scripts/workshop.sh status`
+- Start: `scripts/workshop.sh start`
+- After backend code changes: `scripts/workshop.sh restart`

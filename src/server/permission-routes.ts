@@ -27,8 +27,8 @@ const PERMANENTLY_APPROVED: Array<{
   // All Workshop MCP tool calls (in case the hook matcher is ever broadened)
   { toolPrefix: 'mcp__workshop__' },
   // Bash commands that curl the Workshop API
-  { tool: 'Bash', bashCommandPattern: /curl\s.*localhost:\d+\/api\// },
-  { tool: 'Bash', bashCommandPattern: /curl\s.*127\.0\.0\.1:\d+\/api\// },
+  { tool: 'Bash', bashCommandPattern: /^curl\s[^;|&`$]*localhost:\d+\/api\/[^;|&`$]*$/ },
+  { tool: 'Bash', bashCommandPattern: /^curl\s[^;|&`$]*127\.0\.0\.1:\d+\/api\/[^;|&`$]*$/ },
 ];
 
 /** Check if a tool invocation matches the permanent allowlist */
