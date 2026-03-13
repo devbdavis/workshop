@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import type { TrackId, SessionId, SessionProvider, RepoId, AutomationRuleId, TemplateId, TerminalLayout } from '@foundation/types';
+import type { TrackId, SessionId, SessionProvider, RepoId, PathId, AutomationRuleId, TemplateId, TerminalLayout } from '@foundation/types';
 import { VAULT_ROOT } from '@foundation/config.js';
 import { createTrackRepository } from '@infrastructure/persistence/track-repository.js';
 import { createSessionRepository } from '@infrastructure/persistence/session-repository.js';
@@ -272,6 +272,15 @@ export function createApiRouter(deps: ApiRouterDeps = {}): Router {
     }
     const p = tracks.addPath(req.params.id as TrackId, fsPath, label);
     res.status(201).json(p);
+  });
+
+  router.delete('/tracks/:trackId/paths/:pathId', (req, res) => {
+    const deleted = tracks.removePath(req.params.pathId as PathId);
+    if (!deleted) {
+      res.status(404).json({ error: 'Path not found' });
+      return;
+    }
+    res.status(204).send();
   });
 
   // --- Terminal Layout ---

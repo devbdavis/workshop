@@ -34,10 +34,12 @@ start() {
   # Unset CLAUDECODE so spawned sessions can run Claude Code
   unset CLAUDECODE 2>/dev/null || true
 
+  cd "$PROJECT_DIR"
+
   NODE_ENV=production \
     WORKSHOP_DB_PATH="$DB_PATH" \
     PORT="$WORKSHOP_PORT" \
-    nohup npx --prefix "$PROJECT_DIR" tsx "$PROJECT_DIR/src/server/index.ts" \
+    nohup npx tsx src/server/index.ts \
     >> "$LOG_FILE" 2>&1 &
 
   echo $! > "$PID_FILE"

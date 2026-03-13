@@ -48,6 +48,11 @@ export function TrackConfig({ track, onUpdate }: Props) {
     onUpdate();
   }
 
+  async function removePath(pathId: string) {
+    await fetch(`/api/tracks/${track.id}/paths/${pathId}`, { method: 'DELETE' });
+    onUpdate();
+  }
+
   async function archiveTrack() {
     if (!confirm('Archive this track?')) return;
     await fetch(`/api/tracks/${track.id}`, {
@@ -146,9 +151,17 @@ export function TrackConfig({ track, onUpdate }: Props) {
         {track.paths && track.paths.length > 0 ? (
           <ul className="space-y-1">
             {track.paths.map((p) => (
-              <li key={p.id} className="text-sm font-mono text-xs text-gray-400">
-                {p.label && <span className="text-gray-500 mr-1">{p.label}:</span>}
-                {p.path}
+              <li key={p.id} className="flex items-center justify-between text-sm group">
+                <span className="font-mono text-xs text-gray-400 truncate">
+                  {p.label && <span className="text-gray-500 mr-1">{p.label}:</span>}
+                  {p.path}
+                </span>
+                <button
+                  onClick={() => removePath(p.id)}
+                  className="text-xs text-gray-600 hover:text-red-400 opacity-0 group-hover:opacity-100"
+                >
+                  Remove
+                </button>
               </li>
             ))}
           </ul>
