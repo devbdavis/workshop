@@ -183,6 +183,14 @@ export function TodoDetailModal({ todo, tracks, onClose, onSave, onDelete, onDis
                 )}
               </div>
             )}
+            {status !== 'done' && (
+              <button
+                onClick={() => onSave(todo.id, { status: 'done' })}
+                className="px-3 py-1.5 text-xs bg-gray-700 hover:bg-gray-600 text-gray-200 rounded-lg transition-colors"
+              >
+                Mark Done
+              </button>
+            )}
             <button
               onClick={handleSave}
               className="px-3 py-1.5 text-xs bg-blue-600 hover:bg-blue-500 text-white rounded-lg transition-colors"

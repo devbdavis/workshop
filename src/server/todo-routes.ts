@@ -29,6 +29,7 @@ export interface TodoRouterDeps {
       trackId: TrackId,
       opts?: { systemPrompt?: string; workingDirectory?: string; background?: boolean; todoId?: string; initialPrompt?: string; provider?: SessionProvider; dangerouslySkipPermissions?: boolean },
     ) => Promise<{ id: SessionId; trackId: TrackId; tmuxSession: string; state: string }>;
+    destroySession: (sessionId: SessionId) => Promise<void>;
   };
   vaultReader: VaultReader;
 }
@@ -100,8 +101,16 @@ export function createTodoRouter(deps: TodoRouterDeps): Router {
 
   // --- Update todo ---
 
-  router.put('/todos/:todoId', (req, res) => {
+  router.put('/todos/:todoId', async (req, res) => {
     const { title, description, status, priority, refined, sessionId, sortOrder } = req.body;
+
+    // If transitioning to done, check for an active session to clean up
+    const existing = todos.findById(req.params.todoId as TodoId);
+    if (!existing) {
+      res.status(404).json({ error: 'Todo not found' });
+      return;
+    }
+
     const todo = todos.update(req.params.todoId as TodoId, {
       title,
       description,
@@ -115,6 +124,17 @@ export function createTodoRouter(deps: TodoRouterDeps): Router {
       res.status(404).json({ error: 'Todo not found' });
       return;
     }
+
+    // Clean up tmux session when todo is marked done
+    if (status === 'done' && existing.sessionId) {
+      try {
+        await terminal.destroySession(existing.sessionId);
+        broadcast('session:deleted', todo.trackId);
+      } catch (err) {
+        console.error('Failed to clean up session for completed todo:', err);
+      }
+    }
+
     broadcast('todo:updated', todo.trackId);
     res.json(todo);
   });
