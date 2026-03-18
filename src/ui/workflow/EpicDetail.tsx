@@ -305,6 +305,19 @@ function ActionButtons({ ticket, onApprove, onReject, onTransition }: {
   );
 }
 
+const AGENT_STATE_DESCRIPTIONS: Record<string, string> = {
+  'triaging': 'Agent is reviewing and refining the specification',
+  'planning': 'Agents are creating an implementation plan',
+  'plan-critique': 'Agents are reviewing the plan for issues',
+  'splitting': 'Agent is breaking the plan into tasks',
+  'executing': 'Agent is executing the implementation plan',
+  'integration-review': 'Agents are reviewing the completed implementation',
+  'integration-fix': 'Agent is fixing issues found in review',
+  'in-progress': 'Agent is implementing this task',
+  'code-review': 'Agent is reviewing the code',
+  'changes-requested': 'Agent is addressing review feedback',
+};
+
 function AgentSessionsBar({ ticket, sessions, onAttach, onKill }: {
   ticket: WorkflowTicket;
   sessions: Session[];
@@ -317,30 +330,48 @@ function AgentSessionsBar({ ticket, sessions, onAttach, onKill }: {
   const execSessionId = ticket.executionSessionId;
   const allIds = new Set([...agentSessionIds, ...(execSessionId ? [execSessionId] : [])]);
 
-  if (allIds.size === 0) return null;
-
   // Match against live sessions
   const matched = sessions.filter((s) => allIds.has(s.id));
   const alive = matched.filter((s) => s.state === 'active');
   const dead = matched.filter((s) => s.state !== 'active');
-  const missing = allIds.size - matched.length;
 
-  if (alive.length === 0 && dead.length === 0 && missing === 0) return null;
+  const stateDesc = AGENT_STATE_DESCRIPTIONS[ticket.state];
+  const agentRole = ticket.assignedAgentRole;
+  const hasActivity = alive.length > 0 || stateDesc;
+
+  if (!hasActivity && dead.length === 0 && allIds.size === 0) return null;
 
   return (
-    <div className="border border-gray-800 bg-gray-900 rounded-lg px-4 py-3 mb-4">
-      <div className="flex items-center gap-2 mb-2">
-        {alive.length > 0 && (
-          <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
-        )}
-        <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wider">
-          Agent Sessions
-          <span className="ml-1.5 text-gray-500 font-normal normal-case">
-            ({alive.length} active{dead.length > 0 ? `, ${dead.length} ended` : ''}
-            {missing > 0 ? `, ${missing} cleaned up` : ''})
-          </span>
-        </h3>
-      </div>
+    <div className={`border rounded-lg px-4 py-3 mb-4 ${
+      alive.length > 0
+        ? 'border-blue-800/60 bg-blue-950/30'
+        : 'border-gray-800 bg-gray-900'
+    }`}>
+      {/* Status banner when agents are working */}
+      {stateDesc && (
+        <div className="flex items-center gap-2 mb-2">
+          {alive.length > 0 && (
+            <span className="w-2 h-2 rounded-full bg-blue-400 animate-pulse shrink-0" />
+          )}
+          <span className="text-sm text-blue-300">{stateDesc}</span>
+          {agentRole && (
+            <span className="text-[10px] px-1.5 py-0.5 bg-blue-900/50 text-blue-400 rounded">
+              {agentRole}
+            </span>
+          )}
+        </div>
+      )}
+
+      {(alive.length > 0 || dead.length > 0) && (
+        <div className="flex items-center gap-2 mb-2">
+          <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wider">
+            Sessions
+            <span className="ml-1.5 text-gray-500 font-normal normal-case">
+              ({alive.length} active{dead.length > 0 ? `, ${dead.length} ended` : ''})
+            </span>
+          </h3>
+        </div>
+      )}
       <div className="space-y-1.5">
         {alive.map((s) => (
           <div key={s.id} className="flex items-center gap-2 text-xs">
