@@ -2,7 +2,7 @@ import { useEffect, useState, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import type { WorkflowTicket, Track } from '@foundation/types';
 import { WorkflowStateIndicator } from './WorkflowStateIndicator';
-import { CreateEpicModal } from './CreateEpicModal';
+import { CreateEpicModal, type CreateEpicData } from './CreateEpicModal';
 
 type FilterTab = 'all' | 'active' | 'review' | 'done';
 
@@ -71,14 +71,18 @@ export function WorkflowPage() {
     return true;
   });
 
-  async function handleCreate(data: {
-    title: string; description: string; trackId?: string;
-    priority: string; provider: string;
-  }) {
-    await fetch('/api/workflow/tickets', {
+  async function handleCreate(data: CreateEpicData) {
+    const isFromPlan = !!data.planDraft;
+    const endpoint = isFromPlan ? '/api/workflow/tickets/from-plan' : '/api/workflow/tickets';
+    const body = isFromPlan
+      ? { title: data.title, description: data.description, planDraft: data.planDraft,
+          trackId: data.trackId, priority: data.priority, provider: data.provider }
+      : { type: 'epic', ...data };
+
+    await fetch(endpoint, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ type: 'epic', ...data }),
+      body: JSON.stringify(body),
     });
     setShowCreateForm(false);
     loadData();
