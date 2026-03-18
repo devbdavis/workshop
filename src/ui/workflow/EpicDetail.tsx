@@ -1,7 +1,7 @@
 import { useEffect, useState, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import type {
-  WorkflowTicket, WorkflowTransition, Track,
+  WorkflowTicket, WorkflowTransition, Track, Session,
   NeedsInputData, PlanCritiqueData,
   IntegrationReviewData, FinalReviewData,
 } from '@foundation/types';
@@ -30,22 +30,25 @@ export function EpicDetail() {
   const [transitions, setTransitions] = useState<WorkflowTransition[]>([]);
   const [childTasks, setChildTasks] = useState<WorkflowTicket[]>([]);
   const [tracks, setTracks] = useState<Track[]>([]);
+  const [sessions, setSessions] = useState<Session[]>([]);
   const [loading, setLoading] = useState(true);
   const [inputAnswers, setInputAnswers] = useState<Record<number, string>>({});
 
   const loadData = useCallback(async () => {
     if (!id) return;
     try {
-      const [ticketRes, transRes, tracksRes, childRes] = await Promise.all([
+      const [ticketRes, transRes, tracksRes, childRes, sessionsRes] = await Promise.all([
         fetch(`/api/workflow/tickets/${id}`),
         fetch(`/api/workflow/tickets/${id}/transitions`),
         fetch('/api/tracks'),
         fetch(`/api/workflow/tickets?parentId=${id}`),
+        fetch('/api/sessions'),
       ]);
       if (ticketRes.ok) setTicket(await ticketRes.json());
       if (transRes.ok) setTransitions(await transRes.json());
       if (tracksRes.ok) setTracks(await tracksRes.json());
       if (childRes.ok) setChildTasks(await childRes.json());
+      if (sessionsRes.ok) setSessions(await sessionsRes.json());
     } catch (err) {
       console.error('Failed to load epic detail:', err);
     } finally {
@@ -95,6 +98,11 @@ export function EpicDetail() {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ toState, comment }),
     });
+    loadData();
+  }
+
+  async function handleKillSession(sessionId: string, trackId: string) {
+    await fetch(`/api/tracks/${trackId}/sessions/${sessionId}`, { method: 'DELETE' });
     loadData();
   }
 
@@ -151,6 +159,9 @@ export function EpicDetail() {
         {HUMAN_GATES.has(ticket.state) && (
           <HumanGatePanel ticket={ticket} onApprove={handleApprove} onReject={handleReject} />
         )}
+
+        {/* Agent sessions */}
+        <AgentSessionsBar ticket={ticket} sessions={sessions} onKill={handleKillSession} />
 
         {/* Two-column layout */}
         <div className="flex flex-col md:flex-row gap-6">
@@ -274,6 +285,86 @@ function ActionButtons({ ticket, onApprove, onReject, onTransition }: {
           Cancel
         </button>
       )}
+    </div>
+  );
+}
+
+function AgentSessionsBar({ ticket, sessions, onKill }: {
+  ticket: WorkflowTicket;
+  sessions: Session[];
+  onKill: (sessionId: string, trackId: string) => void;
+}) {
+  // Collect all session IDs associated with this ticket
+  const sd = ticket.stateData as Record<string, unknown> | undefined;
+  const agentSessionIds = (sd?.agentSessionIds as string[] | undefined) ?? [];
+  const execSessionId = ticket.executionSessionId;
+  const allIds = new Set([...agentSessionIds, ...(execSessionId ? [execSessionId] : [])]);
+
+  if (allIds.size === 0) return null;
+
+  // Match against live sessions
+  const matched = sessions.filter((s) => allIds.has(s.id));
+  const alive = matched.filter((s) => s.state === 'active');
+  const dead = matched.filter((s) => s.state !== 'active');
+  const missing = allIds.size - matched.length;
+
+  if (alive.length === 0 && dead.length === 0 && missing === 0) return null;
+
+  return (
+    <div className="border border-gray-800 bg-gray-900 rounded-lg px-4 py-3 mb-4">
+      <div className="flex items-center gap-2 mb-2">
+        {alive.length > 0 && (
+          <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+        )}
+        <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wider">
+          Agent Sessions
+          <span className="ml-1.5 text-gray-500 font-normal normal-case">
+            ({alive.length} active{dead.length > 0 ? `, ${dead.length} ended` : ''}
+            {missing > 0 ? `, ${missing} cleaned up` : ''})
+          </span>
+        </h3>
+      </div>
+      <div className="space-y-1.5">
+        {alive.map((s) => (
+          <div key={s.id} className="flex items-center gap-2 text-xs">
+            <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 shrink-0" />
+            <span className="text-gray-300 font-medium">
+              {s.name || s.tmuxSession}
+            </span>
+            {s.id === execSessionId && (
+              <span className="text-[10px] px-1.5 py-0.5 bg-blue-900/50 text-blue-300 rounded">
+                executor
+              </span>
+            )}
+            {s.background && (
+              <span className="text-[10px] px-1.5 py-0.5 bg-emerald-900/50 text-emerald-400 rounded">
+                background
+              </span>
+            )}
+            <span className="text-gray-600 font-mono ml-auto hidden sm:inline">
+              tmux attach -t {s.tmuxSession}
+            </span>
+            <button
+              onClick={() => onKill(s.id, s.trackId)}
+              className="text-gray-600 hover:text-red-400 transition-colors"
+              title="Kill session"
+            >
+              Kill
+            </button>
+          </div>
+        ))}
+        {dead.map((s) => (
+          <div key={s.id} className="flex items-center gap-2 text-xs opacity-50">
+            <span className="w-1.5 h-1.5 rounded-full bg-gray-600 shrink-0" />
+            <span className="text-gray-500">
+              {s.name || s.tmuxSession}
+            </span>
+            <span className="text-[10px] px-1.5 py-0.5 bg-gray-800 text-gray-500 rounded">
+              ended
+            </span>
+          </div>
+        ))}
+      </div>
     </div>
   );
 }
