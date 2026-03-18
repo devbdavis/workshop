@@ -159,7 +159,7 @@ export function EpicDetail() {
 
         {/* Human gate panel */}
         {HUMAN_GATES.has(ticket.state) && (
-          <HumanGatePanel ticket={ticket} onApprove={handleApprove} onReject={handleReject} />
+          <HumanGatePanel ticket={ticket} transitions={transitions} onApprove={handleApprove} onReject={handleReject} />
         )}
 
         {/* Agent sessions */}
