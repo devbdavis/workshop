@@ -6,6 +6,7 @@ const navItems = [
   { to: '/sessions', label: 'Sessions', end: false },
   { to: '/scheduled-tasks', label: 'Schedules', end: false },
   { to: '/workflow', label: 'Workflow', end: false },
+  { to: '/discussions', label: 'Discussions', end: false },
   { to: '/agents', label: 'Agents', end: false },
   { to: '/settings', label: 'Settings', end: false },
 ];

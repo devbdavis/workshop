@@ -8,6 +8,7 @@ import { SessionsPage } from './sessions/SessionsPage';
 import { ScheduledTasksPage } from './scheduled-tasks/ScheduledTasksPage';
 import { WorkflowPage } from './workflow/WorkflowPage';
 import { EpicDetail } from './workflow/EpicDetail';
+import { DiscussionsPage } from './discussions/DiscussionsPage';
 import { TopNav } from './TopNav';
 
 export function App() {
@@ -18,6 +19,7 @@ export function App() {
         <Routes>
           <Route path="/" element={<Dashboard />} />
           <Route path="/tracks/:trackId" element={<TrackView />} />
+          <Route path="/discussions" element={<DiscussionsPage />} />
           <Route path="/settings" element={<Settings />} />
           <Route path="/kanban" element={<KanbanBoard />} />
           <Route path="/agents" element={<AgentsPage />} />
