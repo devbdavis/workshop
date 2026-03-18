@@ -3,7 +3,6 @@ import type { DiscussionId, DiscussionTeamId, DiscussionStatus } from '@foundati
 import type { TrackId } from '@foundation/types';
 import type { DiscussionService } from '@application/discussion/discussion-service.js';
 import type { DiscussionTeamRepository, DiscussionRepository } from '@domain/discussion/repository';
-import { broadcast } from './events.js';
 
 export interface DiscussionRouterDeps {
   discussionService: DiscussionService;
