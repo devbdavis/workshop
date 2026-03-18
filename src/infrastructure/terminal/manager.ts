@@ -1,9 +1,13 @@
 import { execSync } from 'child_process';
 import { writeFileSync, mkdirSync, rmSync, existsSync, chmodSync } from 'fs';
 import path from 'path';
+import { fileURLToPath } from 'url';
 import { v4 as uuid } from 'uuid';
 import type { SessionRepository } from '@domain/session/repository';
 import type { Session, SessionId, SessionProvider, TrackId } from '@foundation/types';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 /** Directory for per-session data (prompt files, hook config, etc.) */
 const SESSION_DATA_DIR = path.join(
@@ -76,7 +80,7 @@ export function createTerminalManager(sessionRepo: SessionRepository): TerminalM
     const hooks: Record<string, unknown[]> = {
       PreToolUse: [
         {
-          matcher: 'Bash|Edit|Write|NotebookEdit',
+          matcher: 'Bash|Edit|Write|NotebookEdit|mcp__.*',
           hooks: [
             {
               type: 'http',
