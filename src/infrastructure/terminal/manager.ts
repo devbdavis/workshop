@@ -1,9 +1,13 @@
 import { execSync } from 'child_process';
 import { writeFileSync, mkdirSync, rmSync, existsSync, chmodSync } from 'fs';
 import path from 'path';
+import { fileURLToPath } from 'url';
 import { v4 as uuid } from 'uuid';
 import type { SessionRepository } from '@domain/session/repository';
 import type { Session, SessionId, SessionProvider, TrackId } from '@foundation/types';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 /** Directory for per-session data (prompt files, hook config, etc.) */
 const SESSION_DATA_DIR = path.join(
@@ -76,7 +80,7 @@ export function createTerminalManager(sessionRepo: SessionRepository): TerminalM
     const hooks: Record<string, unknown[]> = {
       PreToolUse: [
         {
-          matcher: 'Bash|Edit|Write|NotebookEdit',
+          matcher: 'Bash|Edit|Write|NotebookEdit|mcp__.*',
           hooks: [
             {
               type: 'http',
@@ -177,13 +181,15 @@ export function createTerminalManager(sessionRepo: SessionRepository): TerminalM
       }
     }
 
+    // Always launch interactively so the TUI is visible and attachable.
+    // If there's an initial prompt, write it to a file. The launch script
+    // will send it after claude's TUI is ready (see sendInitialPrompt below).
     if (options?.initialPrompt) {
       const promptMsgFile = path.join(sessionDir, 'initial-prompt.txt');
       writeFileSync(promptMsgFile, options.initialPrompt, 'utf-8');
-      lines.push(`exec ${claudeArgs.join(' ')} -p "$(cat ${JSON.stringify(promptMsgFile)})"`);
-    } else {
-      lines.push(`exec ${claudeArgs.join(' ')}`);
     }
+
+    lines.push(`exec ${claudeArgs.join(' ')}`);
   }
 
   /** Build launcher script lines for a Codex CLI session */
@@ -228,6 +234,49 @@ export function createTerminalManager(sessionRepo: SessionRepository): TerminalM
     }
   }
 
+  /**
+   * Write and execute a helper script that waits for the claude TUI to be
+   * ready, then pastes the initial prompt and presses Enter.
+   *
+   * The script polls the tmux pane content until it sees the `❯` input
+   * indicator (meaning claude is ready for input), then loads the prompt
+   * file into the tmux buffer, pastes it, waits briefly, and sends Enter.
+   * Runs as a detached background process so it doesn't block session creation.
+   */
+  function sendInitialPrompt(sessionDir: string, tmuxName: string): void {
+    const promptMsgFile = path.join(sessionDir, 'initial-prompt.txt');
+    const senderScript = path.join(sessionDir, 'send-prompt.sh');
+
+    const script = `#!/bin/bash
+# Wait for claude TUI to be ready (look for the input prompt indicator)
+for i in $(seq 1 30); do
+  if tmux capture-pane -t ${tmuxName} -p 2>/dev/null | grep -q '❯'; then
+    sleep 1
+    tmux load-buffer ${JSON.stringify(promptMsgFile)} \\; paste-buffer -t ${tmuxName}
+    sleep 0.5
+    tmux send-keys -t ${tmuxName} Enter
+    exit 0
+  fi
+  sleep 1
+done
+echo "Timed out waiting for claude TUI in ${tmuxName}" >&2
+exit 1
+`;
+
+    writeFileSync(senderScript, script, 'utf-8');
+    chmodSync(senderScript, 0o755);
+
+    // Run detached so it doesn't block
+    try {
+      execSync(`nohup ${JSON.stringify(senderScript)} >/dev/null 2>&1 &`, {
+        stdio: 'pipe',
+        shell: '/bin/bash',
+      });
+    } catch (err) {
+      console.error(`Failed to start prompt sender for ${tmuxName}:`, err);
+    }
+  }
+
   return {
     async createSession(trackId: TrackId, options?: CreateSessionOptions): Promise<Session> {
       const provider = options?.provider || 'claude';
@@ -258,8 +307,12 @@ export function createTerminalManager(sessionRepo: SessionRepository): TerminalM
 
         if (provider === 'codex') {
           buildCodexLauncher(launcherLines, sessionDir, cwd, options);
-        } else {
+        } else if (provider === 'gemini') {
+          throw new Error('Gemini CLI support not yet implemented. Agent has provider: gemini.');
+        } else if (provider === 'claude') {
           buildClaudeLauncher(launcherLines, session.id, sessionDir, options);
+        } else {
+          throw new Error(`Unknown session provider: ${provider}`);
         }
 
         writeFileSync(launcherFile, launcherLines.join('\n') + '\n', 'utf-8');
@@ -270,6 +323,12 @@ export function createTerminalManager(sessionRepo: SessionRepository): TerminalM
           `tmux send-keys -t ${tmuxName} ${JSON.stringify(launcherFile)} Enter`,
           { stdio: 'pipe' },
         );
+
+        // If there's an initial prompt for a claude session, write a helper
+        // script that waits for the TUI to be ready and then pastes + submits.
+        if (provider === 'claude' && options?.initialPrompt) {
+          sendInitialPrompt(sessionDir, tmuxName);
+        }
       }
 
       return session;
