@@ -251,16 +251,40 @@ export function createWorkflowRouter(deps: WorkflowRouterDeps): Router {
 
   // --- Reject at human gate ---
 
-  router.post('/workflow/tickets/:id/reject', (req, res) => {
+  router.post('/workflow/tickets/:id/reject', async (req, res) => {
     const ticketId = req.params.id as WorkflowTicketId;
     const { comment } = req.body || {};
 
     try {
-      const updated = engine.reject(ticketId, comment);
+      let updated;
+      if (dispatcher) {
+        updated = await dispatcher.reject(ticketId, comment);
+      } else {
+        updated = engine.reject(ticketId, comment);
+      }
       broadcast('workflow:rejected', ticketId);
       res.json(updated);
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Rejection failed';
+      res.status(400).json({ error: message });
+    }
+  });
+
+  // --- Dispatch agents for current state (retry / manual trigger) ---
+
+  router.post('/workflow/tickets/:id/dispatch', async (req, res) => {
+    const ticketId = req.params.id as WorkflowTicketId;
+    if (!dispatcher) {
+      res.status(503).json({ error: 'Dispatch coordinator not available' });
+      return;
+    }
+    try {
+      await dispatcher.dispatchForCurrentState(ticketId);
+      const refreshed = tickets.findById(ticketId);
+      broadcast('workflow:dispatched', ticketId);
+      res.json(refreshed);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Dispatch failed';
       res.status(400).json({ error: message });
     }
   });

@@ -34,8 +34,8 @@ export interface DispatchCoordinator {
   /** Approve at human gate and dispatch if result state needs agents */
   approveWithDispatch(ticketId: WorkflowTicketId, comment?: string): Promise<WorkflowTicket>;
 
-  /** Reject at human gate — no dispatch needed */
-  reject(ticketId: WorkflowTicketId, comment?: string): WorkflowTicket;
+  /** Reject at human gate — may dispatch if target state is agent-actionable */
+  reject(ticketId: WorkflowTicketId, comment?: string): Promise<WorkflowTicket>;
 
   /** Dispatch agents for a ticket that is already in an agent-actionable state (e.g. retry) */
   dispatchForCurrentState(ticketId: WorkflowTicketId): Promise<void>;
@@ -113,8 +113,13 @@ export function createDispatchCoordinator(
       return tickets.findById(ticketId) ?? updated;
     },
 
-    reject(ticketId: WorkflowTicketId, comment?: string): WorkflowTicket {
-      return engine.reject(ticketId, comment);
+    async reject(ticketId: WorkflowTicketId, comment?: string): Promise<WorkflowTicket> {
+      const updated = engine.reject(ticketId, comment);
+
+      // Rejection can land on agent-actionable states (e.g. final-review → integration-fix)
+      await dispatchIfNeeded(updated);
+
+      return tickets.findById(ticketId) ?? updated;
     },
 
     async dispatchForCurrentState(ticketId: WorkflowTicketId): Promise<void> {
