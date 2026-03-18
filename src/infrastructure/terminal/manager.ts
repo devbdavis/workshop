@@ -181,12 +181,15 @@ export function createTerminalManager(sessionRepo: SessionRepository): TerminalM
       }
     }
 
+    // Always launch interactively so the TUI is visible and attachable.
+    // If there's an initial prompt, we write it to a file and feed it via
+    // tmux send-keys after claude starts (see createSession below).
+    lines.push(`exec ${claudeArgs.join(' ')}`);
+
+    // Stash the initial prompt path so createSession can send it after launch
     if (options?.initialPrompt) {
       const promptMsgFile = path.join(sessionDir, 'initial-prompt.txt');
       writeFileSync(promptMsgFile, options.initialPrompt, 'utf-8');
-      lines.push(`exec ${claudeArgs.join(' ')} -p "$(cat ${JSON.stringify(promptMsgFile)})"`);
-    } else {
-      lines.push(`exec ${claudeArgs.join(' ')}`);
     }
   }
 
@@ -262,8 +265,12 @@ export function createTerminalManager(sessionRepo: SessionRepository): TerminalM
 
         if (provider === 'codex') {
           buildCodexLauncher(launcherLines, sessionDir, cwd, options);
-        } else {
+        } else if (provider === 'gemini') {
+          throw new Error('Gemini CLI support not yet implemented. Agent has provider: gemini.');
+        } else if (provider === 'claude') {
           buildClaudeLauncher(launcherLines, session.id, sessionDir, options);
+        } else {
+          throw new Error(`Unknown session provider: ${provider}`);
         }
 
         writeFileSync(launcherFile, launcherLines.join('\n') + '\n', 'utf-8');
@@ -274,6 +281,29 @@ export function createTerminalManager(sessionRepo: SessionRepository): TerminalM
           `tmux send-keys -t ${tmuxName} ${JSON.stringify(launcherFile)} Enter`,
           { stdio: 'pipe' },
         );
+
+        // If there's an initial prompt for a claude session, send it after
+        // a brief delay so the TUI has time to start up and accept input.
+        if (provider === 'claude' && options?.initialPrompt) {
+          const promptMsgFile = path.join(sessionDir, 'initial-prompt.txt');
+          const sendPrompt = async () => {
+            await new Promise((r) => setTimeout(r, 3000));
+            try {
+              // Paste the prompt content and press Enter to submit
+              const escaped = options.initialPrompt!.replace(/'/g, "'\\''");
+              execSync(
+                `tmux load-buffer - <<'TMUX_EOF'\n${escaped}\nTMUX_EOF\ntmux paste-buffer -t ${tmuxName}`,
+                { stdio: 'pipe', shell: '/bin/bash' },
+              );
+              // Press Enter to submit
+              execSync(`tmux send-keys -t ${tmuxName} Enter`, { stdio: 'pipe' });
+            } catch (err) {
+              console.error(`Failed to send initial prompt to ${tmuxName}:`, err);
+            }
+          };
+          // Fire and forget — don't block session creation
+          void sendPrompt();
+        }
       }
 
       return session;
