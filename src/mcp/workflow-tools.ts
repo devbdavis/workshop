@@ -161,6 +161,30 @@ export function registerWorkflowTools(
   );
 
   server.tool(
+    'workshop_create_epic_from_plan',
+    'Create a workflow epic starting at plan-review with a pre-written plan. Skips triage/spec/planning.',
+    {
+      title: z.string().describe('Epic title'),
+      description: z.string().describe('Epic description / spec'),
+      planDraft: z.string().describe('The pre-written implementation plan'),
+      trackId: z.string().optional().describe('Track ID to bind to'),
+      provider: z.enum(['claude', 'codex']).optional().describe('AI CLI (default: claude)'),
+      priority: z.enum(['low', 'medium', 'high', 'critical']).optional().describe('Priority'),
+    },
+    async ({ title, description, planDraft, trackId, provider, priority }) => {
+      const body: Record<string, unknown> = { title, description, planDraft };
+      if (trackId) body.trackId = trackId;
+      if (provider) body.provider = provider;
+      if (priority) body.priority = priority;
+      const result = await api('/workflow/tickets/from-plan', {
+        method: 'POST',
+        body: JSON.stringify(body),
+      });
+      return { content: [{ type: 'text' as const, text: JSON.stringify(result, null, 2) }] };
+    },
+  );
+
+  server.tool(
     'workshop_list_workflow_pending',
     'List workflow tickets at human gates needing approval.',
     {},

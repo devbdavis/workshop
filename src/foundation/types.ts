@@ -53,7 +53,7 @@ export interface TrackPath {
 
 // Session
 export type SessionState = 'active' | 'detached' | 'dead';
-export type SessionProvider = 'claude' | 'codex';
+export type SessionProvider = 'claude' | 'codex' | 'gemini';
 
 export interface Session {
   id: SessionId;

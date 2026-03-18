@@ -4,7 +4,7 @@ import type { PermissionRequestRepository } from '@domain/permission/repository'
 import { broadcast } from './events.js';
 
 /** Max time (ms) the hook long-poll will wait for a user decision before timing out */
-const HOOK_POLL_TIMEOUT = 300_000; // 5 minutes
+const HOOK_POLL_TIMEOUT = 86_400_000; // 24 hours
 /** Poll interval (ms) for checking if a decision has been made */
 const POLL_INTERVAL = 500;
 
@@ -26,6 +26,8 @@ const PERMANENTLY_APPROVED: Array<{
 }> = [
   // All Workshop MCP tool calls (in case the hook matcher is ever broadened)
   { toolPrefix: 'mcp__workshop__' },
+  // Gmail MCP — allow background agents to create/send drafts
+  { toolPrefix: 'mcp__claude_ai_Gmail__' },
   // Bash commands that curl the Workshop API
   { tool: 'Bash', bashCommandPattern: /^curl\s[^;|&`$]*localhost:\d+\/api\/[^;|&`$]*$/ },
   { tool: 'Bash', bashCommandPattern: /^curl\s[^;|&`$]*127\.0\.0\.1:\d+\/api\/[^;|&`$]*$/ },
