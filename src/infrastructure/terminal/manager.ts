@@ -192,6 +192,30 @@ export function createTerminalManager(sessionRepo: SessionRepository): TerminalM
     lines.push(`exec ${claudeArgs.join(' ')}`);
   }
 
+  /** Build launcher script lines for a Gemini CLI session */
+  function buildGeminiLauncher(
+    lines: string[],
+    sessionDir: string,
+    _cwd: string,
+    options?: CreateSessionOptions,
+  ): void {
+    const geminiArgs = ['gemini'];
+
+    if (options?.systemPrompt) {
+      const promptFile = path.join(sessionDir, 'system-prompt.md');
+      writeFileSync(promptFile, options.systemPrompt, 'utf-8');
+      geminiArgs.push('--system-instruction', JSON.stringify(promptFile));
+    }
+
+    // Write initial prompt to file if provided (sendInitialPrompt handles delivery)
+    if (options?.initialPrompt) {
+      const promptMsgFile = path.join(sessionDir, 'initial-prompt.txt');
+      writeFileSync(promptMsgFile, options.initialPrompt, 'utf-8');
+    }
+
+    lines.push(`exec ${geminiArgs.join(' ')}`);
+  }
+
   /** Build launcher script lines for a Codex CLI session */
   function buildCodexLauncher(
     lines: string[],
@@ -308,7 +332,7 @@ exit 1
         if (provider === 'codex') {
           buildCodexLauncher(launcherLines, sessionDir, cwd, options);
         } else if (provider === 'gemini') {
-          throw new Error('Gemini CLI support not yet implemented. Agent has provider: gemini.');
+          buildGeminiLauncher(launcherLines, sessionDir, cwd, options);
         } else if (provider === 'claude') {
           buildClaudeLauncher(launcherLines, session.id, sessionDir, options);
         } else {
@@ -324,9 +348,9 @@ exit 1
           { stdio: 'pipe' },
         );
 
-        // If there's an initial prompt for a claude session, write a helper
+        // If there's an initial prompt for a claude or gemini session, write a helper
         // script that waits for the TUI to be ready and then pastes + submits.
-        if (provider === 'claude' && options?.initialPrompt) {
+        if ((provider === 'claude' || provider === 'gemini') && options?.initialPrompt) {
           sendInitialPrompt(sessionDir, tmuxName);
         }
       }
