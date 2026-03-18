@@ -182,15 +182,14 @@ export function createTerminalManager(sessionRepo: SessionRepository): TerminalM
     }
 
     // Always launch interactively so the TUI is visible and attachable.
-    // If there's an initial prompt, we write it to a file and feed it via
-    // tmux send-keys after claude starts (see createSession below).
-    lines.push(`exec ${claudeArgs.join(' ')}`);
-
-    // Stash the initial prompt path so createSession can send it after launch
+    // If there's an initial prompt, write it to a file. The launch script
+    // will send it after claude's TUI is ready (see sendInitialPrompt below).
     if (options?.initialPrompt) {
       const promptMsgFile = path.join(sessionDir, 'initial-prompt.txt');
       writeFileSync(promptMsgFile, options.initialPrompt, 'utf-8');
     }
+
+    lines.push(`exec ${claudeArgs.join(' ')}`);
   }
 
   /** Build launcher script lines for a Codex CLI session */
@@ -232,6 +231,49 @@ export function createTerminalManager(sessionRepo: SessionRepository): TerminalM
       } else {
         lines.push(`exec ${codexArgs.join(' ')}`);
       }
+    }
+  }
+
+  /**
+   * Write and execute a helper script that waits for the claude TUI to be
+   * ready, then pastes the initial prompt and presses Enter.
+   *
+   * The script polls the tmux pane content until it sees the `❯` input
+   * indicator (meaning claude is ready for input), then loads the prompt
+   * file into the tmux buffer, pastes it, waits briefly, and sends Enter.
+   * Runs as a detached background process so it doesn't block session creation.
+   */
+  function sendInitialPrompt(sessionDir: string, tmuxName: string): void {
+    const promptMsgFile = path.join(sessionDir, 'initial-prompt.txt');
+    const senderScript = path.join(sessionDir, 'send-prompt.sh');
+
+    const script = `#!/bin/bash
+# Wait for claude TUI to be ready (look for the input prompt indicator)
+for i in $(seq 1 30); do
+  if tmux capture-pane -t ${tmuxName} -p 2>/dev/null | grep -q '❯'; then
+    sleep 1
+    tmux load-buffer ${JSON.stringify(promptMsgFile)} \\; paste-buffer -t ${tmuxName}
+    sleep 0.5
+    tmux send-keys -t ${tmuxName} Enter
+    exit 0
+  fi
+  sleep 1
+done
+echo "Timed out waiting for claude TUI in ${tmuxName}" >&2
+exit 1
+`;
+
+    writeFileSync(senderScript, script, 'utf-8');
+    chmodSync(senderScript, 0o755);
+
+    // Run detached so it doesn't block
+    try {
+      execSync(`nohup ${JSON.stringify(senderScript)} >/dev/null 2>&1 &`, {
+        stdio: 'pipe',
+        shell: '/bin/bash',
+      });
+    } catch (err) {
+      console.error(`Failed to start prompt sender for ${tmuxName}:`, err);
     }
   }
 
@@ -282,27 +324,10 @@ export function createTerminalManager(sessionRepo: SessionRepository): TerminalM
           { stdio: 'pipe' },
         );
 
-        // If there's an initial prompt for a claude session, send it after
-        // a brief delay so the TUI has time to start up and accept input.
+        // If there's an initial prompt for a claude session, write a helper
+        // script that waits for the TUI to be ready and then pastes + submits.
         if (provider === 'claude' && options?.initialPrompt) {
-          const promptMsgFile = path.join(sessionDir, 'initial-prompt.txt');
-          const sendPrompt = async () => {
-            await new Promise((r) => setTimeout(r, 3000));
-            try {
-              // Paste the prompt content and press Enter to submit
-              const escaped = options.initialPrompt!.replace(/'/g, "'\\''");
-              execSync(
-                `tmux load-buffer - <<'TMUX_EOF'\n${escaped}\nTMUX_EOF\ntmux paste-buffer -t ${tmuxName}`,
-                { stdio: 'pipe', shell: '/bin/bash' },
-              );
-              // Press Enter to submit
-              execSync(`tmux send-keys -t ${tmuxName} Enter`, { stdio: 'pipe' });
-            } catch (err) {
-              console.error(`Failed to send initial prompt to ${tmuxName}:`, err);
-            }
-          };
-          // Fire and forget — don't block session creation
-          void sendPrompt();
+          sendInitialPrompt(sessionDir, tmuxName);
         }
       }
 
