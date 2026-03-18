@@ -12,6 +12,7 @@ import {
   Section, DetailRow, NeedsInputSection,
   FindingsSection, FinalReviewSection, MiniTaskBoard,
 } from './EpicDetailSections';
+import { TerminalModal } from '../track-view/TerminalModal';
 
 const PRIORITY_STYLES: Record<string, string> = {
   critical: 'bg-red-900/50 text-red-300',
@@ -31,6 +32,7 @@ export function EpicDetail() {
   const [childTasks, setChildTasks] = useState<WorkflowTicket[]>([]);
   const [tracks, setTracks] = useState<Track[]>([]);
   const [sessions, setSessions] = useState<Session[]>([]);
+  const [attachedSession, setAttachedSession] = useState<Session | null>(null);
   const [loading, setLoading] = useState(true);
   const [inputAnswers, setInputAnswers] = useState<Record<number, string>>({});
 
@@ -161,7 +163,12 @@ export function EpicDetail() {
         )}
 
         {/* Agent sessions */}
-        <AgentSessionsBar ticket={ticket} sessions={sessions} onKill={handleKillSession} />
+        <AgentSessionsBar
+          ticket={ticket}
+          sessions={sessions}
+          onAttach={setAttachedSession}
+          onKill={handleKillSession}
+        />
 
         {/* Two-column layout */}
         <div className="flex flex-col md:flex-row gap-6">
@@ -230,6 +237,15 @@ export function EpicDetail() {
           </div>
         </div>
       </div>
+
+      {attachedSession && (
+        <TerminalModal
+          trackId={attachedSession.trackId}
+          sessionId={attachedSession.id}
+          title={attachedSession.name || `session:${attachedSession.id.slice(0, 8)}`}
+          onClose={() => setAttachedSession(null)}
+        />
+      )}
     </div>
   );
 }
@@ -289,9 +305,10 @@ function ActionButtons({ ticket, onApprove, onReject, onTransition }: {
   );
 }
 
-function AgentSessionsBar({ ticket, sessions, onKill }: {
+function AgentSessionsBar({ ticket, sessions, onAttach, onKill }: {
   ticket: WorkflowTicket;
   sessions: Session[];
+  onAttach: (session: Session) => void;
   onKill: (sessionId: string, trackId: string) => void;
 }) {
   // Collect all session IDs associated with this ticket
@@ -344,6 +361,12 @@ function AgentSessionsBar({ ticket, sessions, onKill }: {
             <span className="text-gray-600 font-mono ml-auto hidden sm:inline">
               tmux attach -t {s.tmuxSession}
             </span>
+            <button
+              onClick={() => onAttach(s)}
+              className="text-xs px-2.5 py-0.5 bg-blue-600 hover:bg-blue-500 text-white rounded transition-colors"
+            >
+              Attach
+            </button>
             <button
               onClick={() => onKill(s.id, s.trackId)}
               className="text-gray-600 hover:text-red-400 transition-colors"
