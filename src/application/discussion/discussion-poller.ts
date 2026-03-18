@@ -1,4 +1,4 @@
-import { execSync } from 'child_process';
+import { execFileSync } from 'child_process';
 import type { DiscussionId } from '@foundation/discussion-types';
 import type {
   DiscussionRepository,
@@ -47,17 +47,17 @@ export function createDiscussionPoller(deps: DiscussionPollerDeps): DiscussionPo
 
         // Check if tmux session is alive
         try {
-          execSync(`tmux has-session -t ${session.tmuxSession}`, { stdio: 'pipe' });
+          execFileSync('tmux', ['has-session', '-t', session.tmuxSession], { stdio: 'pipe' });
         } catch {
           // tmux session is dead — skip
           continue;
         }
 
-        // Send nudge message via tmux send-keys
+        // Send nudge message via tmux send-keys (using execFileSync to avoid shell injection)
         const message = `There are ${entry.unreadCount} new message(s) in discussion "${entry.discussionTitle}". Use workshop_discussion_read to review and respond.`;
-        const escaped = message.replace(/"/g, '\\"');
-        execSync(
-          `tmux send-keys -t ${session.tmuxSession} "${escaped}" Enter`,
+        execFileSync(
+          'tmux',
+          ['send-keys', '-t', session.tmuxSession, message, 'Enter'],
           { stdio: 'pipe' },
         );
 
@@ -101,7 +101,9 @@ export function createDiscussionPoller(deps: DiscussionPollerDeps): DiscussionPo
       if (now - lastActivity > staleThreshold) {
         try {
           deps.discussions.updateStatus(disc.id, 'stale');
-          void deps.discussionService.closeDiscussion(disc.id);
+          deps.discussionService.closeDiscussion(disc.id).catch((closeErr) => {
+            console.error(`Failed to close sessions for stale discussion ${disc.id}:`, closeErr);
+          });
           deps.broadcast('discussion:closed', disc.id);
           staleCount++;
         } catch (err) {
