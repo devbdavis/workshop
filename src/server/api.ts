@@ -37,6 +37,14 @@ import { createAgentDispatcher } from '@application/workflow/agent-dispatcher.js
 import { createDispatchCoordinator } from '@application/workflow/dispatch-coordinator.js';
 import { createExecutionHookRouter } from './execution-hook-routes.js';
 import { broadcast } from './events.js';
+import { createDiscussionTeamRepository } from '@infrastructure/persistence/discussion-team-repository.js';
+import { createDiscussionRepository } from '@infrastructure/persistence/discussion-repository.js';
+import { createDiscussionMessageRepository } from '@infrastructure/persistence/discussion-message-repository.js';
+import { createDiscussionVoteRepository } from '@infrastructure/persistence/discussion-vote-repository.js';
+import { createDiscussionSessionRepository } from '@infrastructure/persistence/discussion-session-repository.js';
+import { createDiscussionService } from '@application/discussion/discussion-service.js';
+import { createDiscussionPoller } from '@application/discussion/discussion-poller.js';
+import { createDiscussionRouter } from './discussion-routes.js';
 
 export interface ApiRouterDeps {
   automationEngine?: AutomationEngine;
@@ -187,9 +195,53 @@ export function createApiRouter(deps: ApiRouterDeps = {}): Router {
   });
   router.use(executionHookRouter);
 
+  // Mount discussion sub-router
+  const discussionTeams = createDiscussionTeamRepository();
+  const discussionsList = createDiscussionRepository();
+  const discussionMessages = createDiscussionMessageRepository();
+  const discussionVotes = createDiscussionVoteRepository();
+  const discussionSessionsRepo = createDiscussionSessionRepository();
+  const discussionService = createDiscussionService({
+    teams: discussionTeams,
+    discussions: discussionsList,
+    messages: discussionMessages,
+    votes: discussionVotes,
+    discussionSessions: discussionSessionsRepo,
+    agents,
+    filesystemScanner,
+    sessions,
+    tracks,
+    summaries,
+    terminal,
+    projectRoot,
+    broadcast: broadcast as (type: string, id: string) => void,
+  });
+
+  const discussionRouter = createDiscussionRouter({
+    discussionService,
+    teams: discussionTeams,
+    discussions: discussionsList,
+  });
+  router.use(discussionRouter);
+
+  // Discussion poller — nudges agents about new messages and detects stale discussions
+  const discussionPoller = createDiscussionPoller({
+    discussionSessions: discussionSessionsRepo,
+    discussions: discussionsList,
+    messages: discussionMessages,
+    sessions,
+    discussionService,
+    broadcast: broadcast as (type: string, id: string) => void,
+  });
+  discussionPoller.start(60_000);
+
   // Stop scheduler on shutdown
   process.on('SIGINT', () => taskScheduler.stop());
   process.on('SIGTERM', () => taskScheduler.stop());
+
+  // Stop discussion poller on shutdown
+  process.on('SIGINT', () => discussionPoller.stop());
+  process.on('SIGTERM', () => discussionPoller.stop());
 
   // --- Tracks ---
 

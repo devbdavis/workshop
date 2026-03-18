@@ -101,7 +101,8 @@ function parseAgentFile(filePath: string, source: AgentSource): Agent | null {
       maxTurns,
       createdAt: mtime,
       updatedAt: mtime,
-    };
+      ...(parsed.frontmatter.provider ? { provider: parsed.frontmatter.provider } : {}),
+    } as Agent;
   } catch (err) {
     console.error(`Failed to parse agent file ${filePath}:`, err);
     return null;

@@ -320,6 +320,75 @@ function runMigrations(db: Database.Database): void {
     // Column already exists — safe to ignore
   }
 
+  // Migration: create discussion tables
+  try {
+    db.exec(`
+      CREATE TABLE discussion_teams (
+        id TEXT PRIMARY KEY,
+        name TEXT NOT NULL,
+        description TEXT,
+        consensus_rule TEXT NOT NULL,
+        member_agent_ids TEXT NOT NULL,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      );
+
+      CREATE TABLE discussions (
+        id TEXT PRIMARY KEY,
+        team_id TEXT NOT NULL REFERENCES discussion_teams(id),
+        title TEXT NOT NULL,
+        type TEXT NOT NULL DEFAULT 'rfc',
+        status TEXT NOT NULL DEFAULT 'open',
+        artifact TEXT,
+        track_id TEXT,
+        created_by_type TEXT NOT NULL,
+        created_by_id TEXT,
+        participant_ids TEXT NOT NULL,
+        stale_after_minutes INTEGER NOT NULL DEFAULT 0,
+        last_activity_at TEXT NOT NULL,
+        closed_at TEXT,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      );
+
+      CREATE TABLE discussion_messages (
+        id TEXT PRIMARY KEY,
+        discussion_id TEXT NOT NULL REFERENCES discussions(id) ON DELETE CASCADE,
+        author_type TEXT NOT NULL,
+        author_id TEXT,
+        author_name TEXT,
+        message_type TEXT NOT NULL,
+        content TEXT NOT NULL,
+        created_at TEXT NOT NULL
+      );
+
+      CREATE INDEX idx_discussion_messages_discussion
+        ON discussion_messages(discussion_id, created_at);
+
+      CREATE TABLE discussion_votes (
+        discussion_id TEXT NOT NULL REFERENCES discussions(id) ON DELETE CASCADE,
+        voter_type TEXT NOT NULL,
+        voter_id TEXT NOT NULL,
+        voter_name TEXT,
+        vote TEXT NOT NULL,
+        comment TEXT,
+        created_at TEXT NOT NULL,
+        PRIMARY KEY (discussion_id, voter_type, voter_id)
+      );
+
+      CREATE TABLE discussion_sessions (
+        discussion_id TEXT NOT NULL REFERENCES discussions(id) ON DELETE CASCADE,
+        agent_id TEXT NOT NULL,
+        session_id TEXT NOT NULL REFERENCES sessions(id) ON DELETE CASCADE,
+        last_seen_message_id TEXT,
+        created_at TEXT NOT NULL,
+        PRIMARY KEY (discussion_id, agent_id)
+      );
+    `);
+  } catch {
+    // Tables already exist — safe to ignore
+  }
+
   // Seed default prompt templates if the table is empty
   seedDefaultTemplates(db);
 }
