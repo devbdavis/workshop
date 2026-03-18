@@ -33,6 +33,8 @@ import { createWorkflowTicketRepository, createWorkflowTransitionRepository } fr
 import { createTicketDependencyRepository } from '@infrastructure/persistence/workflow-dependency-repository.js';
 import { createWorkflowEngine } from '@application/workflow/engine.js';
 import { createExecutionDispatcher } from '@application/workflow/execution-dispatcher.js';
+import { createAgentDispatcher } from '@application/workflow/agent-dispatcher.js';
+import { createDispatchCoordinator } from '@application/workflow/dispatch-coordinator.js';
 import { createExecutionHookRouter } from './execution-hook-routes.js';
 import { broadcast } from './events.js';
 
@@ -144,7 +146,7 @@ export function createApiRouter(deps: ApiRouterDeps = {}): Router {
     dependencies: ticketDependencies,
   });
 
-  // Execution dispatcher — auto-dispatches execution sessions on plan-review approval
+  // Execution dispatcher — handles plan-review → executing dispatch
   const executionDispatcher = createExecutionDispatcher({
     engine: workflowEngine,
     tickets: workflowTickets,
@@ -153,12 +155,28 @@ export function createApiRouter(deps: ApiRouterDeps = {}): Router {
     terminal,
   });
 
+  // Agent dispatcher — handles all other agent-actionable states
+  const agentDispatcher = createAgentDispatcher({
+    tickets: workflowTickets,
+    tracks,
+    summaries,
+    terminal,
+  });
+
+  // Unified coordinator — routes transitions through the right dispatcher
+  const dispatchCoordinator = createDispatchCoordinator({
+    engine: workflowEngine,
+    tickets: workflowTickets,
+    executionDispatcher,
+    agentDispatcher,
+  });
+
   const workflowRouter = createWorkflowRouter({
     engine: workflowEngine,
     tickets: workflowTickets,
     transitions: workflowTransitions,
     dependencies: ticketDependencies,
-    executionDispatcher,
+    dispatcher: dispatchCoordinator,
   });
   router.use(workflowRouter);
 

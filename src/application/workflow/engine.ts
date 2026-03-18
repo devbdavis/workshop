@@ -60,6 +60,16 @@ export interface WorkflowEngine {
     priority?: 'low' | 'medium' | 'high' | 'critical';
     dependsOn?: WorkflowTicketId[];
   }): WorkflowTicket;
+
+  /** Create an epic that starts directly at plan-review with a pre-written plan */
+  createEpicAtPlanReview(data: {
+    title: string;
+    description: string;
+    planDraft: string;
+    trackId?: TrackId;
+    provider?: SessionProvider;
+    priority?: 'low' | 'medium' | 'high' | 'critical';
+  }): WorkflowTicket;
 }
 
 // ---------------------------------------------------------------------------
@@ -243,6 +253,31 @@ export function createWorkflowEngine(deps: WorkflowEngineDeps): WorkflowEngine {
       }
 
       return task;
+    },
+
+    createEpicAtPlanReview(data): WorkflowTicket {
+      const epic = tickets.create({
+        type: 'epic',
+        title: data.title,
+        description: data.description,
+        state: 'plan-review',
+        trackId: data.trackId,
+        provider: data.provider || 'claude',
+        priority: data.priority || 'medium',
+        sortOrder: 0,
+        stateData: { planDraft: data.planDraft },
+      });
+
+      // Synthetic audit trail showing this epic was fast-tracked
+      transitions.create({
+        ticketId: epic.id,
+        fromState: 'idea',
+        toState: 'plan-review',
+        actor: { type: 'human' },
+        comment: 'Epic created directly at plan-review with pre-written plan',
+      });
+
+      return epic;
     },
   };
 }

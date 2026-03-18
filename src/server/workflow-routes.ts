@@ -6,7 +6,7 @@ import type {
   TicketDependencyRepository,
 } from '@domain/workflow/repository';
 import type { WorkflowEngine } from '@application/workflow/engine.js';
-import type { ExecutionDispatcher } from '@application/workflow/execution-dispatcher.js';
+import type { DispatchCoordinator } from '@application/workflow/dispatch-coordinator.js';
 import { broadcast } from './events.js';
 
 export interface WorkflowRouterDeps {
@@ -14,13 +14,13 @@ export interface WorkflowRouterDeps {
   tickets: WorkflowTicketRepository;
   transitions: WorkflowTransitionRepository;
   dependencies: TicketDependencyRepository;
-  /** If provided, plan-review approval auto-dispatches execution */
-  executionDispatcher?: ExecutionDispatcher;
+  /** Unified dispatch coordinator — handles agent dispatch for all actionable states */
+  dispatcher?: DispatchCoordinator;
 }
 
 export function createWorkflowRouter(deps: WorkflowRouterDeps): Router {
   const router = Router();
-  const { engine, tickets, transitions, dependencies, executionDispatcher } = deps;
+  const { engine, tickets, transitions, dependencies, dispatcher } = deps;
 
   // --- List all workflow tickets ---
 
@@ -57,9 +57,41 @@ export function createWorkflowRouter(deps: WorkflowRouterDeps): Router {
     res.json(ticket);
   });
 
+  // --- Create epic from pre-written plan (starts at plan-review) ---
+
+  router.post('/workflow/tickets/from-plan', (req, res) => {
+    const { title, description, planDraft, trackId, provider, priority } = req.body;
+
+    if (!title || typeof title !== 'string') {
+      res.status(400).json({ error: 'title is required' });
+      return;
+    }
+    if (!planDraft || typeof planDraft !== 'string') {
+      res.status(400).json({ error: 'planDraft is required' });
+      return;
+    }
+
+    try {
+      const ticket = engine.createEpicAtPlanReview({
+        title,
+        description: description || '',
+        planDraft,
+        trackId: trackId as TrackId | undefined,
+        provider,
+        priority,
+      });
+
+      broadcast('workflow:created', ticket.id);
+      res.status(201).json(ticket);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Failed to create ticket';
+      res.status(400).json({ error: message });
+    }
+  });
+
   // --- Create workflow ticket (epic or task) ---
 
-  router.post('/workflow/tickets', (req, res) => {
+  router.post('/workflow/tickets', async (req, res) => {
     const { type, title, description, trackId, parentId, provider, priority, dependsOn } = req.body;
 
     if (!title || typeof title !== 'string') {
@@ -94,6 +126,14 @@ export function createWorkflowRouter(deps: WorkflowRouterDeps): Router {
           priority,
           dependsOn: dependsOn as WorkflowTicketId[] | undefined,
         });
+      }
+
+      // Dispatch agents if the initial state is agent-actionable (e.g. epic → triaging)
+      if (dispatcher) {
+        await dispatcher.dispatchForCurrentState(ticket.id);
+        // Re-read to get updated stateData with session IDs
+        const refreshed = tickets.findById(ticket.id);
+        if (refreshed) ticket = refreshed;
       }
 
       broadcast('workflow:created', ticket.id);
@@ -154,7 +194,7 @@ export function createWorkflowRouter(deps: WorkflowRouterDeps): Router {
 
   // --- Transition ticket to new state ---
 
-  router.post('/workflow/tickets/:id/transition', (req, res) => {
+  router.post('/workflow/tickets/:id/transition', async (req, res) => {
     const ticketId = req.params.id as WorkflowTicketId;
     const { toState, comment, actor, data } = req.body;
 
@@ -165,17 +205,19 @@ export function createWorkflowRouter(deps: WorkflowRouterDeps): Router {
 
     try {
       const transitionActor = actor || { type: 'human' as const };
-      const updated = engine.transition(
-        ticketId,
-        toState as WorkflowState,
-        transitionActor,
-        comment,
-        data,
-      );
+      let updated;
 
-      // If a task just reached 'done', trigger dependency resolution
-      if (toState === 'done') {
-        engine.onTaskCompleted(ticketId);
+      if (dispatcher) {
+        updated = await dispatcher.transitionWithDispatch(
+          ticketId,
+          toState as WorkflowState,
+          transitionActor,
+          comment,
+          data,
+        );
+      } else {
+        updated = engine.transition(ticketId, toState as WorkflowState, transitionActor, comment, data);
+        if (toState === 'done') engine.onTaskCompleted(ticketId);
       }
 
       broadcast('workflow:transitioned', ticketId);
@@ -194,8 +236,8 @@ export function createWorkflowRouter(deps: WorkflowRouterDeps): Router {
 
     try {
       let updated;
-      if (executionDispatcher) {
-        updated = await executionDispatcher.approveWithExecution(ticketId, comment);
+      if (dispatcher) {
+        updated = await dispatcher.approveWithDispatch(ticketId, comment);
       } else {
         updated = engine.approve(ticketId, comment);
       }
