@@ -38,6 +38,8 @@ export interface CreateSessionOptions {
   executionTicketId?: string;
   /** Tool patterns to pre-approve (passed as --allowedTools to claude CLI). */
   allowedTools?: string[];
+  /** Route tool permissions through Workshop UI even for interactive (non-background) sessions. */
+  usePermissionHooks?: boolean;
 }
 
 export interface SyncResult {
@@ -174,8 +176,10 @@ export function createTerminalManager(sessionRepo: SessionRepository): TerminalM
       claudeArgs.push('--system-prompt-file', JSON.stringify(promptFile));
     }
 
-    if (options?.background) {
-      if (options.dangerouslySkipPermissions) {
+    // Route permissions through Workshop UI for background or hook-enabled sessions
+    const needsHooks = options?.background || options?.usePermissionHooks;
+    if (needsHooks) {
+      if (options?.dangerouslySkipPermissions) {
         claudeArgs.push('--dangerously-skip-permissions');
       } else {
         const settingsFile = writeHookSettings(sessionDir, sessionId, options?.executionTicketId);

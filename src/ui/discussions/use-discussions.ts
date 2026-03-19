@@ -107,7 +107,7 @@ export function useDiscussionWebSocket(onEvent: (type: string, id: string) => vo
     ws.onmessage = (evt) => {
       try {
         const event = JSON.parse(evt.data);
-        if (event.type?.startsWith('discussion:')) {
+        if (event.type?.startsWith('discussion:') || event.type?.startsWith('permission:')) {
           callbackRef.current(event.type, event.id);
         }
       } catch {
