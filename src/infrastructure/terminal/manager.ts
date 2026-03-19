@@ -36,6 +36,10 @@ export interface CreateSessionOptions {
   dangerouslySkipPermissions?: boolean;
   /** Workflow ticket ID — if set, adds SubagentStop + SessionEnd hooks for execution tracking */
   executionTicketId?: string;
+  /** Tool patterns to pre-approve (passed as --allowedTools to claude CLI). */
+  allowedTools?: string[];
+  /** Route tool permissions through Workshop UI even for interactive (non-background) sessions. */
+  usePermissionHooks?: boolean;
 }
 
 export interface SyncResult {
@@ -172,12 +176,21 @@ export function createTerminalManager(sessionRepo: SessionRepository): TerminalM
       claudeArgs.push('--system-prompt-file', JSON.stringify(promptFile));
     }
 
-    if (options?.background) {
-      if (options.dangerouslySkipPermissions) {
+    // Route permissions through Workshop UI for background or hook-enabled sessions
+    const needsHooks = options?.background || options?.usePermissionHooks;
+    if (needsHooks) {
+      if (options?.dangerouslySkipPermissions) {
         claudeArgs.push('--dangerously-skip-permissions');
       } else {
         const settingsFile = writeHookSettings(sessionDir, sessionId, options?.executionTicketId);
         claudeArgs.push('--settings', JSON.stringify(settingsFile));
+      }
+    }
+
+    // Pre-approve tool patterns so interactive sessions don't block on permission prompts
+    if (options?.allowedTools && options.allowedTools.length > 0) {
+      for (const tool of options.allowedTools) {
+        claudeArgs.push('--allowedTools', JSON.stringify(tool));
       }
     }
 
@@ -190,6 +203,30 @@ export function createTerminalManager(sessionRepo: SessionRepository): TerminalM
     }
 
     lines.push(`exec ${claudeArgs.join(' ')}`);
+  }
+
+  /** Build launcher script lines for a Gemini CLI session */
+  function buildGeminiLauncher(
+    lines: string[],
+    sessionDir: string,
+    _cwd: string,
+    options?: CreateSessionOptions,
+  ): void {
+    const geminiArgs = ['gemini'];
+
+    if (options?.systemPrompt) {
+      const promptFile = path.join(sessionDir, 'system-prompt.md');
+      writeFileSync(promptFile, options.systemPrompt, 'utf-8');
+      geminiArgs.push('--system-instruction', JSON.stringify(promptFile));
+    }
+
+    // Write initial prompt to file if provided (sendInitialPrompt handles delivery)
+    if (options?.initialPrompt) {
+      const promptMsgFile = path.join(sessionDir, 'initial-prompt.txt');
+      writeFileSync(promptMsgFile, options.initialPrompt, 'utf-8');
+    }
+
+    lines.push(`exec ${geminiArgs.join(' ')}`);
   }
 
   /** Build launcher script lines for a Codex CLI session */
@@ -231,35 +268,54 @@ export function createTerminalManager(sessionRepo: SessionRepository): TerminalM
       } else {
         lines.push(`exec ${codexArgs.join(' ')}`);
       }
+
+      // Write initial prompt to file if provided (sendInitialPrompt handles delivery)
+      if (options?.initialPrompt) {
+        const promptMsgFile = path.join(sessionDir, 'initial-prompt.txt');
+        writeFileSync(promptMsgFile, options.initialPrompt, 'utf-8');
+      }
     }
   }
 
   /**
-   * Write and execute a helper script that waits for the claude TUI to be
+   * Write and execute a helper script that waits for the AI CLI TUI to be
    * ready, then pastes the initial prompt and presses Enter.
    *
-   * The script polls the tmux pane content until it sees the `❯` input
-   * indicator (meaning claude is ready for input), then loads the prompt
-   * file into the tmux buffer, pastes it, waits briefly, and sends Enter.
+   * The script polls the tmux pane content until it sees the input prompt
+   * indicator (provider-specific), then loads the prompt file into the tmux
+   * buffer, pastes it, waits briefly, and sends Enter.
    * Runs as a detached background process so it doesn't block session creation.
    */
-  function sendInitialPrompt(sessionDir: string, tmuxName: string): void {
+  function sendInitialPrompt(
+    sessionDir: string,
+    tmuxName: string,
+    provider: SessionProvider = 'claude',
+  ): void {
     const promptMsgFile = path.join(sessionDir, 'initial-prompt.txt');
     const senderScript = path.join(sessionDir, 'send-prompt.sh');
 
+    const logFile = path.join(sessionDir, 'send-prompt.log');
+
+    // Different CLIs use different prompt indicators:
+    // - claude/gemini use `❯`
+    // - codex uses `>` at start of line (use regex to avoid matching other > chars)
+    const grepPattern = provider === 'codex' ? "'^>'" : "'❯'";
+
     const script = `#!/bin/bash
-# Wait for claude TUI to be ready (look for the input prompt indicator)
-for i in $(seq 1 30); do
-  if tmux capture-pane -t ${tmuxName} -p 2>/dev/null | grep -q '❯'; then
+# Wait for ${provider} TUI to be ready (look for the input prompt indicator)
+# 90s timeout to allow for enterprise auth + MCP server connections
+for i in $(seq 1 90); do
+  if tmux capture-pane -t ${tmuxName} -p 2>/dev/null | grep -q ${grepPattern}; then
     sleep 1
     tmux load-buffer ${JSON.stringify(promptMsgFile)} \\; paste-buffer -t ${tmuxName}
     sleep 0.5
     tmux send-keys -t ${tmuxName} Enter
+    echo "[$(date)] Prompt delivered to ${tmuxName} after \${i}s" >> ${JSON.stringify(logFile)}
     exit 0
   fi
   sleep 1
 done
-echo "Timed out waiting for claude TUI in ${tmuxName}" >&2
+echo "[$(date)] Timed out waiting for ${provider} TUI in ${tmuxName} after 90s" >> ${JSON.stringify(logFile)}
 exit 1
 `;
 
@@ -268,7 +324,7 @@ exit 1
 
     // Run detached so it doesn't block
     try {
-      execSync(`nohup ${JSON.stringify(senderScript)} >/dev/null 2>&1 &`, {
+      execSync(`nohup ${JSON.stringify(senderScript)} >> ${JSON.stringify(logFile)} 2>&1 &`, {
         stdio: 'pipe',
         shell: '/bin/bash',
       });
@@ -308,7 +364,7 @@ exit 1
         if (provider === 'codex') {
           buildCodexLauncher(launcherLines, sessionDir, cwd, options);
         } else if (provider === 'gemini') {
-          throw new Error('Gemini CLI support not yet implemented. Agent has provider: gemini.');
+          buildGeminiLauncher(launcherLines, sessionDir, cwd, options);
         } else if (provider === 'claude') {
           buildClaudeLauncher(launcherLines, session.id, sessionDir, options);
         } else {
@@ -324,10 +380,10 @@ exit 1
           { stdio: 'pipe' },
         );
 
-        // If there's an initial prompt for a claude session, write a helper
+        // If there's an initial prompt for an interactive session, write a helper
         // script that waits for the TUI to be ready and then pastes + submits.
-        if (provider === 'claude' && options?.initialPrompt) {
-          sendInitialPrompt(sessionDir, tmuxName);
+        if (options?.initialPrompt && !options?.background) {
+          sendInitialPrompt(sessionDir, tmuxName, provider);
         }
       }
 

@@ -2,17 +2,18 @@ import { Router } from 'express';
 import type { DiscussionId, DiscussionTeamId, DiscussionStatus } from '@foundation/discussion-types';
 import type { TrackId } from '@foundation/types';
 import type { DiscussionService } from '@application/discussion/discussion-service.js';
-import type { DiscussionTeamRepository, DiscussionRepository } from '@domain/discussion/repository';
+import type { DiscussionTeamRepository, DiscussionRepository, DiscussionSessionRepository } from '@domain/discussion/repository';
 
 export interface DiscussionRouterDeps {
   discussionService: DiscussionService;
   teams: DiscussionTeamRepository;
   discussions: DiscussionRepository;
+  discussionSessions: DiscussionSessionRepository;
 }
 
 export function createDiscussionRouter(deps: DiscussionRouterDeps): Router {
   const router = Router();
-  const { discussionService, teams, discussions } = deps;
+  const { discussionService, teams, discussions, discussionSessions } = deps;
 
   // === Discussion Teams ===
 
@@ -160,6 +161,13 @@ export function createDiscussionRouter(deps: DiscussionRouterDeps): Router {
       const msg = err instanceof Error ? err.message : 'Failed to close discussion';
       res.status(500).json({ error: msg });
     }
+  });
+
+  // Get agent sessions linked to a discussion (used for permission polling)
+  router.get('/discussions/:id/sessions', (req, res) => {
+    const discussionId = req.params.id as DiscussionId;
+    const sessions = discussionSessions.findByDiscussion(discussionId);
+    res.json(sessions);
   });
 
   router.delete('/discussions/:id', async (req, res) => {

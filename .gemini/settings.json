@@ -1,0 +1,38 @@
+{
+  "mcpServers": {
+    "MCP_DOCKER": {
+      "command": "",
+      "args": []
+    },
+    "ai-cli-mcp": {
+      "command": "/Users/fabian.haupt/.local/share/fnm/node-versions/v22.17.1/installation/bin/npx",
+      "args": [
+        "-y",
+        "ai-cli-mcp@latest"
+      ]
+    },
+    "atlassian": {
+      "url": "https://mcp.atlassian.com/v1/sse",
+      "type": "sse"
+    },
+    "buildkite": {
+      "url": "https://mcp.buildkite.com/mcp",
+      "type": "http"
+    },
+    "glean-developer-docs": {
+      "url": "https://developers.glean.com/mcp",
+      "type": "http"
+    },
+    "glean_default": {
+      "url": "https://klaviyo-be.glean.com/mcp/default",
+      "type": "http"
+    },
+    "workshop": {
+      "command": "npx",
+      "args": [
+        "tsx",
+        "/Users/fabian.haupt/projects/workshop/src/mcp/server.ts"
+      ]
+    }
+  }
+}

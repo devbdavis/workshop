@@ -45,6 +45,11 @@ import { createDiscussionSessionRepository } from '@infrastructure/persistence/d
 import { createDiscussionService } from '@application/discussion/discussion-service.js';
 import { createDiscussionPoller } from '@application/discussion/discussion-poller.js';
 import { createDiscussionRouter } from './discussion-routes.js';
+import { createMcpServerConfigRepository } from '@infrastructure/persistence/mcp-config-repository.js';
+import { createMcpConfigRouter } from './mcp-config-routes.js';
+import { createClaudeAdapter } from '@infrastructure/mcp-tools/claude-adapter.js';
+import { createCodexAdapter } from '@infrastructure/mcp-tools/codex-adapter.js';
+import { createGeminiAdapter } from '@infrastructure/mcp-tools/gemini-adapter.js';
 
 export interface ApiRouterDeps {
   automationEngine?: AutomationEngine;
@@ -221,8 +226,21 @@ export function createApiRouter(deps: ApiRouterDeps = {}): Router {
     discussionService,
     teams: discussionTeams,
     discussions: discussionsList,
+    discussionSessions: discussionSessionsRepo,
   });
   router.use(discussionRouter);
+
+  // Mount MCP config sub-router
+  const mcpConfigs = createMcpServerConfigRepository();
+  const mcpConfigRouter = createMcpConfigRouter({
+    mcpConfigs,
+    adapters: {
+      claude: createClaudeAdapter(),
+      codex: createCodexAdapter(),
+      gemini: createGeminiAdapter(),
+    },
+  });
+  router.use(mcpConfigRouter);
 
   // Discussion poller — nudges agents about new messages and detects stale discussions
   const discussionPoller = createDiscussionPoller({

@@ -51,7 +51,7 @@ export function createAgentRouter(deps: AgentRouterDeps): Router {
   // --- Create workshop agent ---
 
   router.post('/agents', (req, res) => {
-    const { name, description, model, color, systemPrompt, allowedTools, maxTurns } = req.body;
+    const { name, description, model, color, systemPrompt, allowedTools, maxTurns, provider } = req.body;
 
     if (!name || typeof name !== 'string') {
       res.status(400).json({ error: 'name is required' });
@@ -74,6 +74,7 @@ export function createAgentRouter(deps: AgentRouterDeps): Router {
       systemPrompt,
       allowedTools,
       maxTurns,
+      provider,
     });
     res.status(201).json(agent);
   });
@@ -88,7 +89,7 @@ export function createAgentRouter(deps: AgentRouterDeps): Router {
       return;
     }
 
-    const { name, description, model, color, systemPrompt, allowedTools, maxTurns } = req.body;
+    const { name, description, model, color, systemPrompt, allowedTools, maxTurns, provider } = req.body;
     const updated = agents.update(id, {
       name,
       description,
@@ -97,6 +98,7 @@ export function createAgentRouter(deps: AgentRouterDeps): Router {
       systemPrompt,
       allowedTools,
       maxTurns,
+      provider,
     });
 
     if (!updated) {
