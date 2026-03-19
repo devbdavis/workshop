@@ -226,6 +226,7 @@ export function createApiRouter(deps: ApiRouterDeps = {}): Router {
     discussionService,
     teams: discussionTeams,
     discussions: discussionsList,
+    discussionSessions: discussionSessionsRepo,
   });
   router.use(discussionRouter);
 

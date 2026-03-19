@@ -1,11 +1,12 @@
 import { useState, useCallback, useEffect } from 'react';
 import type { ConsensusRule, DiscussionId, DiscussionTeamId } from '@foundation/discussion-types';
-import type { Agent, AgentId, Track, TrackId } from '@foundation/types';
+import type { Agent, AgentId, PermissionRequest, Track, TrackId } from '@foundation/types';
 import { DiscussionList } from './DiscussionList';
 import { DiscussionThread } from './DiscussionThread';
 import { TeamManager } from './TeamManager';
 import { NewDiscussionModal } from './NewDiscussionModal';
 import type { CreateDiscussionData } from './NewDiscussionModal';
+import { PermissionPanel } from '../track-view/PermissionPanel';
 import {
   useDiscussionTeams,
   useDiscussions,
@@ -27,6 +28,7 @@ export function DiscussionsPage() {
   const [showNewDiscussion, setShowNewDiscussion] = useState(false);
   const [agents, setAgents] = useState<Agent[]>([]);
   const [tracks, setTracks] = useState<Track[]>([]);
+  const [pendingPermissions, setPendingPermissions] = useState<PermissionRequest[]>([]);
 
   const { teams, reload: reloadTeams } = useDiscussionTeams();
   const { discussions, reload: reloadDiscussions } = useDiscussions();
@@ -45,14 +47,41 @@ export function DiscussionsPage() {
     });
   }, []);
 
-  // WebSocket: auto-refresh on discussion events
+  // Fetch pending permissions for the selected discussion's agent sessions
+  const loadPermissions = useCallback(async (discussionId: string) => {
+    try {
+      const sessRes = await fetch(`/api/discussions/${discussionId}/sessions`);
+      if (!sessRes.ok) return;
+      const sessions: { sessionId: string }[] = await sessRes.json();
+      const allPending: PermissionRequest[] = [];
+      for (const s of sessions) {
+        const permRes = await fetch(`/api/permissions?sessionId=${s.sessionId}&status=pending`);
+        if (permRes.ok) {
+          allPending.push(...(await permRes.json()));
+        }
+      }
+      setPendingPermissions(allPending);
+    } catch {
+      // ignore
+    }
+  }, []);
+
+  useEffect(() => {
+    if (selectedId) loadPermissions(selectedId);
+    else setPendingPermissions([]);
+  }, [selectedId, loadPermissions]);
+
+  // WebSocket: auto-refresh on discussion + permission events
   useDiscussionWebSocket(
     useCallback(
-      (_type: string, id: string) => {
+      (type: string, id: string) => {
         reloadDiscussions();
         if (selectedId === id) reloadState();
+        if (type.startsWith('permission:') && selectedId) {
+          loadPermissions(selectedId);
+        }
       },
-      [selectedId, reloadDiscussions, reloadState],
+      [selectedId, reloadDiscussions, reloadState, loadPermissions],
     ),
   );
 
@@ -173,6 +202,28 @@ export function DiscussionsPage() {
     }
   }
 
+  async function resolvePermission(id: string, decision: 'approved' | 'denied', comment?: string) {
+    try {
+      await fetch(`/api/permissions/${id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ decision, comment }),
+      });
+      setPendingPermissions((prev) => prev.filter((p) => p.id !== id));
+    } catch (err) {
+      console.error('Failed to resolve permission:', err);
+    }
+  }
+
+  async function allowAllForSession(sessionId: string) {
+    try {
+      await fetch(`/api/permissions/sessions/${sessionId}/auto-approve`, { method: 'POST' });
+      setPendingPermissions((prev) => prev.filter((p) => p.sessionId !== sessionId));
+    } catch (err) {
+      console.error('Failed to set auto-approve:', err);
+    }
+  }
+
   return (
     <div className="h-full flex flex-col">
       {/* Header bar */}
@@ -212,7 +263,12 @@ export function DiscussionsPage() {
         </div>
 
         {/* Thread panel */}
-        <div className="flex-1 min-w-0">
+        <div className="flex-1 min-w-0 flex flex-col">
+          <PermissionPanel
+            requests={pendingPermissions}
+            onResolve={resolvePermission}
+            onAllowAllForSession={allowAllForSession}
+          />
           {state ? (
             <DiscussionThread
               state={state}
