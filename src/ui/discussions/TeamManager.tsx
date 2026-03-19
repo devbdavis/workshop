@@ -2,6 +2,23 @@ import { useState } from 'react';
 import type { DiscussionTeam, ConsensusRule } from '@foundation/discussion-types';
 import type { Agent } from '@foundation/types';
 
+type ProviderType = 'claude' | 'codex' | 'gemini';
+
+function resolveAgentProvider(agent: Agent): ProviderType {
+  // Check explicit provider field first
+  if (agent.provider) return agent.provider;
+  const model = (agent.model || '').toLowerCase();
+  if (model.startsWith('gemini')) return 'gemini';
+  if (model.startsWith('codex') || model === 'o1' || model === 'o3' || model === 'o4-mini') return 'codex';
+  return 'claude';
+}
+
+const PROVIDER_BADGES: Record<ProviderType, { bg: string; label: string }> = {
+  claude: { bg: 'bg-orange-900/60 text-orange-300', label: 'Claude' },
+  codex: { bg: 'bg-green-900/60 text-green-300', label: 'Codex' },
+  gemini: { bg: 'bg-blue-900/60 text-blue-300', label: 'Gemini' },
+};
+
 interface CreateTeamData {
   name: string;
   description?: string;
@@ -230,8 +247,13 @@ function TeamForm({ agents, initial, onSave, onCancel }: {
             <label key={agent.id} className="flex items-center gap-2 px-2 py-1.5 rounded hover:bg-gray-700/50 cursor-pointer">
               <input type="checkbox" checked={selectedAgentIds.has(agent.id)}
                 onChange={() => toggleAgent(agent.id)} className="accent-blue-500" />
-              <span className="text-xs">{agent.name}</span>
-              <span className="text-[10px] px-1.5 py-0.5 rounded bg-gray-700 text-gray-400">{agent.source}</span>
+              <span className="text-xs flex-1 truncate">{agent.name}</span>
+              <span className="text-[10px] px-1.5 py-0.5 rounded bg-gray-700 text-gray-400 shrink-0">{agent.source}</span>
+              {(() => {
+                const p = resolveAgentProvider(agent);
+                const badge = PROVIDER_BADGES[p];
+                return <span className={`text-[10px] px-1.5 py-0.5 rounded shrink-0 ${badge.bg}`}>{badge.label}</span>;
+              })()}
             </label>
           ))}
         </div>

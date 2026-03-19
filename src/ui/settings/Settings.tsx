@@ -1,4 +1,5 @@
 import { PromptTemplates } from './PromptTemplates';
+import { McpServers } from './McpServers';
 
 export function Settings() {
   return (
@@ -9,15 +10,11 @@ export function Settings() {
 
       <div className="space-y-6">
         <section className="bg-gray-900 border border-gray-800 rounded-lg p-6">
-          <PromptTemplates />
+          <McpServers />
         </section>
 
         <section className="bg-gray-900 border border-gray-800 rounded-lg p-6">
-          <h2 className="text-lg font-semibold mb-4">Integrations</h2>
-          <p className="text-sm text-gray-400">
-            Configure MCP connections for Jira, Linear, and other tools.
-          </p>
-          <p className="text-sm text-gray-500 mt-2 italic">Coming soon.</p>
+          <PromptTemplates />
         </section>
       </div>
     </div>
