@@ -1,4 +1,4 @@
-import type { Agent, AgentId } from '@foundation/types';
+import type { Agent, AgentId, SessionProvider } from '@foundation/types';
 
 export interface AgentRepository {
   findAll(): Agent[];
@@ -7,6 +7,7 @@ export interface AgentRepository {
     name: string;
     description: string;
     model?: string;
+    provider?: SessionProvider;
     color?: string;
     systemPrompt: string;
     allowedTools?: string[];
@@ -14,7 +15,7 @@ export interface AgentRepository {
   }): Agent;
   update(
     id: AgentId,
-    data: Partial<Pick<Agent, 'name' | 'description' | 'model' | 'color' | 'systemPrompt' | 'allowedTools' | 'maxTurns'>>,
+    data: Partial<Pick<Agent, 'name' | 'description' | 'model' | 'provider' | 'color' | 'systemPrompt' | 'allowedTools' | 'maxTurns'>>,
   ): Agent | null;
   delete(id: AgentId): boolean;
 }

@@ -389,6 +389,35 @@ function runMigrations(db: Database.Database): void {
     // Tables already exist — safe to ignore
   }
 
+  // Migration: add provider column to agents table
+  try {
+    db.exec(`ALTER TABLE agents ADD COLUMN provider TEXT;`);
+  } catch {
+    // Column already exists — safe to ignore
+  }
+
+  // Migration: create mcp_server_configs table
+  try {
+    db.exec(`
+      CREATE TABLE mcp_server_configs (
+        id TEXT PRIMARY KEY,
+        name TEXT NOT NULL UNIQUE,
+        transport_type TEXT NOT NULL CHECK(transport_type IN ('stdio', 'http', 'sse')),
+        command TEXT,
+        args TEXT,
+        env TEXT,
+        url TEXT,
+        headers TEXT,
+        enabled INTEGER NOT NULL DEFAULT 1,
+        source TEXT NOT NULL DEFAULT 'manual',
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      );
+    `);
+  } catch {
+    // Table already exists — safe to ignore
+  }
+
   // Seed default prompt templates if the table is empty
   seedDefaultTemplates(db);
 }
