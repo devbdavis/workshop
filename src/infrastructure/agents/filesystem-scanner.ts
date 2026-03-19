@@ -1,7 +1,7 @@
 import fs from 'fs';
 import path from 'path';
 import os from 'os';
-import type { Agent, AgentId, AgentSource } from '@foundation/types';
+import type { Agent, AgentId, AgentSource, SessionProvider } from '@foundation/types';
 
 export interface FilesystemAgentScanner {
   scanGlobalAgents(): Agent[];
@@ -93,6 +93,7 @@ function parseAgentFile(filePath: string, source: AgentSource): Agent | null {
       name,
       description,
       model,
+      provider: parsed.frontmatter.provider as SessionProvider | undefined,
       color,
       systemPrompt: parsed.body.trim(),
       source,
@@ -101,8 +102,7 @@ function parseAgentFile(filePath: string, source: AgentSource): Agent | null {
       maxTurns,
       createdAt: mtime,
       updatedAt: mtime,
-      ...(parsed.frontmatter.provider ? { provider: parsed.frontmatter.provider } : {}),
-    } as Agent;
+    };
   } catch (err) {
     console.error(`Failed to parse agent file ${filePath}:`, err);
     return null;

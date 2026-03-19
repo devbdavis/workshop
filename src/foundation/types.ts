@@ -464,6 +464,7 @@ export interface Agent {
   name: string;
   description: string;
   model?: string;
+  provider?: SessionProvider;
   color?: string;
   systemPrompt: string;
   source: AgentSource;
@@ -475,4 +476,38 @@ export interface Agent {
   maxTurns?: number;
   createdAt: string;
   updatedAt: string;
+}
+
+// MCP Server Config
+export type McpServerConfigId = string & { readonly __brand: 'McpServerConfigId' };
+export type McpTransportType = 'stdio' | 'http' | 'sse';
+
+export interface McpServerConfig {
+  id: McpServerConfigId;
+  /** Server name — unique key across all CLI tools */
+  name: string;
+  transportType: McpTransportType;
+  /** For stdio servers: the command to run */
+  command?: string;
+  /** For stdio servers: arguments to the command */
+  args?: string[];
+  /** Environment variables for stdio servers */
+  env?: Record<string, string>;
+  /** For http/sse servers: the URL */
+  url?: string;
+  /** HTTP headers for http/sse servers */
+  headers?: Record<string, string>;
+  enabled: boolean;
+  /** How this config was added */
+  source: 'claude-import' | 'manual';
+  createdAt: string;
+  updatedAt: string;
+}
+
+/** Result of attempting to install an MCP server into a CLI tool */
+export interface McpInstallResult {
+  tool: 'claude' | 'codex' | 'gemini';
+  serverName: string;
+  success: boolean;
+  message: string;
 }

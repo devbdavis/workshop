@@ -201,8 +201,10 @@ function buildInitialPrompt(ticket: WorkflowTicket): string {
   return [
     `Execute the approved implementation plan for workflow ticket ${ticket.id}.`,
     '',
-    'Your system prompt contains the full spec, plan, and project context.',
-    'Follow the workflow steps: Implementation → Test Design → Test Implementation → Code Review → Git/PR.',
+    'Your system prompt contains the spec, plan, and project context.',
+    'Read the plan carefully. If it defines phases, milestones, or steps, implement all of them.',
+    'If the plan is brief or high-level, use your judgment to fully deliver on the intent.',
+    'Do not defer work to follow-up PRs unless the plan explicitly says to.',
     '',
     `When done, report results via: workshop_transition_ticket("${ticket.id}", "integration-review", ...)`,
     `On failure: workshop_transition_ticket("${ticket.id}", "execution-failed", ...)`,

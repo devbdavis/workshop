@@ -1,1 +1,112 @@
 @import 'tailwindcss';
+
+@theme {
+  /* ═══════════════════════════════════════════════════
+     MATRIX THEME — green phosphor terminal aesthetic
+     ═══════════════════════════════════════════════════ */
+
+  /* Base scale: green-tinted darks replacing neutral grays.
+     950 is near-black, 100 is bright phosphor green. */
+  --color-gray-50: #d0ffd0;
+  --color-gray-100: #a8ffa8;
+  --color-gray-200: #88e088;
+  --color-gray-300: #68c468;
+  --color-gray-400: #4d964d;
+  --color-gray-500: #387038;
+  --color-gray-600: #275027;
+  --color-gray-700: #183218;
+  --color-gray-800: #0d1f0d;
+  --color-gray-900: #061206;
+  --color-gray-950: #010a01;
+
+  /* Primary actions: neon green replacing blue.
+     Buttons, links, focus rings all glow green. */
+  --color-blue-50: #d0ffd0;
+  --color-blue-100: #a0ffa0;
+  --color-blue-200: #80ff80;
+  --color-blue-300: #50e850;
+  --color-blue-400: #33cc33;
+  --color-blue-500: #2aaa2a;
+  --color-blue-600: #228822;
+  --color-blue-700: #1a6a1a;
+  --color-blue-800: #104a10;
+  --color-blue-900: #082a08;
+  --color-blue-950: #041504;
+
+  /* Success states: bright neon */
+  --color-green-50: #d0ffd0;
+  --color-green-100: #a0ffa0;
+  --color-green-200: #70ff70;
+  --color-green-300: #40ff40;
+  --color-green-400: #20e820;
+  --color-green-500: #10cc10;
+  --color-green-600: #0aaa0a;
+  --color-green-700: #088808;
+  --color-green-800: #066006;
+  --color-green-900: #043804;
+  --color-green-950: #021802;
+
+  /* Shift indigo/purple/cyan toward green-teal
+     so semantic badges don't clash with the green base */
+  --color-indigo-300: #50c8a0;
+  --color-indigo-500: #30a070;
+  --color-indigo-900: #082820;
+
+  --color-purple-300: #60b0c8;
+  --color-purple-500: #3088a0;
+  --color-purple-900: #0a2028;
+
+  --color-cyan-300: #40e8c0;
+  --color-cyan-500: #20b898;
+  --color-cyan-900: #042820;
+
+  /* Emerald: slightly cyan-shifted for variety */
+  --color-emerald-300: #40e8a0;
+  --color-emerald-500: #20b870;
+  --color-emerald-900: #042818;
+
+  /* White → soft matrix green (used for button text, highlights) */
+  --color-white: #c0ffc0;
+}
+
+/* ─── Phosphor glow on hover ─── */
+button:hover,
+a:hover {
+  text-shadow: 0 0 6px rgba(0, 255, 65, 0.3);
+}
+
+/* Active/focused buttons get a stronger glow */
+button:active,
+button:focus-visible {
+  box-shadow: 0 0 12px rgba(0, 255, 65, 0.2);
+}
+
+/* ─── Matrix-green scrollbars ─── */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: #183218 #010a01;
+}
+
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: #010a01;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #183218;
+  border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #275027;
+}
+
+/* ─── Selection highlight ─── */
+::selection {
+  background: rgba(0, 255, 65, 0.25);
+  color: #c0ffc0;
+}

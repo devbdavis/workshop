@@ -2,7 +2,7 @@ import type { Agent, SessionProvider } from '@foundation/types';
 
 export function resolveProvider(agent: Agent): SessionProvider {
   // Explicit provider field takes precedence (from agent frontmatter or DB)
-  if ((agent as any).provider) return (agent as any).provider;
+  if (agent.provider) return agent.provider;
 
   const model = (agent.model || '').toLowerCase();
   if (model.startsWith('gemini')) return 'gemini';
