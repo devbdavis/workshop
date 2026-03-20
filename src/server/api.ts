@@ -197,6 +197,7 @@ export function createApiRouter(deps: ApiRouterDeps = {}): Router {
   const executionHookRouter = createExecutionHookRouter({
     engine: workflowEngine,
     tickets: workflowTickets,
+    terminal,
   });
   router.use(executionHookRouter);
 
