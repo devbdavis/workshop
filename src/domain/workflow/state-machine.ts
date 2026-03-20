@@ -350,3 +350,19 @@ export function getStatesForType(ticketType: WorkflowTicketType): WorkflowState[
 export function getInitialState(ticketType: WorkflowTicketType): WorkflowState {
   return ticketType === 'epic' ? 'idea' : 'ready';
 }
+
+/** Get ALL transitions for a ticket type (flattened from stage definitions) */
+export function getAllTransitions(ticketType: WorkflowTicketType): Array<{
+  from: WorkflowState;
+  to: WorkflowState;
+  trigger: string;
+}> {
+  const stages = ticketType === 'epic' ? EPIC_STAGES : TASK_STAGES;
+  const transitions: Array<{ from: WorkflowState; to: WorkflowState; trigger: string }> = [];
+  for (const stage of stages) {
+    for (const t of stage.validTransitions) {
+      transitions.push({ from: stage.state, to: t.to, trigger: t.trigger });
+    }
+  }
+  return transitions;
+}
