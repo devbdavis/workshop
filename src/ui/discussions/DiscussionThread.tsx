@@ -114,7 +114,8 @@ export function DiscussionThread({ state, onPostMessage, onCastVote, onClose, on
   // Show "Act on Consensus" for human-started discussions that reached a conclusion
   const canAct =
     discussion.createdByType === 'human' &&
-    (discussion.status === 'consensus' || discussion.status === 'closed');
+    (discussion.status === 'consensus' || discussion.status === 'closed') &&
+    !discussion.actSessionId;
 
   return (
     <div className="flex flex-col h-full bg-gray-950">
@@ -252,7 +253,12 @@ export function DiscussionThread({ state, onPostMessage, onCastVote, onClose, on
         <div className={`shrink-0 px-4 py-3 border-t ${banner.style}`}>
           <div className="flex items-center justify-center gap-3">
             <span className="text-sm font-medium">{banner.text}</span>
-            {canAct && onAct && (
+            {discussion.actSessionId ? (
+              <span className="inline-flex items-center gap-1.5 px-3 py-1 text-xs bg-emerald-900/50 text-emerald-300 border border-emerald-800 rounded">
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                Implementation dispatched
+              </span>
+            ) : canAct && onAct ? (
               <button
                 onClick={onAct}
                 disabled={acting}
@@ -260,7 +266,7 @@ export function DiscussionThread({ state, onPostMessage, onCastVote, onClose, on
               >
                 {acting ? 'Dispatching...' : 'Act on Consensus'}
               </button>
-            )}
+            ) : null}
           </div>
         </div>
       ) : null}
