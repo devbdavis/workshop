@@ -1,7 +1,7 @@
 import { WebSocket } from 'ws';
 import type { TrackId } from '@foundation/types';
 
-type EventType = 'track:updated' | 'track:created' | 'track:deleted' | 'session:created' | 'session:updated' | 'session:deleted' | 'summary:updated' | 'todo:created' | 'todo:updated' | 'todo:deleted' | 'todo:dispatched' | 'permission:requested' | 'permission:resolved' | 'scheduled-task:created' | 'scheduled-task:updated' | 'scheduled-task:deleted' | 'scheduled-task:triggered' | 'scheduled-task:failed' | 'workflow:created' | 'workflow:updated' | 'workflow:deleted' | 'workflow:transitioned' | 'workflow:approved' | 'workflow:rejected' | 'workflow:progress' | 'workflow:dispatched' | 'discussion:created' | 'discussion:message' | 'discussion:vote' | 'discussion:consensus' | 'discussion:closed'
+type EventType = 'track:updated' | 'track:created' | 'track:deleted' | 'session:created' | 'session:updated' | 'session:deleted' | 'summary:updated' | 'todo:created' | 'todo:updated' | 'todo:deleted' | 'todo:dispatched' | 'permission:requested' | 'permission:resolved' | 'scheduled-task:created' | 'scheduled-task:updated' | 'scheduled-task:deleted' | 'scheduled-task:triggered' | 'scheduled-task:failed' | 'workflow:created' | 'workflow:updated' | 'workflow:deleted' | 'workflow:transitioned' | 'workflow:approved' | 'workflow:rejected' | 'workflow:progress' | 'workflow:dispatched' | 'discussion:created' | 'discussion:updated' | 'discussion:message' | 'discussion:vote' | 'discussion:consensus' | 'discussion:closed'
 | 'mcp-config:updated';
 
 interface WorkshopEvent {

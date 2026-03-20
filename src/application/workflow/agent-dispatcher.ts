@@ -47,6 +47,28 @@ export interface AgentDispatcherDeps {
 export function createAgentDispatcher(deps: AgentDispatcherDeps): AgentDispatcher {
   const { tickets, tracks, summaries, terminal } = deps;
 
+  /** Lazily find-or-create a _Workflow track for tickets without a track */
+  let workflowTrackId: TrackId | null = null;
+  function getOrCreateWorkflowTrack(): TrackId {
+    if (workflowTrackId) {
+      const existing = tracks.findById(workflowTrackId);
+      if (existing) return workflowTrackId;
+    }
+    const all = tracks.findAll();
+    const existing = all.find((t) => t.name === '_Workflow');
+    if (existing) {
+      workflowTrackId = existing.id;
+      return existing.id;
+    }
+    const track = tracks.create({
+      name: '_Workflow',
+      description: 'System track for workflow agent sessions',
+      status: 'active',
+    });
+    workflowTrackId = track.id;
+    return track.id;
+  }
+
   function resolveWorkingDir(ticket: WorkflowTicket): string | undefined {
     const trackId = ticket.trackId ?? resolveTrackIdFromParent(ticket);
     if (!trackId) return undefined;
@@ -138,7 +160,7 @@ export function createAgentDispatcher(deps: AgentDispatcherDeps): AgentDispatche
       const context = buildPromptContext(ticket);
       const systemPrompt = composeWorkflowPrompt(role, ticket, context);
       const initialPrompt = buildInitialPrompt(ticket, role);
-      const trackId = ticket.trackId ?? resolveTrackIdFromParent(ticket) ?? ('_workflow' as TrackId);
+      const trackId = ticket.trackId ?? resolveTrackIdFromParent(ticket) ?? getOrCreateWorkflowTrack();
 
       const sessionIds: string[] = [];
 

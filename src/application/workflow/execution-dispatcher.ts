@@ -45,6 +45,28 @@ export function createExecutionDispatcher(
 ): ExecutionDispatcher {
   const { engine, tickets, tracks, summaries, terminal } = deps;
 
+  /** Lazily find-or-create a _Workflow track for tickets without a track */
+  let workflowTrackId: TrackId | null = null;
+  function getOrCreateWorkflowTrack(): TrackId {
+    if (workflowTrackId) {
+      const existing = tracks.findById(workflowTrackId);
+      if (existing) return workflowTrackId;
+    }
+    const all = tracks.findAll();
+    const existing = all.find((t) => t.name === '_Workflow');
+    if (existing) {
+      workflowTrackId = existing.id;
+      return existing.id;
+    }
+    const created = tracks.create({
+      name: '_Workflow',
+      description: 'System track for workflow agent sessions',
+      status: 'active',
+    });
+    workflowTrackId = created.id;
+    return created.id;
+  }
+
   async function dispatchExecution(ticket: WorkflowTicket): Promise<void> {
     const systemPrompt = composeExecutionPrompt(ticket, deps);
 
@@ -59,7 +81,7 @@ export function createExecutionDispatcher(
     const workingDir = repos[0].path;
 
     const session = await terminal.createSession(
-      ticket.trackId || ('_execution' as TrackId),
+      ticket.trackId || getOrCreateWorkflowTrack(),
       {
         systemPrompt,
         background: true,
