@@ -1,3 +1,4 @@
+import { useEffect, useState, useCallback } from 'react';
 import { NavLink, useMatch } from 'react-router-dom';
 
 const navItems = [
@@ -13,6 +14,34 @@ const navItems = [
 
 export function TopNav() {
   const trackMatch = useMatch('/tracks/:trackId');
+  const [pendingCount, setPendingCount] = useState(0);
+
+  const loadCount = useCallback(async () => {
+    try {
+      const res = await fetch('/api/permissions/pending');
+      if (res.ok) {
+        const items = await res.json();
+        setPendingCount(items.length);
+      }
+    } catch { /* ignore */ }
+  }, []);
+
+  useEffect(() => {
+    loadCount();
+  }, [loadCount]);
+
+  // WebSocket for real-time count updates
+  useEffect(() => {
+    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+    const ws = new WebSocket(`${protocol}//${window.location.host}/ws/events`);
+    ws.onmessage = (evt) => {
+      try {
+        const event = JSON.parse(evt.data);
+        if (event.type?.startsWith('permission:')) loadCount();
+      } catch { /* ignore */ }
+    };
+    return () => ws.close();
+  }, [loadCount]);
 
   return (
     <nav className="flex items-center gap-1 px-4 py-1.5 bg-gray-950 border-b border-gray-800 shrink-0">
@@ -47,6 +76,34 @@ export function TopNav() {
             /{trackMatch.params.trackId?.slice(0, 8)}
           </span>
         )}
+      </div>
+
+      {/* Notification bell — pushed to the right */}
+      <div className="ml-auto">
+        <NavLink
+          to="/notifications"
+          className={({ isActive }) =>
+            `relative flex items-center gap-1.5 px-3 py-1 text-xs font-medium rounded transition-colors ${
+              isActive
+                ? 'bg-gray-800 text-gray-100'
+                : pendingCount > 0
+                  ? 'text-amber-400 hover:text-amber-300 hover:bg-gray-900'
+                  : 'text-gray-500 hover:text-gray-300 hover:bg-gray-900'
+            }`
+          }
+        >
+          {/* Bell icon */}
+          <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M14.857 17.082a23.848 23.848 0 005.454-1.31A8.967 8.967 0 0118 9.75v-.7V9A6 6 0 006 9v.75a8.967 8.967 0 01-2.312 6.022c1.733.64 3.56 1.085 5.455 1.31m5.714 0a24.255 24.255 0 01-5.714 0m5.714 0a3 3 0 11-5.714 0" />
+          </svg>
+          {pendingCount > 0 && (
+            <>
+              <span className="min-w-[18px] h-[18px] flex items-center justify-center text-[10px] font-bold bg-amber-600 text-white rounded-full animate-pulse">
+                {pendingCount}
+              </span>
+            </>
+          )}
+        </NavLink>
       </div>
     </nav>
   );

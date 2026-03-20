@@ -15,6 +15,7 @@ export function createPermissionRequestRepository(): PermissionRequestRepository
   const findByIdStmt = db.prepare('SELECT * FROM permission_requests WHERE id = ?');
   const findBySessionStmt = db.prepare('SELECT * FROM permission_requests WHERE session_id = ? ORDER BY created_at DESC');
   const findPendingBySessionStmt = db.prepare("SELECT * FROM permission_requests WHERE session_id = ? AND decision = 'pending' ORDER BY created_at ASC");
+  const findAllPendingStmt = db.prepare("SELECT * FROM permission_requests WHERE decision = 'pending' ORDER BY created_at ASC");
   const insertStmt = db.prepare(
     `INSERT INTO permission_requests (id, session_id, tool_name, tool_input, decision, decision_reason, user_comment, created_at)
      VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
@@ -37,6 +38,11 @@ export function createPermissionRequestRepository(): PermissionRequestRepository
 
     findPendingBySession(sessionId: SessionId): PermissionRequest[] {
       const rows = findPendingBySessionStmt.all(sessionId) as Row[];
+      return rows.map(rowToPermission);
+    },
+
+    findAllPending(): PermissionRequest[] {
+      const rows = findAllPendingStmt.all() as Row[];
       return rows.map(rowToPermission);
     },
 

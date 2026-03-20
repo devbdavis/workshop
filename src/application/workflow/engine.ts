@@ -121,10 +121,14 @@ export function createWorkflowEngine(deps: WorkflowEngineDeps): WorkflowEngine {
       data,
     });
 
-    // Update ticket state
+    // Update ticket state, merging transition data into stateData
+    const mergedStateData = data
+      ? { ...(ticket.stateData as Record<string, unknown> || {}), ...data }
+      : undefined;
     const updated = tickets.update(ticket.id, {
       state: toState,
       stateChangedAt: now,
+      ...(mergedStateData && { stateData: mergedStateData }),
     });
 
     if (!updated) throw new Error(`Failed to update ticket: ${ticket.id}`);

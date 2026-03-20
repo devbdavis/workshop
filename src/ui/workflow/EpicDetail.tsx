@@ -110,11 +110,16 @@ export function EpicDetail() {
 
   async function handleSubmitAnswers() {
     if (!id || !ticket) return;
-    const questions = (ticket.stateData as NeedsInputData | undefined)?.pendingQuestions ?? [];
-    const answered = questions.map((q, i) => ({
-      text: q.text,
-      answer: inputAnswers[i] ?? '',
-    }));
+    // Collect answers: either per-question or as a single freeform response
+    const hasStructuredAnswers = Object.keys(inputAnswers).length > 1 ||
+      (ticket.stateData as NeedsInputData | undefined)?.pendingQuestions?.length;
+    const answered = hasStructuredAnswers
+      ? Object.entries(inputAnswers).map(([idx, answer]) => ({
+          text: `Question ${Number(idx) + 1}`,
+          answer,
+        }))
+      : [{ text: 'Response', answer: inputAnswers[0] ?? '' }];
+
     await fetch(`/api/workflow/tickets/${id}`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
@@ -196,6 +201,7 @@ export function EpicDetail() {
                   setInputAnswers((prev) => ({ ...prev, [idx]: val }))
                 }
                 onSubmit={handleSubmitAnswers}
+                transitionComment={transitions.find((t) => t.toState === 'needs-input')?.comment}
               />
             )}
 

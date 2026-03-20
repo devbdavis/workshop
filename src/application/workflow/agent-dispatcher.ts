@@ -123,7 +123,7 @@ export function createAgentDispatcher(deps: AgentDispatcherDeps): AgentDispatche
 
     // Add role-specific completion instructions
     const completionMap: Partial<Record<AgentRole, string>> = {
-      'triage': 'Transition to "specced" if the spec is complete, or "needs-input" if you have questions.',
+      'triage': 'Transition to "specced" if the spec is complete, or "needs-input" if you have questions. When transitioning to needs-input, pass questions as structured data: workshop_transition_ticket(ticketId, "needs-input", "summary comment", { pendingQuestions: [{ text: "question?" }] })',
       'planner': 'Transition to "plan-critique" when the plan is ready for review.',
       'plan-critic': 'Transition to "plan-review" if no blocking findings, or "planning" if blocking findings exist.',
       'splitter': 'Create child tasks via workshop_create_task, then transition to "in-progress".',

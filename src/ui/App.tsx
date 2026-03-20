@@ -9,6 +9,7 @@ import { ScheduledTasksPage } from './scheduled-tasks/ScheduledTasksPage';
 import { WorkflowPage } from './workflow/WorkflowPage';
 import { EpicDetail } from './workflow/EpicDetail';
 import { DiscussionsPage } from './discussions/DiscussionsPage';
+import { NotificationsPage } from './notifications/NotificationsPage';
 import { TopNav } from './TopNav';
 
 export function App() {
@@ -27,6 +28,7 @@ export function App() {
           <Route path="/scheduled-tasks" element={<ScheduledTasksPage />} />
           <Route path="/workflow" element={<WorkflowPage />} />
           <Route path="/workflow/:id" element={<EpicDetail />} />
+          <Route path="/notifications" element={<NotificationsPage />} />
         </Routes>
       </div>
     </div>
