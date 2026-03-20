@@ -11,6 +11,8 @@ interface DiscussionThreadProps {
   onPostMessage: (data: { messageType: string; content: string }) => void;
   onCastVote: (data: { vote: string; comment?: string }) => void;
   onClose: () => void;
+  onAct?: () => void;
+  acting?: boolean;
 }
 
 const STATUS_STYLES: Record<DiscussionStatus, string> = {
@@ -78,7 +80,7 @@ function formatRelativeTime(iso: string): string {
   return `${days}d ago`;
 }
 
-export function DiscussionThread({ state, onPostMessage, onCastVote, onClose }: DiscussionThreadProps) {
+export function DiscussionThread({ state, onPostMessage, onCastVote, onClose, onAct, acting }: DiscussionThreadProps) {
   const { discussion, messages, votes, consensusMet, participantCount, votedCount, satisfiedCount } = state;
   const isOpen = discussion.status === 'open';
 
@@ -108,6 +110,11 @@ export function DiscussionThread({ state, onPostMessage, onCastVote, onClose }: 
   }
 
   const banner = STATUS_BANNER[discussion.status];
+
+  // Show "Act on Consensus" for human-started discussions that reached a conclusion
+  const canAct =
+    discussion.createdByType === 'human' &&
+    (discussion.status === 'consensus' || discussion.status === 'closed');
 
   return (
     <div className="flex flex-col h-full bg-gray-950">
@@ -242,8 +249,19 @@ export function DiscussionThread({ state, onPostMessage, onCastVote, onClose }: 
           </div>
         </div>
       ) : banner ? (
-        <div className={`shrink-0 px-4 py-3 border-t text-sm text-center font-medium ${banner.style}`}>
-          {banner.text}
+        <div className={`shrink-0 px-4 py-3 border-t ${banner.style}`}>
+          <div className="flex items-center justify-center gap-3">
+            <span className="text-sm font-medium">{banner.text}</span>
+            {canAct && onAct && (
+              <button
+                onClick={onAct}
+                disabled={acting}
+                className="px-3 py-1 text-xs bg-emerald-600 hover:bg-emerald-500 text-white rounded transition-colors disabled:opacity-50"
+              >
+                {acting ? 'Dispatching...' : 'Act on Consensus'}
+              </button>
+            )}
+          </div>
         </div>
       ) : null}
     </div>

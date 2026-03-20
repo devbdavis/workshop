@@ -19,6 +19,7 @@ import {
   postMessage,
   castVote,
   closeDiscussion,
+  actOnConsensus,
 } from './use-discussions';
 
 export function DiscussionsPage() {
@@ -29,6 +30,7 @@ export function DiscussionsPage() {
   const [agents, setAgents] = useState<Agent[]>([]);
   const [tracks, setTracks] = useState<Track[]>([]);
   const [pendingPermissions, setPendingPermissions] = useState<PermissionRequest[]>([]);
+  const [acting, setActing] = useState(false);
 
   const { teams, reload: reloadTeams } = useDiscussionTeams();
   const { discussions, reload: reloadDiscussions } = useDiscussions();
@@ -202,6 +204,19 @@ export function DiscussionsPage() {
     }
   }
 
+  async function handleAct() {
+    if (!selectedId) return;
+    setActing(true);
+    try {
+      await actOnConsensus(selectedId as DiscussionId);
+      reloadDiscussions();
+    } catch (err) {
+      console.error('Failed to act on consensus:', err);
+    } finally {
+      setActing(false);
+    }
+  }
+
   async function resolvePermission(id: string, decision: 'approved' | 'denied', comment?: string) {
     try {
       await fetch(`/api/permissions/${id}`, {
@@ -275,6 +290,8 @@ export function DiscussionsPage() {
               onPostMessage={handlePostMessage}
               onCastVote={handleCastVote}
               onClose={handleClose}
+              onAct={handleAct}
+              acting={acting}
             />
           ) : (
             <div className="h-full flex items-center justify-center text-gray-500 text-sm">

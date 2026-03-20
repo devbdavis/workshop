@@ -38,6 +38,8 @@ export interface Discussion {
   createdById?: string;
   participantIds: string[];
   staleAfterMinutes: number;
+  /** Session spawned by "Act on Consensus" to implement the outcome */
+  actSessionId?: SessionId;
   closedAt?: string;
   createdAt: string;
   updatedAt: string;
