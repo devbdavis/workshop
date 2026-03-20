@@ -1,12 +1,42 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import type { Track } from '@foundation/types';
 import { CreateTrackModal } from './CreateTrackModal';
+
+type SortOption = 'activity' | 'alphabetical';
+
+const SORT_STORAGE_KEY = 'workshop:tracks-sort';
+
+function loadSavedSort(): SortOption {
+  try {
+    const saved = localStorage.getItem(SORT_STORAGE_KEY);
+    if (saved === 'activity' || saved === 'alphabetical') return saved;
+  } catch {
+    // ignore
+  }
+  return 'activity';
+}
+
+function sortTracks(tracks: Track[], sort: SortOption): Track[] {
+  const sorted = [...tracks];
+  if (sort === 'alphabetical') {
+    sorted.sort((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: 'base' }));
+  } else {
+    sorted.sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
+  }
+  return sorted;
+}
 
 export function Dashboard() {
   const [tracks, setTracks] = useState<Track[]>([]);
   const [loading, setLoading] = useState(true);
   const [showCreate, setShowCreate] = useState(false);
+  const [sort, setSort] = useState<SortOption>(loadSavedSort);
+
+  function changeSort(next: SortOption) {
+    setSort(next);
+    try { localStorage.setItem(SORT_STORAGE_KEY, next); } catch { /* ignore */ }
+  }
 
   useEffect(() => {
     loadTracks();
@@ -24,16 +54,43 @@ export function Dashboard() {
     }
   }
 
+  const sorted = useMemo(() => sortTracks(tracks, sort), [tracks, sort]);
+
   return (
     <div className="max-w-6xl mx-auto px-6 py-8">
       <header className="flex items-center justify-between mb-6">
         <h1 className="text-xl font-semibold">Tracks</h1>
-        <button
-          onClick={() => setShowCreate(true)}
-          className="px-4 py-2 text-sm bg-blue-600 hover:bg-blue-500 rounded-lg transition-colors"
-        >
-          New Track
-        </button>
+        <div className="flex items-center gap-3">
+          <div className="flex items-center gap-1 text-xs text-gray-500">
+            <span>Sort:</span>
+            <button
+              onClick={() => changeSort('activity')}
+              className={`px-2 py-1 rounded transition-colors ${
+                sort === 'activity'
+                  ? 'bg-gray-800 text-gray-200'
+                  : 'hover:text-gray-300'
+              }`}
+            >
+              Recent
+            </button>
+            <button
+              onClick={() => changeSort('alphabetical')}
+              className={`px-2 py-1 rounded transition-colors ${
+                sort === 'alphabetical'
+                  ? 'bg-gray-800 text-gray-200'
+                  : 'hover:text-gray-300'
+              }`}
+            >
+              A–Z
+            </button>
+          </div>
+          <button
+            onClick={() => setShowCreate(true)}
+            className="px-4 py-2 text-sm bg-blue-600 hover:bg-blue-500 rounded-lg transition-colors"
+          >
+            New Track
+          </button>
+        </div>
       </header>
 
       {loading ? (
@@ -50,7 +107,7 @@ export function Dashboard() {
         </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          {tracks.map((track) => (
+          {sorted.map((track) => (
             <Link
               key={track.id}
               to={`/tracks/${track.id}`}
