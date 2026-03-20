@@ -219,3 +219,11 @@ export async function deleteDiscussion(discussionId: DiscussionId): Promise<void
   const res = await fetch(`/api/discussions/${discussionId}`, { method: 'DELETE' });
   if (!res.ok) throw new Error((await res.json()).error || 'Failed to delete discussion');
 }
+
+export async function actOnConsensus(
+  discussionId: DiscussionId,
+): Promise<{ sessionId: string }> {
+  const res = await fetch(`/api/discussions/${discussionId}/act`, { method: 'POST' });
+  if (!res.ok) throw new Error((await res.json()).error || 'Failed to act on discussion');
+  return res.json();
+}

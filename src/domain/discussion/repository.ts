@@ -25,7 +25,7 @@ export interface DiscussionRepository {
   create(data: Omit<Discussion, 'id' | 'createdAt' | 'updatedAt'>): Discussion;
   updateStatus(id: DiscussionId, status: DiscussionStatus): Discussion | null;
   updateLastActivity(id: DiscussionId): Discussion | null;
-  update(id: DiscussionId, data: Partial<Pick<Discussion, 'title' | 'artifact' | 'trackId'>>): Discussion | null;
+  update(id: DiscussionId, data: Partial<Pick<Discussion, 'title' | 'artifact' | 'trackId' | 'actSessionId'>>): Discussion | null;
   delete(id: DiscussionId): boolean;
 }
 

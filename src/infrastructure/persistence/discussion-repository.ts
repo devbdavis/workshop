@@ -8,7 +8,7 @@ import type {
   DiscussionTeamId,
   DiscussionType,
 } from '@foundation/discussion-types';
-import type { TrackId } from '@foundation/types';
+import type { SessionId, TrackId } from '@foundation/types';
 
 interface DiscussionRow {
   id: string;
@@ -22,6 +22,7 @@ interface DiscussionRow {
   created_by_id: string | null;
   participant_ids: string;
   stale_after_minutes: number;
+  act_session_id: string | null;
   last_activity_at: string;
   closed_at: string | null;
   created_at: string;
@@ -41,6 +42,7 @@ function rowToDiscussion(row: DiscussionRow): Discussion {
     createdById: row.created_by_id || undefined,
     participantIds: JSON.parse(row.participant_ids),
     staleAfterMinutes: row.stale_after_minutes,
+    actSessionId: row.act_session_id ? (row.act_session_id as SessionId) : undefined,
     lastActivityAt: row.last_activity_at,
     closedAt: row.closed_at || undefined,
     createdAt: row.created_at,
@@ -139,10 +141,11 @@ export function createDiscussionRepository(): DiscussionRepository {
       const title = data.title ?? existing.title;
       const artifact = data.artifact !== undefined ? data.artifact : existing.artifact;
       const trackId = data.trackId !== undefined ? data.trackId : existing.trackId;
+      const actSessionId = data.actSessionId !== undefined ? data.actSessionId : existing.actSessionId;
       db.prepare(
-        'UPDATE discussions SET title = ?, artifact = ?, track_id = ?, updated_at = ? WHERE id = ?',
-      ).run(title, artifact || null, trackId || null, now, id);
-      return { ...existing, title, artifact, trackId, updatedAt: now };
+        'UPDATE discussions SET title = ?, artifact = ?, track_id = ?, act_session_id = ?, updated_at = ? WHERE id = ?',
+      ).run(title, artifact || null, trackId || null, actSessionId || null, now, id);
+      return { ...existing, title, artifact, trackId, actSessionId, updatedAt: now };
     },
 
     delete(id): boolean {

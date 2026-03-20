@@ -152,6 +152,18 @@ export function createDiscussionRouter(deps: DiscussionRouterDeps): Router {
     }
   });
 
+  // Act on consensus: spawn an agent to implement the discussion outcome
+  router.post('/discussions/:id/act', async (req, res) => {
+    try {
+      const discussionId = req.params.id as DiscussionId;
+      const result = await discussionService.actOnConsensus(discussionId);
+      res.status(201).json(result);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Failed to act on discussion';
+      res.status(400).json({ error: msg });
+    }
+  });
+
   router.post('/discussions/:id/close', async (req, res) => {
     try {
       const discussionId = req.params.id as DiscussionId;

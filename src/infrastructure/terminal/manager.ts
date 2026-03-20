@@ -380,9 +380,9 @@ exit 1
           { stdio: 'pipe' },
         );
 
-        // If there's an initial prompt for an interactive session, write a helper
-        // script that waits for the TUI to be ready and then pastes + submits.
-        if (options?.initialPrompt && !options?.background) {
+        // Write a helper script that waits for the TUI to be ready and then
+        // pastes + submits the initial prompt.
+        if (options?.initialPrompt) {
           sendInitialPrompt(sessionDir, tmuxName, provider);
         }
       }

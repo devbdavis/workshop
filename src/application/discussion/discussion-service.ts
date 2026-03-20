@@ -22,6 +22,7 @@ import type { SummaryRepository } from '@domain/summary/repository';
 import type { SessionRepository } from '@domain/session/repository';
 import type { FilesystemAgentScanner } from '@infrastructure/agents/filesystem-scanner.js';
 import { buildGovernancePrompt } from './governance-prompt.js';
+import { buildActOnConsensusPrompt } from './act-on-consensus-prompt.js';
 import { resolveProvider } from './provider-mapping.js';
 
 export interface DiscussionServiceDeps {
@@ -102,6 +103,9 @@ export interface DiscussionService {
   castVote(discussionId: DiscussionId, data: CastVoteInput): Promise<DiscussionVote>;
   closeDiscussion(discussionId: DiscussionId): Promise<void>;
   getDiscussionState(discussionId: DiscussionId): DiscussionState | null;
+
+  /** Spawn an agent to implement the consensus from a completed discussion. */
+  actOnConsensus(discussionId: DiscussionId): Promise<{ sessionId: SessionId }>;
 }
 
 export function createDiscussionService(deps: DiscussionServiceDeps): DiscussionService {
@@ -357,6 +361,67 @@ export function createDiscussionService(deps: DiscussionServiceDeps): Discussion
         votedCount: votes.length,
         satisfiedCount: votes.filter((v) => v.vote === 'satisfied').length,
       };
+    },
+
+    async actOnConsensus(discussionId) {
+      const state = this.getDiscussionState(discussionId);
+      if (!state) throw new Error(`Discussion not found: ${discussionId}`);
+
+      const { discussion } = state;
+      if (discussion.status !== 'consensus' && discussion.status !== 'closed') {
+        throw new Error(`Discussion is ${discussion.status} — must be consensus or closed`);
+      }
+      if (discussion.createdByType !== 'human') {
+        throw new Error('Only human-started discussions can be acted on');
+      }
+      if (discussion.actSessionId) {
+        throw new Error('An implementation agent has already been dispatched for this discussion');
+      }
+
+      // Gather track context
+      const trackId = discussion.trackId
+        ? (discussion.trackId as TrackId)
+        : getOrCreateDiscussionsTrack();
+
+      let trackContext: string | undefined;
+      let summaryContent: string | undefined;
+      let workingDir: string | undefined;
+
+      if (discussion.trackId) {
+        const track = deps.tracks.findById(discussion.trackId as TrackId);
+        if (track?.context) trackContext = track.context;
+
+        const summary = deps.summaries.findLatest(discussion.trackId as TrackId);
+        if (summary) summaryContent = summary.content;
+
+        const repos = deps.tracks.findReposByTrack(discussion.trackId as TrackId);
+        if (repos.length > 0) workingDir = repos[0].path;
+      }
+
+      const systemPrompt = buildActOnConsensusPrompt(state, trackContext, summaryContent);
+
+      const initialPrompt = [
+        `The discussion "${discussion.title}" has reached consensus.`,
+        'Analyze the thread, determine the right execution strategy,',
+        'and take action. Do not ask for confirmation — just execute.',
+      ].join(' ');
+
+      const session = await deps.terminal.createSession(trackId, {
+        systemPrompt,
+        workingDirectory: workingDir,
+        background: true,
+        usePermissionHooks: true,
+        initialPrompt,
+      });
+
+      // Link the session to the discussion so the UI can show status
+      deps.discussions.update(discussionId, {
+        actSessionId: session.id as SessionId,
+      });
+
+      deps.broadcast('session:created', trackId);
+      deps.broadcast('discussion:updated', discussionId);
+      return { sessionId: session.id };
     },
   };
 }

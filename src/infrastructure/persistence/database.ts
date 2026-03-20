@@ -396,6 +396,13 @@ function runMigrations(db: Database.Database): void {
     // Column already exists — safe to ignore
   }
 
+  // Migration: add act_session_id column to discussions
+  try {
+    db.exec(`ALTER TABLE discussions ADD COLUMN act_session_id TEXT;`);
+  } catch {
+    // Column already exists — safe to ignore
+  }
+
   // Migration: create mcp_server_configs table
   try {
     db.exec(`
