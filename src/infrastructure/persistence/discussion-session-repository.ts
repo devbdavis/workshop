@@ -60,7 +60,7 @@ export function createDiscussionSessionRepository(): DiscussionSessionRepository
       SELECT dm.discussion_id, ds2.agent_id, COUNT(*) as cnt
       FROM discussion_messages dm
       JOIN discussion_sessions ds2 ON ds2.discussion_id = dm.discussion_id
-      WHERE dm.author_id != ds2.agent_id
+      WHERE (dm.author_id IS NULL OR dm.author_id != ds2.agent_id)
         AND (ds2.last_seen_message_id IS NULL
              OR dm.rowid > (SELECT rowid FROM discussion_messages WHERE id = ds2.last_seen_message_id))
       GROUP BY dm.discussion_id, ds2.agent_id
