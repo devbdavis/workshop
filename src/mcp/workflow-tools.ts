@@ -91,15 +91,17 @@ export function registerWorkflowTools(
 
   server.tool(
     'workshop_transition_ticket',
-    'Transition a workflow ticket to a new state.',
+    'Transition a workflow ticket to a new state. Use the data param to pass structured state data (e.g. pendingQuestions for needs-input).',
     {
       ticketId: z.string().describe('The workflow ticket ID'),
       toState: z.string().describe('Target state'),
       comment: z.string().optional().describe('Transition comment'),
+      data: z.record(z.unknown()).optional().describe('Structured state data to merge into ticket stateData (e.g. { pendingQuestions: [{ text: "..." }] })'),
     },
-    async ({ ticketId, toState, comment }) => {
+    async ({ ticketId, toState, comment, data }) => {
       const body: Record<string, unknown> = { toState };
       if (comment) body.comment = comment;
+      if (data) body.data = data;
       const result = await api(`/workflow/tickets/${ticketId}/transition`, {
         method: 'POST',
         body: JSON.stringify(body),

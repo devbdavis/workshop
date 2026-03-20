@@ -26,39 +26,100 @@ export function DetailRow({ label, value }: { label: string; value: string }) {
   );
 }
 
-export function NeedsInputSection({ data, answers, onChangeAnswer, onSubmit }: {
+/**
+ * Extract numbered questions from a transition comment when stateData.pendingQuestions
+ * is not available (fallback for agents that put questions in the comment).
+ * Handles formats: "1. q?", "2) q?", "- q?", "(1) q", multi-line and inline.
+ */
+function parseQuestionsFromComment(comment?: string): Array<{ text: string }> {
+  if (!comment) return [];
+  const questions: Array<{ text: string }> = [];
+
+  // Try line-by-line first (numbered/bulleted lists)
+  for (const line of comment.split('\n')) {
+    const m = line.match(/^\s*(?:\d+[.)]\s*|-\s+)(.{10,})/);
+    if (m) questions.push({ text: m[1].trim() });
+  }
+  if (questions.length > 0) return questions;
+
+  // Try inline parenthesized numbers: (1) ... (2) ...
+  const inlineMatches = comment.match(/\(\d+\)\s*([^(]+)/g);
+  if (inlineMatches && inlineMatches.length >= 2) {
+    for (const seg of inlineMatches) {
+      const m = seg.match(/\(\d+\)\s*(.+)/);
+      if (m) questions.push({ text: m[1].trim().replace(/[,;]$/, '') });
+    }
+  }
+
+  return questions;
+}
+
+export function NeedsInputSection({ data, answers, onChangeAnswer, onSubmit, transitionComment }: {
   data: NeedsInputData | undefined;
   answers: Record<number, string>;
   onChangeAnswer: (idx: number, val: string) => void;
   onSubmit: () => void;
+  /** Fallback: the transition comment that may contain questions */
+  transitionComment?: string;
 }) {
   const questions = data?.pendingQuestions ?? [];
-  if (questions.length === 0) return null;
+  const parsedQuestions = questions.length > 0 ? questions : parseQuestionsFromComment(transitionComment);
 
-  return (
-    <Section title="Questions Needing Your Input">
-      <div className="space-y-3">
-        {questions.map((q, idx) => (
-          <div key={idx}>
-            <p className="text-sm text-gray-300 mb-1">{q.text}</p>
-            <textarea
-              value={answers[idx] ?? ''}
-              onChange={(e) => onChangeAnswer(idx, e.target.value)}
-              placeholder="Your answer..."
-              className="w-full px-3 py-2 bg-gray-800 border border-gray-700 rounded text-sm text-gray-200"
-              rows={2}
-            />
-          </div>
-        ))}
-        <button
-          onClick={onSubmit}
-          className="px-4 py-1.5 text-xs bg-blue-600 hover:bg-blue-500 text-white rounded transition-colors"
-        >
-          Submit Answers
-        </button>
-      </div>
-    </Section>
-  );
+  // If we have structured or parsed questions, show them with individual answer fields
+  if (parsedQuestions.length > 0) {
+    return (
+      <Section title="Questions Needing Your Input">
+        <div className="space-y-3">
+          {parsedQuestions.map((q, idx) => (
+            <div key={idx}>
+              <p className="text-sm text-gray-300 mb-1">{q.text}</p>
+              <textarea
+                value={answers[idx] ?? ''}
+                onChange={(e) => onChangeAnswer(idx, e.target.value)}
+                placeholder="Your answer..."
+                className="w-full px-3 py-2 bg-gray-800 border border-gray-700 rounded text-sm text-gray-200"
+                rows={2}
+              />
+            </div>
+          ))}
+          <button
+            onClick={onSubmit}
+            className="px-4 py-1.5 text-xs bg-blue-600 hover:bg-blue-500 text-white rounded transition-colors"
+          >
+            Submit Answers
+          </button>
+        </div>
+      </Section>
+    );
+  }
+
+  // Last resort: show raw comment with a freeform response field
+  if (transitionComment) {
+    return (
+      <Section title="Input Requested">
+        <div className="space-y-3">
+          <p className="text-sm text-gray-300 whitespace-pre-wrap bg-gray-800/50 rounded p-3 border border-gray-700">
+            {transitionComment}
+          </p>
+          <textarea
+            value={answers[0] ?? ''}
+            onChange={(e) => onChangeAnswer(0, e.target.value)}
+            placeholder="Your response..."
+            className="w-full px-3 py-2 bg-gray-800 border border-gray-700 rounded text-sm text-gray-200"
+            rows={4}
+          />
+          <button
+            onClick={onSubmit}
+            className="px-4 py-1.5 text-xs bg-blue-600 hover:bg-blue-500 text-white rounded transition-colors"
+          >
+            Submit Response
+          </button>
+        </div>
+      </Section>
+    );
+  }
+
+  return null;
 }
 
 export function FindingsSection({ data }: {

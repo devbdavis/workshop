@@ -9,6 +9,8 @@ export interface PermissionRequestRepository {
   findById(id: PermissionRequestId): PermissionRequest | null;
   findBySession(sessionId: SessionId): PermissionRequest[];
   findPendingBySession(sessionId: SessionId): PermissionRequest[];
+  /** Return all pending permission requests across all sessions */
+  findAllPending(): PermissionRequest[];
   create(data: Omit<PermissionRequest, 'id' | 'createdAt' | 'resolvedAt'>): PermissionRequest;
   resolve(
     id: PermissionRequestId,

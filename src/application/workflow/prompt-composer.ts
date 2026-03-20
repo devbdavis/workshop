@@ -71,7 +71,13 @@ function buildTriagePrompt(ticket: WorkflowTicket): string {
     `Ticket: ${ticket.title}`,
     ticket.description,
     '',
-    "Respond with EITHER a refined description OR a list of questions prefixed with 'QUESTIONS:'",
+    'If the spec is complete, transition to "specced".',
+    '',
+    'If you have questions, transition to "needs-input" and pass the questions',
+    'as structured data so they appear in the UI:',
+    '  workshop_transition_ticket(ticketId, "needs-input", comment, {',
+    '    pendingQuestions: [{ text: "Your question here?" }, ...]',
+    '  })',
   ].join('\n');
 }
 

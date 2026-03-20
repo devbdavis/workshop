@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import type { PermissionRequestId, SessionId } from '@foundation/types';
 import type { PermissionRequestRepository } from '@domain/permission/repository';
+import { getDatabase } from '@infrastructure/persistence/database.js';
 import { broadcast } from './events.js';
 
 /** Max time (ms) the hook long-poll will wait for a user decision before timing out */
@@ -119,6 +120,37 @@ export function createPermissionRouter(deps: PermissionRouterDeps): Router {
       console.error('Permission hook error:', err);
       // On error, fall through to normal permission handling
       res.json(makeHookResponse('ask'));
+    }
+  });
+
+  // --- List all pending permissions across all sessions (enriched with track/session info) ---
+
+  router.get('/permissions/pending', (_req, res) => {
+    try {
+      const pending = permissions.findAllPending();
+      // Enrich with session/track info using a single JOIN query
+      const db = getDatabase();
+      const enrichStmt = db.prepare(`
+        SELECT s.track_id, s.name as session_name, s.tmux_session, t.name as track_name
+        FROM sessions s
+        LEFT JOIN tracks t ON t.id = s.track_id
+        WHERE s.id = ?
+      `);
+      const enriched = pending.map((p) => {
+        const info = enrichStmt.get(p.sessionId) as {
+          track_id: string; session_name: string | null; tmux_session: string; track_name: string | null;
+        } | undefined;
+        return {
+          ...p,
+          trackId: info?.track_id,
+          trackName: info?.track_name ?? 'Unknown',
+          sessionName: info?.session_name || info?.tmux_session || p.sessionId.slice(0, 8),
+        };
+      });
+      res.json(enriched);
+    } catch (err) {
+      console.error('Failed to list pending permissions:', err);
+      res.status(500).json({ error: 'Internal server error' });
     }
   });
 
