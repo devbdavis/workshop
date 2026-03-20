@@ -53,11 +53,44 @@ export interface TerminalManager {
   syncSessionStates(): SyncResult;
 }
 
+/** Minutes a background session can sit idle at the CLI prompt before being reaped */
+const BACKGROUND_IDLE_TIMEOUT_MINUTES = 5;
+
 export function createTerminalManager(sessionRepo: SessionRepository): TerminalManager {
   try {
     execSync('which tmux', { stdio: 'pipe' });
   } catch {
     console.warn('tmux not found in PATH. Terminal sessions will not work.');
+  }
+
+  /** Track when we first observe a session idle, keyed by session ID */
+  const idleFirstSeen = new Map<string, number>();
+
+  /** Check if the tmux pane shows an idle CLI prompt (❯ or $ at end) */
+  function isSessionIdle(session: Session): boolean {
+    try {
+      const output = execSync(
+        `tmux capture-pane -t ${session.tmuxSession} -p`,
+        { stdio: 'pipe', encoding: 'utf-8' },
+      );
+      // Look at non-empty lines from the bottom — if the last visible content
+      // is the Claude/Gemini prompt indicator, the agent is idle.
+      const lines = output.trimEnd().split('\n');
+      const lastLine = lines[lines.length - 1]?.trim() || '';
+      return lastLine === '❯' || lastLine.endsWith('❯') || lastLine === '>';
+    } catch {
+      return false;
+    }
+  }
+
+  /** Get how many minutes a session has been observed idle */
+  function getIdleMinutes(session: Session): number {
+    const firstSeen = idleFirstSeen.get(session.id);
+    if (!firstSeen) {
+      idleFirstSeen.set(session.id, Date.now());
+      return 0;
+    }
+    return (Date.now() - firstSeen) / 60_000;
   }
 
   function getSessionDir(sessionId: string): string {
@@ -111,19 +144,21 @@ export function createTerminalManager(sessionRepo: SessionRepository): TerminalM
           ],
         },
       ];
-
-      const hookScript = path.resolve(__dirname, '../../../scripts/session-end-hook.sh');
-      hooks.SessionEnd = [
-        {
-          hooks: [
-            {
-              type: 'command',
-              command: `WORKSHOP_API_URL=${WORKSHOP_API_URL} ${hookScript}`,
-            },
-          ],
-        },
-      ];
     }
+
+    // SessionEnd hook — always register so Workshop can clean up when Claude exits.
+    // For workflow tickets this also serves as a safety net for completion detection.
+    const hookScript = path.resolve(__dirname, '../../../scripts/session-end-hook.sh');
+    hooks.SessionEnd = [
+      {
+        hooks: [
+          {
+            type: 'command',
+            command: `WORKSHOP_API_URL=${WORKSHOP_API_URL} WORKSHOP_SESSION_ID=${sessionId} ${hookScript}`,
+          },
+        ],
+      },
+    ];
 
     const settings = { hooks };
     writeFileSync(settingsFile, JSON.stringify(settings, null, 2), 'utf-8');
@@ -150,6 +185,13 @@ export function createTerminalManager(sessionRepo: SessionRepository): TerminalM
         'When you have completed the task (or determined you cannot proceed):',
         `1. Use the workshop_update_todo MCP tool to update todo "${todoId}" status to "review"`,
         '2. Add a brief summary of what you accomplished or why you stopped to the description',
+        '3. Use /exit to close your session',
+        '',
+      );
+    } else {
+      instructions.push(
+        'When you have completed your task (or determined you cannot proceed),',
+        'use /exit to close your session so resources are freed.',
         '',
       );
     }
@@ -402,6 +444,7 @@ exit 1
 
       cleanSessionDir(sessionId);
       sessionRepo.delete(sessionId);
+      idleFirstSeen.delete(sessionId);
     },
 
     isSessionAlive(session: Session): boolean {
@@ -426,13 +469,36 @@ exit 1
           }
           cleanSessionDir(session.id);
           sessionRepo.delete(session.id);
+          idleFirstSeen.delete(session.id);
           cleaned.push({ sessionId: session.id, trackId: session.trackId });
         } else if (alive && session.state === 'dead') {
           sessionRepo.updateState(session.id, 'active');
+        } else if (alive && session.background) {
+          // Background sessions that are idle (Claude at prompt, no work) should be reaped.
+          // Check if the last line of the tmux pane is the idle prompt indicator.
+          if (isSessionIdle(session)) {
+            const idleMinutes = getIdleMinutes(session);
+            if (idleMinutes >= BACKGROUND_IDLE_TIMEOUT_MINUTES) {
+              console.log(
+                `Session sync: reaping idle background session ${session.id} ` +
+                `(${session.tmuxSession}, idle ${Math.round(idleMinutes)}m)`,
+              );
+              try {
+                execSync(`tmux kill-session -t ${session.tmuxSession}`, { stdio: 'pipe' });
+              } catch { /* already dead */ }
+              cleanSessionDir(session.id);
+              sessionRepo.delete(session.id);
+              idleFirstSeen.delete(session.id);
+              cleaned.push({ sessionId: session.id, trackId: session.trackId });
+            }
+          } else {
+            // Not idle — reset the tracker
+            idleFirstSeen.delete(session.id);
+          }
         }
       }
       if (cleaned.length > 0) {
-        console.log(`Session sync: cleaned up ${cleaned.length} dead session(s)`);
+        console.log(`Session sync: cleaned up ${cleaned.length} dead/idle session(s)`);
       }
       return { cleaned };
     },

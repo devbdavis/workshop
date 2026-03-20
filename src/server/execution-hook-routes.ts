@@ -2,22 +2,24 @@
  * Hook endpoints for the execution integration pipeline.
  *
  * - /hooks/agent-progress — SubagentStop HTTP hook: tracks which agents completed
- * - /hooks/session-end — SessionEnd command hook callback: safety net for completion
+ * - /hooks/session-end — SessionEnd command hook callback: cleans up finished sessions
  */
 import { Router } from 'express';
-import type { WorkflowTicketId, ExecutionData } from '@foundation/types';
+import type { SessionId, WorkflowTicketId, ExecutionData } from '@foundation/types';
 import type { WorkflowTicketRepository } from '@domain/workflow/repository';
 import type { WorkflowEngine } from '@application/workflow/engine.js';
+import type { TerminalManager } from '@infrastructure/terminal/manager.js';
 import { broadcast } from './events.js';
 
 export interface ExecutionHookRouterDeps {
   engine: WorkflowEngine;
   tickets: WorkflowTicketRepository;
+  terminal: TerminalManager;
 }
 
 export function createExecutionHookRouter(deps: ExecutionHookRouterDeps): Router {
   const router = Router();
-  const { engine, tickets } = deps;
+  const { engine, tickets, terminal } = deps;
 
   /**
    * SubagentStop hook — Claude Code sends this when a Task-spawned sub-agent completes.
@@ -67,41 +69,51 @@ export function createExecutionHookRouter(deps: ExecutionHookRouterDeps): Router
   });
 
   /**
-   * SessionEnd hook — called by scripts/session-end-hook.sh when a Claude Code session ends.
-   * Safety net: if the executing agent didn't self-report via MCP, transition to execution-failed.
+   * SessionEnd hook — called by scripts/session-end-hook.sh when ANY Claude session ends.
+   * Two responsibilities:
+   * 1. General cleanup: destroy the tmux session + DB record so it doesn't linger
+   * 2. Workflow safety net: if a workflow execution agent didn't self-report, mark it failed
    */
-  router.post('/hooks/session-end', (req, res) => {
+  router.post('/hooks/session-end', async (req, res) => {
     try {
-      const { session_id } = req.body;
+      const sessionId =
+        (req.headers['x-workshop-session'] as string | undefined) ||
+        req.body.session_id;
 
-      if (!session_id) {
+      if (!sessionId) {
         res.json({ ok: true });
         return;
       }
 
-      const boundTicket = tickets.findByExecutionSessionId(session_id);
+      console.log(`Session ${sessionId} ended — cleaning up`);
 
-      if (!boundTicket || boundTicket.state !== 'executing') {
-        res.json({ ok: true });
-        return;
-      }
-
-      console.warn(
-        `Execution session ${session_id} ended without reporting results. ` +
-        `Marking ticket ${boundTicket.id} as execution-failed.`,
-      );
-
-      try {
-        engine.transition(
-          boundTicket.id,
-          'execution-failed',
-          { type: 'system', reason: 'Session ended without completion report' },
-          'Execution session terminated before reporting results. ' +
-          'The agent may have crashed or timed out.',
+      // 1. Workflow safety net: check if this session was bound to a ticket
+      const boundTicket = tickets.findByExecutionSessionId(sessionId);
+      if (boundTicket && boundTicket.state === 'executing') {
+        console.warn(
+          `Execution session ${sessionId} ended without reporting results. ` +
+          `Marking ticket ${boundTicket.id} as execution-failed.`,
         );
-        broadcast('workflow:transitioned', boundTicket.id);
-      } catch (transitionErr) {
-        console.error('Failed to transition ticket on session end:', transitionErr);
+        try {
+          engine.transition(
+            boundTicket.id,
+            'execution-failed',
+            { type: 'system', reason: 'Session ended without completion report' },
+            'Execution session terminated before reporting results. ' +
+            'The agent may have crashed or timed out.',
+          );
+          broadcast('workflow:transitioned', boundTicket.id);
+        } catch (transitionErr) {
+          console.error('Failed to transition ticket on session end:', transitionErr);
+        }
+      }
+
+      // 2. General cleanup: destroy the session (tmux + DB + session dir)
+      try {
+        await terminal.destroySession(sessionId as SessionId);
+        broadcast('session:deleted', sessionId);
+      } catch (destroyErr) {
+        console.error(`Failed to destroy session ${sessionId}:`, destroyErr);
       }
 
       res.json({ ok: true });
