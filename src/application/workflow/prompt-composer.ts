@@ -3,9 +3,24 @@
  */
 import type { AgentRole, WorkflowTicket } from '@foundation/types';
 
+export interface CritiqueFinding {
+  text: string;
+  severity: string;
+  resolved?: boolean;
+}
+
+export interface TriageAnswer {
+  text: string;
+  answer: string;
+}
+
 export interface PromptContext {
   planDraft?: string;
   feedback?: string[];
+  /** Blocking/suggestion findings from the plan-critic agent */
+  findings?: CritiqueFinding[];
+  /** Human answers from triage Q&A — these override the original spec */
+  answers?: TriageAnswer[];
   trackContext?: string;
   summary?: string;
 }
@@ -104,18 +119,84 @@ function buildTriagePrompt(ticket: WorkflowTicket): string {
 }
 
 function buildPlannerPrompt(ticket: WorkflowTicket, context?: PromptContext): string {
+  const isRevision = !!(context?.findings?.length || context?.planDraft);
+
   const lines = [
     'You are a technical architect creating an implementation plan.',
     '',
-    `Spec: ${ticket.description}`,
+    `## Spec\n\n${ticket.description}`,
   ];
-  if (context?.feedback?.length) {
-    lines.push('', 'Previous feedback:', ...context.feedback.map((f) => `- ${f}`));
+
+  // Human Q&A answers from triage — these are authoritative and override the original spec
+  if (context?.answers?.length) {
+    lines.push('', '## Human Answers (AUTHORITATIVE — these override the original spec)', '');
+    for (const a of context.answers) {
+      lines.push(`**Q:** ${a.text}`);
+      lines.push(`**A:** ${a.answer}`);
+      lines.push('');
+    }
+    lines.push(
+      'The above answers were provided by the human stakeholder during triage.',
+      'Your plan MUST be consistent with every one of these answers.',
+      'If the spec says one thing but an answer says another, the answer wins.',
+    );
   }
-  lines.push(
-    '',
-    'Create a detailed technical plan covering: architecture, file changes, API design, test strategy.',
-  );
+
+  // Previous plan draft — critical for revisions so the planner edits rather than regenerates
+  if (context?.planDraft) {
+    lines.push('', '## Previous Plan Draft', '', context.planDraft);
+  }
+
+  // Critic's blocking findings — the actual issues to fix
+  if (context?.findings?.length) {
+    const blocking = context.findings.filter((f) => f.severity === 'blocking' && !f.resolved);
+    const suggestions = context.findings.filter((f) => f.severity === 'suggestion' && !f.resolved);
+
+    if (blocking.length > 0) {
+      lines.push('', '## BLOCKING Findings from Plan Critic (MUST fix every one of these)', '');
+      for (let i = 0; i < blocking.length; i++) {
+        lines.push(`${i + 1}. ${blocking[i].text}`);
+      }
+      lines.push(
+        '',
+        'Each blocking finding above MUST be resolved in the revised plan.',
+        'Do not claim something is addressed without actually changing the plan text.',
+      );
+    }
+
+    if (suggestions.length > 0) {
+      lines.push('', '## Suggestions from Plan Critic (address if feasible)', '');
+      for (const s of suggestions) {
+        lines.push(`- ${s.text}`);
+      }
+    }
+  }
+
+  // Planner's own self-reported feedback from previous iteration
+  if (context?.feedback?.length) {
+    lines.push('', '## Your Previous Revision Notes', ...context.feedback.map((f) => `- ${f}`));
+  }
+
+  if (isRevision) {
+    lines.push(
+      '',
+      '## Instructions',
+      '',
+      'This is a REVISION of an existing plan. You must:',
+      '1. Start from the previous plan draft above — do not regenerate from scratch',
+      '2. Address every BLOCKING finding by making concrete changes to the plan',
+      '3. Ensure the plan is consistent with all human answers',
+      '4. Keep parts of the plan that are not affected by the findings',
+    );
+  } else {
+    lines.push(
+      '',
+      '## Instructions',
+      '',
+      'Create a detailed technical plan covering: architecture, file changes, API design, test strategy.',
+    );
+  }
+
   return lines.join('\n');
 }
 

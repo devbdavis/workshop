@@ -96,6 +96,9 @@ export function createWorkflowEngine(deps: WorkflowEngineDeps): WorkflowEngine {
     return ticket;
   }
 
+  /** Max times plan-critique can send a ticket back to planning before escalating to human review */
+  const MAX_CRITIQUE_ITERATIONS = 3;
+
   function applyTransition(
     ticket: WorkflowTicket,
     toState: WorkflowState,
@@ -103,6 +106,20 @@ export function createWorkflowEngine(deps: WorkflowEngineDeps): WorkflowEngine {
     comment?: string,
     data?: Record<string, unknown>,
   ): WorkflowTicket {
+    // Circuit breaker: if plan-critique → planning loop exceeds max iterations,
+    // redirect to plan-review (human gate) so a human can intervene
+    if (ticket.state === 'plan-critique' && toState === 'planning') {
+      const stateData = (ticket.stateData || {}) as Record<string, unknown>;
+      const iteration = (typeof stateData.iteration === 'number' ? stateData.iteration : 0) + 1;
+      if (iteration >= MAX_CRITIQUE_ITERATIONS) {
+        console.warn(
+          `[workflow-circuit-breaker] Ticket ${ticket.id} hit ${iteration} plan-critique iterations. Escalating to plan-review for human intervention.`,
+        );
+        toState = 'plan-review' as WorkflowState;
+        comment = `Circuit breaker: plan-critique ↔ planning loop hit ${iteration} iterations. Escalating to human review. Original blocking findings are in stateData.findings.`;
+      }
+    }
+
     if (!isValidTransition(ticket.type, ticket.state, toState)) {
       throw new Error(
         `Invalid transition: ${ticket.type} cannot go from '${ticket.state}' to '${toState}'`,

@@ -96,6 +96,16 @@ export function createAgentDispatcher(deps: AgentDispatcherDeps): AgentDispatche
       ctx.feedback = stateData.feedback as string[];
     }
 
+    // Critic's findings (blocking/suggestion items from plan-critique)
+    if (stateData?.findings && Array.isArray(stateData.findings)) {
+      ctx.findings = stateData.findings as PromptContext['findings'];
+    }
+
+    // Human Q&A answers from triage phase
+    if (stateData?.answers && Array.isArray(stateData.answers)) {
+      ctx.answers = stateData.answers as PromptContext['answers'];
+    }
+
     const trackId = ticket.trackId ?? resolveTrackIdFromParent(ticket);
     if (trackId) {
       const track = tracks.findById(trackId);
