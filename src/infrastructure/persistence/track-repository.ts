@@ -10,10 +10,10 @@ export function createTrackRepository(): TrackRepository {
   const findAllStmt = db.prepare('SELECT * FROM tracks WHERE status != ? ORDER BY updated_at DESC');
   const findByIdStmt = db.prepare('SELECT * FROM tracks WHERE id = ?');
   const insertStmt = db.prepare(
-    'INSERT INTO tracks (id, name, description, context, status, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)',
+    'INSERT INTO tracks (id, name, description, context, label, status, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
   );
   const updateStmt = db.prepare(
-    'UPDATE tracks SET name = ?, description = ?, context = ?, status = ?, updated_at = ? WHERE id = ?',
+    'UPDATE tracks SET name = ?, description = ?, context = ?, label = ?, status = ?, updated_at = ? WHERE id = ?',
   );
   const deleteStmt = db.prepare('DELETE FROM tracks WHERE id = ?');
   const setDefaultPromptTemplateStmt = db.prepare(
@@ -52,8 +52,8 @@ export function createTrackRepository(): TrackRepository {
     create(data): Track {
       const id = uuid() as TrackId;
       const now = new Date().toISOString();
-      insertStmt.run(id, data.name, data.description || null, data.context || null, data.status || 'active', now, now);
-      return { id, name: data.name, description: data.description, context: data.context, status: data.status || 'active', createdAt: now, updatedAt: now };
+      insertStmt.run(id, data.name, data.description || null, data.context || null, data.label || null, data.status || 'active', now, now);
+      return { id, name: data.name, description: data.description, context: data.context, label: data.label, status: data.status || 'active', createdAt: now, updatedAt: now };
     },
 
     update(id: TrackId, data): Track | null {
@@ -63,9 +63,10 @@ export function createTrackRepository(): TrackRepository {
       const name = data.name ?? existing.name;
       const description = data.description ?? existing.description;
       const context = data.context !== undefined ? data.context : existing.context;
+      const label = data.label !== undefined ? data.label : existing.label;
       const status = data.status ?? existing.status;
-      updateStmt.run(name, description || null, context || null, status, now, id);
-      return { ...existing, name, description, context, status, updatedAt: now };
+      updateStmt.run(name, description || null, context || null, label || null, status, now, id);
+      return { ...existing, name, description, context, label, status, updatedAt: now };
     },
 
     delete(id: TrackId): boolean {
@@ -137,6 +138,7 @@ interface TrackRow {
   name: string;
   description: string | null;
   context: string | null;
+  label: string | null;
   status: string;
   default_prompt_template_id: string | null;
   terminal_layout: string | null;
@@ -174,6 +176,7 @@ function rowToTrack(row: TrackRow): Track {
     name: row.name,
     description: row.description || undefined,
     context: row.context || undefined,
+    label: row.label || undefined,
     status: row.status as Track['status'],
     defaultPromptTemplateId: (row.default_prompt_template_id as TemplateId) || undefined,
     terminalLayout,

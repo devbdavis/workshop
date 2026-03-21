@@ -20,6 +20,8 @@ export interface Track {
   name: string;
   description?: string;
   context?: string;
+  /** Optional label for categorisation (e.g. 'system' for internal tracks) */
+  label?: string;
   status: 'active' | 'archived';
   defaultPromptTemplateId?: TemplateId;
   terminalLayout?: TerminalLayout;

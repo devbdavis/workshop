@@ -8,7 +8,7 @@ import type {
   DiscussionStatus,
   ConsensusRule,
 } from '@foundation/discussion-types';
-import type { AgentId, SessionId, SessionProvider, TrackId } from '@foundation/types';
+import type { AgentId, Session, SessionId, SessionProvider, TrackId } from '@foundation/types';
 import type {
   DiscussionTeamRepository,
   DiscussionRepository,
@@ -49,6 +49,7 @@ export interface DiscussionServiceDeps {
       },
     ) => Promise<{ id: SessionId; trackId: TrackId; tmuxSession: string; state: string }>;
     destroySession: (sessionId: SessionId) => Promise<void>;
+    isSessionAlive: (session: Session) => boolean;
   };
   projectRoot: string;
   broadcast: (type: string, id: string) => void;
@@ -106,6 +107,9 @@ export interface DiscussionService {
 
   /** Spawn an agent to implement the consensus from a completed discussion. */
   actOnConsensus(discussionId: DiscussionId): Promise<{ sessionId: SessionId }>;
+
+  /** Check for missing/dead agent sessions and respawn them. Returns IDs of spawned agents. */
+  ensureAgentSessions(discussionId: DiscussionId): Promise<{ spawned: string[]; failed: string[] }>;
 }
 
 export function createDiscussionService(deps: DiscussionServiceDeps): DiscussionService {
@@ -125,6 +129,7 @@ export function createDiscussionService(deps: DiscussionServiceDeps): Discussion
     const track = deps.tracks.create({
       name: '_Discussions',
       description: 'System track for discussion agent sessions',
+      label: 'system',
       status: 'active',
     });
     discussionsTrackId = track.id;
@@ -361,6 +366,84 @@ export function createDiscussionService(deps: DiscussionServiceDeps): Discussion
         votedCount: votes.length,
         satisfiedCount: votes.filter((v) => v.vote === 'satisfied').length,
       };
+    },
+
+    async ensureAgentSessions(discussionId) {
+      const discussion = deps.discussions.findById(discussionId);
+      if (!discussion || discussion.status !== 'open') {
+        return { spawned: [], failed: [] };
+      }
+
+      const trackId = getOrCreateDiscussionsTrack();
+      const existingSessions = deps.discussionSessions.findByDiscussion(discussionId);
+      const spawned: string[] = [];
+      const failed: string[] = [];
+
+      for (const agentId of discussion.participantIds) {
+        const existing = existingSessions.find((s) => s.agentId === agentId);
+
+        // Check if there's already a live session for this agent
+        if (existing) {
+          const session = deps.sessions.findById(existing.sessionId);
+          if (session && deps.terminal.isSessionAlive(session)) {
+            continue; // Session is alive, nothing to do
+          }
+          // Dead session — clean up the stale record
+          deps.discussionSessions.deleteOne(discussionId, agentId as AgentId);
+        }
+
+        // Need to spawn a session for this agent
+        try {
+          const agent = resolveAgent(agentId as AgentId);
+          if (!agent) {
+            console.warn(`Discussion ${discussionId}: agent ${agentId} not found, skipping recovery`);
+            failed.push(agentId);
+            continue;
+          }
+
+          const parts: string[] = [];
+          if (agent.systemPrompt) {
+            parts.push(`## Agent: ${agent.name}\n\n${agent.systemPrompt}`);
+          }
+
+          if (discussion.trackId) {
+            const boundTrack = deps.tracks.findById(discussion.trackId);
+            if (boundTrack?.context) {
+              parts.push(boundTrack.context);
+            }
+            const summary = deps.summaries.findLatest(discussion.trackId);
+            if (summary) {
+              parts.push(`## Current Status\n\n${summary.content}`);
+            }
+          }
+
+          parts.push(buildGovernancePrompt(discussion, agentId, agent.name));
+          const systemPrompt = parts.join('\n\n---\n\n');
+          const provider = resolveProvider(agent);
+
+          const session = await deps.terminal.createSession(trackId, {
+            systemPrompt,
+            provider,
+            background: false,
+            usePermissionHooks: true,
+            initialPrompt: `The discussion "${discussion.title}" is in progress. Use workshop_discussion_read to review the full thread and share your perspective.`,
+          });
+
+          deps.discussionSessions.create({
+            discussionId: discussion.id,
+            agentId: agentId as AgentId,
+            sessionId: session.id,
+            createdAt: new Date().toISOString(),
+          });
+
+          spawned.push(agentId);
+        } catch (err) {
+          console.error(`Discussion ${discussionId}: failed to recover session for ${agentId}:`, err);
+          failed.push(agentId);
+        }
+      }
+
+      return { spawned, failed };
     },
 
     async actOnConsensus(discussionId) {
