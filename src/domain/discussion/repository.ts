@@ -50,5 +50,6 @@ export interface DiscussionSessionRepository {
   create(data: DiscussionSession): DiscussionSession;
   updateLastSeen(discussionId: DiscussionId, agentId: AgentId, messageId: DiscussionMessageId): void;
   deleteByDiscussion(discussionId: DiscussionId): void;
+  deleteOne(discussionId: DiscussionId, agentId: AgentId): void;
   findWithUnread(): Array<DiscussionSession & { unreadCount: number; discussionTitle: string }>;
 }

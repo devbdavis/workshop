@@ -18,11 +18,18 @@ export function TopNav() {
 
   const loadCount = useCallback(async () => {
     try {
-      const res = await fetch('/api/permissions/pending');
-      if (res.ok) {
-        const items = await res.json();
-        setPendingCount(items.length);
+      const [permRes, wfRes] = await Promise.all([
+        fetch('/api/permissions/pending'),
+        fetch('/api/workflow/tickets'),
+      ]);
+      let count = 0;
+      if (permRes.ok) count += (await permRes.json()).length;
+      if (wfRes.ok) {
+        const tickets = await wfRes.json();
+        const humanStates = ['spec-review', 'plan-review', 'final-review', 'needs-input'];
+        count += tickets.filter((t: { state: string }) => humanStates.includes(t.state)).length;
       }
+      setPendingCount(count);
     } catch { /* ignore */ }
   }, []);
 
@@ -37,7 +44,7 @@ export function TopNav() {
     ws.onmessage = (evt) => {
       try {
         const event = JSON.parse(evt.data);
-        if (event.type?.startsWith('permission:')) loadCount();
+        if (event.type?.startsWith('permission:') || event.type?.startsWith('workflow:')) loadCount();
       } catch { /* ignore */ }
     };
     return () => ws.close();
