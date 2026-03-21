@@ -30,9 +30,10 @@ describe('composeWorkflowPrompt', () => {
       expect(prompt).toContain('Implement OAuth2 with Google and GitHub providers');
     });
 
-    it('should mention QUESTIONS response format', () => {
+    it('should mention questions response format', () => {
       const prompt = composeWorkflowPrompt('triage', makeTicket());
-      expect(prompt).toContain('QUESTIONS:');
+      expect(prompt).toContain('needs-input');
+      expect(prompt).toContain('pendingQuestions');
     });
   });
 
@@ -40,21 +41,70 @@ describe('composeWorkflowPrompt', () => {
     it('should include spec from ticket description', () => {
       const prompt = composeWorkflowPrompt('planner', makeTicket());
       expect(prompt).toContain('technical architect');
-      expect(prompt).toContain('Spec: Implement OAuth2');
+      expect(prompt).toContain('## Spec');
+      expect(prompt).toContain('Implement OAuth2');
     });
 
     it('should include previous feedback when provided', () => {
       const prompt = composeWorkflowPrompt('planner', makeTicket(), {
         feedback: ['Missing error handling', 'Need rate limiting'],
       });
-      expect(prompt).toContain('Previous feedback:');
+      expect(prompt).toContain('Previous Revision Notes');
       expect(prompt).toContain('- Missing error handling');
       expect(prompt).toContain('- Need rate limiting');
     });
 
     it('should omit feedback section when no feedback', () => {
       const prompt = composeWorkflowPrompt('planner', makeTicket());
-      expect(prompt).not.toContain('Previous feedback:');
+      expect(prompt).not.toContain('Previous Revision Notes');
+    });
+
+    it('should include human answers when provided', () => {
+      const prompt = composeWorkflowPrompt('planner', makeTicket(), {
+        answers: [
+          { text: 'Storage strategy?', answer: 'in memory is fine' },
+          { text: 'Which provider?', answer: 'use replicate' },
+        ],
+      });
+      expect(prompt).toContain('Human Answers');
+      expect(prompt).toContain('AUTHORITATIVE');
+      expect(prompt).toContain('in memory is fine');
+      expect(prompt).toContain('use replicate');
+    });
+
+    it('should include previous plan draft for revisions', () => {
+      const prompt = composeWorkflowPrompt('planner', makeTicket(), {
+        planDraft: 'Step 1: Create middleware\nStep 2: Add routes',
+      });
+      expect(prompt).toContain('## Previous Plan Draft');
+      expect(prompt).toContain('Step 1: Create middleware');
+      expect(prompt).toContain('REVISION');
+    });
+
+    it('should include critic findings when provided', () => {
+      const prompt = composeWorkflowPrompt('planner', makeTicket(), {
+        findings: [
+          { text: 'Plan contradicts human answer on storage', severity: 'blocking' },
+          { text: 'Missing cleanup on destroy', severity: 'suggestion' },
+        ],
+        planDraft: 'some plan',
+      });
+      expect(prompt).toContain('BLOCKING Findings');
+      expect(prompt).toContain('Plan contradicts human answer on storage');
+      expect(prompt).toContain('Suggestions from Plan Critic');
+      expect(prompt).toContain('Missing cleanup on destroy');
+    });
+
+    it('should exclude resolved findings', () => {
+      const prompt = composeWorkflowPrompt('planner', makeTicket(), {
+        findings: [
+          { text: 'Already fixed', severity: 'blocking', resolved: true },
+          { text: 'Still broken', severity: 'blocking', resolved: false },
+        ],
+        planDraft: 'some plan',
+      });
+      expect(prompt).not.toContain('Already fixed');
+      expect(prompt).toContain('Still broken');
     });
 
     it('should mention required plan sections', () => {
