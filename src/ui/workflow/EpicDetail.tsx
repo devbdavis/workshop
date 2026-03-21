@@ -9,7 +9,7 @@ import { WorkflowStateIndicator } from './WorkflowStateIndicator';
 import { StateTimeline } from './StateTimeline';
 import { HumanGatePanel } from './HumanGatePanel';
 import {
-  Section, DetailRow, NeedsInputSection,
+  Section, CollapsibleSection, DetailRow, NeedsInputSection,
   FindingsSection, FinalReviewSection, MiniTaskBoard,
 } from './EpicDetailSections';
 import { TerminalModal } from '../track-view/TerminalModal';
@@ -179,18 +179,33 @@ export function EpicDetail() {
         <div className="flex flex-col md:flex-row gap-6">
           {/* Left column (2/3) */}
           <div className="flex-1 min-w-0 space-y-4">
-            <Section title="Description">
-              <div className="text-sm text-gray-300 whitespace-pre-wrap bg-gray-900/50 rounded p-3">
-                {ticket.description || 'No description.'}
-              </div>
-            </Section>
+            {sd?.refinedSpec ? (
+              <>
+                <CollapsibleSection title="Refined Spec" defaultOpen={false} badge="agent-generated">
+                  <div className="text-sm text-gray-300 whitespace-pre-wrap bg-gray-900/50 rounded p-3">
+                    {String(sd.refinedSpec)}
+                  </div>
+                </CollapsibleSection>
+                <CollapsibleSection title="Original Description" defaultOpen={false}>
+                  <div className="text-sm text-gray-300 whitespace-pre-wrap bg-gray-900/50 rounded p-3">
+                    {ticket.description || 'No description.'}
+                  </div>
+                </CollapsibleSection>
+              </>
+            ) : (
+              <CollapsibleSection title="Description" defaultOpen={!sd?.planDraft}>
+                <div className="text-sm text-gray-300 whitespace-pre-wrap bg-gray-900/50 rounded p-3">
+                  {ticket.description || 'No description.'}
+                </div>
+              </CollapsibleSection>
+            )}
 
             {sd?.planDraft != null && (
-              <Section title="Plan">
+              <CollapsibleSection title="Plan" defaultOpen={false}>
                 <div className="text-sm text-gray-300 whitespace-pre-wrap bg-gray-900/50 rounded p-3">
                   {String(sd.planDraft)}
                 </div>
-              </Section>
+              </CollapsibleSection>
             )}
 
             {ticket.state === 'needs-input' && (

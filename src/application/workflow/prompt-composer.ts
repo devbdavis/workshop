@@ -98,18 +98,36 @@ function buildTriagePrompt(ticket: WorkflowTicket): string {
       lines.push('');
     }
     lines.push(
-      'The human has answered the above questions. Incorporate these answers into the spec.',
-      'If the spec is now complete, transition to "specced".',
+      'The human has answered the above questions.',
+      '',
+      '## Your Task',
+      '',
+      'Write a refined spec that incorporates ALL human answers into a coherent document.',
+      'The refined spec should be a standalone document that supersedes the original description.',
+      '',
+      'When the spec is complete:',
+      '1. First, update the ticket description to reflect the refined reality:',
+      `   workshop_update_ticket("${ticket.id}", { description: "updated description..." })`,
+      '2. Then transition to "specced" and pass the refined spec as structured data:',
+      `   workshop_transition_ticket("${ticket.id}", "specced", "summary", {`,
+      '     refinedSpec: "Your full refined spec here..."',
+      '   })',
+      '',
       'If you still have unanswered concerns, transition to "needs-input" with new questions.',
     );
   } else {
     lines.push(
       '',
-      'If the spec is complete, transition to "specced".',
+      'If the spec is complete and no questions are needed:',
+      '1. Write a refined spec summarizing the requirements clearly',
+      '2. Transition to "specced" and pass the refined spec:',
+      `   workshop_transition_ticket("${ticket.id}", "specced", "summary", {`,
+      '     refinedSpec: "Your full refined spec here..."',
+      '   })',
       '',
       'If you have questions, transition to "needs-input" and pass the questions',
       'as structured data so they appear in the UI:',
-      '  workshop_transition_ticket(ticketId, "needs-input", comment, {',
+      `  workshop_transition_ticket("${ticket.id}", "needs-input", comment, {`,
       '    pendingQuestions: [{ text: "Your question here?" }, ...]',
       '  })',
     );

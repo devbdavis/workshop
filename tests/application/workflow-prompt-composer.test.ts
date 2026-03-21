@@ -35,6 +35,25 @@ describe('composeWorkflowPrompt', () => {
       expect(prompt).toContain('needs-input');
       expect(prompt).toContain('pendingQuestions');
     });
+
+    it('should instruct agent to produce refinedSpec', () => {
+      const prompt = composeWorkflowPrompt('triage', makeTicket());
+      expect(prompt).toContain('refinedSpec');
+    });
+
+    it('should instruct agent to update description when answers exist', () => {
+      const ticket = makeTicket({
+        stateData: {
+          answers: [
+            { text: 'Storage?', answer: 'in memory' },
+          ],
+        },
+      });
+      const prompt = composeWorkflowPrompt('triage', ticket);
+      expect(prompt).toContain('workshop_update_ticket');
+      expect(prompt).toContain('refinedSpec');
+      expect(prompt).toContain('in memory');
+    });
   });
 
   describe('planner role', () => {
