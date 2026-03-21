@@ -63,6 +63,7 @@ export function createAgentDispatcher(deps: AgentDispatcherDeps): AgentDispatche
     const track = tracks.create({
       name: '_Workflow',
       description: 'System track for workflow agent sessions',
+      label: 'system',
       status: 'active',
     });
     workflowTrackId = track.id;

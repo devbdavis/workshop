@@ -425,6 +425,16 @@ function runMigrations(db: Database.Database): void {
     // Table already exists — safe to ignore
   }
 
+  // Migration: add label column to tracks
+  try {
+    db.exec(`ALTER TABLE tracks ADD COLUMN label TEXT;`);
+  } catch {
+    // Column already exists — safe to ignore
+  }
+
+  // Migration: backfill label='system' for existing system tracks (names starting with _)
+  db.exec(`UPDATE tracks SET label = 'system' WHERE name LIKE '\\_%' ESCAPE '\\' AND label IS NULL;`);
+
   // Seed default prompt templates if the table is empty
   seedDefaultTemplates(db);
 }

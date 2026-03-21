@@ -80,6 +80,7 @@ export function createTaskScheduler(deps: TaskSchedulerDeps): TaskScheduler {
     const track = deps.tracks.create({
       name: '_Scheduled Tasks',
       description: 'System track for freeform scheduled task dispatches',
+      label: 'system',
       status: 'active',
     });
     scheduledTrackId = track.id;

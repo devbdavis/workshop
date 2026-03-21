@@ -36,6 +36,7 @@ import { createExecutionDispatcher } from '@application/workflow/execution-dispa
 import { createAgentDispatcher } from '@application/workflow/agent-dispatcher.js';
 import { createDispatchCoordinator } from '@application/workflow/dispatch-coordinator.js';
 import { createExecutionHookRouter } from './execution-hook-routes.js';
+import { recoverStuckTickets } from '@application/workflow/startup-recovery.js';
 import { broadcast } from './events.js';
 import { createDiscussionTeamRepository } from '@infrastructure/persistence/discussion-team-repository.js';
 import { createDiscussionRepository } from '@infrastructure/persistence/discussion-repository.js';
@@ -201,6 +202,53 @@ export function createApiRouter(deps: ApiRouterDeps = {}): Router {
   });
   router.use(executionHookRouter);
 
+  // Recover stuck workflow tickets on startup (delay to let session sync finish first)
+  setTimeout(async () => {
+    try {
+      const result = await recoverStuckTickets({
+        tickets: workflowTickets,
+        sessions,
+        dispatcher: dispatchCoordinator,
+      });
+      if (result.redispatched.length > 0) {
+        console.log(
+          `[workflow-recovery] Startup recovery complete: ${result.redispatched.length} ticket(s) re-dispatched`,
+        );
+        for (const id of result.redispatched) {
+          broadcast('workflow:dispatched', id);
+        }
+      }
+      if (result.errors.length > 0) {
+        console.warn(
+          `[workflow-recovery] ${result.errors.length} ticket(s) failed to re-dispatch`,
+        );
+      }
+    } catch (err) {
+      console.error('[workflow-recovery] Startup recovery failed:', err);
+    }
+  }, 5_000);
+
+  // Periodic workflow recovery — check every 2 minutes for agent-actionable
+  // tickets whose sessions have died mid-operation
+  const recoveryDeps = { tickets: workflowTickets, sessions, dispatcher: dispatchCoordinator };
+  const recoveryInterval = setInterval(async () => {
+    try {
+      const result = await recoverStuckTickets(recoveryDeps);
+      if (result.redispatched.length > 0) {
+        console.log(
+          `[workflow-recovery] Periodic recovery: ${result.redispatched.length} ticket(s) re-dispatched`,
+        );
+        for (const id of result.redispatched) {
+          broadcast('workflow:dispatched', id);
+        }
+      }
+    } catch (err) {
+      console.error('[workflow-recovery] Periodic recovery failed:', err);
+    }
+  }, 120_000);
+  process.on('SIGINT', () => clearInterval(recoveryInterval));
+  process.on('SIGTERM', () => clearInterval(recoveryInterval));
+
   // Mount discussion sub-router
   const discussionTeams = createDiscussionTeamRepository();
   const discussionsList = createDiscussionRepository();
@@ -301,8 +349,8 @@ export function createApiRouter(deps: ApiRouterDeps = {}): Router {
   });
 
   router.put('/tracks/:id', (req, res) => {
-    const { name, description, context, status } = req.body;
-    const track = tracks.update(req.params.id as TrackId, { name, description, context, status });
+    const { name, description, context, label, status } = req.body;
+    const track = tracks.update(req.params.id as TrackId, { name, description, context, label, status });
     if (!track) {
       res.status(404).json({ error: 'Track not found' });
       return;

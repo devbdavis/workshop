@@ -6,6 +6,15 @@ import { CreateTrackModal } from './CreateTrackModal';
 type SortOption = 'activity' | 'alphabetical';
 
 const SORT_STORAGE_KEY = 'workshop:tracks-sort';
+const SHOW_SYSTEM_STORAGE_KEY = 'workshop:show-system-tracks';
+
+function loadShowSystem(): boolean {
+  try {
+    return localStorage.getItem(SHOW_SYSTEM_STORAGE_KEY) === 'true';
+  } catch {
+    return false;
+  }
+}
 
 function loadSavedSort(): SortOption {
   try {
@@ -32,10 +41,17 @@ export function Dashboard() {
   const [loading, setLoading] = useState(true);
   const [showCreate, setShowCreate] = useState(false);
   const [sort, setSort] = useState<SortOption>(loadSavedSort);
+  const [showSystem, setShowSystem] = useState(loadShowSystem);
 
   function changeSort(next: SortOption) {
     setSort(next);
     try { localStorage.setItem(SORT_STORAGE_KEY, next); } catch { /* ignore */ }
+  }
+
+  function toggleShowSystem() {
+    const next = !showSystem;
+    setShowSystem(next);
+    try { localStorage.setItem(SHOW_SYSTEM_STORAGE_KEY, String(next)); } catch { /* ignore */ }
   }
 
   useEffect(() => {
@@ -54,13 +70,27 @@ export function Dashboard() {
     }
   }
 
-  const sorted = useMemo(() => sortTracks(tracks, sort), [tracks, sort]);
+  const filtered = useMemo(
+    () => showSystem ? tracks : tracks.filter((t) => t.label !== 'system'),
+    [tracks, showSystem],
+  );
+  const sorted = useMemo(() => sortTracks(filtered, sort), [filtered, sort]);
 
   return (
     <div className="max-w-6xl mx-auto px-6 py-8">
       <header className="flex items-center justify-between mb-6">
         <h1 className="text-xl font-semibold">Tracks</h1>
         <div className="flex items-center gap-3">
+          <label className="flex items-center gap-1.5 text-xs text-gray-500 cursor-pointer select-none">
+            <input
+              type="checkbox"
+              checked={showSystem}
+              onChange={toggleShowSystem}
+              className="rounded border-gray-600 bg-gray-800 text-blue-500 focus:ring-blue-500/30 focus:ring-offset-0"
+            />
+            System tracks
+          </label>
+          <div className="w-px h-4 bg-gray-700" />
           <div className="flex items-center gap-1 text-xs text-gray-500">
             <span>Sort:</span>
             <button
@@ -95,7 +125,7 @@ export function Dashboard() {
 
       {loading ? (
         <div className="text-gray-400">Loading...</div>
-      ) : tracks.length === 0 ? (
+      ) : sorted.length === 0 ? (
         <div className="text-center py-20">
           <p className="text-gray-400 mb-4">No project tracks yet.</p>
           <button
