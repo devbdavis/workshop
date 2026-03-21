@@ -132,6 +132,17 @@ export function createWorkflowEngine(deps: WorkflowEngineDeps): WorkflowEngine {
     });
 
     if (!updated) throw new Error(`Failed to update ticket: ${ticket.id}`);
+
+    // Process auto-transitions: if the new state has an 'auto' trigger, follow it immediately
+    const stage = getStageDefinition(updated.type, updated.state);
+    if (stage) {
+      const autoTarget = stage.validTransitions.find((t) => t.trigger === 'auto');
+      if (autoTarget) {
+        const autoActor: TransitionActor = { type: 'system', reason: `Auto-transition from ${updated.state}` };
+        return applyTransition(updated, autoTarget.to, autoActor);
+      }
+    }
+
     return updated;
   }
 

@@ -64,21 +64,43 @@ function buildRolePrompt(
 }
 
 function buildTriagePrompt(ticket: WorkflowTicket): string {
-  return [
+  const lines = [
     'You are a ticket triage specialist.',
     'Review this ticket and either declare it well-specced or ask clarifying questions.',
     '',
     `Ticket: ${ticket.title}`,
     ticket.description,
-    '',
-    'If the spec is complete, transition to "specced".',
-    '',
-    'If you have questions, transition to "needs-input" and pass the questions',
-    'as structured data so they appear in the UI:',
-    '  workshop_transition_ticket(ticketId, "needs-input", comment, {',
-    '    pendingQuestions: [{ text: "Your question here?" }, ...]',
-    '  })',
-  ].join('\n');
+  ];
+
+  // Include previous Q&A if the human already answered questions
+  const sd = ticket.stateData as Record<string, unknown> | undefined;
+  const answers = sd?.answers as Array<{ text: string; answer: string }> | undefined;
+  if (answers && answers.length > 0) {
+    lines.push('', '## Previous Questions & Human Answers', '');
+    for (const a of answers) {
+      lines.push(`Q: ${a.text}`);
+      lines.push(`A: ${a.answer}`);
+      lines.push('');
+    }
+    lines.push(
+      'The human has answered the above questions. Incorporate these answers into the spec.',
+      'If the spec is now complete, transition to "specced".',
+      'If you still have unanswered concerns, transition to "needs-input" with new questions.',
+    );
+  } else {
+    lines.push(
+      '',
+      'If the spec is complete, transition to "specced".',
+      '',
+      'If you have questions, transition to "needs-input" and pass the questions',
+      'as structured data so they appear in the UI:',
+      '  workshop_transition_ticket(ticketId, "needs-input", comment, {',
+      '    pendingQuestions: [{ text: "Your question here?" }, ...]',
+      '  })',
+    );
+  }
+
+  return lines.join('\n');
 }
 
 function buildPlannerPrompt(ticket: WorkflowTicket, context?: PromptContext): string {

@@ -28,10 +28,34 @@ export function createDiscussionPoller(deps: DiscussionPollerDeps): DiscussionPo
 
   function pollNow(): void {
     try {
+      recoverMissingSessions();
       nudgeAgents();
       checkStaleDiscussions();
     } catch (err) {
       console.error('Discussion poller error:', err);
+    }
+  }
+
+  /** Ensure every open discussion has live agent sessions for all participants. */
+  function recoverMissingSessions(): void {
+    const openDiscussions = deps.discussions.findAll({ status: 'open' as any });
+
+    for (const disc of openDiscussions) {
+      deps.discussionService.ensureAgentSessions(disc.id).then((result) => {
+        if (result.spawned.length > 0) {
+          console.log(
+            `[discussion-recovery] Discussion "${disc.title}" (${disc.id}): spawned ${result.spawned.length} agent session(s): ${result.spawned.join(', ')}`,
+          );
+          deps.broadcast('discussion:updated', disc.id);
+        }
+        if (result.failed.length > 0) {
+          console.warn(
+            `[discussion-recovery] Discussion "${disc.title}" (${disc.id}): failed to spawn ${result.failed.length} agent(s): ${result.failed.join(', ')}`,
+          );
+        }
+      }).catch((err) => {
+        console.error(`[discussion-recovery] Failed for discussion ${disc.id}:`, err);
+      });
     }
   }
 

@@ -60,6 +60,7 @@ function createMockDeps(): DiscussionServiceDeps {
       create: vi.fn().mockImplementation((data) => data),
       updateLastSeen: vi.fn(),
       deleteByDiscussion: vi.fn(),
+      deleteOne: vi.fn(),
       findWithUnread: vi.fn().mockReturnValue([]),
     },
     agents: {
@@ -123,6 +124,7 @@ function createMockDeps(): DiscussionServiceDeps {
         state: 'active',
       }),
       destroySession: vi.fn().mockResolvedValue(undefined),
+      isSessionAlive: vi.fn().mockReturnValue(true),
     },
     projectRoot: '/tmp/test',
     broadcast: vi.fn(),
@@ -336,6 +338,86 @@ describe('DiscussionService', () => {
       expect(deps.terminal.destroySession).toHaveBeenCalledWith('session-1');
       expect(deps.discussionSessions.deleteByDiscussion).toHaveBeenCalledWith('disc-1');
       expect(deps.broadcast).toHaveBeenCalledWith('discussion:closed', 'disc-1');
+    });
+  });
+
+  describe('ensureAgentSessions', () => {
+    it('spawns sessions for participants with no existing session', async () => {
+      const discussion = {
+        id: 'disc-1' as DiscussionId,
+        teamId: 'team-1' as DiscussionTeamId,
+        status: 'open' as const,
+        participantIds: ['agent-a', 'agent-b'],
+      };
+      (deps.discussions.findById as any).mockReturnValue(discussion);
+      // No existing sessions
+      (deps.discussionSessions.findByDiscussion as any).mockReturnValue([]);
+
+      const service = createDiscussionService(deps);
+      const result = await service.ensureAgentSessions('disc-1' as DiscussionId);
+
+      expect(result.spawned).toEqual(['agent-a', 'agent-b']);
+      expect(result.failed).toEqual([]);
+      expect(deps.terminal.createSession).toHaveBeenCalledTimes(2);
+      expect(deps.discussionSessions.create).toHaveBeenCalledTimes(2);
+    });
+
+    it('skips participants with live sessions', async () => {
+      const discussion = {
+        id: 'disc-1' as DiscussionId,
+        teamId: 'team-1' as DiscussionTeamId,
+        status: 'open' as const,
+        participantIds: ['agent-a', 'agent-b'],
+      };
+      (deps.discussions.findById as any).mockReturnValue(discussion);
+      (deps.discussionSessions.findByDiscussion as any).mockReturnValue([
+        { agentId: 'agent-a', sessionId: 'session-a' as SessionId },
+        { agentId: 'agent-b', sessionId: 'session-b' as SessionId },
+      ]);
+      (deps.sessions.findById as any).mockReturnValue({ id: 'session-a', tmuxSession: 'workshop-a' });
+      (deps.terminal.isSessionAlive as any).mockReturnValue(true);
+
+      const service = createDiscussionService(deps);
+      const result = await service.ensureAgentSessions('disc-1' as DiscussionId);
+
+      expect(result.spawned).toEqual([]);
+      expect(deps.terminal.createSession).not.toHaveBeenCalled();
+    });
+
+    it('respawns sessions for dead agents', async () => {
+      const discussion = {
+        id: 'disc-1' as DiscussionId,
+        teamId: 'team-1' as DiscussionTeamId,
+        status: 'open' as const,
+        participantIds: ['agent-a'],
+      };
+      (deps.discussions.findById as any).mockReturnValue(discussion);
+      (deps.discussionSessions.findByDiscussion as any).mockReturnValue([
+        { agentId: 'agent-a', sessionId: 'session-dead' as SessionId },
+      ]);
+      // Session exists in DB but tmux is dead
+      (deps.sessions.findById as any).mockReturnValue({ id: 'session-dead', tmuxSession: 'workshop-dead' });
+      (deps.terminal.isSessionAlive as any).mockReturnValue(false);
+
+      const service = createDiscussionService(deps);
+      const result = await service.ensureAgentSessions('disc-1' as DiscussionId);
+
+      expect(result.spawned).toEqual(['agent-a']);
+      expect(deps.discussionSessions.deleteOne).toHaveBeenCalledWith('disc-1', 'agent-a');
+      expect(deps.terminal.createSession).toHaveBeenCalledTimes(1);
+    });
+
+    it('returns empty for non-open discussions', async () => {
+      (deps.discussions.findById as any).mockReturnValue({
+        id: 'disc-1',
+        status: 'closed',
+      });
+
+      const service = createDiscussionService(deps);
+      const result = await service.ensureAgentSessions('disc-1' as DiscussionId);
+
+      expect(result.spawned).toEqual([]);
+      expect(result.failed).toEqual([]);
     });
   });
 

@@ -51,6 +51,9 @@ export function createDiscussionSessionRepository(): DiscussionSessionRepository
   const deleteByDiscussionStmt = db.prepare(
     'DELETE FROM discussion_sessions WHERE discussion_id = ?',
   );
+  const deleteOneStmt = db.prepare(
+    'DELETE FROM discussion_sessions WHERE discussion_id = ? AND agent_id = ?',
+  );
 
   const findWithUnreadStmt = db.prepare(`
     SELECT ds.*, d.title as discussion_title, unread.cnt as unread_count
@@ -94,6 +97,10 @@ export function createDiscussionSessionRepository(): DiscussionSessionRepository
 
     deleteByDiscussion(discussionId): void {
       deleteByDiscussionStmt.run(discussionId);
+    },
+
+    deleteOne(discussionId, agentId): void {
+      deleteOneStmt.run(discussionId, agentId);
     },
 
     findWithUnread(): Array<DiscussionSession & { unreadCount: number; discussionTitle: string }> {

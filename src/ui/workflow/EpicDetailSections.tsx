@@ -67,27 +67,52 @@ export function NeedsInputSection({ data, answers, onChangeAnswer, onSubmit, tra
 
   // If we have structured or parsed questions, show them with individual answer fields
   if (parsedQuestions.length > 0) {
+    const answeredCount = parsedQuestions.filter((_, i) => (answers[i] ?? '').trim().length > 0).length;
+    const allAnswered = answeredCount === parsedQuestions.length;
+
     return (
       <Section title="Questions Needing Your Input">
+        <p className="text-xs text-gray-500 mb-3">
+          Answer the questions below, then submit to send back for re-triage.
+          {' '}<span className={answeredCount === 0 ? 'text-gray-600' : 'text-blue-400'}>
+            {answeredCount}/{parsedQuestions.length} answered
+          </span>
+        </p>
         <div className="space-y-3">
-          {parsedQuestions.map((q, idx) => (
-            <div key={idx}>
-              <p className="text-sm text-gray-300 mb-1">{q.text}</p>
-              <textarea
-                value={answers[idx] ?? ''}
-                onChange={(e) => onChangeAnswer(idx, e.target.value)}
-                placeholder="Your answer..."
-                className="w-full px-3 py-2 bg-gray-800 border border-gray-700 rounded text-sm text-gray-200"
-                rows={2}
-              />
-            </div>
-          ))}
-          <button
-            onClick={onSubmit}
-            className="px-4 py-1.5 text-xs bg-blue-600 hover:bg-blue-500 text-white rounded transition-colors"
-          >
-            Submit Answers
-          </button>
+          {parsedQuestions.map((q, idx) => {
+            const filled = (answers[idx] ?? '').trim().length > 0;
+            return (
+              <div key={idx} className={`rounded p-3 ${filled ? 'bg-gray-800/30' : 'bg-gray-800/60 border border-gray-700'}`}>
+                <p className="text-sm text-gray-300 mb-1.5 font-medium">
+                  <span className="text-gray-500 mr-1.5">{idx + 1}.</span>
+                  {q.text}
+                </p>
+                <textarea
+                  value={answers[idx] ?? ''}
+                  onChange={(e) => onChangeAnswer(idx, e.target.value)}
+                  placeholder="Type your answer..."
+                  className="w-full px-3 py-2 bg-gray-900 border border-gray-700 rounded text-sm text-gray-200 placeholder-gray-600 focus:border-blue-600 focus:outline-none"
+                  rows={2}
+                />
+              </div>
+            );
+          })}
+          <div className="flex items-center gap-3 pt-1">
+            <button
+              onClick={onSubmit}
+              disabled={answeredCount === 0}
+              title={answeredCount === 0 ? 'Answer at least one question before submitting' : undefined}
+              className="px-4 py-1.5 text-xs bg-blue-600 hover:bg-blue-500 text-white rounded transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+            >
+              Submit &amp; Re-triage
+            </button>
+            {answeredCount === 0 && (
+              <span className="text-[10px] text-amber-400">Answer at least one question</span>
+            )}
+            {answeredCount > 0 && !allAnswered && (
+              <span className="text-[10px] text-gray-500">Unanswered questions will be left blank</span>
+            )}
+          </div>
         </div>
       </Section>
     );
@@ -95,8 +120,13 @@ export function NeedsInputSection({ data, answers, onChangeAnswer, onSubmit, tra
 
   // Last resort: show raw comment with a freeform response field
   if (transitionComment) {
+    const hasFreeform = (answers[0] ?? '').trim().length > 0;
+
     return (
       <Section title="Input Requested">
+        <p className="text-xs text-gray-500 mb-3">
+          The triage agent needs more information. Read the request below and provide your response.
+        </p>
         <div className="space-y-3">
           <p className="text-sm text-gray-300 whitespace-pre-wrap bg-gray-800/50 rounded p-3 border border-gray-700">
             {transitionComment}
@@ -104,16 +134,23 @@ export function NeedsInputSection({ data, answers, onChangeAnswer, onSubmit, tra
           <textarea
             value={answers[0] ?? ''}
             onChange={(e) => onChangeAnswer(0, e.target.value)}
-            placeholder="Your response..."
-            className="w-full px-3 py-2 bg-gray-800 border border-gray-700 rounded text-sm text-gray-200"
+            placeholder="Type your response..."
+            className="w-full px-3 py-2 bg-gray-900 border border-gray-700 rounded text-sm text-gray-200 placeholder-gray-600 focus:border-blue-600 focus:outline-none"
             rows={4}
           />
-          <button
-            onClick={onSubmit}
-            className="px-4 py-1.5 text-xs bg-blue-600 hover:bg-blue-500 text-white rounded transition-colors"
-          >
-            Submit Response
-          </button>
+          <div className="flex items-center gap-3 pt-1">
+            <button
+              onClick={onSubmit}
+              disabled={!hasFreeform}
+              title={!hasFreeform ? 'Write a response before submitting' : undefined}
+              className="px-4 py-1.5 text-xs bg-blue-600 hover:bg-blue-500 text-white rounded transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+            >
+              Submit &amp; Re-triage
+            </button>
+            {!hasFreeform && (
+              <span className="text-[10px] text-amber-400">Write a response first</span>
+            )}
+          </div>
         </div>
       </Section>
     );
