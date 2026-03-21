@@ -1,0 +1,49 @@
+import { execSync } from 'child_process';
+import type { Session } from '@foundation/types';
+
+/** Capture the last N non-empty lines from a tmux pane */
+export function capturePaneLines(tmuxSession: string, count = 20): string[] {
+  try {
+    const output = execSync(
+      `tmux capture-pane -t ${tmuxSession} -p`,
+      { stdio: 'pipe', encoding: 'utf-8' },
+    );
+    return output.trimEnd().split('\n').filter(l => l.trim() !== '').slice(-count);
+  } catch {
+    return [];
+  }
+}
+
+/** Check if the tmux pane shows an idle CLI prompt (❯ or > at end).
+ *  The Claude TUI renders a status bar *below* the ❯ prompt line, so
+ *  we scan the last several lines rather than just the very last one.
+ *  We also verify there's no active work indicator (spinner/thinking). */
+export function isSessionIdle(session: Session): boolean {
+  const lines = capturePaneLines(session.tmuxSession, 8);
+  if (lines.length === 0) return false;
+  const tail = lines.join(' ');
+  // Active work indicators — if any are present, session is NOT idle
+  if (/Running…|Thinking|thinking/.test(tail)) return false;
+  // Check if any of the recent lines is the CLI prompt indicator.
+  // The prompt line is typically just `❯` or `❯ ` (possibly with spaces).
+  return lines.some(line => {
+    const t = line.trim();
+    return t === '❯' || t === '>' || t.endsWith('❯');
+  });
+}
+
+/** Check if the session shows Claude is not logged in */
+export function isSessionLoggedOut(session: Session): boolean {
+  const lines = capturePaneLines(session.tmuxSession, 10);
+  const tail = lines.join(' ');
+  return /not logged in|Please run \/login/i.test(tail);
+}
+
+/** Check if the CLI process has exited and the pane shows a bare shell */
+export function isSessionExited(session: Session): boolean {
+  const lines = capturePaneLines(session.tmuxSession, 5);
+  if (lines.length === 0) return false;
+  const lastLine = lines[lines.length - 1]?.trim() || '';
+  // Bare shell prompts: zsh (➜/%), bash ($)
+  return /^[$%]$/.test(lastLine) || /^➜\s/.test(lastLine);
+}
