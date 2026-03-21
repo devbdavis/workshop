@@ -17,6 +17,33 @@ export function Section({ title, children }: { title: string; children: React.Re
   );
 }
 
+export function CollapsibleSection({ title, children, defaultOpen = false, badge }: {
+  title: string;
+  children: React.ReactNode;
+  defaultOpen?: boolean;
+  badge?: string;
+}) {
+  return (
+    <details
+      open={defaultOpen || undefined}
+      className="border border-gray-800 bg-gray-900 rounded-lg group"
+    >
+      <summary className="flex items-center gap-2 px-4 py-3 cursor-pointer select-none text-xs font-semibold text-gray-400 uppercase tracking-wider hover:text-gray-300 transition-colors">
+        <span className="text-gray-600 group-open:rotate-90 transition-transform text-[10px]">&#9654;</span>
+        {title}
+        {badge && (
+          <span className="text-[10px] px-1.5 py-0.5 bg-blue-900/50 text-blue-400 rounded font-normal normal-case">
+            {badge}
+          </span>
+        )}
+      </summary>
+      <div className="px-4 pb-4">
+        {children}
+      </div>
+    </details>
+  );
+}
+
 export function DetailRow({ label, value }: { label: string; value: string }) {
   return (
     <div className="flex justify-between">

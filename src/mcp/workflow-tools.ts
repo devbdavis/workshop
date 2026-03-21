@@ -43,6 +43,33 @@ export function registerWorkflowTools(
   );
 
   server.tool(
+    'workshop_update_ticket',
+    'Update a workflow ticket\'s title, description, or stateData. Use this to refine the spec after triage Q&A loops. stateData fields are shallow-merged with existing values (won\'t wipe other fields).',
+    {
+      ticketId: z.string().describe('The workflow ticket ID'),
+      title: z.string().optional().describe('Updated title'),
+      description: z.string().optional().describe('Updated description / spec text'),
+      stateData: z.record(z.unknown()).optional().describe('State data fields to merge (shallow merge with existing stateData)'),
+    },
+    async ({ ticketId, title, description, stateData }) => {
+      const body: Record<string, unknown> = {};
+      if (title !== undefined) body.title = title;
+      if (description !== undefined) body.description = description;
+      // Merge stateData with existing to avoid wiping other fields
+      if (stateData !== undefined) {
+        const existing = await api(`/workflow/tickets/${ticketId}`);
+        const existingStateData = (existing?.stateData ?? {}) as Record<string, unknown>;
+        body.stateData = { ...existingStateData, ...stateData };
+      }
+      const result = await api(`/workflow/tickets/${ticketId}`, {
+        method: 'PUT',
+        body: JSON.stringify(body),
+      });
+      return { content: [{ type: 'text' as const, text: JSON.stringify(result, null, 2) }] };
+    },
+  );
+
+  server.tool(
     'workshop_create_epic',
     'Create a new workflow epic. Starts in idea state and auto-transitions to triaging.',
     {
