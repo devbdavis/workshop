@@ -1,0 +1,288 @@
+import { execSync } from 'child_process';
+import { writeFileSync, chmodSync } from 'fs';
+import path from 'path';
+import { fileURLToPath } from 'url';
+import type { SessionProvider } from '@foundation/types';
+import type { CreateSessionOptions } from './manager.js';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
+/** Workshop API URL for hook callbacks */
+const WORKSHOP_API_URL = process.env.WORKSHOP_API_URL || 'http://localhost:3002';
+
+/** Write a Claude Code settings file with permission + optional execution hooks */
+export function writeHookSettings(
+  sessionDir: string,
+  sessionId: string,
+  executionTicketId?: string,
+): string {
+  const settingsFile = path.join(sessionDir, 'settings.json');
+
+  const hooks: Record<string, unknown[]> = {
+    PreToolUse: [
+      {
+        matcher: 'Bash|Edit|Write|NotebookEdit|mcp__.*',
+        hooks: [
+          {
+            type: 'http',
+            url: `${WORKSHOP_API_URL}/api/hooks/permission`,
+            headers: { 'X-Workshop-Session': sessionId },
+          },
+        ],
+      },
+    ],
+  };
+
+  if (executionTicketId) {
+    hooks.SubagentStop = [
+      {
+        hooks: [
+          {
+            type: 'http',
+            url: `${WORKSHOP_API_URL}/api/hooks/agent-progress`,
+            headers: {
+              'X-Workshop-Session': sessionId,
+              'X-Workshop-Ticket': executionTicketId,
+            },
+          },
+        ],
+      },
+    ];
+  }
+
+  // SessionEnd hook — always register so Workshop can clean up when Claude exits.
+  // For workflow tickets this also serves as a safety net for completion detection.
+  const hookScript = path.resolve(__dirname, '../../../scripts/session-end-hook.sh');
+  hooks.SessionEnd = [
+    {
+      hooks: [
+        {
+          type: 'command',
+          command: `WORKSHOP_API_URL=${WORKSHOP_API_URL} WORKSHOP_SESSION_ID=${sessionId} ${hookScript}`,
+        },
+      ],
+    },
+  ];
+
+  const settings = { hooks };
+  writeFileSync(settingsFile, JSON.stringify(settings, null, 2), 'utf-8');
+  return settingsFile;
+}
+
+/** Append background agent instructions to the system prompt */
+export function appendBackgroundInstructions(prompt: string, todoId?: string): string {
+  const instructions = [
+    '',
+    '---',
+    '',
+    '## Background Agent Instructions',
+    '',
+    'You are running as a background agent dispatched from Workshop.',
+    'A human will review and approve/deny your tool calls — they see each',
+    'request in the Workshop UI. Keep working through denials by adjusting',
+    'your approach.',
+    '',
+  ];
+
+  if (todoId) {
+    instructions.push(
+      'When you have completed the task (or determined you cannot proceed):',
+      `1. Use the workshop_update_todo MCP tool to update todo "${todoId}" status to "review"`,
+      '2. Add a brief summary of what you accomplished or why you stopped to the description',
+      '3. Use /exit to close your session',
+      '',
+    );
+  } else {
+    instructions.push(
+      'When you have completed your task (or determined you cannot proceed),',
+      'use /exit to close your session so resources are freed.',
+      '',
+    );
+  }
+
+  return prompt + instructions.join('\n');
+}
+
+/** Build launcher script lines for a Claude Code session */
+export function buildClaudeLauncher(
+  lines: string[],
+  sessionId: string,
+  sessionDir: string,
+  tmuxName: string,
+  options?: CreateSessionOptions,
+): void {
+  const claudeArgs = ['claude'];
+
+  if (options?.systemPrompt) {
+    let prompt = options.systemPrompt;
+    if (options.background) {
+      prompt = appendBackgroundInstructions(prompt, options.todoId);
+    }
+    const promptFile = path.join(sessionDir, 'system-prompt.md');
+    writeFileSync(promptFile, prompt, 'utf-8');
+    claudeArgs.push('--system-prompt-file', JSON.stringify(promptFile));
+  }
+
+  // Route permissions through Workshop UI for background or hook-enabled sessions
+  const needsHooks = options?.background || options?.usePermissionHooks;
+  if (needsHooks) {
+    if (options?.dangerouslySkipPermissions) {
+      claudeArgs.push('--dangerously-skip-permissions');
+    } else {
+      const settingsFile = writeHookSettings(sessionDir, sessionId, options?.executionTicketId);
+      claudeArgs.push('--settings', JSON.stringify(settingsFile));
+    }
+  }
+
+  // Pre-approve tool patterns so interactive sessions don't block on permission prompts
+  if (options?.allowedTools && options.allowedTools.length > 0) {
+    for (const tool of options.allowedTools) {
+      claudeArgs.push('--allowedTools', JSON.stringify(tool));
+    }
+  }
+
+  // Auto-approve workspace trust prompt. Claude Code's TUI shows a "trust this
+  // folder" dialog on first use in a directory. A background process polls the
+  // tmux pane and sends Enter when detected — harmless if the prompt never appears.
+  const logFile = path.join(sessionDir, 'trust-approve.log');
+  lines.push(`# Auto-approve workspace trust prompt if it appears`);
+  lines.push(`(`);
+  lines.push(`  for _i in $(seq 1 15); do`);
+  lines.push(`    if tmux capture-pane -t ${tmuxName} -p 2>/dev/null | grep -q "trust this folder"; then`);
+  lines.push(`      sleep 0.5`);
+  lines.push(`      tmux send-keys -t ${tmuxName} Enter`);
+  lines.push(`      echo "[$(date)] Auto-approved workspace trust" >> ${JSON.stringify(logFile)}`);
+  lines.push(`      exit 0`);
+  lines.push(`    fi`);
+  lines.push(`    sleep 1`);
+  lines.push(`  done`);
+  lines.push(`) &`);
+  lines.push('');
+
+  // Pass the initial prompt as a positional argument to claude so it's sent
+  // as the first message. This is reliable — no tmux paste race conditions.
+  // We write it to a file and use $(cat ...) to avoid shell quoting issues.
+  if (options?.initialPrompt) {
+    const promptMsgFile = path.join(sessionDir, 'initial-prompt.txt');
+    writeFileSync(promptMsgFile, options.initialPrompt, 'utf-8');
+    lines.push(`exec ${claudeArgs.join(' ')} "$(cat ${JSON.stringify(promptMsgFile)})"`);
+  } else {
+    lines.push(`exec ${claudeArgs.join(' ')}`);
+  }
+}
+
+/** Build launcher script lines for a Gemini CLI session */
+export function buildGeminiLauncher(
+  lines: string[],
+  sessionDir: string,
+  _cwd: string,
+  options?: CreateSessionOptions,
+): void {
+  const geminiArgs = ['gemini'];
+
+  if (options?.systemPrompt) {
+    const promptFile = path.join(sessionDir, 'system-prompt.md');
+    writeFileSync(promptFile, options.systemPrompt, 'utf-8');
+    geminiArgs.push('--system-instruction', JSON.stringify(promptFile));
+  }
+
+  // Write initial prompt to file if provided (sendInitialPrompt handles delivery)
+  if (options?.initialPrompt) {
+    const promptMsgFile = path.join(sessionDir, 'initial-prompt.txt');
+    writeFileSync(promptMsgFile, options.initialPrompt, 'utf-8');
+  }
+
+  lines.push(`exec ${geminiArgs.join(' ')}`);
+}
+
+/** Build launcher script lines for a Codex CLI session */
+export function buildCodexLauncher(
+  lines: string[],
+  sessionDir: string,
+  cwd: string,
+  options?: CreateSessionOptions,
+): void {
+  const codexArgs = ['codex'];
+  const promptFile = path.join(sessionDir, 'system-prompt.md');
+
+  if (options?.background) {
+    codexArgs.push('exec', '--full-auto', '-C', JSON.stringify(cwd));
+
+    let fullPrompt = '';
+    if (options?.systemPrompt) {
+      let prompt = options.systemPrompt;
+      prompt = appendBackgroundInstructions(prompt, options.todoId);
+      fullPrompt += prompt + '\n\n---\n\n';
+    }
+    if (options?.initialPrompt) {
+      fullPrompt += options.initialPrompt;
+    }
+
+    writeFileSync(promptFile, fullPrompt, 'utf-8');
+    lines.push(`exec ${codexArgs.join(' ')} "$(cat ${JSON.stringify(promptFile)})"`);
+  } else {
+    codexArgs.push('-C', JSON.stringify(cwd));
+
+    if (options?.systemPrompt) {
+      writeFileSync(promptFile, options.systemPrompt, 'utf-8');
+      lines.push(`exec ${codexArgs.join(' ')} "$(cat ${JSON.stringify(promptFile)})"`);
+    } else {
+      lines.push(`exec ${codexArgs.join(' ')}`);
+    }
+
+    if (options?.initialPrompt) {
+      const promptMsgFile = path.join(sessionDir, 'initial-prompt.txt');
+      writeFileSync(promptMsgFile, options.initialPrompt, 'utf-8');
+    }
+  }
+}
+
+/**
+ * Write and execute a helper script that waits for the AI CLI TUI to be
+ * ready, then pastes the initial prompt and presses Enter.
+ *
+ * Runs as a detached background process so it doesn't block session creation.
+ */
+export function sendInitialPrompt(
+  sessionDir: string,
+  tmuxName: string,
+  provider: SessionProvider = 'claude',
+): void {
+  const promptMsgFile = path.join(sessionDir, 'initial-prompt.txt');
+  const senderScript = path.join(sessionDir, 'send-prompt.sh');
+  const logFile = path.join(sessionDir, 'send-prompt.log');
+
+  // Different CLIs use different prompt indicators
+  const grepPattern = provider === 'codex' ? "'^>'" : "'❯'";
+
+  const script = `#!/bin/bash
+# Wait for ${provider} TUI to be ready (look for the input prompt indicator)
+# 90s timeout to allow for enterprise auth + MCP server connections
+for i in $(seq 1 90); do
+  if tmux capture-pane -t ${tmuxName} -p 2>/dev/null | grep -q ${grepPattern}; then
+    sleep 1
+    tmux load-buffer ${JSON.stringify(promptMsgFile)} \\; paste-buffer -t ${tmuxName}
+    sleep 0.5
+    tmux send-keys -t ${tmuxName} Enter
+    echo "[$(date)] Prompt delivered to ${tmuxName} after \${i}s" >> ${JSON.stringify(logFile)}
+    exit 0
+  fi
+  sleep 1
+done
+echo "[$(date)] Timed out waiting for ${provider} TUI in ${tmuxName} after 90s" >> ${JSON.stringify(logFile)}
+exit 1
+`;
+
+  writeFileSync(senderScript, script, 'utf-8');
+  chmodSync(senderScript, 0o755);
+
+  try {
+    execSync(`nohup ${JSON.stringify(senderScript)} >> ${JSON.stringify(logFile)} 2>&1 &`, {
+      stdio: 'pipe',
+      shell: '/bin/bash',
+    });
+  } catch (err) {
+    console.error(`Failed to start prompt sender for ${tmuxName}:`, err);
+  }
+}
