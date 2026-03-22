@@ -1,11 +1,12 @@
 import { useEffect, useState, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import type { WorkflowTicket, Track } from '@foundation/types';
+import type { WorkflowTicket, Track } from '@foundation/types.js';
 import { CreateEpicModal, type CreateEpicData } from './CreateEpicModal.js';
 import { EpicList, type FilterTab } from './EpicList.js';
 import { StateDiagram } from './StateDiagram.js';
+import { TemplateLibrary } from './TemplateLibrary.js';
 
-type SubTab = 'epics' | 'flow';
+type SubTab = 'epics' | 'flow' | 'templates';
 
 export function WorkflowPage() {
   const navigate = useNavigate();
@@ -102,6 +103,16 @@ export function WorkflowPage() {
           >
             Flow Diagram
           </button>
+          <button
+            onClick={() => setActiveTab('templates')}
+            className={`px-4 py-1.5 text-xs rounded-md transition-colors ${
+              activeTab === 'templates'
+                ? 'bg-gray-700 text-white'
+                : 'text-gray-400 hover:text-gray-200'
+            }`}
+          >
+            Templates
+          </button>
         </div>
         {activeTab === 'flow' && (
           <button
@@ -113,7 +124,7 @@ export function WorkflowPage() {
         )}
       </header>
 
-      {activeTab === 'epics' ? (
+      {activeTab === 'epics' && (
         <EpicList
           epics={epics}
           tracks={tracks}
@@ -122,7 +133,9 @@ export function WorkflowPage() {
           onEpicClick={(id) => navigate(`/workflow/${id}`)}
           onCreateClick={() => setShowCreateForm(true)}
         />
-      ) : (
+      )}
+
+      {activeTab === 'flow' && (
         <div className="flex-1 overflow-y-auto p-6">
           <div className="space-y-6 max-w-4xl">
             <div>
@@ -140,6 +153,12 @@ export function WorkflowPage() {
               <StateDiagram ticketType="task" />
             </div>
           </div>
+        </div>
+      )}
+
+      {activeTab === 'templates' && (
+        <div className="flex-1 overflow-y-auto">
+          <TemplateLibrary />
         </div>
       )}
 

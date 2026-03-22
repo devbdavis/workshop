@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import type { Track } from '@foundation/types';
+import type { Track } from '@foundation/types.js';
 
 type CreateMode = 'standard' | 'from-plan';
 

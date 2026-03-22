@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import type { WorkflowTicketId, WorkflowState, WorkflowTicketType, TrackId } from '@foundation/types';
+import type { WorkflowTicketId, WorkflowState, WorkflowTicketType, TrackId, WorkflowTicket } from '@foundation/types.js';
 import type {
   WorkflowTicketRepository,
   WorkflowTransitionRepository,
@@ -7,6 +7,7 @@ import type {
 } from '@application/workflow/ticket-repository.js';
 import type { WorkflowEngine } from '@application/workflow/engine.js';
 import type { DispatchCoordinator } from '@application/workflow/dispatch-coordinator.js';
+import type { TopologyLoader } from '@application/workflow/topology-loader.js';
 import { broadcast } from './events.js';
 
 export interface WorkflowRouterDeps {
@@ -16,11 +17,49 @@ export interface WorkflowRouterDeps {
   dependencies: TicketDependencyRepository;
   /** Unified dispatch coordinator — handles agent dispatch for all actionable states */
   dispatcher?: DispatchCoordinator;
+  /** Optional topology loader for enriching responses with semantic info */
+  topologyLoader?: TopologyLoader;
+}
+
+/**
+ * Enrich a ticket with semantic role info from its workflow template.
+ * This adds currentStateSemanticRole, currentStateHumanGate, currentStateAgentActionable
+ * to the ticket's stateData for UI rendering.
+ */
+function enrichTicketWithSemanticInfo(
+  ticket: WorkflowTicket,
+  topologyLoader?: TopologyLoader
+): WorkflowTicket {
+  if (!topologyLoader || !ticket.workflowTemplateRowId) {
+    return ticket;
+  }
+
+  try {
+    const stages = topologyLoader.loadForTicket(ticket);
+    const stage = stages.find(s => s.state === ticket.state);
+
+    if (!stage) {
+      return ticket;
+    }
+
+    // Merge semantic info into stateData (don't overwrite existing stateData)
+    const enrichedStateData = {
+      ...ticket.stateData,
+      currentStateSemanticRole: stage.semanticRole,
+      currentStateHumanGate: stage.humanGate,
+      currentStateAgentActionable: stage.agentActionable,
+    };
+
+    return { ...ticket, stateData: enrichedStateData };
+  } catch {
+    // Template not found or loading failed — return ticket as-is
+    return ticket;
+  }
 }
 
 export function createWorkflowRouter(deps: WorkflowRouterDeps): Router {
   const router = Router();
-  const { engine, tickets, transitions, dependencies, dispatcher } = deps;
+  const { engine, tickets, transitions, dependencies, dispatcher, topologyLoader } = deps;
 
   // --- List all workflow tickets ---
 
@@ -38,7 +77,10 @@ export function createWorkflowRouter(deps: WorkflowRouterDeps): Router {
     if (trackId) filters.trackId = trackId as TrackId;
     if (parentId) filters.parentId = parentId as WorkflowTicketId;
 
-    res.json(tickets.findAll(filters));
+    const rawTickets = tickets.findAll(filters);
+    // Enrich each ticket with semantic info from its template
+    const enrichedTickets = rawTickets.map(t => enrichTicketWithSemanticInfo(t, topologyLoader));
+    res.json(enrichedTickets);
   });
 
   // --- Get single workflow ticket ---
@@ -54,7 +96,9 @@ export function createWorkflowRouter(deps: WorkflowRouterDeps): Router {
     const children = tickets.findChildren(ticket.id);
     ticket.childIds = children.map((c) => c.id);
 
-    res.json(ticket);
+    // Enrich with semantic info from template
+    const enriched = enrichTicketWithSemanticInfo(ticket, topologyLoader);
+    res.json(enriched);
   });
 
   // --- Create epic from pre-written plan (starts at plan-review) ---

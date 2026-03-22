@@ -1,4 +1,4 @@
-import type { WorkflowTicket, Track } from '@foundation/types';
+import type { WorkflowTicket, Track } from '@foundation/types.js';
 import { WorkflowStateIndicator } from './WorkflowStateIndicator.js';
 
 const PRIORITY_STYLES: Record<string, string> = {
@@ -17,9 +17,31 @@ const FILTER_TABS: { value: FilterTab; label: string }[] = [
   { value: 'done', label: 'Done' },
 ];
 
-const TERMINAL_STATES = new Set(['merged', 'cancelled']);
-const HUMAN_REVIEW_STATES = new Set(['spec-review', 'plan-review', 'final-review']);
-const DONE_STATES = new Set(['merged', 'approved']);
+// Legacy state sets — kept for backward compatibility with tickets without templates
+const LEGACY_TERMINAL_STATES = new Set(['merged', 'cancelled', 'done']);
+const LEGACY_HUMAN_REVIEW_STATES = new Set(['spec-review', 'plan-review', 'final-review']);
+const LEGACY_DONE_STATES = new Set(['merged', 'approved', 'done']);
+
+/** Check if ticket is in a terminal state (dynamic template or legacy fallback) */
+function isTerminalState(ticket: WorkflowTicket): boolean {
+  const sd = ticket.stateData as Record<string, unknown> | undefined;
+  if (sd?.currentStateSemanticRole === 'terminal') return true;
+  return LEGACY_TERMINAL_STATES.has(ticket.state);
+}
+
+/** Check if ticket is at a human gate requiring review (dynamic template or legacy fallback) */
+function isHumanReviewState(ticket: WorkflowTicket): boolean {
+  const sd = ticket.stateData as Record<string, unknown> | undefined;
+  if (sd?.currentStateHumanGate === true) return true;
+  return LEGACY_HUMAN_REVIEW_STATES.has(ticket.state);
+}
+
+/** Check if ticket is in a done state (successful terminal) */
+function isDoneState(ticket: WorkflowTicket): boolean {
+  const sd = ticket.stateData as Record<string, unknown> | undefined;
+  if (sd?.currentStateSemanticRole === 'terminal' && ticket.state !== 'cancelled') return true;
+  return LEGACY_DONE_STATES.has(ticket.state);
+}
 
 interface EpicListProps {
   epics: WorkflowTicket[];
@@ -41,9 +63,9 @@ export function EpicList({
   const trackNames = Object.fromEntries(tracks.map((t) => [t.id, t.name]));
 
   const filtered = epics.filter((e) => {
-    if (filter === 'active') return !TERMINAL_STATES.has(e.state);
-    if (filter === 'review') return HUMAN_REVIEW_STATES.has(e.state);
-    if (filter === 'done') return DONE_STATES.has(e.state);
+    if (filter === 'active') return !isTerminalState(e);
+    if (filter === 'review') return isHumanReviewState(e);
+    if (filter === 'done') return isDoneState(e);
     return true;
   });
 
@@ -121,7 +143,7 @@ function EpicCard({
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 mb-1">
             <h3 className="text-sm font-medium text-gray-200 truncate">{epic.title}</h3>
-            <WorkflowStateIndicator state={epic.state} ticketType="epic" />
+            <WorkflowStateIndicator state={epic.state} ticketType="epic" stateData={epic.stateData as Record<string, unknown> | undefined} />
             <span className={`text-[10px] px-1.5 py-0.5 rounded ${PRIORITY_STYLES[epic.priority]}`}>
               {epic.priority}
             </span>
