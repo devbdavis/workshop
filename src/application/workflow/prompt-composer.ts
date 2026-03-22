@@ -26,8 +26,9 @@ export interface PromptContext {
 }
 
 /**
- * Detect whether a planDraft value is a reference (vault path or file URL) vs inline content.
- * Returns formatted prompt text with read instructions if it's a reference.
+ * Detect whether a planDraft value is a reference (vault path, file URL, or
+ * relative file path) vs inline content, and return formatted prompt text
+ * with explicit read instructions when it's a reference.
  */
 export function formatPlanContent(planDraft: string, heading: string): string {
   const trimmed = planDraft.trim();
@@ -44,19 +45,33 @@ export function formatPlanContent(planDraft: string, heading: string): string {
     ].join('\n');
   }
 
-  // Vault path — short string, no newlines, ends with .md, contains /
+  // Short path-like string (no newlines, ends with .md, contains /)
   if (!trimmed.includes('\n') && trimmed.endsWith('.md') && trimmed.includes('/') && trimmed.length < 300) {
-    // Parse vault path: "TrackSlug/path/to/file.md" or "_Workflow/plans/file.md"
     const slashIdx = trimmed.indexOf('/');
-    const trackSlug = trimmed.substring(0, slashIdx);
-    const filePath = trimmed.substring(slashIdx + 1);
+    const firstSegment = trimmed.substring(0, slashIdx);
+
+    // Vault path — first segment starts with _ (system track) or looks like a track slug
+    // e.g. "_Workflow/plans/file.md" or "workshop-dev/plans/file.md"
+    if (firstSegment.startsWith('_') || firstSegment.includes('-')) {
+      const trackSlug = firstSegment;
+      const filePath = trimmed.substring(slashIdx + 1);
+      return [
+        `## ${heading}`,
+        '',
+        `The plan is stored in the Workshop vault at: \`${trimmed}\``,
+        '',
+        `**You MUST read this file first** before proceeding. Use the workshop_vault_read tool:`,
+        `  workshop_vault_read(trackSlug="${trackSlug}", filePath="${filePath}")`,
+      ].join('\n');
+    }
+
+    // Relative file path — e.g. "plans/dynamic-workflow-engine.md"
     return [
       `## ${heading}`,
       '',
-      `The plan is stored in the Workshop vault at: \`${trimmed}\``,
+      `The plan is stored in the file: \`${trimmed}\``,
       '',
-      `**You MUST read this file first** before proceeding. Use the workshop_vault_read tool:`,
-      `  workshop_vault_read(trackSlug="${trackSlug}", filePath="${filePath}")`,
+      `**You MUST read this file first** before proceeding. It is a relative path in the working directory.`,
     ].join('\n');
   }
 
@@ -321,11 +336,28 @@ function buildIntegrationReviewerPrompt(
   return lines.join('\n');
 }
 
-function buildFixerPrompt(_ticket: WorkflowTicket, context?: PromptContext): string {
-  const lines = ['You are fixing issues found during review.'];
-  if (context?.feedback?.length) {
-    lines.push('', 'Findings:', ...context.feedback.map((f) => `- ${f}`));
+function buildFixerPrompt(ticket: WorkflowTicket, context?: PromptContext): string {
+  const lines = [
+    'You are fixing issues found during integration review.',
+    '',
+    `## Ticket: ${ticket.title}`,
+    '',
+    ticket.description,
+  ];
+  if (context?.planDraft) {
+    lines.push('', formatPlanContent(context.planDraft, 'Implementation Plan'));
   }
-  lines.push('', 'Address each finding.');
+  if (context?.feedback?.length) {
+    lines.push('', '## Review Findings (MUST address all of these)', '');
+    for (const f of context.feedback) {
+      lines.push(`- ${f}`);
+    }
+  }
+  lines.push(
+    '',
+    '## Instructions',
+    '',
+    'Address each finding above. Run builds, tests, and typecheck to verify your fixes.',
+  );
   return lines.join('\n');
 }

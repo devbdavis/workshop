@@ -97,6 +97,23 @@ export function createAgentDispatcher(deps: AgentDispatcherDeps): AgentDispatche
       ctx.feedback = stateData.feedback as string[];
     }
 
+    // Integration-review findings — structured review results for the fixer agent
+    if (stateData?.reviewFindings && typeof stateData.reviewFindings === 'object') {
+      const rf = stateData.reviewFindings as Record<string, unknown>;
+      const lines: string[] = [];
+      if (rf.verdict) lines.push(`Verdict: ${rf.verdict}`);
+      if (rf.summary) lines.push(`Summary: ${rf.summary}`);
+      if (Array.isArray(rf.blocking)) {
+        for (const b of rf.blocking as Array<Record<string, unknown>>) {
+          const missing = Array.isArray(b.missing) ? (b.missing as string[]).join(', ') : '';
+          lines.push(`[${b.status}] ${b.phase}${missing ? ': ' + missing : ''}`);
+        }
+      }
+      if (lines.length > 0) {
+        ctx.feedback = [...(ctx.feedback || []), ...lines];
+      }
+    }
+
     // Critic's findings (blocking/suggestion items from plan-critique)
     if (stateData?.findings && Array.isArray(stateData.findings)) {
       ctx.findings = stateData.findings as PromptContext['findings'];
