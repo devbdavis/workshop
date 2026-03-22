@@ -1,20 +1,21 @@
 /**
  * Application service that orchestrates execution dispatch after plan-review approval.
  *
- * Owns the full "approve → dispatch → compensate on failure" flow so the HTTP layer
+ * Owns the full "approve -> dispatch -> compensate on failure" flow so the HTTP layer
  * stays thin and any caller of approveWithExecution gets consistent behavior.
  */
 import type {
   WorkflowTicket,
   WorkflowTicketId,
-  ExecutionData,
   TrackId,
-} from '@foundation/types';
+} from '@foundation/types.js';
 import type { WorkflowTicketRepository } from './ticket-repository.js';
-import type { TrackRepository } from '@domain/track/repository';
-import type { SummaryRepository } from '@domain/summary/repository';
+import type { TrackRepository } from '@domain/track/repository.js';
+import type { SummaryRepository } from '@domain/summary/repository.js';
 import type { TerminalManager } from '@infrastructure/terminal/manager.js';
 import type { WorkflowEngine } from './engine.js';
+import type { TopologyLoader } from './topology-loader.js';
+import { getStageDefinition } from './types.js';
 import { formatPlanContent } from './prompt-composer.js';
 
 // ---------------------------------------------------------------------------
@@ -22,10 +23,10 @@ import { formatPlanContent } from './prompt-composer.js';
 // ---------------------------------------------------------------------------
 
 export interface ExecutionDispatcher {
-  /** Approve a ticket at a human gate — if the result is 'executing', dispatch automatically. */
+  /** Approve a ticket at a human gate — if the result is an execution stage, dispatch automatically. */
   approveWithExecution(ticketId: WorkflowTicketId, comment?: string): Promise<WorkflowTicket>;
 
-  /** Dispatch execution for a ticket already in 'executing' state (e.g. retry). */
+  /** Dispatch execution for a ticket already in an execution stage (e.g. retry). */
   dispatch(ticketId: WorkflowTicketId): Promise<void>;
 }
 
@@ -35,6 +36,51 @@ export interface ExecutionDispatcherDeps {
   tracks: TrackRepository;
   summaries: SummaryRepository;
   terminal: TerminalManager;
+  topologyLoader: TopologyLoader;
+}
+
+// ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
+
+/**
+ * Check if a stage is an execution stage (has execution-complete or execution-failed triggers).
+ */
+function isExecutionStage(
+  topologyLoader: TopologyLoader,
+  ticket: WorkflowTicket,
+): boolean {
+  try {
+    const stages = topologyLoader.loadForTicket(ticket);
+    const stage = getStageDefinition(stages, ticket.state);
+    return stage?.validTransitions.some(
+      (t) => t.trigger === 'execution-complete' || t.trigger === 'execution-failed',
+    ) ?? false;
+  } catch {
+    // No template — fallback to hardcoded check for backward compat
+    return ticket.state === 'executing';
+  }
+}
+
+/**
+ * Find the target state for a given trigger from the current stage.
+ */
+function findTransitionTarget(
+  topologyLoader: TopologyLoader,
+  ticket: WorkflowTicket,
+  trigger: string,
+): string | null {
+  try {
+    const stages = topologyLoader.loadForTicket(ticket);
+    const stage = getStageDefinition(stages, ticket.state);
+    const transition = stage?.validTransitions.find((t) => t.trigger === trigger);
+    return transition?.to ?? null;
+  } catch {
+    // Fallback for backward compat
+    if (trigger === 'execution-complete') return 'integration-review';
+    if (trigger === 'execution-failed') return 'execution-failed';
+    return null;
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -44,7 +90,7 @@ export interface ExecutionDispatcherDeps {
 export function createExecutionDispatcher(
   deps: ExecutionDispatcherDeps,
 ): ExecutionDispatcher {
-  const { engine, tickets, tracks, summaries, terminal } = deps;
+  const { engine, tickets, tracks, summaries, terminal, topologyLoader } = deps;
 
   /** Lazily find-or-create a _Workflow track for tickets without a track */
   let workflowTrackId: TrackId | null = null;
@@ -82,12 +128,16 @@ export function createExecutionDispatcher(
     }
     const workingDir = repos[0].path;
 
+    // Find the completion target from topology
+    const completionTarget = findTransitionTarget(topologyLoader, ticket, 'execution-complete');
+    const failedTarget = findTransitionTarget(topologyLoader, ticket, 'execution-failed');
+
     const session = await terminal.createSession(
       ticket.trackId || getOrCreateWorkflowTrack(),
       {
         systemPrompt,
         background: true,
-        initialPrompt: buildInitialPrompt(ticket),
+        initialPrompt: buildInitialPrompt(ticket, completionTarget, failedTarget),
         workingDirectory: workingDir,
         executionTicketId: ticket.id,
       },
@@ -98,11 +148,11 @@ export function createExecutionDispatcher(
       stateData: {
         ...(ticket.stateData || {}),
         agentProgress: [],
-      } satisfies ExecutionData & Record<string, unknown>,
+      } as Record<string, unknown>,
     });
 
     console.log(
-      `Execution dispatched for ticket ${ticket.id} → session ${session.id}`,
+      `Execution dispatched for ticket ${ticket.id} -> session ${session.id}`,
     );
   }
 
@@ -113,7 +163,7 @@ export function createExecutionDispatcher(
     ): Promise<WorkflowTicket> {
       let current = engine.approve(ticketId, comment);
 
-      if (current.state !== 'executing') {
+      if (!isExecutionStage(topologyLoader, current)) {
         return current;
       }
 
@@ -123,17 +173,20 @@ export function createExecutionDispatcher(
         current = tickets.findById(ticketId) || current;
       } catch (dispatchErr) {
         console.error('Failed to dispatch execution:', dispatchErr);
-        try {
-          current = engine.transition(
-            current.id,
-            'execution-failed',
-            { type: 'system', reason: 'Dispatch failed' },
-            dispatchErr instanceof Error
-              ? dispatchErr.message
-              : 'Failed to dispatch execution session',
-          );
-        } catch {
-          console.error('Failed to mark ticket as execution-failed:', ticketId);
+        const failedTarget = findTransitionTarget(topologyLoader, current, 'execution-failed');
+        if (failedTarget) {
+          try {
+            current = engine.transition(
+              current.id,
+              failedTarget,
+              { type: 'system', reason: 'Dispatch failed' },
+              dispatchErr instanceof Error
+                ? dispatchErr.message
+                : 'Failed to dispatch execution session',
+            );
+          } catch {
+            console.error('Failed to mark ticket as execution-failed:', ticketId);
+          }
         }
       }
 
@@ -143,9 +196,10 @@ export function createExecutionDispatcher(
     async dispatch(ticketId: WorkflowTicketId): Promise<void> {
       const ticket = tickets.findById(ticketId);
       if (!ticket) throw new Error(`Ticket not found: ${ticketId}`);
-      if (ticket.state !== 'executing') {
+
+      if (!isExecutionStage(topologyLoader, ticket)) {
         throw new Error(
-          `Ticket ${ticketId} is not in 'executing' state (current: ${ticket.state})`,
+          `Ticket ${ticketId} is not in an execution stage (current: ${ticket.state})`,
         );
       }
       await dispatchExecution(ticket);
@@ -222,7 +276,7 @@ function composeExecutionPrompt(
     '### Context Passing (CRITICAL)',
     '',
     'When spawning each sub-agent, you MUST include in its prompt:',
-    '- The relevant section of the implementation plan (not the whole plan — just their part)',
+    '- The relevant section of the implementation plan (not the whole plan - just their part)',
     '- The project context and repository paths',
     '- Any outputs from prior agents that are dependencies for their work',
     '- Clear scope boundaries: what they should and should NOT touch',
@@ -234,7 +288,14 @@ function composeExecutionPrompt(
   return parts.join('\n');
 }
 
-function buildInitialPrompt(ticket: WorkflowTicket): string {
+function buildInitialPrompt(
+  ticket: WorkflowTicket,
+  completionTarget: string | null,
+  failedTarget: string | null,
+): string {
+  const successState = completionTarget || 'integration-review';
+  const failState = failedTarget || 'execution-failed';
+
   return [
     `Execute the approved implementation plan for workflow ticket ${ticket.id}.`,
     '',
@@ -250,7 +311,7 @@ function buildInitialPrompt(ticket: WorkflowTicket): string {
     '',
     'For small/simple plans, you may implement directly. For multi-phase plans, you MUST delegate.',
     '',
-    `When done, report results via: workshop_transition_ticket("${ticket.id}", "integration-review", ...)`,
-    `On failure: workshop_transition_ticket("${ticket.id}", "execution-failed", ...)`,
+    `When done, report results via: workshop_transition_ticket("${ticket.id}", "${successState}", ...)`,
+    `On failure: workshop_transition_ticket("${ticket.id}", "${failState}", ...)`,
   ].join('\n');
 }

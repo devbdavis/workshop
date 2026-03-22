@@ -1,8 +1,10 @@
 /**
  * Resolves inter-ticket dependencies and detects when blocked tickets become unblocked.
  */
-import type { WorkflowTicketId } from '@foundation/types';
+import type { WorkflowTicketId } from '@foundation/types.js';
 import type { WorkflowTicketRepository, TicketDependencyRepository } from './ticket-repository.js';
+import type { TopologyLoader } from './topology-loader.js';
+import { isTerminal } from './types.js';
 
 export interface DependencyResolver {
   /** Check if all dependencies for a ticket are resolved */
@@ -18,10 +20,24 @@ export interface DependencyResolver {
 export interface DependencyResolverDeps {
   tickets: WorkflowTicketRepository;
   dependencies: TicketDependencyRepository;
+  topologyLoader: TopologyLoader;
 }
 
 export function createDependencyResolver(deps: DependencyResolverDeps): DependencyResolver {
-  const { tickets, dependencies } = deps;
+  const { tickets, dependencies, topologyLoader } = deps;
+
+  /** Check if a ticket is in a terminal state using topology or fallback. */
+  function checkIsTerminal(ticket: { state: string; workflowTemplateRowId?: string }): boolean {
+    try {
+      if (ticket.workflowTemplateRowId) {
+        const stages = topologyLoader.loadByTemplateRowId(ticket.workflowTemplateRowId);
+        return isTerminal(stages, ticket.state);
+      }
+    } catch {
+      // Template not found — fall through to hardcoded check
+    }
+    return ticket.state === 'done' || ticket.state === 'cancelled' || ticket.state === 'merged';
+  }
 
   return {
     allResolved(ticketId: WorkflowTicketId): boolean {
@@ -30,18 +46,14 @@ export function createDependencyResolver(deps: DependencyResolverDeps): Dependen
     },
 
     resolveAndUnblock(completedTicketId: WorkflowTicketId): WorkflowTicketId[] {
-      // Find all dependency records where something depends ON the completed ticket
       const dependents = dependencies.findDependents(completedTicketId);
       const unblockedIds: WorkflowTicketId[] = [];
 
       for (const dep of dependents) {
-        // Mark this specific dependency as resolved
         dependencies.resolve(dep.ticketId, completedTicketId);
 
-        // Check if the dependent ticket now has zero unresolved deps
         const remaining = dependencies.findUnresolved(dep.ticketId);
         if (remaining.length === 0) {
-          // Only unblock if the ticket is actually in 'blocked' state
           const ticket = tickets.findById(dep.ticketId);
           if (ticket && ticket.state === 'blocked') {
             unblockedIds.push(dep.ticketId);
@@ -55,7 +67,7 @@ export function createDependencyResolver(deps: DependencyResolverDeps): Dependen
     allChildrenDone(epicId: WorkflowTicketId): boolean {
       const children = tickets.findChildren(epicId);
       if (children.length === 0) return false;
-      return children.every((child) => child.state === 'done' || child.state === 'cancelled');
+      return children.every((child) => checkIsTerminal(child));
     },
   };
 }
