@@ -435,6 +435,112 @@ function runMigrations(db: Database.Database): void {
   // Migration: backfill label='system' for existing system tracks (names starting with _)
   db.exec(`UPDATE tracks SET label = 'system' WHERE name LIKE '\\_%' ESCAPE '\\' AND label IS NULL;`);
 
+  // Migration: create workflow_templates table
+  try {
+    db.exec(`
+      CREATE TABLE workflow_templates (
+        row_id TEXT PRIMARY KEY,
+        id TEXT NOT NULL,
+        version INTEGER NOT NULL DEFAULT 1,
+        name TEXT NOT NULL,
+        description TEXT NOT NULL DEFAULT '',
+        ticket_type TEXT NOT NULL CHECK(ticket_type IN ('epic', 'task')),
+        stage_definitions TEXT NOT NULL,
+        prompt_overrides TEXT,
+        tags TEXT,
+        match_criteria TEXT,
+        usage_count INTEGER NOT NULL DEFAULT 0,
+        avg_rating REAL,
+        parent_template_id TEXT,
+        is_latest BOOLEAN NOT NULL DEFAULT true,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        created_by TEXT NOT NULL DEFAULT 'system',
+        UNIQUE(id, version)
+      );
+
+      CREATE INDEX idx_wf_templates_id ON workflow_templates(id);
+      CREATE INDEX idx_wf_templates_tags ON workflow_templates(tags);
+      CREATE INDEX idx_wf_templates_ticket_type ON workflow_templates(ticket_type);
+    `);
+  } catch {
+    // Table already exists — safe to ignore
+  }
+
+  // Migration: create partial index for latest templates (needs separate try-catch)
+  try {
+    db.exec(`CREATE INDEX idx_wf_templates_latest ON workflow_templates(id, is_latest) WHERE is_latest = true;`);
+  } catch {
+    // Index already exists — safe to ignore
+  }
+
+  // Migration: create workflow_agent_roles table
+  try {
+    db.exec(`
+      CREATE TABLE workflow_agent_roles (
+        id TEXT PRIMARY KEY,
+        name TEXT NOT NULL,
+        description TEXT NOT NULL DEFAULT '',
+        prompt_block TEXT NOT NULL,
+        tools_allowed TEXT,
+        capability_tier TEXT NOT NULL DEFAULT 'advisory' CHECK(capability_tier IN ('advisory', 'code-modification', 'infrastructure')),
+        created_by_template_row_id TEXT,
+        reusable BOOLEAN NOT NULL DEFAULT true,
+        usage_count INTEGER NOT NULL DEFAULT 0,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      );
+
+      CREATE INDEX idx_wf_agent_roles_tier ON workflow_agent_roles(capability_tier);
+    `);
+  } catch {
+    // Table already exists — safe to ignore
+  }
+
+  // Migration: create partial index for reusable agent roles
+  try {
+    db.exec(`CREATE INDEX idx_wf_agent_roles_reusable ON workflow_agent_roles(reusable) WHERE reusable = true;`);
+  } catch {
+    // Index already exists — safe to ignore
+  }
+
+  // Migration: create workflow_reviews table
+  try {
+    db.exec(`
+      CREATE TABLE workflow_reviews (
+        id TEXT PRIMARY KEY,
+        template_row_id TEXT NOT NULL,
+        epic_id TEXT NOT NULL REFERENCES workflow_tickets(id),
+        structured_findings TEXT NOT NULL,
+        suggested_changes TEXT,
+        per_state_timing TEXT,
+        human_approved BOOLEAN,
+        applied_as_version INTEGER,
+        created_at TEXT NOT NULL,
+        reviewed_at TEXT
+      );
+
+      CREATE INDEX idx_wf_reviews_template ON workflow_reviews(template_row_id);
+      CREATE INDEX idx_wf_reviews_epic ON workflow_reviews(epic_id);
+    `);
+  } catch {
+    // Table already exists — safe to ignore
+  }
+
+  // Migration: add workflow_template_row_id column to workflow_tickets
+  try {
+    db.exec(`ALTER TABLE workflow_tickets ADD COLUMN workflow_template_row_id TEXT;`);
+  } catch {
+    // Column already exists — safe to ignore
+  }
+
+  // Migration: add workflow_template_version column to workflow_tickets
+  try {
+    db.exec(`ALTER TABLE workflow_tickets ADD COLUMN workflow_template_version INTEGER;`);
+  } catch {
+    // Column already exists — safe to ignore
+  }
+
   // Seed default prompt templates if the table is empty
   seedDefaultTemplates(db);
 }
