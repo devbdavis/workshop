@@ -5,31 +5,16 @@
  * This runs once on server startup (after a short delay to let session sync
  * complete) and can also be invoked on-demand.
  */
-import type { WorkflowTicket, SessionId } from '@foundation/types';
+import type { WorkflowTicket, SessionId } from '@foundation/types.js';
 import type { WorkflowTicketRepository } from './ticket-repository.js';
 import type { SessionRepository } from '@domain/session/repository';
-// TODO: Phase 3 Round 2 — replace with topology loader
-// import { isAgentActionable, isTerminal } from '@domain/workflow/state-machine.js';
 import type { DispatchCoordinator } from './dispatch-coordinator.js';
-
-// ---------------------------------------------------------------------------
-// TODO: Phase 3 Round 2 — replace these stubs with topology loader
-// ---------------------------------------------------------------------------
-
-const TERMINAL_STATES = ['merged', 'cancelled', 'done'];
-const AGENT_ACTIONABLE_STATES: Record<string, string[]> = {
-  epic: ['triaging', 'planning', 'plan-critique', 'splitting', 'integration-review', 'integration-fix'],
-  task: ['ready', 'in-progress', 'code-review', 'changes-requested'],
-};
-
-function isTerminal(ticketType: string, state: string): boolean {
-  return TERMINAL_STATES.includes(state);
-}
-
-function isAgentActionable(ticketType: string, state: string): boolean {
-  const states = AGENT_ACTIONABLE_STATES[ticketType];
-  return states ? states.includes(state) : false;
-}
+import type { TopologyLoader } from './topology-loader.js';
+import {
+  isTerminal as topologyIsTerminal,
+  isAgentActionable as topologyIsAgentActionable,
+  getStageDefinition,
+} from './types.js';
 
 // ---------------------------------------------------------------------------
 // Public interface
@@ -46,6 +31,50 @@ export interface WorkflowRecoveryDeps {
   tickets: WorkflowTicketRepository;
   sessions: SessionRepository;
   dispatcher: DispatchCoordinator;
+  topologyLoader: TopologyLoader;
+}
+
+// ---------------------------------------------------------------------------
+// Helpers — topology-aware state checks with fallbacks for legacy tickets
+// ---------------------------------------------------------------------------
+
+function checkIsTerminal(deps: WorkflowRecoveryDeps, ticket: WorkflowTicket): boolean {
+  try {
+    if (ticket.workflowTemplateRowId) {
+      const stages = deps.topologyLoader.loadByTemplateRowId(ticket.workflowTemplateRowId);
+      return topologyIsTerminal(stages, ticket.state);
+    }
+  } catch { /* fall through */ }
+  return ['done', 'cancelled', 'merged'].includes(ticket.state);
+}
+
+function checkIsAgentActionable(deps: WorkflowRecoveryDeps, ticket: WorkflowTicket): boolean {
+  try {
+    if (ticket.workflowTemplateRowId) {
+      const stages = deps.topologyLoader.loadByTemplateRowId(ticket.workflowTemplateRowId);
+      return topologyIsAgentActionable(stages, ticket.state);
+    }
+  } catch { /* fall through */ }
+  // Fallback for tickets without templates
+  const agentStates: Record<string, string[]> = {
+    epic: ['triaging', 'planning', 'plan-critique', 'splitting', 'integration-review', 'integration-fix'],
+    task: ['ready', 'in-progress', 'code-review', 'changes-requested'],
+  };
+  return agentStates[ticket.type]?.includes(ticket.state) ?? false;
+}
+
+function checkIsExecutionStage(deps: WorkflowRecoveryDeps, ticket: WorkflowTicket): boolean {
+  try {
+    if (ticket.workflowTemplateRowId) {
+      const stages = deps.topologyLoader.loadByTemplateRowId(ticket.workflowTemplateRowId);
+      const stage = getStageDefinition(stages, ticket.state);
+      return stage?.validTransitions.some(
+        (t) => t.trigger === 'execution-complete' || t.trigger === 'execution-failed',
+      ) ?? false;
+    }
+  } catch { /* fall through */ }
+  // Fallback for tickets without templates
+  return ticket.state === 'executing';
 }
 
 // ---------------------------------------------------------------------------
@@ -59,7 +88,7 @@ export interface WorkflowRecoveryDeps {
 export async function recoverStuckTickets(
   deps: WorkflowRecoveryDeps,
 ): Promise<WorkflowRecoveryResult> {
-  const { tickets, sessions, dispatcher } = deps;
+  const { tickets, sessions } = deps;
   const result: WorkflowRecoveryResult = {
     scanned: 0,
     redispatched: [],
@@ -71,9 +100,9 @@ export async function recoverStuckTickets(
   const allTickets = tickets.findAll();
   const candidates = allTickets.filter(
     (t) =>
-      !isTerminal(t.type, t.state) &&
-      isAgentActionable(t.type, t.state) &&
-      t.state !== 'executing', // executing is handled by ExecutionDispatcher
+      !checkIsTerminal(deps, t) &&
+      checkIsAgentActionable(deps, t) &&
+      !checkIsExecutionStage(deps, t), // execution stages are handled by ExecutionDispatcher
   );
 
   result.scanned = candidates.length;
