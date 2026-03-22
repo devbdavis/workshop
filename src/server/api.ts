@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import type { TrackId, SessionId, SessionProvider, RepoId, PathId, AutomationRuleId, TemplateId, TerminalLayout } from '@foundation/types';
+import type { TrackId, SessionId, SessionProvider, RepoId, PathId, AutomationRuleId, TemplateId, TerminalLayout, WorkflowTicket } from '@foundation/types';
 import { VAULT_ROOT } from '@foundation/config.js';
 import { createTrackRepository } from '@infrastructure/persistence/track-repository.js';
 import { createSessionRepository } from '@infrastructure/persistence/session-repository.js';
@@ -35,6 +35,9 @@ import { createWorkflowEngine } from '@application/workflow/engine.js';
 import { createExecutionDispatcher } from '@application/workflow/execution-dispatcher.js';
 import { createAgentDispatcher } from '@application/workflow/agent-dispatcher.js';
 import { createDispatchCoordinator } from '@application/workflow/dispatch-coordinator.js';
+import { createTopologyLoader } from '@application/workflow/topology-loader.js';
+import { createWorkflowTemplateRepository } from '@infrastructure/persistence/workflow-template-repository.js';
+import { createAgentRoleRepository } from '@infrastructure/persistence/workflow-agent-role-repository.js';
 import { createExecutionHookRouter } from './execution-hook-routes.js';
 import { recoverStuckTickets } from '@application/workflow/startup-recovery.js';
 import { broadcast } from './events.js';
@@ -156,10 +159,21 @@ export function createApiRouter(deps: ApiRouterDeps = {}): Router {
   const workflowTickets = createWorkflowTicketRepository();
   const workflowTransitions = createWorkflowTransitionRepository();
   const ticketDependencies = createTicketDependencyRepository();
+  const workflowTemplates = createWorkflowTemplateRepository();
+  const workflowAgentRoles = createAgentRoleRepository();
+  const topologyLoader = createTopologyLoader({ templates: workflowTemplates });
+
+  // Create a mutable callback holder for epic advanced events (circular dependency resolution)
+  let epicAdvancedCallback: ((ticket: WorkflowTicket) => Promise<void>) | undefined;
+
   const workflowEngine = createWorkflowEngine({
     tickets: workflowTickets,
     transitions: workflowTransitions,
     dependencies: ticketDependencies,
+    topologyLoader,
+    onEpicAdvanced: async (ticket) => {
+      if (epicAdvancedCallback) await epicAdvancedCallback(ticket);
+    },
   });
 
   // Execution dispatcher — handles plan-review → executing dispatch
@@ -169,6 +183,7 @@ export function createApiRouter(deps: ApiRouterDeps = {}): Router {
     tracks,
     summaries,
     terminal,
+    topologyLoader,
   });
 
   // Agent dispatcher — handles all other agent-actionable states
@@ -177,6 +192,8 @@ export function createApiRouter(deps: ApiRouterDeps = {}): Router {
     tracks,
     summaries,
     terminal,
+    topologyLoader,
+    agentRoles: workflowAgentRoles,
   });
 
   // Unified coordinator — routes transitions through the right dispatcher
@@ -185,7 +202,13 @@ export function createApiRouter(deps: ApiRouterDeps = {}): Router {
     tickets: workflowTickets,
     executionDispatcher,
     agentDispatcher,
+    topologyLoader,
   });
+
+  // Wire the callback after coordinator exists (B4 fix: parent epic dispatch)
+  epicAdvancedCallback = async (epic) => {
+    await dispatchCoordinator.dispatchForCurrentState(epic.id);
+  };
 
   const workflowRouter = createWorkflowRouter({
     engine: workflowEngine,
@@ -211,6 +234,7 @@ export function createApiRouter(deps: ApiRouterDeps = {}): Router {
         tickets: workflowTickets,
         sessions,
         dispatcher: dispatchCoordinator,
+        topologyLoader,
       });
       if (result.redispatched.length > 0) {
         console.log(
@@ -232,7 +256,7 @@ export function createApiRouter(deps: ApiRouterDeps = {}): Router {
 
   // Periodic workflow recovery — check every 2 minutes for agent-actionable
   // tickets whose sessions have died mid-operation
-  const recoveryDeps = { tickets: workflowTickets, sessions, dispatcher: dispatchCoordinator };
+  const recoveryDeps = { tickets: workflowTickets, sessions, dispatcher: dispatchCoordinator, topologyLoader };
   const recoveryInterval = setInterval(async () => {
     try {
       const result = await recoverStuckTickets(recoveryDeps);
