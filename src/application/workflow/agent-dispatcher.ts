@@ -2,57 +2,26 @@
  * General-purpose agent dispatcher — spawns Claude/Codex sessions for any
  * agent-actionable workflow state.
  *
- * The ExecutionDispatcher handles only the plan-review → executing transition.
- * This dispatcher covers everything else: triaging, planning, plan-critique,
- * splitting, integration-review, integration-fix, and task states like
- * ready, in-progress, code-review, changes-requested.
+ * The ExecutionDispatcher handles only execution stages (those with
+ * execution-complete/execution-failed triggers). This dispatcher covers
+ * everything else: triaging, planning, plan-critique, splitting,
+ * integration-review, integration-fix, and task states like ready,
+ * in-progress, code-review, changes-requested.
  */
 import type {
   WorkflowTicket,
   WorkflowTicketId,
   TrackId,
   SessionId,
-} from '@foundation/types';
+} from '@foundation/types.js';
 import type { WorkflowTicketRepository } from './ticket-repository.js';
-import type { TrackRepository } from '@domain/track/repository';
-import type { SummaryRepository } from '@domain/summary/repository';
+import type { TrackRepository } from '@domain/track/repository.js';
+import type { SummaryRepository } from '@domain/summary/repository.js';
 import type { TerminalManager } from '@infrastructure/terminal/manager.js';
+import type { TopologyLoader } from './topology-loader.js';
+import type { AgentRoleRepository, AgentRoleRow } from './agent-role-repository.js';
+import { getStageDefinition, isAgentActionable } from './types.js';
 import { composeWorkflowPrompt, type PromptContext } from './prompt-composer.js';
-
-// AgentRole is now a string (dynamic)
-type AgentRole = string;
-
-// ---------------------------------------------------------------------------
-// TODO: Phase 3 Round 2 — replace these stubs with topology loader
-// ---------------------------------------------------------------------------
-
-interface StageDefinitionStub {
-  state: string;
-  ticketType: string;
-  agentActionable: boolean;
-  humanGate: boolean;
-  agentRole?: string;
-  agentCount?: number;
-  validTransitions: Array<{ to: string; trigger: string }>;
-}
-
-// Hardcoded stage definitions for backward compat
-const STAGE_DEFS: Record<string, StageDefinitionStub> = {
-  'epic:triaging': { state: 'triaging', ticketType: 'epic', agentActionable: true, humanGate: false, agentRole: 'triage', agentCount: 1, validTransitions: [] },
-  'epic:planning': { state: 'planning', ticketType: 'epic', agentActionable: true, humanGate: false, agentRole: 'planner', agentCount: 1, validTransitions: [] },
-  'epic:plan-critique': { state: 'plan-critique', ticketType: 'epic', agentActionable: true, humanGate: false, agentRole: 'plan-critic', agentCount: 1, validTransitions: [] },
-  'epic:splitting': { state: 'splitting', ticketType: 'epic', agentActionable: true, humanGate: false, agentRole: 'splitter', agentCount: 1, validTransitions: [] },
-  'epic:integration-review': { state: 'integration-review', ticketType: 'epic', agentActionable: true, humanGate: false, agentRole: 'integration-reviewer', agentCount: 1, validTransitions: [] },
-  'epic:integration-fix': { state: 'integration-fix', ticketType: 'epic', agentActionable: true, humanGate: false, agentRole: 'fixer', agentCount: 1, validTransitions: [] },
-  'task:ready': { state: 'ready', ticketType: 'task', agentActionable: true, humanGate: false, agentRole: 'implementer', agentCount: 1, validTransitions: [] },
-  'task:in-progress': { state: 'in-progress', ticketType: 'task', agentActionable: true, humanGate: false, agentRole: 'implementer', agentCount: 1, validTransitions: [] },
-  'task:code-review': { state: 'code-review', ticketType: 'task', agentActionable: true, humanGate: false, agentRole: 'code-reviewer', agentCount: 1, validTransitions: [] },
-  'task:changes-requested': { state: 'changes-requested', ticketType: 'task', agentActionable: true, humanGate: false, agentRole: 'implementer', agentCount: 1, validTransitions: [] },
-};
-
-function getStageDefinition(ticketType: string, state: string): StageDefinitionStub | undefined {
-  return STAGE_DEFS[`${ticketType}:${state}`];
-}
 
 // ---------------------------------------------------------------------------
 // Public interface
@@ -61,8 +30,7 @@ function getStageDefinition(ticketType: string, state: string): StageDefinitionS
 export interface AgentDispatcher {
   /**
    * Called after any state transition. If the target state is agent-actionable
-   * (and not 'executing', which is handled by ExecutionDispatcher), dispatches
-   * the appropriate agent sessions.
+   * (and not an execution stage), dispatches the appropriate agent sessions.
    */
   onTransition(ticket: WorkflowTicket): Promise<void>;
 }
@@ -72,6 +40,31 @@ export interface AgentDispatcherDeps {
   tracks: TrackRepository;
   summaries: SummaryRepository;
   terminal: TerminalManager;
+  topologyLoader: TopologyLoader;
+  agentRoles: AgentRoleRepository;
+}
+
+// ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
+
+/**
+ * Check if a stage is an execution stage (handled by ExecutionDispatcher).
+ */
+function isExecutionStage(
+  topologyLoader: TopologyLoader,
+  ticket: WorkflowTicket,
+): boolean {
+  try {
+    const stages = topologyLoader.loadForTicket(ticket);
+    const stage = getStageDefinition(stages, ticket.state);
+    return stage?.validTransitions.some(
+      (t) => t.trigger === 'execution-complete' || t.trigger === 'execution-failed',
+    ) ?? false;
+  } catch {
+    // No template — fallback to hardcoded check
+    return ticket.state === 'executing';
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -79,7 +72,7 @@ export interface AgentDispatcherDeps {
 // ---------------------------------------------------------------------------
 
 export function createAgentDispatcher(deps: AgentDispatcherDeps): AgentDispatcher {
-  const { tickets, tracks, summaries, terminal } = deps;
+  const { tickets, tracks, summaries, terminal, topologyLoader, agentRoles } = deps;
 
   /** Lazily find-or-create a _Workflow track for tickets without a track */
   let workflowTrackId: TrackId | null = null;
@@ -172,9 +165,16 @@ export function createAgentDispatcher(deps: AgentDispatcherDeps): AgentDispatche
     return ctx;
   }
 
-  function buildInitialPrompt(ticket: WorkflowTicket, role: AgentRole): string {
+  /**
+   * Build the initial prompt for the agent, using role from DB if available.
+   */
+  function buildInitialPrompt(
+    ticket: WorkflowTicket,
+    roleName: string,
+    agentRole: AgentRoleRow | null,
+  ): string {
     const lines = [
-      `You are working on workflow ticket ${ticket.id} as a ${role} agent.`,
+      `You are working on workflow ticket ${ticket.id} as a ${roleName} agent.`,
       '',
       `Ticket: ${ticket.title}`,
       '',
@@ -183,21 +183,26 @@ export function createAgentDispatcher(deps: AgentDispatcherDeps): AgentDispatche
       '',
     ];
 
-    // Add role-specific completion instructions
-    const completionMap: Partial<Record<AgentRole, string>> = {
-      'triage': 'When the spec is complete: (1) optionally update the description via workshop_update_ticket to reflect any Q&A refinements, (2) transition to "specced" with the refined spec: workshop_transition_ticket(ticketId, "specced", "summary", { refinedSpec: "full spec text..." }). If you have questions: transition to "needs-input" with: workshop_transition_ticket(ticketId, "needs-input", "summary", { pendingQuestions: [{ text: "question?" }] })',
-      'planner': 'Transition to "plan-critique" when the plan is ready for review.',
-      'plan-critic': 'Transition to "plan-review" if no blocking findings, or "planning" if blocking findings exist.',
-      'splitter': 'Create child tasks via workshop_create_task, then transition to "in-progress".',
-      'implementer': 'Transition to "code-review" when implementation is complete.',
-      'code-reviewer': 'Transition to "done" if review passes, or "changes-requested" if issues found.',
-      'integration-reviewer': 'Transition to "final-review" if no blocking findings, or "integration-fix" if issues found.',
-      'fixer': 'Transition to "integration-review" when fixes are complete.',
-    };
+    // Use completion instructions from role if available
+    if (agentRole?.promptBlock.completionInstructions) {
+      lines.push(agentRole.promptBlock.completionInstructions);
+    } else {
+      // Fallback to hardcoded role-specific completion instructions
+      const completionMap: Record<string, string> = {
+        'triage': 'When the spec is complete: (1) optionally update the description via workshop_update_ticket to reflect any Q&A refinements, (2) transition to "specced" with the refined spec: workshop_transition_ticket(ticketId, "specced", "summary", { refinedSpec: "full spec text..." }). If you have questions: transition to "needs-input" with: workshop_transition_ticket(ticketId, "needs-input", "summary", { pendingQuestions: [{ text: "question?" }] })',
+        'planner': 'Transition to "plan-critique" when the plan is ready for review.',
+        'plan-critic': 'Transition to "plan-review" if no blocking findings, or "planning" if blocking findings exist.',
+        'splitter': 'Create child tasks via workshop_create_task, then transition to "in-progress".',
+        'implementer': 'Transition to "code-review" when implementation is complete.',
+        'code-reviewer': 'Transition to "done" if review passes, or "changes-requested" if issues found.',
+        'integration-reviewer': 'Transition to "final-review" if no blocking findings, or "integration-fix" if issues found.',
+        'fixer': 'Transition to "integration-review" when fixes are complete.',
+      };
 
-    const instructions = completionMap[role];
-    if (instructions) {
-      lines.push(instructions);
+      const instructions = completionMap[roleName];
+      if (instructions) {
+        lines.push(instructions);
+      }
     }
 
     return lines.join('\n');
@@ -214,38 +219,109 @@ export function createAgentDispatcher(deps: AgentDispatcherDeps): AgentDispatche
         await terminal.destroySession(sid as SessionId);
         console.log(`Cleaned up previous agent session ${sid} for ticket ${ticket.id}`);
       } catch {
-        // Session might already be dead — that's fine
+        // Session might already be dead - that's fine
       }
+    }
+  }
+
+  /**
+   * Derive agent role from stage definition (topology-driven).
+   */
+  function getStageRole(ticket: WorkflowTicket): {
+    roleName: string;
+    agentCount: number;
+    agentRole: AgentRoleRow | null;
+  } | null {
+    try {
+      const stages = topologyLoader.loadForTicket(ticket);
+      const stage = getStageDefinition(stages, ticket.state);
+      if (!stage || !stage.agentActionable) return null;
+
+      // Load agent role from DB if agentRoleId is set
+      let agentRole: AgentRoleRow | null = null;
+      if (stage.agentRoleId) {
+        agentRole = agentRoles.findById(stage.agentRoleId);
+      }
+
+      // Role name: from DB role, or from stage.agentRoleId, or derive from state
+      const roleName = agentRole?.name ?? stage.agentRoleId ?? deriveRoleFromState(ticket.state);
+      const agentCount = stage.agentCount ?? 1;
+
+      return { roleName, agentCount, agentRole };
+    } catch {
+      // No template — fallback to hardcoded role derivation
+      return {
+        roleName: deriveRoleFromState(ticket.state),
+        agentCount: 1,
+        agentRole: null,
+      };
+    }
+  }
+
+  /**
+   * Derive role name from state (backward compat for tickets without templates).
+   */
+  function deriveRoleFromState(state: string): string {
+    const roleMap: Record<string, string> = {
+      'triaging': 'triage',
+      'planning': 'planner',
+      'plan-critique': 'plan-critic',
+      'splitting': 'splitter',
+      'integration-review': 'integration-reviewer',
+      'integration-fix': 'fixer',
+      'ready': 'implementer',
+      'in-progress': 'implementer',
+      'code-review': 'code-reviewer',
+      'changes-requested': 'implementer',
+    };
+    return roleMap[state] ?? state;
+  }
+
+  /**
+   * Check if ticket state is agent-actionable.
+   */
+  function checkAgentActionable(ticket: WorkflowTicket): boolean {
+    try {
+      const stages = topologyLoader.loadForTicket(ticket);
+      return isAgentActionable(stages, ticket.state);
+    } catch {
+      // No template — fallback to hardcoded check
+      const agentActionableStates: Record<string, string[]> = {
+        epic: ['triaging', 'planning', 'plan-critique', 'splitting', 'integration-review', 'integration-fix'],
+        task: ['ready', 'in-progress', 'code-review', 'changes-requested'],
+      };
+      return agentActionableStates[ticket.type]?.includes(ticket.state) ?? false;
     }
   }
 
   return {
     async onTransition(ticket: WorkflowTicket): Promise<void> {
-      const stage = getStageDefinition(ticket.type, ticket.state);
-      if (!stage || !stage.agentActionable) return;
+      // Skip execution stages (handled by ExecutionDispatcher)
+      if (isExecutionStage(topologyLoader, ticket)) return;
 
-      // 'executing' is handled by ExecutionDispatcher
-      if (ticket.state === 'executing') return;
+      // Check if agent-actionable
+      if (!checkAgentActionable(ticket)) return;
 
-      const role = stage.agentRole;
-      if (!role) {
-        console.warn(`Agent-actionable state '${ticket.state}' has no agentRole defined`);
+      const roleInfo = getStageRole(ticket);
+      if (!roleInfo) {
+        console.warn(`Agent-actionable state '${ticket.state}' has no role defined`);
         return;
       }
+
+      const { roleName, agentCount, agentRole } = roleInfo;
 
       // Kill previous agent sessions before dispatching new ones
       await killPreviousSessions(ticket);
 
-      const count = stage.agentCount ?? 1;
       const workingDir = resolveWorkingDir(ticket);
       const context = buildPromptContext(ticket);
-      const systemPrompt = composeWorkflowPrompt(role, ticket, context);
-      const initialPrompt = buildInitialPrompt(ticket, role);
+      const systemPrompt = composeWorkflowPrompt(roleName, ticket, context);
+      const initialPrompt = buildInitialPrompt(ticket, roleName, agentRole);
       const trackId = ticket.trackId ?? resolveTrackIdFromParent(ticket) ?? getOrCreateWorkflowTrack();
 
       const sessionIds: string[] = [];
 
-      for (let i = 0; i < count; i++) {
+      for (let i = 0; i < agentCount; i++) {
         try {
           const session = await terminal.createSession(trackId, {
             systemPrompt,
@@ -256,10 +332,10 @@ export function createAgentDispatcher(deps: AgentDispatcherDeps): AgentDispatche
           });
           sessionIds.push(session.id);
           console.log(
-            `Agent dispatched: ${role} (${i + 1}/${count}) for ticket ${ticket.id} → session ${session.id}`,
+            `Agent dispatched: ${roleName} (${i + 1}/${agentCount}) for ticket ${ticket.id} -> session ${session.id}`,
           );
         } catch (err) {
-          console.error(`Failed to dispatch ${role} agent for ticket ${ticket.id}:`, err);
+          console.error(`Failed to dispatch ${roleName} agent for ticket ${ticket.id}:`, err);
         }
       }
 
@@ -267,7 +343,7 @@ export function createAgentDispatcher(deps: AgentDispatcherDeps): AgentDispatche
       if (sessionIds.length > 0) {
         const existingData = (ticket.stateData || {}) as Record<string, unknown>;
         tickets.update(ticket.id, {
-          assignedAgentRole: role,
+          assignedAgentRole: roleName,
           stateData: {
             ...existingData,
             agentSessionIds: sessionIds,

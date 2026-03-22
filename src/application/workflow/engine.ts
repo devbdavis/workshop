@@ -1,6 +1,8 @@
 /**
  * Core workflow orchestrator — validates state transitions, manages ticket
  * lifecycle, and resolves inter-ticket dependencies.
+ *
+ * Uses dynamic topology from workflow templates rather than hardcoded state machines.
  */
 import type {
   WorkflowTicket,
@@ -9,122 +11,17 @@ import type {
   TransitionActor,
   TrackId,
   SessionProvider,
-} from '@foundation/types';
+} from '@foundation/types.js';
 import type {
   WorkflowTicketRepository,
   WorkflowTransitionRepository,
   TicketDependencyRepository,
 } from './ticket-repository.js';
+import type { TopologyLoader } from './topology-loader.js';
+import type { StageDefinition } from './types.js';
+import { isHumanGate, isTerminal, getStageDefinition } from './types.js';
 import { createDependencyResolver } from './dependency-resolver.js';
 import type { DependencyResolver } from './dependency-resolver.js';
-
-// ---------------------------------------------------------------------------
-// TODO: Phase 3 Round 2 — replace these stubs with topology loader
-// ---------------------------------------------------------------------------
-
-// Temporary stub types and functions until topology loader is implemented
-interface StageDefinitionStub {
-  state: string;
-  ticketType: string;
-  agentActionable: boolean;
-  humanGate: boolean;
-  agentRole?: string;
-  agentCount?: number;
-  validTransitions: Array<{ to: string; trigger: string; condition?: string }>;
-}
-
-// Hardcoded human gate states for backward compat
-const HUMAN_GATE_STATES = ['spec-review', 'plan-review', 'final-review'];
-
-// Hardcoded transition map for backward compat (will be replaced by topology loader)
-const TRANSITION_MAP: Record<string, Record<string, string[]>> = {
-  epic: {
-    idea: ['triaging', 'cancelled'],
-    triaging: ['needs-input', 'specced', 'cancelled'],
-    'needs-input': ['triaging', 'cancelled'],
-    specced: ['spec-review', 'cancelled'],
-    'spec-review': ['planning', 'triaging', 'cancelled'],
-    planning: ['plan-critique', 'cancelled'],
-    'plan-critique': ['plan-review', 'planning', 'cancelled'],
-    'plan-review': ['executing', 'planning', 'cancelled'],
-    executing: ['integration-review', 'execution-failed', 'cancelled'],
-    'execution-failed': ['executing', 'planning', 'cancelled'],
-    splitting: ['in-progress', 'cancelled'],
-    'in-progress': ['integration-review', 'cancelled'],
-    'integration-review': ['final-review', 'integration-fix', 'cancelled'],
-    'integration-fix': ['integration-review', 'cancelled'],
-    'final-review': ['approved', 'integration-fix', 'cancelled'],
-    approved: ['merged'],
-    merged: [],
-    cancelled: [],
-  },
-  task: {
-    blocked: ['ready', 'cancelled'],
-    ready: ['in-progress', 'cancelled'],
-    'in-progress': ['code-review', 'cancelled'],
-    'code-review': ['done', 'changes-requested', 'cancelled'],
-    'changes-requested': ['in-progress', 'cancelled'],
-    done: [],
-    cancelled: [],
-  },
-};
-
-// Hardcoded stage definitions for backward compat
-const STAGE_DEFS: Record<string, StageDefinitionStub> = {
-  'epic:spec-review': {
-    state: 'spec-review', ticketType: 'epic', agentActionable: false, humanGate: true,
-    validTransitions: [
-      { to: 'planning', trigger: 'human-approve' },
-      { to: 'triaging', trigger: 'human-reject' },
-    ],
-  },
-  'epic:plan-review': {
-    state: 'plan-review', ticketType: 'epic', agentActionable: false, humanGate: true,
-    validTransitions: [
-      { to: 'executing', trigger: 'human-approve' },
-      { to: 'planning', trigger: 'human-reject' },
-    ],
-  },
-  'epic:final-review': {
-    state: 'final-review', ticketType: 'epic', agentActionable: false, humanGate: true,
-    validTransitions: [
-      { to: 'approved', trigger: 'human-approve' },
-      { to: 'integration-fix', trigger: 'human-reject' },
-    ],
-  },
-  'epic:idea': {
-    state: 'idea', ticketType: 'epic', agentActionable: false, humanGate: false,
-    validTransitions: [{ to: 'triaging', trigger: 'auto' }],
-  },
-  'epic:specced': {
-    state: 'specced', ticketType: 'epic', agentActionable: false, humanGate: false,
-    validTransitions: [{ to: 'spec-review', trigger: 'auto' }],
-  },
-  'task:ready': {
-    state: 'ready', ticketType: 'task', agentActionable: true, humanGate: false, agentRole: 'implementer',
-    validTransitions: [{ to: 'in-progress', trigger: 'auto' }],
-  },
-  'task:changes-requested': {
-    state: 'changes-requested', ticketType: 'task', agentActionable: true, humanGate: false, agentRole: 'implementer',
-    validTransitions: [{ to: 'in-progress', trigger: 'auto' }],
-  },
-};
-
-function isValidTransition(ticketType: string, fromState: string, toState: string): boolean {
-  const typeMap = TRANSITION_MAP[ticketType];
-  if (!typeMap) return false;
-  const allowed = typeMap[fromState];
-  if (!allowed) return false;
-  return allowed.includes(toState);
-}
-
-function isHumanGate(state: string): boolean {
-  return HUMAN_GATE_STATES.includes(state);
-}
-
-function getStageDefinition(ticketType: string, state: string): StageDefinitionStub | undefined {
-  return STAGE_DEFS[`${ticketType}:${state}`];
-}
 
 // ---------------------------------------------------------------------------
 // Public interface
@@ -149,13 +46,14 @@ export interface WorkflowEngine {
   /** Called when a task completes — resolves deps and checks epic progress */
   onTaskCompleted(ticketId: WorkflowTicketId): void;
 
-  /** Create a new epic (starts in 'idea' state) */
+  /** Create a new epic (starts in entry state) */
   createEpic(data: {
     title: string;
     description: string;
     trackId?: TrackId;
     provider?: SessionProvider;
     priority?: 'low' | 'medium' | 'high' | 'critical';
+    workflowTemplateRowId?: string;
   }): WorkflowTicket;
 
   /** Create a child task under an epic */
@@ -166,6 +64,7 @@ export interface WorkflowEngine {
     provider?: SessionProvider;
     priority?: 'low' | 'medium' | 'high' | 'critical';
     dependsOn?: WorkflowTicketId[];
+    workflowTemplateRowId?: string;
   }): WorkflowTicket;
 
   /** Create an epic that starts directly at plan-review with a pre-written plan */
@@ -176,6 +75,7 @@ export interface WorkflowEngine {
     trackId?: TrackId;
     provider?: SessionProvider;
     priority?: 'low' | 'medium' | 'high' | 'critical';
+    workflowTemplateRowId?: string;
   }): WorkflowTicket;
 }
 
@@ -187,15 +87,24 @@ export interface WorkflowEngineDeps {
   tickets: WorkflowTicketRepository;
   transitions: WorkflowTransitionRepository;
   dependencies: TicketDependencyRepository;
+  topologyLoader: TopologyLoader;
+  /** Called when an epic advances to a new state (e.g., all tasks done) */
+  onEpicAdvanced?: (ticket: WorkflowTicket) => Promise<void>;
 }
 
 // ---------------------------------------------------------------------------
 // Implementation
 // ---------------------------------------------------------------------------
 
+/** Max recursion depth for auto-transitions to prevent infinite loops */
+const MAX_AUTO_TRANSITION_DEPTH = 10;
+
+/** Max times an agent loop can repeat before escalating to human review */
+const MAX_AGENT_ITERATIONS = 3;
+
 export function createWorkflowEngine(deps: WorkflowEngineDeps): WorkflowEngine {
-  const { tickets, transitions, dependencies } = deps;
-  const resolver: DependencyResolver = createDependencyResolver({ tickets, dependencies });
+  const { tickets, transitions, dependencies, topologyLoader } = deps;
+  const resolver: DependencyResolver = createDependencyResolver({ tickets, dependencies, topologyLoader });
 
   function requireTicket(id: WorkflowTicketId): WorkflowTicket {
     const ticket = tickets.findById(id);
@@ -203,35 +112,85 @@ export function createWorkflowEngine(deps: WorkflowEngineDeps): WorkflowEngine {
     return ticket;
   }
 
-  /** Max times plan-critique can send a ticket back to planning before escalating to human review */
-  const MAX_CRITIQUE_ITERATIONS = 3;
+  /**
+   * Validate that a transition from the current state to toState is allowed.
+   * Returns the transition definition if valid, throws otherwise.
+   */
+  function validateTransition(
+    stages: StageDefinition[],
+    ticket: WorkflowTicket,
+    toState: WorkflowState,
+  ): { to: string; trigger: string; condition?: string } {
+    const currentStage = getStageDefinition(stages, ticket.state);
+    if (!currentStage) {
+      throw new Error(
+        `Invalid state: ${ticket.type}:${ticket.state} not found in template`,
+      );
+    }
 
+    const transition = currentStage.validTransitions.find((t) => t.to === toState);
+    if (!transition) {
+      const validTargets = currentStage.validTransitions.map((t) => t.to).join(', ');
+      throw new Error(
+        `Invalid transition: ${ticket.type} cannot go from '${ticket.state}' to '${toState}'. ` +
+        `Valid targets: ${validTargets || 'none'}`,
+      );
+    }
+
+    return transition;
+  }
+
+  /**
+   * Find the nearest human gate state from the current stage.
+   * Used by the circuit breaker to escalate stuck agent loops.
+   */
+  function findNearestHumanGate(stages: StageDefinition[], fromState: string): string | null {
+    const stage = getStageDefinition(stages, fromState);
+    if (!stage) return null;
+
+    for (const t of stage.validTransitions) {
+      const targetStage = getStageDefinition(stages, t.to);
+      if (targetStage?.humanGate) {
+        return t.to;
+      }
+    }
+    return null;
+  }
+
+  /**
+   * Apply a state transition with validation, circuit breaker, and auto-transitions.
+   */
   function applyTransition(
     ticket: WorkflowTicket,
     toState: WorkflowState,
     actor: TransitionActor,
     comment?: string,
     data?: Record<string, unknown>,
+    _depth: number = 0,
   ): WorkflowTicket {
-    // Circuit breaker: if plan-critique → planning loop exceeds max iterations,
-    // redirect to plan-review (human gate) so a human can intervene
-    if (ticket.state === 'plan-critique' && toState === 'planning') {
-      const stateData = (ticket.stateData || {}) as Record<string, unknown>;
-      const iteration = (typeof stateData.iteration === 'number' ? stateData.iteration : 0) + 1;
-      if (iteration >= MAX_CRITIQUE_ITERATIONS) {
+    // Load topology for this ticket
+    const stages = topologyLoader.loadForTicket(ticket);
+    const stateData = (ticket.stateData || {}) as Record<string, unknown>;
+
+    // Circuit breaker: check for agent loops exceeding max iterations
+    const iteration = (typeof stateData.iteration === 'number' ? stateData.iteration : 0) + 1;
+    const currentStage = getStageDefinition(stages, ticket.state);
+
+    if (currentStage?.agentActionable && iteration >= MAX_AGENT_ITERATIONS) {
+      // Look for a human gate to escalate to
+      const humanGate = findNearestHumanGate(stages, ticket.state);
+      if (humanGate && humanGate !== toState) {
         console.warn(
-          `[workflow-circuit-breaker] Ticket ${ticket.id} hit ${iteration} plan-critique iterations. Escalating to plan-review for human intervention.`,
+          `[workflow-circuit-breaker] Ticket ${ticket.id} hit ${iteration} iterations at ${ticket.state}. ` +
+          `Escalating to ${humanGate} for human intervention.`,
         );
-        toState = 'plan-review' as WorkflowState;
-        comment = `Circuit breaker: plan-critique ↔ planning loop hit ${iteration} iterations. Escalating to human review. Original blocking findings are in stateData.findings.`;
+        toState = humanGate as WorkflowState;
+        comment = `Circuit breaker: agent loop hit ${iteration} iterations. Escalating to human review.`;
       }
     }
 
-    if (!isValidTransition(ticket.type, ticket.state, toState)) {
-      throw new Error(
-        `Invalid transition: ${ticket.type} cannot go from '${ticket.state}' to '${toState}'`,
-      );
-    }
+    // Validate the transition
+    validateTransition(stages, ticket, toState);
 
     const now = new Date().toISOString();
 
@@ -247,7 +206,7 @@ export function createWorkflowEngine(deps: WorkflowEngineDeps): WorkflowEngine {
 
     // Update ticket state, merging transition data into stateData
     const mergedStateData = data
-      ? { ...(ticket.stateData as Record<string, unknown> || {}), ...data }
+      ? { ...stateData, ...data }
       : undefined;
     const updated = tickets.update(ticket.id, {
       state: toState,
@@ -257,17 +216,55 @@ export function createWorkflowEngine(deps: WorkflowEngineDeps): WorkflowEngine {
 
     if (!updated) throw new Error(`Failed to update ticket: ${ticket.id}`);
 
-    // Process auto-transitions: if the new state has an 'auto' trigger, follow it immediately
-    const stage = getStageDefinition(updated.type, updated.state);
-    if (stage) {
-      const autoTarget = stage.validTransitions.find((t) => t.trigger === 'auto');
-      if (autoTarget) {
-        const autoActor: TransitionActor = { type: 'system', reason: `Auto-transition from ${updated.state}` };
-        return applyTransition(updated, autoTarget.to, autoActor);
+    // Process auto-transitions if within depth limit
+    if (_depth < MAX_AUTO_TRANSITION_DEPTH) {
+      const newStage = getStageDefinition(stages, updated.state);
+      if (newStage) {
+        const autoTarget = newStage.validTransitions.find((t) => t.trigger === 'auto');
+        if (autoTarget) {
+          const autoActor: TransitionActor = { type: 'system', reason: `Auto-transition from ${updated.state}` };
+          return applyTransition(updated, autoTarget.to, autoActor, undefined, undefined, _depth + 1);
+        }
       }
     }
 
     return updated;
+  }
+
+  /**
+   * Get the entry state (first stage) from a template.
+   */
+  function getEntryState(stages: StageDefinition[]): string {
+    // Entry state is the first one with semanticRole === 'entry', or just the first stage
+    const entryStage = stages.find((s) => s.semanticRole === 'entry') ?? stages[0];
+    return entryStage.state;
+  }
+
+  /**
+   * Find a state that has a transition with the given trigger.
+   */
+  function findStateWithTrigger(stages: StageDefinition[], trigger: string): string | null {
+    for (const stage of stages) {
+      if (stage.validTransitions.some((t) => t.trigger === trigger)) {
+        return stage.state;
+      }
+    }
+    return null;
+  }
+
+  /**
+   * Resolve the task template row ID from a parent epic.
+   */
+  function resolveTaskTemplate(parentId: WorkflowTicketId): string | undefined {
+    const parent = tickets.findById(parentId);
+    if (!parent?.workflowTemplateRowId) return undefined;
+
+    const parentTemplate = topologyLoader.loadTemplateForTicket(parent);
+    if (!parentTemplate) return undefined;
+
+    // TODO: In Phase 4, we may have linked task templates; for now return undefined
+    // so tasks without explicit template fall back to legacy behavior
+    return undefined;
   }
 
   return {
@@ -284,13 +281,13 @@ export function createWorkflowEngine(deps: WorkflowEngineDeps): WorkflowEngine {
 
     approve(ticketId: WorkflowTicketId, comment?: string): WorkflowTicket {
       const ticket = requireTicket(ticketId);
+      const stages = topologyLoader.loadForTicket(ticket);
 
-      if (!isHumanGate(ticket.state)) {
+      if (!isHumanGate(stages, ticket.state)) {
         throw new Error(`Ticket '${ticket.id}' is not at a human gate (state: ${ticket.state})`);
       }
 
-      // Find the approval transition target from the stage definition
-      const stage = getStageDefinition(ticket.type, ticket.state);
+      const stage = getStageDefinition(stages, ticket.state);
       if (!stage) throw new Error(`No stage definition for ${ticket.type}:${ticket.state}`);
 
       const approvalTarget = stage.validTransitions.find((t) => t.trigger === 'human-approve');
@@ -304,12 +301,13 @@ export function createWorkflowEngine(deps: WorkflowEngineDeps): WorkflowEngine {
 
     reject(ticketId: WorkflowTicketId, comment?: string): WorkflowTicket {
       const ticket = requireTicket(ticketId);
+      const stages = topologyLoader.loadForTicket(ticket);
 
-      if (!isHumanGate(ticket.state)) {
+      if (!isHumanGate(stages, ticket.state)) {
         throw new Error(`Ticket '${ticket.id}' is not at a human gate (state: ${ticket.state})`);
       }
 
-      const stage = getStageDefinition(ticket.type, ticket.state);
+      const stage = getStageDefinition(stages, ticket.state);
       if (!stage) throw new Error(`No stage definition for ${ticket.type}:${ticket.state}`);
 
       const rejectTarget = stage.validTransitions.find((t) => t.trigger === 'human-reject');
@@ -323,55 +321,119 @@ export function createWorkflowEngine(deps: WorkflowEngineDeps): WorkflowEngine {
 
     onTaskCompleted(ticketId: WorkflowTicketId): void {
       const ticket = requireTicket(ticketId);
-      if (ticket.type !== 'task' || ticket.state !== 'done') return;
+      if (ticket.type !== 'task') return;
+
+      // Check if task is in a terminal state
+      const stages = topologyLoader.loadForTicket(ticket);
+      if (!isTerminal(stages, ticket.state)) return;
 
       // Resolve dependencies that depended on this task
       const unblockedIds = resolver.resolveAndUnblock(ticketId);
 
-      // Auto-transition unblocked tickets from 'blocked' to 'ready'
+      // Auto-transition unblocked tickets via their 'all-deps-resolved' trigger
       const systemActor: TransitionActor = { type: 'system', reason: 'All dependencies resolved' };
       for (const unblockedId of unblockedIds) {
         const blocked = tickets.findById(unblockedId);
-        if (blocked && blocked.state === 'blocked') {
-          applyTransition(blocked, 'ready', systemActor);
+        if (!blocked) continue;
+
+        try {
+          const blockedStages = topologyLoader.loadForTicket(blocked);
+          const blockedStage = getStageDefinition(blockedStages, blocked.state);
+          const unblockTransition = blockedStage?.validTransitions.find(
+            (t) => t.trigger === 'all-deps-resolved',
+          );
+          if (unblockTransition) {
+            applyTransition(blocked, unblockTransition.to, systemActor);
+          }
+        } catch (err) {
+          console.warn(`Failed to unblock ticket ${unblockedId}:`, err);
         }
       }
 
       // Check if parent epic should advance
       if (ticket.parentId) {
         const epic = tickets.findById(ticket.parentId);
-        if (epic && epic.type === 'epic' && epic.state === 'in-progress') {
-          if (resolver.allChildrenDone(epic.id)) {
-            const epicActor: TransitionActor = {
-              type: 'system',
-              reason: 'All child tasks completed',
-            };
-            applyTransition(epic, 'integration-review', epicActor);
+        if (epic && epic.type === 'epic') {
+          try {
+            const epicStages = topologyLoader.loadForTicket(epic);
+            const epicStage = getStageDefinition(epicStages, epic.state);
+            const allDoneTransition = epicStage?.validTransitions.find(
+              (t) => t.trigger === 'all-tasks-done',
+            );
+
+            if (allDoneTransition && resolver.allChildrenDone(epic.id)) {
+              const epicActor: TransitionActor = {
+                type: 'system',
+                reason: 'All child tasks completed',
+              };
+              const advancedEpic = applyTransition(epic, allDoneTransition.to, epicActor);
+              // Notify callback (B4 fix)
+              deps.onEpicAdvanced?.(advancedEpic);
+            }
+          } catch (err) {
+            console.warn(`Failed to advance epic ${epic.id}:`, err);
           }
         }
       }
     },
 
     createEpic(data): WorkflowTicket {
+      // Determine initial state from template
+      let initialState: WorkflowState = 'idea';
+
+      if (data.workflowTemplateRowId) {
+        const stages = topologyLoader.loadByTemplateRowId(data.workflowTemplateRowId);
+        initialState = getEntryState(stages);
+      }
+
       const epic = tickets.create({
         type: 'epic',
         title: data.title,
         description: data.description,
-        state: 'idea',
+        state: initialState,
         trackId: data.trackId,
         provider: data.provider || 'claude',
         priority: data.priority || 'medium',
         sortOrder: 0,
+        workflowTemplateRowId: data.workflowTemplateRowId,
       });
 
-      // Auto-transition from 'idea' to 'triaging'
-      const actor: TransitionActor = { type: 'system', reason: 'Auto-triage on creation' };
-      return applyTransition(epic, 'triaging', actor);
+      // Follow auto-transitions from entry state
+      if (data.workflowTemplateRowId) {
+        const stages = topologyLoader.loadByTemplateRowId(data.workflowTemplateRowId);
+        const entryStage = getStageDefinition(stages, epic.state);
+        const autoTarget = entryStage?.validTransitions.find((t) => t.trigger === 'auto');
+        if (autoTarget) {
+          const actor: TransitionActor = { type: 'system', reason: 'Auto-transition from entry state' };
+          return applyTransition(epic, autoTarget.to, actor);
+        }
+      }
+
+      return epic;
     },
 
     createTask(data): WorkflowTicket {
       const hasDeps = data.dependsOn && data.dependsOn.length > 0;
-      const initialState: WorkflowState = hasDeps ? 'blocked' : 'ready';
+      let initialState: WorkflowState = hasDeps ? 'blocked' : 'ready';
+
+      // Resolve task template from parent if not provided
+      const templateRowId = data.workflowTemplateRowId ?? resolveTaskTemplate(data.parentId);
+
+      if (templateRowId) {
+        try {
+          const stages = topologyLoader.loadByTemplateRowId(templateRowId);
+          if (hasDeps) {
+            // Find the state with 'all-deps-resolved' trigger (the blocked state)
+            const blockedState = findStateWithTrigger(stages, 'all-deps-resolved');
+            if (blockedState) initialState = blockedState;
+          } else {
+            // Use entry state
+            initialState = getEntryState(stages);
+          }
+        } catch {
+          // Template not found, use defaults
+        }
+      }
 
       const task = tickets.create({
         type: 'task',
@@ -382,6 +444,7 @@ export function createWorkflowEngine(deps: WorkflowEngineDeps): WorkflowEngine {
         provider: data.provider || 'claude',
         priority: data.priority || 'medium',
         sortOrder: 0,
+        workflowTemplateRowId: templateRowId,
       });
 
       // Create dependency records
@@ -395,23 +458,36 @@ export function createWorkflowEngine(deps: WorkflowEngineDeps): WorkflowEngine {
     },
 
     createEpicAtPlanReview(data): WorkflowTicket {
+      // Find the human gate state to start at
+      let planReviewState: WorkflowState = 'plan-review';
+
+      if (data.workflowTemplateRowId) {
+        const stages = topologyLoader.loadByTemplateRowId(data.workflowTemplateRowId);
+        // Find first human gate with semanticRole 'human-gate'
+        const humanGateStage = stages.find((s) => s.humanGate && s.semanticRole === 'human-gate');
+        if (humanGateStage) {
+          planReviewState = humanGateStage.state;
+        }
+      }
+
       const epic = tickets.create({
         type: 'epic',
         title: data.title,
         description: data.description,
-        state: 'plan-review',
+        state: planReviewState,
         trackId: data.trackId,
         provider: data.provider || 'claude',
         priority: data.priority || 'medium',
         sortOrder: 0,
         stateData: { planDraft: data.planDraft },
+        workflowTemplateRowId: data.workflowTemplateRowId,
       });
 
       // Synthetic audit trail showing this epic was fast-tracked
       transitions.create({
         ticketId: epic.id,
         fromState: 'idea',
-        toState: 'plan-review',
+        toState: planReviewState,
         actor: { type: 'human' },
         comment: 'Epic created directly at plan-review with pre-written plan',
       });
