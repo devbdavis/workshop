@@ -17,33 +17,169 @@ const autoApprovedSessions = new Set<string>();
  * Each entry is checked against tool_name (exact or prefix match) or,
  * for Bash commands, against the command string.
  *
- * This prevents background agents from getting stuck when calling back
- * into Workshop's own API (e.g. updating their todo status).
+ * This prevents background agents from getting stuck on safe, read-only
+ * operations. Mirrors the safe command set from claude-approve config.
  */
 const PERMANENTLY_APPROVED: Array<{
   tool?: string;
   toolPrefix?: string;
   bashCommandPattern?: RegExp;
 }> = [
-  // All Workshop MCP tool calls (in case the hook matcher is ever broadened)
+  // --- MCP tools ---
   { toolPrefix: 'mcp__workshop__' },
-  // Gmail MCP — allow background agents to create/send drafts
   { toolPrefix: 'mcp__claude_ai_Gmail__' },
-  // Bash commands that curl the Workshop API
-  { tool: 'Bash', bashCommandPattern: /^curl\s[^;|&`$]*localhost:\d+\/api\/[^;|&`$]*$/ },
-  { tool: 'Bash', bashCommandPattern: /^curl\s[^;|&`$]*127\.0\.0\.1:\d+\/api\/[^;|&`$]*$/ },
+  { toolPrefix: 'mcp__claude_ai_Atlassian__' },
+  { toolPrefix: 'mcp__claude_ai_Linear__' },
+  { toolPrefix: 'mcp__claude_ai_Google_Calendar__' },
+  { toolPrefix: 'mcp__glean-developer-docs__' },
+  { toolPrefix: 'mcp__replicate__' },
+  { toolPrefix: 'mcp__MCP_DOCKER__' },
+
+  // --- Read-only file and search commands ---
+  { tool: 'Bash', bashCommandPattern: /^(cat|head|tail|less|more|wc|file|stat)(\s|$)/ },
+  { tool: 'Bash', bashCommandPattern: /^(grep|rg|ag|ack|fgrep|egrep)(\s|$)/ },
+  { tool: 'Bash', bashCommandPattern: /^(ls|ll|la|tree|exa|fd)(\s|$)/ },
+  { tool: 'Bash', bashCommandPattern: /^find\s/ },
+  { tool: 'Bash', bashCommandPattern: /^(echo|printf)(\s|$)/ },
+  { tool: 'Bash', bashCommandPattern: /^(pwd|whoami|hostname|uname|date|env|printenv|id|which|type|command\s+-v)(\s|$)/ },
+
+  // --- Text processing ---
+  { tool: 'Bash', bashCommandPattern: /^(sed|awk|sort|uniq|cut|tr|tee|diff|comm|paste|column)(\s|$)/ },
+  { tool: 'Bash', bashCommandPattern: /^(jq|yq|xq)(\s|$)/ },
+
+  // --- Git (read-only) ---
+  { tool: 'Bash', bashCommandPattern: /^git\s+(status|log|diff|show|branch|tag|remote|stash\s+list|ls-files|blame|describe|rev-parse|config\s+--get|reflog|rev-list|merge-base)(\s|$)/ },
+  // --- Git (write — agents need to commit their work) ---
+  { tool: 'Bash', bashCommandPattern: /^git\s+(add|commit|checkout|switch|stash|fetch|pull|merge|rebase|cherry-pick|worktree)(\s|$)/ },
+  // --- Git push (without force) ---
+  { tool: 'Bash', bashCommandPattern: /^git\s+push(\s|$)/ },
+
+  // --- Build/runtime tools ---
+  { tool: 'Bash', bashCommandPattern: /^(npm|npx|node|tsx|ts-node)(\s|$)/ },
+  { tool: 'Bash', bashCommandPattern: /^(python|python3)(\s|$)/ },
+  { tool: 'Bash', bashCommandPattern: /^(make|cargo|go)(\s|$)/ },
+
+  // --- GitHub CLI ---
+  { tool: 'Bash', bashCommandPattern: /^gh\s+/ },
+
+  // --- Shell navigation and piping helpers ---
+  { tool: 'Bash', bashCommandPattern: /^cd\s/ },
+  { tool: 'Bash', bashCommandPattern: /^(bash|sh|source|\.)(\s|$)/ },
+  { tool: 'Bash', bashCommandPattern: /^(mkdir|touch|cp|mv|ln|chmod)(\s|$)/ },
+  { tool: 'Bash', bashCommandPattern: /^sleep\s/ },
+
+  // --- Workshop-specific ---
+  { tool: 'Bash', bashCommandPattern: /scripts\/workshop\.sh\s+(start|stop|restart|status|logs)/ },
+  { tool: 'Bash', bashCommandPattern: /^curl\s[^;|&`$]*localhost:\d+\/api\// },
+  { tool: 'Bash', bashCommandPattern: /^curl\s[^;|&`$]*127\.0\.0\.1:\d+\/api\// },
+
+  // --- Local/home/absolute scripts ---
+  { tool: 'Bash', bashCommandPattern: /^\.\/|^~\/|^\/Users\// },
+
+  // --- Database CLI ---
+  { tool: 'Bash', bashCommandPattern: /^sqlite3\s/ },
+
+  // --- Docker (read-only + build/run) ---
+  { tool: 'Bash', bashCommandPattern: /^docker\s+(ps|images|inspect|logs|stats|build|run|compose|exec|pull)(\s|$)/ },
+
+  // --- HTTP tools ---
+  { tool: 'Bash', bashCommandPattern: /^(curl|wget)(\s|$)/ },
+
+  // --- Env var prefix before safe commands ---
+  { tool: 'Bash', bashCommandPattern: /^[A-Z_]+=\S*\s+(pytest|python|python3|node|npm|go|make|cargo)\s/ },
 ];
 
-/** Check if a tool invocation matches the permanent allowlist */
-function isPermanentlyApproved(toolName: string, toolInput: Record<string, unknown>): boolean {
+/**
+ * Commands that should ALWAYS be denied, even if individual segments look safe.
+ * Checked against the full unsplit command string.
+ */
+const DENY_PATTERNS: RegExp[] = [
+  /rm\s+.*-r.*f|rm\s+.*-f.*r/,     // rm -rf
+  /git\s+push\s+.*--force|git\s+push\s+-f\s/,  // force push
+  /git\s+reset\s+--hard/,           // hard reset
+  /git\s+clean\s+-f/,               // clean -f
+  /^terraform\s+/,                   // terraform commands
+];
+
+/**
+ * Split a shell command into logical segments on && || | ; operators.
+ * Respects quoted strings so pipes inside quotes don't cause false splits.
+ */
+function splitShellSegments(command: string): string[] {
+  const segments: string[] = [];
+  let current = '';
+  let inSingle = false;
+  let inDouble = false;
+  let i = 0;
+
+  while (i < command.length) {
+    const ch = command[i];
+    const next = command[i + 1];
+
+    if (ch === "'" && !inDouble) { inSingle = !inSingle; current += ch; i++; continue; }
+    if (ch === '"' && !inSingle) { inDouble = !inDouble; current += ch; i++; continue; }
+    if (ch === '\\') { current += ch + (next || ''); i += 2; continue; }
+
+    if (!inSingle && !inDouble) {
+      if ((ch === '&' && next === '&') || (ch === '|' && next === '|')) {
+        segments.push(current.trim());
+        current = '';
+        i += 2;
+        continue;
+      }
+      if (ch === '|' || ch === ';') {
+        segments.push(current.trim());
+        current = '';
+        i++;
+        continue;
+      }
+    }
+
+    current += ch;
+    i++;
+  }
+
+  if (current.trim()) segments.push(current.trim());
+  return segments.filter((s) => s.length > 0);
+}
+
+/** Check if a single command segment matches any allow pattern */
+function segmentMatchesAllow(segment: string): boolean {
+  // Strip leading env var assignments (e.g., FOO=bar command ...)
+  const stripped = segment.replace(/^([A-Z_]+=\S*\s+)+/, '');
+  // Strip redirects (2>/dev/null, >/tmp/foo, etc.)
+  const noRedirects = stripped.replace(/\s*\d*>[>&]?\s*\S+/g, '').trim();
+
   for (const rule of PERMANENTLY_APPROVED) {
-    if (rule.toolPrefix && toolName.startsWith(rule.toolPrefix)) return true;
-    if (rule.tool && rule.tool === toolName && rule.bashCommandPattern) {
-      const command = String(toolInput.command || '');
-      if (rule.bashCommandPattern.test(command)) return true;
+    if (rule.bashCommandPattern && rule.tool === 'Bash') {
+      if (rule.bashCommandPattern.test(noRedirects)) return true;
     }
   }
   return false;
+}
+
+/** Check if a tool invocation matches the permanent allowlist */
+function isPermanentlyApproved(toolName: string, toolInput: Record<string, unknown>): boolean {
+  // Non-Bash tools: check prefix/exact matches
+  for (const rule of PERMANENTLY_APPROVED) {
+    if (rule.toolPrefix && toolName.startsWith(rule.toolPrefix)) return true;
+  }
+
+  if (toolName !== 'Bash') return false;
+
+  const command = String(toolInput.command || '');
+  if (!command) return false;
+
+  // Check deny patterns against the full command first
+  for (const deny of DENY_PATTERNS) {
+    if (deny.test(command)) return false;
+  }
+
+  // Split into segments and verify each one
+  const segments = splitShellSegments(command);
+  if (segments.length === 0) return false;
+
+  return segments.every(segmentMatchesAllow);
 }
 
 export interface PermissionRouterDeps {
