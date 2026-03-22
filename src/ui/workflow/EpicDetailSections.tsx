@@ -1,4 +1,4 @@
-import type { WorkflowTicket } from '@foundation/types';
+import type { WorkflowTicket } from '@foundation/types.js';
 
 // State-specific data interfaces — now defined locally (runtime validated by stateData shape)
 interface NeedsInputData {

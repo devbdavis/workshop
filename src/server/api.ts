@@ -29,6 +29,8 @@ import { createAgentRouter } from './agent-routes.js';
 import { createVaultRouter } from './vault-routes.js';
 import { createScheduledTaskRouter } from './scheduled-task-routes.js';
 import { createWorkflowRouter } from './workflow-routes.js';
+import { createWorkflowTemplateRouter } from './workflow-template-routes.js';
+import { createWorkflowProposalRouter } from './workflow-proposal-routes.js';
 import { createWorkflowTicketRepository, createWorkflowTransitionRepository } from '@infrastructure/persistence/workflow-repository.js';
 import { createTicketDependencyRepository } from '@infrastructure/persistence/workflow-dependency-repository.js';
 import { createWorkflowEngine } from '@application/workflow/engine.js';
@@ -216,8 +218,26 @@ export function createApiRouter(deps: ApiRouterDeps = {}): Router {
     transitions: workflowTransitions,
     dependencies: ticketDependencies,
     dispatcher: dispatchCoordinator,
+    topologyLoader,
   });
   router.use(workflowRouter);
+
+  // Workflow template routes (template registry, agent roles, validation)
+  const workflowTemplateRouter = createWorkflowTemplateRouter({
+    templates: workflowTemplates,
+    agentRoles: workflowAgentRoles,
+  });
+  router.use(workflowTemplateRouter);
+
+  // Workflow proposal routes (propose and approve workflow assignments)
+  const workflowProposalRouter = createWorkflowProposalRouter({
+    engine: workflowEngine,
+    tickets: workflowTickets,
+    templates: workflowTemplates,
+    agentRoles: workflowAgentRoles,
+    topologyLoader,
+  });
+  router.use(workflowProposalRouter);
 
   // Execution hook routes (SubagentStop + SessionEnd callbacks)
   const executionHookRouter = createExecutionHookRouter({
