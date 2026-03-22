@@ -98,9 +98,9 @@ describe('ExecutionDispatcher', () => {
       description: 'Test spec',
       trackId: testTrackId,
     });
+    // specced auto-transitions to spec-review
     engine.transition(epic.id, 'specced', { type: 'agent' });
-    engine.transition(epic.id, 'spec-review', { type: 'system', reason: 'auto' });
-    engine.transition(epic.id, 'planning', { type: 'human' });
+    engine.approve(epic.id); // spec-review -> planning
     engine.transition(epic.id, 'plan-critique', { type: 'agent' });
     engine.transition(epic.id, 'plan-review', { type: 'agent' });
     return tickets.findById(epic.id)!;
@@ -154,10 +154,9 @@ describe('ExecutionDispatcher', () => {
         terminal: createMockTerminal(),
       });
 
-      // Create epic at spec-review
+      // Create epic at spec-review (specced auto-transitions to spec-review)
       const epic = engine.createEpic({ title: 'Spec gate', description: 'X' });
       engine.transition(epic.id, 'specced', { type: 'agent' });
-      engine.transition(epic.id, 'spec-review', { type: 'system', reason: 'auto' });
 
       const result = await dispatcher.approveWithExecution(epic.id);
       expect(result.state).toBe('planning');
