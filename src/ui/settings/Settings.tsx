@@ -1,5 +1,6 @@
 import { PromptTemplates } from './PromptTemplates';
 import { McpServers } from './McpServers';
+import { SoulEditor } from './SoulEditor';
 
 export function Settings() {
   return (
@@ -9,6 +10,10 @@ export function Settings() {
       </header>
 
       <div className="space-y-6">
+        <section className="bg-gray-900 border border-gray-800 rounded-lg p-6">
+          <SoulEditor />
+        </section>
+
         <section className="bg-gray-900 border border-gray-800 rounded-lg p-6">
           <McpServers />
         </section>

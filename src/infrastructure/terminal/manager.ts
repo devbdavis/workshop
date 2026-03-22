@@ -4,6 +4,7 @@ import path from 'path';
 import { v4 as uuid } from 'uuid';
 import type { SessionRepository } from '@domain/session/repository';
 import type { Session, SessionId, SessionProvider, TrackId } from '@foundation/types';
+import type { SoulLoader } from '@infrastructure/soul/soul-loader.js';
 import { isSessionIdle, isSessionLoggedOut, isSessionExited } from './pane-detection.js';
 import {
   buildClaudeLauncher, buildGeminiLauncher, buildCodexLauncher,
@@ -55,7 +56,7 @@ export interface TerminalManager {
 /** Minutes a background session can sit idle at the CLI prompt before being reaped */
 const BACKGROUND_IDLE_TIMEOUT_MINUTES = 5;
 
-export function createTerminalManager(sessionRepo: SessionRepository): TerminalManager {
+export function createTerminalManager(sessionRepo: SessionRepository, soulLoader?: SoulLoader): TerminalManager {
   try {
     execSync('which tmux', { stdio: 'pipe' });
   } catch {
@@ -94,6 +95,24 @@ export function createTerminalManager(sessionRepo: SessionRepository): TerminalM
       const tmuxName = `workshop-${uuid().slice(0, 8)}`;
       const cwd = options?.workingDirectory || process.env.HOME || '/tmp';
 
+      // Prepend soul to system prompt
+      let systemPrompt = options?.systemPrompt || '';
+      if (soulLoader) {
+        const soul = soulLoader.load();
+        if (soul) {
+          systemPrompt = systemPrompt
+            ? soul + '\n\n---\n\n' + systemPrompt
+            : soul;
+        }
+      }
+
+      // Create modified options with soul-prepended system prompt
+      const effectiveOptions: CreateSessionOptions | undefined = options
+        ? { ...options, systemPrompt: systemPrompt || undefined }
+        : systemPrompt
+          ? { systemPrompt }
+          : undefined;
+
       const cleanEnv = { ...process.env };
       delete cleanEnv.CLAUDECODE;
 
@@ -105,7 +124,7 @@ export function createTerminalManager(sessionRepo: SessionRepository): TerminalM
       const session = sessionRepo.create({
         trackId,
         tmuxSession: tmuxName,
-        systemPrompt: options?.systemPrompt,
+        systemPrompt: systemPrompt || undefined,
         state: 'active',
         provider,
         background: options?.background ?? false,
@@ -117,11 +136,11 @@ export function createTerminalManager(sessionRepo: SessionRepository): TerminalM
         const launcherLines = ['#!/bin/bash', 'set -e', ''];
 
         if (provider === 'codex') {
-          buildCodexLauncher(launcherLines, sessionDir, cwd, options);
+          buildCodexLauncher(launcherLines, sessionDir, cwd, effectiveOptions);
         } else if (provider === 'gemini') {
-          buildGeminiLauncher(launcherLines, sessionDir, cwd, options);
+          buildGeminiLauncher(launcherLines, sessionDir, cwd, effectiveOptions);
         } else if (provider === 'claude') {
-          buildClaudeLauncher(launcherLines, session.id, sessionDir, tmuxName, options);
+          buildClaudeLauncher(launcherLines, session.id, sessionDir, tmuxName, effectiveOptions);
         } else {
           throw new Error(`Unknown session provider: ${provider}`);
         }
