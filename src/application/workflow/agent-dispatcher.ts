@@ -12,6 +12,7 @@ import type {
   WorkflowTicketId,
   TrackId,
   AgentRole,
+  SessionId,
 } from '@foundation/types';
 import type { WorkflowTicketRepository } from '@domain/workflow/repository';
 import type { TrackRepository } from '@domain/track/repository';
@@ -152,6 +153,22 @@ export function createAgentDispatcher(deps: AgentDispatcherDeps): AgentDispatche
     return lines.join('\n');
   }
 
+  /** Kill any previously dispatched agent sessions for a ticket */
+  async function killPreviousSessions(ticket: WorkflowTicket): Promise<void> {
+    const stateData = (ticket.stateData || {}) as Record<string, unknown>;
+    const previousIds = stateData.agentSessionIds;
+    if (!Array.isArray(previousIds)) return;
+
+    for (const sid of previousIds) {
+      try {
+        await terminal.destroySession(sid as SessionId);
+        console.log(`Cleaned up previous agent session ${sid} for ticket ${ticket.id}`);
+      } catch {
+        // Session might already be dead — that's fine
+      }
+    }
+  }
+
   return {
     async onTransition(ticket: WorkflowTicket): Promise<void> {
       const stage = getStageDefinition(ticket.type, ticket.state);
@@ -165,6 +182,9 @@ export function createAgentDispatcher(deps: AgentDispatcherDeps): AgentDispatche
         console.warn(`Agent-actionable state '${ticket.state}' has no agentRole defined`);
         return;
       }
+
+      // Kill previous agent sessions before dispatching new ones
+      await killPreviousSessions(ticket);
 
       const count = stage.agentCount ?? 1;
       const workingDir = resolveWorkingDir(ticket);

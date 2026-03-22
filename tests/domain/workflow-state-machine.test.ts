@@ -46,22 +46,19 @@ describe('workflow state machine', () => {
       }
     });
 
-    it('planning should have agentCount=3 and parallel=true', () => {
+    it('planning should have agentCount=1', () => {
       const planning = EPIC_STAGES.find((s) => s.state === 'planning');
-      expect(planning!.agentCount).toBe(3);
-      expect(planning!.parallel).toBe(true);
+      expect(planning!.agentCount).toBe(1);
     });
 
-    it('plan-critique should have agentCount=2 and parallel=true', () => {
+    it('plan-critique should have agentCount=1', () => {
       const planCritique = EPIC_STAGES.find((s) => s.state === 'plan-critique');
-      expect(planCritique!.agentCount).toBe(2);
-      expect(planCritique!.parallel).toBe(true);
+      expect(planCritique!.agentCount).toBe(1);
     });
 
-    it('integration-review should have agentCount=2 and parallel=true', () => {
+    it('integration-review should have agentCount=1', () => {
       const integrationReview = EPIC_STAGES.find((s) => s.state === 'integration-review');
-      expect(integrationReview!.agentCount).toBe(2);
-      expect(integrationReview!.parallel).toBe(true);
+      expect(integrationReview!.agentCount).toBe(1);
     });
   });
 

@@ -106,14 +106,14 @@ describe('WorkflowEngine', () => {
   describe('transition', () => {
     it('should transition a ticket to a valid state', () => {
       const epic = engine.createEpic({ title: 'Trans test', description: 'X' });
-      // epic is in triaging, transition to specced
+      // epic is in triaging, transition to specced (auto-transitions to spec-review)
       const updated = engine.transition(
         epic.id,
         'specced',
         { type: 'agent', agentId: 'triage-1' },
         'Spec complete',
       );
-      expect(updated.state).toBe('specced');
+      expect(updated.state).toBe('spec-review');
     });
 
     it('should throw on invalid transition', () => {
@@ -153,8 +153,8 @@ describe('WorkflowEngine', () => {
   describe('approve', () => {
     it('should approve at spec-review gate', () => {
       const epic = engine.createEpic({ title: 'Approve test', description: 'X' });
+      // specced auto-transitions to spec-review
       engine.transition(epic.id, 'specced', { type: 'agent' });
-      engine.transition(epic.id, 'spec-review', { type: 'system', reason: 'auto' });
 
       const approved = engine.approve(epic.id, 'Looks good');
       expect(approved.state).toBe('planning');
@@ -162,9 +162,9 @@ describe('WorkflowEngine', () => {
 
     it('should approve at plan-review gate', () => {
       const epic = engine.createEpic({ title: 'Plan approve', description: 'X' });
+      // specced auto-transitions to spec-review
       engine.transition(epic.id, 'specced', { type: 'agent' });
-      engine.transition(epic.id, 'spec-review', { type: 'system', reason: 'auto' });
-      engine.transition(epic.id, 'planning', { type: 'human' });
+      engine.approve(epic.id); // spec-review -> planning
       engine.transition(epic.id, 'plan-critique', { type: 'agent' });
       engine.transition(epic.id, 'plan-review', { type: 'agent' });
 
@@ -181,8 +181,8 @@ describe('WorkflowEngine', () => {
   describe('reject', () => {
     it('should reject at spec-review and go back to triaging', () => {
       const epic = engine.createEpic({ title: 'Reject test', description: 'X' });
+      // specced auto-transitions to spec-review
       engine.transition(epic.id, 'specced', { type: 'agent' });
-      engine.transition(epic.id, 'spec-review', { type: 'system', reason: 'auto' });
 
       const rejected = engine.reject(epic.id, 'Needs more detail');
       expect(rejected.state).toBe('triaging');
@@ -190,9 +190,9 @@ describe('WorkflowEngine', () => {
 
     it('should reject at plan-review and go back to planning', () => {
       const epic = engine.createEpic({ title: 'Plan reject', description: 'X' });
+      // specced auto-transitions to spec-review
       engine.transition(epic.id, 'specced', { type: 'agent' });
-      engine.transition(epic.id, 'spec-review', { type: 'system', reason: 'auto' });
-      engine.transition(epic.id, 'planning', { type: 'human' });
+      engine.approve(epic.id); // spec-review -> planning
       engine.transition(epic.id, 'plan-critique', { type: 'agent' });
       engine.transition(epic.id, 'plan-review', { type: 'agent' });
 
@@ -223,8 +223,9 @@ describe('WorkflowEngine', () => {
       tickets.update(t1.id, { state: 'done' });
       engine.onTaskCompleted(t1.id);
 
+      // ready auto-transitions to in-progress
       const updatedT2 = tickets.findById(t2.id);
-      expect(updatedT2!.state).toBe('ready');
+      expect(updatedT2!.state).toBe('in-progress');
     });
 
     it('should not unblock when other deps still pending', () => {
@@ -251,16 +252,17 @@ describe('WorkflowEngine', () => {
       tickets.update(t2.id, { state: 'done' });
       engine.onTaskCompleted(t2.id);
 
+      // ready auto-transitions to in-progress
       const nowReady = tickets.findById(t3.id);
-      expect(nowReady!.state).toBe('ready');
+      expect(nowReady!.state).toBe('in-progress');
     });
 
     it('should advance epic to integration-review when all tasks done', () => {
       const epic = engine.createEpic({ title: 'All done', description: 'X' });
       // Move epic through the pipeline to in-progress
+      // specced auto-transitions to spec-review
       engine.transition(epic.id, 'specced', { type: 'agent' });
-      engine.transition(epic.id, 'spec-review', { type: 'system', reason: 'auto' });
-      engine.transition(epic.id, 'planning', { type: 'human' });
+      engine.approve(epic.id); // spec-review -> planning
       engine.transition(epic.id, 'plan-critique', { type: 'agent' });
       engine.transition(epic.id, 'plan-review', { type: 'agent' });
       engine.approve(epic.id); // plan-review -> executing

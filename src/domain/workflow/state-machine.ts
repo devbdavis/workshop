@@ -73,8 +73,7 @@ export const EPIC_STAGES: StageDefinition[] = [
     agentActionable: true,
     humanGate: false,
     agentRole: 'planner',
-    agentCount: 3,
-    parallel: true,
+    agentCount: 1,
     validTransitions: [
       { to: 'plan-critique', trigger: 'agent-complete' },
       { to: 'cancelled', trigger: 'manual' },
@@ -86,8 +85,7 @@ export const EPIC_STAGES: StageDefinition[] = [
     agentActionable: true,
     humanGate: false,
     agentRole: 'plan-critic',
-    agentCount: 2,
-    parallel: true,
+    agentCount: 1,
     validTransitions: [
       { to: 'plan-review', trigger: 'agent-complete', condition: 'No blocking findings' },
       { to: 'planning', trigger: 'agent-complete', condition: 'Blocking findings exist' },
@@ -155,8 +153,7 @@ export const EPIC_STAGES: StageDefinition[] = [
     agentActionable: true,
     humanGate: false,
     agentRole: 'integration-reviewer',
-    agentCount: 2,
-    parallel: true,
+    agentCount: 1,
     validTransitions: [
       { to: 'final-review', trigger: 'agent-complete', condition: 'No blocking findings' },
       { to: 'integration-fix', trigger: 'agent-complete', condition: 'Blocking findings exist' },

@@ -15,6 +15,7 @@ import type { TrackRepository } from '@domain/track/repository';
 import type { SummaryRepository } from '@domain/summary/repository';
 import type { TerminalManager } from '@infrastructure/terminal/manager.js';
 import type { WorkflowEngine } from './engine.js';
+import { formatPlanContent } from './prompt-composer.js';
 
 // ---------------------------------------------------------------------------
 // Public interface
@@ -176,7 +177,7 @@ function composeExecutionPrompt(
   const stateData = ticket.stateData as Record<string, unknown> | undefined;
   const planDraft = stateData?.planDraft;
   if (planDraft && typeof planDraft === 'string') {
-    parts.push('', '## Approved Implementation Plan', '', planDraft);
+    parts.push('', formatPlanContent(planDraft, 'Approved Implementation Plan'));
   }
 
   if (ticket.trackId) {

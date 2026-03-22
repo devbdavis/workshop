@@ -141,7 +141,7 @@ describe('composeWorkflowPrompt', () => {
         planDraft: 'Step 1: Create auth middleware\nStep 2: Add OAuth routes',
       });
       expect(prompt).toContain('adversarial reviewer');
-      expect(prompt).toContain('Plan:');
+      expect(prompt).toContain('## Plan to Review');
       expect(prompt).toContain('Create auth middleware');
     });
 
@@ -205,7 +205,8 @@ describe('composeWorkflowPrompt', () => {
         planDraft: 'Original plan: 3 phases',
       });
       expect(prompt).toContain('Spec: Implement OAuth2');
-      expect(prompt).toContain('Plan: Original plan: 3 phases');
+      expect(prompt).toContain('## Plan');
+      expect(prompt).toContain('Original plan: 3 phases');
     });
 
     it('should ask to compare delivery vs spec', () => {

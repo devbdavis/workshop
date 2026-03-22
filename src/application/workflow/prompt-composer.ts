@@ -26,6 +26,45 @@ export interface PromptContext {
 }
 
 /**
+ * Detect whether a planDraft value is a reference (vault path or file URL) vs inline content.
+ * Returns formatted prompt text with read instructions if it's a reference.
+ */
+export function formatPlanContent(planDraft: string, heading: string): string {
+  const trimmed = planDraft.trim();
+
+  // file:// URL — agent should read the local file
+  if (trimmed.startsWith('file://')) {
+    const filePath = trimmed.replace('file://', '');
+    return [
+      `## ${heading}`,
+      '',
+      `The plan is stored at: \`${filePath}\``,
+      '',
+      `**You MUST read this file first** before proceeding. Use your file reading tools to read \`${filePath}\`.`,
+    ].join('\n');
+  }
+
+  // Vault path — short string, no newlines, ends with .md, contains /
+  if (!trimmed.includes('\n') && trimmed.endsWith('.md') && trimmed.includes('/') && trimmed.length < 300) {
+    // Parse vault path: "TrackSlug/path/to/file.md" or "_Workflow/plans/file.md"
+    const slashIdx = trimmed.indexOf('/');
+    const trackSlug = trimmed.substring(0, slashIdx);
+    const filePath = trimmed.substring(slashIdx + 1);
+    return [
+      `## ${heading}`,
+      '',
+      `The plan is stored in the Workshop vault at: \`${trimmed}\``,
+      '',
+      `**You MUST read this file first** before proceeding. Use the workshop_vault_read tool:`,
+      `  workshop_vault_read(trackSlug="${trackSlug}", filePath="${filePath}")`,
+    ].join('\n');
+  }
+
+  // Inline content — include directly
+  return `## ${heading}\n\n${trimmed}`;
+}
+
+/**
  * Build a system prompt tailored to the given agent role and ticket context.
  */
 export function composeWorkflowPrompt(
@@ -162,7 +201,7 @@ function buildPlannerPrompt(ticket: WorkflowTicket, context?: PromptContext): st
 
   // Previous plan draft — critical for revisions so the planner edits rather than regenerates
   if (context?.planDraft) {
-    lines.push('', '## Previous Plan Draft', '', context.planDraft);
+    lines.push('', formatPlanContent(context.planDraft, 'Previous Plan Draft'));
   }
 
   // Critic's blocking findings — the actual issues to fix
@@ -201,10 +240,11 @@ function buildPlannerPrompt(ticket: WorkflowTicket, context?: PromptContext): st
       '## Instructions',
       '',
       'This is a REVISION of an existing plan. You must:',
-      '1. Start from the previous plan draft above — do not regenerate from scratch',
+      '1. Read the previous plan draft (see reference above) — do not regenerate from scratch',
       '2. Address every BLOCKING finding by making concrete changes to the plan',
       '3. Ensure the plan is consistent with all human answers',
       '4. Keep parts of the plan that are not affected by the findings',
+      '5. Write the revised plan back to the same vault location when done',
     );
   } else {
     lines.push(
@@ -224,7 +264,7 @@ function buildPlanCriticPrompt(ticket: WorkflowTicket, context?: PromptContext):
     'Find holes, missing edge cases, security issues, scalability concerns.',
   ];
   if (context?.planDraft) {
-    lines.push('', 'Plan:', context.planDraft);
+    lines.push('', formatPlanContent(context.planDraft, 'Plan to Review'));
   }
   lines.push('', 'List findings as BLOCKING or SUGGESTION.');
   return lines.join('\n');
@@ -235,7 +275,7 @@ function buildSplitterPrompt(ticket: WorkflowTicket, context?: PromptContext): s
     'You are a project planner splitting a technical plan into implementation tasks.',
   ];
   if (context?.planDraft) {
-    lines.push('', 'Plan:', context.planDraft);
+    lines.push('', formatPlanContent(context.planDraft, 'Plan'));
   }
   lines.push(
     '',
@@ -275,7 +315,7 @@ function buildIntegrationReviewerPrompt(
     `Spec: ${ticket.description}`,
   ];
   if (context?.planDraft) {
-    lines.push('', `Plan: ${context.planDraft}`);
+    lines.push('', formatPlanContent(context.planDraft, 'Plan'));
   }
   lines.push('', 'Compare what was delivered vs what was specified.');
   return lines.join('\n');
