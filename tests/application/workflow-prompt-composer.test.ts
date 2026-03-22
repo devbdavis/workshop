@@ -221,14 +221,19 @@ describe('composeWorkflowPrompt', () => {
         feedback: ['SQL injection risk', 'Missing input validation'],
       });
       expect(prompt).toContain('fixing issues');
-      expect(prompt).toContain('Findings:');
+      expect(prompt).toContain('## Review Findings');
       expect(prompt).toContain('- SQL injection risk');
       expect(prompt).toContain('- Missing input validation');
     });
 
+    it('should include ticket description', () => {
+      const prompt = composeWorkflowPrompt('fixer', makeTicket());
+      expect(prompt).toContain('Implement OAuth2');
+    });
+
     it('should omit findings section when no feedback', () => {
       const prompt = composeWorkflowPrompt('fixer', makeTicket());
-      expect(prompt).not.toContain('Findings:');
+      expect(prompt).not.toContain('## Review Findings');
       expect(prompt).toContain('Address each finding');
     });
   });
