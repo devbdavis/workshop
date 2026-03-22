@@ -51,6 +51,7 @@ import { createMcpConfigRouter } from './mcp-config-routes.js';
 import { createClaudeAdapter } from '@infrastructure/mcp-tools/claude-adapter.js';
 import { createCodexAdapter } from '@infrastructure/mcp-tools/codex-adapter.js';
 import { createGeminiAdapter } from '@infrastructure/mcp-tools/gemini-adapter.js';
+import { createSoulLoader } from '@infrastructure/soul/soul-loader.js';
 
 export interface ApiRouterDeps {
   automationEngine?: AutomationEngine;
@@ -69,7 +70,8 @@ export function createApiRouter(deps: ApiRouterDeps = {}): Router {
   const agents = createAgentRepository();
   const filesystemScanner = createFilesystemAgentScanner();
   const projectRoot = process.cwd();
-  const terminal = createTerminalManager(sessions);
+  const soulLoader = createSoulLoader(projectRoot);
+  const terminal = createTerminalManager(sessions, soulLoader);
 
   // Sync session states on startup and periodically (every 30s).
   // Dead tmux sessions are removed from the DB and events broadcast to connected clients.
@@ -789,6 +791,30 @@ export function createApiRouter(deps: ApiRouterDeps = {}): Router {
       return;
     }
     res.json({ templateId: newTemplateId });
+  });
+
+  // --- Soul ---
+
+  router.get('/soul', (_req, res) => {
+    const info = soulLoader.getInfo();
+    res.json(info);
+  });
+
+  router.put('/soul', (req, res) => {
+    const { content } = req.body;
+    if (typeof content !== 'string') {
+      res.status(400).json({ error: 'content must be a string' });
+      return;
+    }
+    soulLoader.save(content);
+    const info = soulLoader.getInfo();
+    res.json(info);
+  });
+
+  router.delete('/soul', (_req, res) => {
+    soulLoader.reset();
+    const info = soulLoader.getInfo();
+    res.json(info);
   });
 
   return router;
