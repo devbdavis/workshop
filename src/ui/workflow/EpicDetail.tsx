@@ -2,9 +2,26 @@ import { useEffect, useState, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import type {
   WorkflowTicket, WorkflowTransition, Track, Session,
-  NeedsInputData, PlanCritiqueData,
-  IntegrationReviewData, FinalReviewData,
 } from '@foundation/types';
+
+// State-specific data interfaces — now defined locally (runtime validated by stateData shape)
+interface NeedsInputData {
+  pendingQuestions?: Array<{ text: string }>;
+  answers?: Array<{ text: string; answer: string }>;
+}
+
+interface PlanCritiqueData {
+  findings?: Array<{ text: string; severity: string; resolved?: boolean }>;
+}
+
+interface IntegrationReviewData {
+  findings?: Array<{ text: string; severity: string; resolved?: boolean }>;
+}
+
+interface FinalReviewData {
+  prLinks?: string[];
+  reviewNotes?: string;
+}
 import { WorkflowStateIndicator } from './WorkflowStateIndicator';
 import { StateTimeline } from './StateTimeline';
 import { HumanGatePanel } from './HumanGatePanel';

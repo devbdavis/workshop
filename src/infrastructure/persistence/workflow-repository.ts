@@ -3,12 +3,12 @@ import { getDatabase } from './database.js';
 import type {
   WorkflowTicket, WorkflowTicketId, WorkflowTransition, WorkflowTransitionId,
   WorkflowState, WorkflowTicketType, TrackId, TicketId, SessionId,
-  AgentId, AgentRole, SessionProvider, TransitionActor,
+  AgentId, SessionProvider, TransitionActor,
 } from '@foundation/types';
 import type {
   WorkflowTicketRepository, WorkflowTicketCreate, WorkflowTicketUpdate,
   WorkflowTransitionRepository, WorkflowTransitionCreate,
-} from '@domain/workflow/repository';
+} from '@application/workflow/ticket-repository.js';
 
 // ---------------------------------------------------------------------------
 // WorkflowTicketRepository
@@ -233,7 +233,7 @@ function rowToTicket(row: TicketRow): WorkflowTicket {
     trackId: (row.track_id as TrackId) || undefined,
     externalTicketId: (row.external_ticket_id as TicketId) || undefined,
     executionSessionId: (row.execution_session_id as SessionId) || undefined,
-    assignedAgentRole: (row.assigned_agent_role as AgentRole) || undefined,
+    assignedAgentRole: row.assigned_agent_role || undefined,
     assignedAgentIds: safeJsonParse<AgentId[]>(row.assigned_agent_ids),
     provider: (row.provider as SessionProvider) || 'claude',
     priority: row.priority as WorkflowTicket['priority'],

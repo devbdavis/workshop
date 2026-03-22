@@ -11,15 +11,48 @@ import type {
   WorkflowTicket,
   WorkflowTicketId,
   TrackId,
-  AgentRole,
   SessionId,
 } from '@foundation/types';
-import type { WorkflowTicketRepository } from '@domain/workflow/repository';
+import type { WorkflowTicketRepository } from './ticket-repository.js';
 import type { TrackRepository } from '@domain/track/repository';
 import type { SummaryRepository } from '@domain/summary/repository';
 import type { TerminalManager } from '@infrastructure/terminal/manager.js';
-import { getStageDefinition } from '@domain/workflow/state-machine.js';
 import { composeWorkflowPrompt, type PromptContext } from './prompt-composer.js';
+
+// AgentRole is now a string (dynamic)
+type AgentRole = string;
+
+// ---------------------------------------------------------------------------
+// TODO: Phase 3 Round 2 — replace these stubs with topology loader
+// ---------------------------------------------------------------------------
+
+interface StageDefinitionStub {
+  state: string;
+  ticketType: string;
+  agentActionable: boolean;
+  humanGate: boolean;
+  agentRole?: string;
+  agentCount?: number;
+  validTransitions: Array<{ to: string; trigger: string }>;
+}
+
+// Hardcoded stage definitions for backward compat
+const STAGE_DEFS: Record<string, StageDefinitionStub> = {
+  'epic:triaging': { state: 'triaging', ticketType: 'epic', agentActionable: true, humanGate: false, agentRole: 'triage', agentCount: 1, validTransitions: [] },
+  'epic:planning': { state: 'planning', ticketType: 'epic', agentActionable: true, humanGate: false, agentRole: 'planner', agentCount: 1, validTransitions: [] },
+  'epic:plan-critique': { state: 'plan-critique', ticketType: 'epic', agentActionable: true, humanGate: false, agentRole: 'plan-critic', agentCount: 1, validTransitions: [] },
+  'epic:splitting': { state: 'splitting', ticketType: 'epic', agentActionable: true, humanGate: false, agentRole: 'splitter', agentCount: 1, validTransitions: [] },
+  'epic:integration-review': { state: 'integration-review', ticketType: 'epic', agentActionable: true, humanGate: false, agentRole: 'integration-reviewer', agentCount: 1, validTransitions: [] },
+  'epic:integration-fix': { state: 'integration-fix', ticketType: 'epic', agentActionable: true, humanGate: false, agentRole: 'fixer', agentCount: 1, validTransitions: [] },
+  'task:ready': { state: 'ready', ticketType: 'task', agentActionable: true, humanGate: false, agentRole: 'implementer', agentCount: 1, validTransitions: [] },
+  'task:in-progress': { state: 'in-progress', ticketType: 'task', agentActionable: true, humanGate: false, agentRole: 'implementer', agentCount: 1, validTransitions: [] },
+  'task:code-review': { state: 'code-review', ticketType: 'task', agentActionable: true, humanGate: false, agentRole: 'code-reviewer', agentCount: 1, validTransitions: [] },
+  'task:changes-requested': { state: 'changes-requested', ticketType: 'task', agentActionable: true, humanGate: false, agentRole: 'implementer', agentCount: 1, validTransitions: [] },
+};
+
+function getStageDefinition(ticketType: string, state: string): StageDefinitionStub | undefined {
+  return STAGE_DEFS[`${ticketType}:${state}`];
+}
 
 // ---------------------------------------------------------------------------
 // Public interface

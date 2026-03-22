@@ -1,7 +1,10 @@
 /**
  * Composes system prompts for each agent role in the workflow lifecycle.
  */
-import type { AgentRole, WorkflowTicket } from '@foundation/types';
+import type { WorkflowTicket } from '@foundation/types';
+
+// AgentRole is now a string (dynamic)
+type AgentRole = string;
 
 export interface CritiqueFinding {
   text: string;

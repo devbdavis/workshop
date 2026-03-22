@@ -12,7 +12,7 @@ import type {
   WorkflowState,
   TransitionActor,
 } from '@foundation/types';
-import type { WorkflowTicketRepository } from '@domain/workflow/repository';
+import type { WorkflowTicketRepository } from './ticket-repository.js';
 import type { WorkflowEngine } from './engine.js';
 import type { ExecutionDispatcher } from './execution-dispatcher.js';
 import type { AgentDispatcher } from './agent-dispatcher.js';

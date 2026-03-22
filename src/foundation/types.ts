@@ -261,112 +261,9 @@ export interface ScheduledTaskRun {
 // Workflow Ticket
 export type WorkflowTicketType = 'epic' | 'task';
 
-export type EpicState =
-  | 'idea'
-  | 'triaging'
-  | 'needs-input'
-  | 'specced'
-  | 'spec-review'
-  | 'planning'
-  | 'plan-critique'
-  | 'plan-review'
-  | 'executing'
-  | 'execution-failed'
-  | 'splitting'
-  | 'in-progress'
-  | 'integration-review'
-  | 'integration-fix'
-  | 'final-review'
-  | 'approved'
-  | 'merged'
-  | 'cancelled';
-
-export type TaskState =
-  | 'blocked'
-  | 'ready'
-  | 'in-progress'
-  | 'code-review'
-  | 'changes-requested'
-  | 'done'
-  | 'cancelled';
-
-export type WorkflowState = EpicState | TaskState;
-
-/** States that require human approval to advance */
-export type HumanGateState = 'spec-review' | 'plan-review' | 'final-review';
-
-export type AgentRole =
-  | 'triage'
-  | 'planner'
-  | 'plan-critic'
-  | 'splitter'
-  | 'implementer'
-  | 'code-reviewer'
-  | 'integration-reviewer'
-  | 'fixer';
-
-/** State-specific data for triaging */
-export interface TriagingData {
-  questions: Array<{ text: string; answered: boolean; answer?: string }>;
-  iteration: number;
-}
-
-/** State-specific data for needs-input */
-export interface NeedsInputData {
-  pendingQuestions: Array<{ text: string }>;
-}
-
-/** State-specific data for planning */
-export interface PlanningData {
-  planDraft?: string;
-  teamSessionIds: string[];
-  feedback?: string[];
-  iteration: number;
-}
-
-/** State-specific data for plan-critique */
-export interface PlanCritiqueData {
-  criticSessionIds: string[];
-  findings: Array<{ text: string; severity: 'blocking' | 'suggestion'; resolved: boolean }>;
-}
-
-/** State-specific data for splitting */
-export interface SplittingData {
-  plannerSessionId?: string;
-  childTicketIds: WorkflowTicketId[];
-}
-
-/** State-specific data for epic in-progress */
-export interface EpicInProgressData {
-  totalTasks: number;
-  completedTasks: number;
-  failedTasks: number;
-}
-
-/** State-specific data for integration-review */
-export interface IntegrationReviewData {
-  reviewerSessionIds: string[];
-  findings: Array<{ text: string; severity: 'blocking' | 'suggestion'; resolved: boolean }>;
-  iteration: number;
-}
-
-/** State-specific data for final-review */
-export interface FinalReviewData {
-  prLinks: string[];
-  reviewNotes?: string;
-}
-
-/** State-specific data for task code-review */
-export interface CodeReviewData {
-  reviewSessionId?: string;
-  findings: Array<{ text: string; severity: 'blocking' | 'suggestion' }>;
-}
-
-/** State-specific data for changes-requested */
-export interface ChangesRequestedData {
-  feedback: string[];
-  iteration: number;
-}
+// Dynamic workflow types — all validation is runtime via Zod schemas
+export type WorkflowState = string;
+export type AgentRoleId = string;
 
 /** Structured data from the execution pipeline */
 export interface ExecutionData {
@@ -399,8 +296,8 @@ export interface WorkflowTicket {
   externalTicketId?: TicketId;
   executionSessionId?: SessionId;
 
-  // Assignment
-  assignedAgentRole?: AgentRole;
+  // Assignment — now string-based for dynamic roles
+  assignedAgentRole?: string | null;
   assignedAgentIds?: AgentId[];
   provider: SessionProvider;
 
@@ -408,6 +305,10 @@ export interface WorkflowTicket {
   priority: 'low' | 'medium' | 'high' | 'critical';
   labels?: string[];
   sortOrder: number;
+
+  // Dynamic workflow template binding
+  workflowTemplateRowId?: string;
+  workflowTemplateVersion?: number;
 
   // Audit
   stateChangedAt: string;
@@ -440,23 +341,6 @@ export interface TicketDependency {
   resolvedAt?: string;
 }
 
-/** Defines behavior and valid transitions for a workflow state */
-export interface StageDefinition {
-  state: WorkflowState;
-  ticketType: WorkflowTicketType;
-  agentActionable: boolean;
-  humanGate: boolean;
-  agentRole?: AgentRole;
-  agentCount?: number;
-  parallel?: boolean;
-  validTransitions: Array<{
-    to: WorkflowState;
-    trigger: 'agent-complete' | 'human-approve' | 'human-reject'
-      | 'auto' | 'all-deps-resolved' | 'all-tasks-done' | 'manual'
-      | 'execution-complete' | 'execution-failed';
-    condition?: string;
-  }>;
-}
 
 // Agent
 export type AgentSource = 'global' | 'project' | 'workshop';

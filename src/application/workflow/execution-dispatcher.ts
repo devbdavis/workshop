@@ -10,7 +10,7 @@ import type {
   ExecutionData,
   TrackId,
 } from '@foundation/types';
-import type { WorkflowTicketRepository } from '@domain/workflow/repository';
+import type { WorkflowTicketRepository } from './ticket-repository.js';
 import type { TrackRepository } from '@domain/track/repository';
 import type { SummaryRepository } from '@domain/summary/repository';
 import type { TerminalManager } from '@infrastructure/terminal/manager.js';
