@@ -12,7 +12,51 @@ import { DiagramNode } from './DiagramNode';
 import { DiagramEdge } from './DiagramEdge';
 import { DiagramTooltip } from './DiagramTooltip';
 import { DiagramLegend } from './DiagramLegend';
-import { getTemplatesForType, type WorkflowTemplate } from '@domain/workflow/templates';
+// TODO: Phase 3 Round 2 — replace with dynamic template fetching from API
+// import { getTemplatesForType, type WorkflowTemplate } from '@domain/workflow/templates';
+
+// Temporary stub until dynamic templates are implemented
+interface WorkflowTemplate {
+  id: string;
+  name: string;
+  description: string;
+  ticketType: string;
+  entryState: string;
+  activeStates: string[];
+  skippedStates: string[];
+  requiredFields: string[];
+  builtin: boolean;
+}
+
+// Hardcoded templates for backward compat
+const BUILTIN_TEMPLATES: WorkflowTemplate[] = [
+  {
+    id: 'epic-standard',
+    name: 'Standard',
+    description: 'Full workflow',
+    ticketType: 'epic',
+    entryState: 'idea',
+    activeStates: ['idea', 'triaging', 'needs-input', 'specced', 'spec-review', 'planning', 'plan-critique', 'plan-review', 'executing', 'execution-failed', 'splitting', 'in-progress', 'integration-review', 'integration-fix', 'final-review', 'approved', 'merged', 'cancelled'],
+    skippedStates: [],
+    requiredFields: ['description'],
+    builtin: true,
+  },
+  {
+    id: 'task-standard',
+    name: 'Standard',
+    description: 'Full task flow',
+    ticketType: 'task',
+    entryState: 'ready',
+    activeStates: ['blocked', 'ready', 'in-progress', 'code-review', 'changes-requested', 'done', 'cancelled'],
+    skippedStates: [],
+    requiredFields: ['description'],
+    builtin: true,
+  },
+];
+
+function getTemplatesForType(ticketType: string): WorkflowTemplate[] {
+  return BUILTIN_TEMPLATES.filter(t => t.ticketType === ticketType);
+}
 
 interface StateDiagramProps {
   ticketType: 'epic' | 'task';

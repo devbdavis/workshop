@@ -1,5 +1,8 @@
 import { useState } from 'react';
-import type { WorkflowTicket, WorkflowTransition, HumanGateState } from '@foundation/types';
+import type { WorkflowTicket, WorkflowTransition } from '@foundation/types';
+
+// HumanGateState is now just a string type (dynamic workflow)
+type HumanGateState = 'spec-review' | 'plan-review' | 'final-review';
 
 interface Props {
   ticket: WorkflowTicket;

@@ -2,7 +2,7 @@
  * Resolves inter-ticket dependencies and detects when blocked tickets become unblocked.
  */
 import type { WorkflowTicketId } from '@foundation/types';
-import type { WorkflowTicketRepository, TicketDependencyRepository } from '@domain/workflow/repository';
+import type { WorkflowTicketRepository, TicketDependencyRepository } from './ticket-repository.js';
 
 export interface DependencyResolver {
   /** Check if all dependencies for a ticket are resolved */

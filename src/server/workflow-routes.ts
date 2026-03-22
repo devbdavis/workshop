@@ -4,7 +4,7 @@ import type {
   WorkflowTicketRepository,
   WorkflowTransitionRepository,
   TicketDependencyRepository,
-} from '@domain/workflow/repository';
+} from '@application/workflow/ticket-repository.js';
 import type { WorkflowEngine } from '@application/workflow/engine.js';
 import type { DispatchCoordinator } from '@application/workflow/dispatch-coordinator.js';
 import { broadcast } from './events.js';

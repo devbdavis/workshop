@@ -14,10 +14,117 @@ import type {
   WorkflowTicketRepository,
   WorkflowTransitionRepository,
   TicketDependencyRepository,
-} from '@domain/workflow/repository';
-import { isValidTransition, isHumanGate, getStageDefinition } from '@domain/workflow/state-machine.js';
+} from './ticket-repository.js';
 import { createDependencyResolver } from './dependency-resolver.js';
 import type { DependencyResolver } from './dependency-resolver.js';
+
+// ---------------------------------------------------------------------------
+// TODO: Phase 3 Round 2 — replace these stubs with topology loader
+// ---------------------------------------------------------------------------
+
+// Temporary stub types and functions until topology loader is implemented
+interface StageDefinitionStub {
+  state: string;
+  ticketType: string;
+  agentActionable: boolean;
+  humanGate: boolean;
+  agentRole?: string;
+  agentCount?: number;
+  validTransitions: Array<{ to: string; trigger: string; condition?: string }>;
+}
+
+// Hardcoded human gate states for backward compat
+const HUMAN_GATE_STATES = ['spec-review', 'plan-review', 'final-review'];
+
+// Hardcoded transition map for backward compat (will be replaced by topology loader)
+const TRANSITION_MAP: Record<string, Record<string, string[]>> = {
+  epic: {
+    idea: ['triaging', 'cancelled'],
+    triaging: ['needs-input', 'specced', 'cancelled'],
+    'needs-input': ['triaging', 'cancelled'],
+    specced: ['spec-review', 'cancelled'],
+    'spec-review': ['planning', 'triaging', 'cancelled'],
+    planning: ['plan-critique', 'cancelled'],
+    'plan-critique': ['plan-review', 'planning', 'cancelled'],
+    'plan-review': ['executing', 'planning', 'cancelled'],
+    executing: ['integration-review', 'execution-failed', 'cancelled'],
+    'execution-failed': ['executing', 'planning', 'cancelled'],
+    splitting: ['in-progress', 'cancelled'],
+    'in-progress': ['integration-review', 'cancelled'],
+    'integration-review': ['final-review', 'integration-fix', 'cancelled'],
+    'integration-fix': ['integration-review', 'cancelled'],
+    'final-review': ['approved', 'integration-fix', 'cancelled'],
+    approved: ['merged'],
+    merged: [],
+    cancelled: [],
+  },
+  task: {
+    blocked: ['ready', 'cancelled'],
+    ready: ['in-progress', 'cancelled'],
+    'in-progress': ['code-review', 'cancelled'],
+    'code-review': ['done', 'changes-requested', 'cancelled'],
+    'changes-requested': ['in-progress', 'cancelled'],
+    done: [],
+    cancelled: [],
+  },
+};
+
+// Hardcoded stage definitions for backward compat
+const STAGE_DEFS: Record<string, StageDefinitionStub> = {
+  'epic:spec-review': {
+    state: 'spec-review', ticketType: 'epic', agentActionable: false, humanGate: true,
+    validTransitions: [
+      { to: 'planning', trigger: 'human-approve' },
+      { to: 'triaging', trigger: 'human-reject' },
+    ],
+  },
+  'epic:plan-review': {
+    state: 'plan-review', ticketType: 'epic', agentActionable: false, humanGate: true,
+    validTransitions: [
+      { to: 'executing', trigger: 'human-approve' },
+      { to: 'planning', trigger: 'human-reject' },
+    ],
+  },
+  'epic:final-review': {
+    state: 'final-review', ticketType: 'epic', agentActionable: false, humanGate: true,
+    validTransitions: [
+      { to: 'approved', trigger: 'human-approve' },
+      { to: 'integration-fix', trigger: 'human-reject' },
+    ],
+  },
+  'epic:idea': {
+    state: 'idea', ticketType: 'epic', agentActionable: false, humanGate: false,
+    validTransitions: [{ to: 'triaging', trigger: 'auto' }],
+  },
+  'epic:specced': {
+    state: 'specced', ticketType: 'epic', agentActionable: false, humanGate: false,
+    validTransitions: [{ to: 'spec-review', trigger: 'auto' }],
+  },
+  'task:ready': {
+    state: 'ready', ticketType: 'task', agentActionable: true, humanGate: false, agentRole: 'implementer',
+    validTransitions: [{ to: 'in-progress', trigger: 'auto' }],
+  },
+  'task:changes-requested': {
+    state: 'changes-requested', ticketType: 'task', agentActionable: true, humanGate: false, agentRole: 'implementer',
+    validTransitions: [{ to: 'in-progress', trigger: 'auto' }],
+  },
+};
+
+function isValidTransition(ticketType: string, fromState: string, toState: string): boolean {
+  const typeMap = TRANSITION_MAP[ticketType];
+  if (!typeMap) return false;
+  const allowed = typeMap[fromState];
+  if (!allowed) return false;
+  return allowed.includes(toState);
+}
+
+function isHumanGate(state: string): boolean {
+  return HUMAN_GATE_STATES.includes(state);
+}
+
+function getStageDefinition(ticketType: string, state: string): StageDefinitionStub | undefined {
+  return STAGE_DEFS[`${ticketType}:${state}`];
+}
 
 // ---------------------------------------------------------------------------
 // Public interface

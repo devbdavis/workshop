@@ -1,3 +1,10 @@
+/**
+ * Repository interfaces for workflow ticket persistence.
+ *
+ * Moved from domain/workflow/repository.ts to application layer as part of
+ * the dynamic workflow engine refactor — repositories now use string-based
+ * types for states and roles (runtime validated via Zod schemas).
+ */
 import type {
   WorkflowTicket,
   WorkflowTicketId,
@@ -7,8 +14,7 @@ import type {
   WorkflowState,
   WorkflowTicketType,
   TrackId,
-  TransitionActor,
-} from '@foundation/types';
+} from '@foundation/types.js';
 
 // ---------------------------------------------------------------------------
 // WorkflowTicket repository
@@ -36,17 +42,21 @@ export type WorkflowTicketUpdate = Partial<
     | 'labels'
     | 'sortOrder'
     | 'stateChangedAt'
+    | 'workflowTemplateRowId'
+    | 'workflowTemplateVersion'
   >
 >;
 
+export interface WorkflowTicketFilter {
+  type?: WorkflowTicketType;
+  state?: WorkflowState;
+  trackId?: TrackId;
+  parentId?: WorkflowTicketId;
+}
+
 export interface WorkflowTicketRepository {
   findById(id: WorkflowTicketId): WorkflowTicket | null;
-  findAll(filters?: {
-    type?: WorkflowTicketType;
-    state?: WorkflowState;
-    trackId?: TrackId;
-    parentId?: WorkflowTicketId;
-  }): WorkflowTicket[];
+  findAll(filters?: WorkflowTicketFilter): WorkflowTicket[];
   findChildren(parentId: WorkflowTicketId): WorkflowTicket[];
   findByState(state: WorkflowState): WorkflowTicket[];
   findByExecutionSessionId(sessionId: string): WorkflowTicket | null;

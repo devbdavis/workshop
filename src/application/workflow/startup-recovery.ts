@@ -6,10 +6,30 @@
  * complete) and can also be invoked on-demand.
  */
 import type { WorkflowTicket, SessionId } from '@foundation/types';
-import type { WorkflowTicketRepository } from '@domain/workflow/repository';
+import type { WorkflowTicketRepository } from './ticket-repository.js';
 import type { SessionRepository } from '@domain/session/repository';
-import { isAgentActionable, isTerminal } from '@domain/workflow/state-machine.js';
+// TODO: Phase 3 Round 2 — replace with topology loader
+// import { isAgentActionable, isTerminal } from '@domain/workflow/state-machine.js';
 import type { DispatchCoordinator } from './dispatch-coordinator.js';
+
+// ---------------------------------------------------------------------------
+// TODO: Phase 3 Round 2 — replace these stubs with topology loader
+// ---------------------------------------------------------------------------
+
+const TERMINAL_STATES = ['merged', 'cancelled', 'done'];
+const AGENT_ACTIONABLE_STATES: Record<string, string[]> = {
+  epic: ['triaging', 'planning', 'plan-critique', 'splitting', 'integration-review', 'integration-fix'],
+  task: ['ready', 'in-progress', 'code-review', 'changes-requested'],
+};
+
+function isTerminal(ticketType: string, state: string): boolean {
+  return TERMINAL_STATES.includes(state);
+}
+
+function isAgentActionable(ticketType: string, state: string): boolean {
+  const states = AGENT_ACTIONABLE_STATES[ticketType];
+  return states ? states.includes(state) : false;
+}
 
 // ---------------------------------------------------------------------------
 // Public interface
