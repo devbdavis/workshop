@@ -79,14 +79,34 @@ export function createApiRouter(deps: ApiRouterDeps = {}): Router {
   const terminal = createTerminalManager(sessions, soulLoader);
 
   // Sync session states on startup and periodically (every 30s).
-  // Dead tmux sessions are removed from the DB and events broadcast to connected clients.
+  // Dead tmux sessions are removed from the DB (or suspended if resumable).
   function runSessionSync() {
     const result = terminal.syncSessionStates();
     for (const { trackId } of result.cleaned) {
       broadcast('session:deleted', trackId);
     }
+    for (const { trackId } of result.suspended) {
+      broadcast('session:updated', trackId);
+    }
   }
   runSessionSync();
+
+  // Resume sessions that were suspended (e.g. after machine restart).
+  // Delayed slightly so the sync completes and the server is ready for hook callbacks.
+  setTimeout(async () => {
+    try {
+      const resumed = await terminal.resumeSuspendedSessions();
+      for (const session of resumed) {
+        broadcast('session:created', session.trackId);
+      }
+      if (resumed.length > 0) {
+        console.log(`[session-resume] Resumed ${resumed.length} session(s) after restart`);
+      }
+    } catch (err) {
+      console.error('[session-resume] Failed to resume suspended sessions:', err);
+    }
+  }, 3_000);
+
   const syncInterval = setInterval(runSessionSync, 30_000);
   // Clean up interval when the router's parent process exits
   process.on('SIGINT', () => clearInterval(syncInterval));
@@ -239,11 +259,12 @@ export function createApiRouter(deps: ApiRouterDeps = {}): Router {
   });
   router.use(workflowProposalRouter);
 
-  // Execution hook routes (SubagentStop + SessionEnd callbacks)
+  // Execution hook routes (SubagentStop + SessionEnd + SessionStart callbacks)
   const executionHookRouter = createExecutionHookRouter({
     engine: workflowEngine,
     tickets: workflowTickets,
     terminal,
+    sessions,
   });
   router.use(executionHookRouter);
 

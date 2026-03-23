@@ -6,6 +6,7 @@
  */
 import { Router } from 'express';
 import type { SessionId, WorkflowTicketId, ExecutionData } from '@foundation/types';
+import type { SessionRepository } from '@domain/session/repository.js';
 import type { WorkflowTicketRepository } from '@domain/workflow/ticket-repository.js';
 import type { WorkflowEngine } from '@application/workflow/engine.js';
 import type { TerminalManager } from '@infrastructure/terminal/manager.js';
@@ -15,11 +16,44 @@ export interface ExecutionHookRouterDeps {
   engine: WorkflowEngine;
   tickets: WorkflowTicketRepository;
   terminal: TerminalManager;
+  sessions: SessionRepository;
 }
 
 export function createExecutionHookRouter(deps: ExecutionHookRouterDeps): Router {
   const router = Router();
-  const { engine, tickets, terminal } = deps;
+  const { engine, tickets, terminal, sessions } = deps;
+
+  /**
+   * SessionStart hook — Claude Code sends this when a session begins.
+   * Captures the Claude session ID so we can later --resume it.
+   */
+  router.post('/hooks/session-start', (req, res) => {
+    try {
+      const workshopSessionId = req.headers['x-workshop-session'] as string | undefined;
+      const claudeSessionId = req.body?.session_id;
+
+      if (!workshopSessionId || !claudeSessionId) {
+        res.json({});
+        return;
+      }
+
+      const updated = sessions.updateClaudeResumeId(
+        workshopSessionId as SessionId,
+        claudeSessionId,
+      );
+
+      if (updated) {
+        console.log(
+          `Captured Claude session ID for ${workshopSessionId}: ${claudeSessionId}`,
+        );
+      }
+
+      res.json({});
+    } catch (err) {
+      console.error('Session start hook error:', err);
+      res.json({});
+    }
+  });
 
   /**
    * SubagentStop hook — Claude Code sends this when a Task-spawned sub-agent completes.

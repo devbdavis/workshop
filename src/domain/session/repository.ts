@@ -9,5 +9,6 @@ export interface SessionRepository {
   updateState(id: SessionId, state: SessionState): Session | null;
   updateName(id: SessionId, name: string): Session | null;
   updateClaudeResumeId(id: SessionId, claudeResumeId: string): Session | null;
+  updateTmuxSession(id: SessionId, tmuxSession: string): Session | null;
   delete(id: SessionId): boolean;
 }
