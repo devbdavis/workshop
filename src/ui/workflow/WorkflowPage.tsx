@@ -3,10 +3,9 @@ import { useNavigate } from 'react-router-dom';
 import type { WorkflowTicket, Track } from '@foundation/types.js';
 import { CreateEpicModal, type CreateEpicData } from './CreateEpicModal.js';
 import { EpicList, type FilterTab } from './EpicList.js';
-import { StateDiagram } from './StateDiagram.js';
 import { TemplateLibrary } from './TemplateLibrary.js';
 
-type SubTab = 'epics' | 'flow' | 'templates';
+type SubTab = 'epics' | 'templates';
 
 export function WorkflowPage() {
   const navigate = useNavigate();
@@ -94,16 +93,6 @@ export function WorkflowPage() {
             Epics
           </button>
           <button
-            onClick={() => setActiveTab('flow')}
-            className={`px-4 py-1.5 text-xs rounded-md transition-colors ${
-              activeTab === 'flow'
-                ? 'bg-gray-700 text-white'
-                : 'text-gray-400 hover:text-gray-200'
-            }`}
-          >
-            Flow Diagram
-          </button>
-          <button
             onClick={() => setActiveTab('templates')}
             className={`px-4 py-1.5 text-xs rounded-md transition-colors ${
               activeTab === 'templates'
@@ -114,14 +103,6 @@ export function WorkflowPage() {
             Templates
           </button>
         </div>
-        {activeTab === 'flow' && (
-          <button
-            onClick={() => setShowCreateForm(true)}
-            className="ml-auto px-3 py-1 text-xs bg-blue-600 hover:bg-blue-500 text-white rounded transition-colors"
-          >
-            + New Epic
-          </button>
-        )}
       </header>
 
       {activeTab === 'epics' && (
@@ -133,27 +114,6 @@ export function WorkflowPage() {
           onEpicClick={(id) => navigate(`/workflow/${id}`)}
           onCreateClick={() => setShowCreateForm(true)}
         />
-      )}
-
-      {activeTab === 'flow' && (
-        <div className="flex-1 overflow-y-auto p-6">
-          <div className="space-y-6 max-w-4xl">
-            <div>
-              <h3 className="text-sm font-semibold mb-1">Epic Workflow</h3>
-              <p className="text-xs text-gray-500 mb-3">
-                States, transitions, and agent assignments for the epic lifecycle.
-              </p>
-              <StateDiagram ticketType="epic" />
-            </div>
-            <div className="border-t border-gray-800 pt-6">
-              <h3 className="text-sm font-semibold mb-1">Task Workflow</h3>
-              <p className="text-xs text-gray-500 mb-3">
-                States and transitions for individual tasks within an epic.
-              </p>
-              <StateDiagram ticketType="task" />
-            </div>
-          </div>
-        </div>
       )}
 
       {activeTab === 'templates' && (
