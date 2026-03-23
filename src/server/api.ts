@@ -196,6 +196,13 @@ export function createApiRouter(deps: ApiRouterDeps = {}): Router {
     onEpicAdvanced: async (ticket) => {
       if (epicAdvancedCallback) await epicAdvancedCallback(ticket);
     },
+    onTerminalState: async (ticket) => {
+      console.log(
+        `[workflow] Ticket ${ticket.id} reached terminal state "${ticket.state}"` +
+        (ticket.workflowTemplateRowId ? ` (template: ${ticket.workflowTemplateRowId})` : ''),
+      );
+      broadcast('workflow:terminal', ticket.trackId ?? ticket.id);
+    },
   });
 
   // Execution dispatcher — handles plan-review → executing dispatch
