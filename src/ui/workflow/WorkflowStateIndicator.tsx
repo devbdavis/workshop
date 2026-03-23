@@ -1,4 +1,3 @@
-import type { WorkflowTicket } from '@foundation/types.js';
 
 // Semantic role type from dynamic workflow schemas
 type SemanticRole = 'entry' | 'processing' | 'human-gate' | 'terminal' | 'error' | 'waiting';

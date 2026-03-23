@@ -1,4 +1,3 @@
-import type { DiscussionMessage, DiscussionVote } from '@foundation/discussion-types';
 import type { DiscussionState } from './discussion-service.js';
 
 /**

@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import type { Track, TrackRepo, TrackPath } from '@foundation/types';
+import type { Track } from '@foundation/types';
 
 interface Props {
   track: Track;
