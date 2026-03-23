@@ -14,7 +14,7 @@ import type { SummaryRepository } from '@domain/summary/repository';
 import type { TicketRepository } from '@domain/ticket/repository';
 import type { PromptTemplateRepository } from '@domain/prompt-template/repository';
 import type { AgentRepository } from '@domain/agent/repository';
-import type { FilesystemAgentScanner } from '@infrastructure/agents/filesystem-scanner.js';
+import type { AgentScanner as FilesystemAgentScanner } from '@domain/agent/scanner.js';
 import { interpolateTemplate } from '@application/track-management/prompt-interpolation.js';
 
 export interface TaskSchedulerDeps {
