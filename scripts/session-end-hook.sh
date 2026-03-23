@@ -12,6 +12,15 @@ set -e
 
 WORKSHOP_API_URL="${WORKSHOP_API_URL:-http://localhost:3002}"
 
+# Read auth token for API authentication
+AUTH_TOKEN=""
+AUTH_TOKEN_FILE="$HOME/.workshop/auth-token"
+if [ -n "${WORKSHOP_AUTH_TOKEN:-}" ]; then
+  AUTH_TOKEN="$WORKSHOP_AUTH_TOKEN"
+elif [ -f "$AUTH_TOKEN_FILE" ]; then
+  AUTH_TOKEN=$(cat "$AUTH_TOKEN_FILE")
+fi
+
 # Prefer env var; fall back to parsing stdin for backward compat
 SESSION_ID="${WORKSHOP_SESSION_ID:-}"
 
@@ -31,8 +40,14 @@ if ! echo "$SESSION_ID" | grep -qE '^[a-zA-Z0-9_-]+$'; then
 fi
 
 # Fire-and-forget POST to Workshop (timeout after 1s to stay within hook budget)
-curl -s -m 1 -X POST "${WORKSHOP_API_URL}/api/hooks/session-end" \
+AUTH_HEADER=""
+if [ -n "$AUTH_TOKEN" ]; then
+  AUTH_HEADER="-H \"Authorization: Bearer ${AUTH_TOKEN}\""
+fi
+
+eval curl -s -m 1 -X POST "${WORKSHOP_API_URL}/api/hooks/session-end" \
   -H "Content-Type: application/json" \
   -H "X-Workshop-Session: ${SESSION_ID}" \
+  $AUTH_HEADER \
   --data-raw "{\"session_id\": \"${SESSION_ID}\"}" \
   >/dev/null 2>&1 || true

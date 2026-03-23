@@ -11,6 +11,8 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { z } from 'zod';
+import { readFileSync } from 'fs';
+import path from 'path';
 import { registerTodoTools } from './todo-tools.js';
 import { registerVaultTools } from './vault-tools.js';
 import { registerScheduledTaskTools } from './scheduled-task-tools.js';
@@ -20,10 +22,27 @@ import { registerDiscussionTools } from './discussion-tools.js';
 
 const API_URL = process.env.WORKSHOP_API_URL || 'http://localhost:3002';
 
-async function api(path: string, options?: RequestInit) {
-  const res = await fetch(`${API_URL}/api${path}`, {
+// Read auth token from env var or ~/.workshop/auth-token
+const AUTH_TOKEN = (() => {
+  if (process.env.WORKSHOP_AUTH_TOKEN) return process.env.WORKSHOP_AUTH_TOKEN.trim();
+  try {
+    const tokenPath = path.join(process.env.HOME || '/tmp', '.workshop', 'auth-token');
+    return readFileSync(tokenPath, 'utf-8').trim();
+  } catch {
+    return '';
+  }
+})();
+
+async function api(apiPath: string, options?: RequestInit) {
+  const headers: Record<string, string> = {
+    'Content-Type': 'application/json',
+  };
+  if (AUTH_TOKEN) {
+    headers['Authorization'] = `Bearer ${AUTH_TOKEN}`;
+  }
+  const res = await fetch(`${API_URL}/api${apiPath}`, {
     ...options,
-    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    headers: { ...headers, ...options?.headers },
   });
   if (!res.ok) {
     const body = await res.text();
