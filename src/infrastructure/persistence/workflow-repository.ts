@@ -8,7 +8,7 @@ import type {
 import type {
   WorkflowTicketRepository, WorkflowTicketCreate, WorkflowTicketUpdate,
   WorkflowTransitionRepository, WorkflowTransitionCreate,
-} from '@application/workflow/ticket-repository.js';
+} from '@domain/workflow/ticket-repository.js';
 
 // ---------------------------------------------------------------------------
 // WorkflowTicketRepository

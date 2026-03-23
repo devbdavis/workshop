@@ -6,7 +6,7 @@
  * complete) and can also be invoked on-demand.
  */
 import type { WorkflowTicket, SessionId } from '@foundation/types.js';
-import type { WorkflowTicketRepository } from './ticket-repository.js';
+import type { WorkflowTicketRepository } from '@domain/workflow/ticket-repository.js';
 import type { SessionRepository } from '@domain/session/repository';
 import type { DispatchCoordinator } from './dispatch-coordinator.js';
 import type { TopologyLoader } from './topology-loader.js';
@@ -14,7 +14,7 @@ import {
   isTerminal as topologyIsTerminal,
   isAgentActionable as topologyIsAgentActionable,
   getStageDefinition,
-} from './types.js';
+} from '@domain/workflow/types.js';
 
 // ---------------------------------------------------------------------------
 // Public interface

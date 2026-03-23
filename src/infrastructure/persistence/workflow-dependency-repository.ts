@@ -1,7 +1,7 @@
 import { v4 as uuid } from 'uuid';
 import { getDatabase } from './database.js';
 import type { TicketDependency, WorkflowTicketId } from '@foundation/types';
-import type { TicketDependencyRepository } from '@application/workflow/ticket-repository.js';
+import type { TicketDependencyRepository } from '@domain/workflow/ticket-repository.js';
 
 export function createTicketDependencyRepository(): TicketDependencyRepository {
   const db = getDatabase();

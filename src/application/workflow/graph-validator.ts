@@ -1,4 +1,4 @@
-import type { StageDefinition, CapabilityTier } from './types.js';
+import type { StageDefinition, CapabilityTier } from '@domain/workflow/types.js';
 
 export interface GraphValidationResult {
   valid: boolean;

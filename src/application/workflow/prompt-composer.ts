@@ -9,8 +9,8 @@
  *    for tickets without templates.
  */
 import type { WorkflowTicket } from '@foundation/types';
-import type { AgentRoleRow } from './agent-role-repository.js';
-import type { StageDefinition, PromptOverrides } from './types.js';
+import type { AgentRoleRow } from '@domain/workflow/agent-role-repository.js';
+import type { StageDefinition, PromptOverrides } from '@domain/workflow/types.js';
 
 export interface CritiqueFinding {
   text: string;

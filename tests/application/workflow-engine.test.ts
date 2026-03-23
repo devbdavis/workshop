@@ -16,7 +16,7 @@ import { createWorkflowEngine } from '@application/workflow/engine';
 import { resetDatabase } from '@infrastructure/persistence/database';
 import type { WorkflowTicketId, WorkflowTicket } from '@foundation/types';
 import type { TopologyLoader } from '@application/workflow/topology-loader';
-import type { StageDefinition } from '@application/workflow/types';
+import type { StageDefinition } from '@domain/workflow/types';
 
 // ---------------------------------------------------------------------------
 // Mock topology loader matching the old static EPIC_STAGES and TASK_STAGES

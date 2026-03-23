@@ -5,8 +5,8 @@ import type {
   WorkflowReviewRepository,
   WorkflowReviewRow,
   PerStateTiming,
-} from '@application/workflow/review-repository.js';
-import { ReviewFindingSchema, SuggestedChangeSchema } from '@application/workflow/schemas.js';
+} from '@domain/workflow/review-repository.js';
+import { ReviewFindingSchema, SuggestedChangeSchema } from '@domain/workflow/schemas.js';
 
 // ---------------------------------------------------------------------------
 // SQLite implementation of WorkflowReviewRepository
