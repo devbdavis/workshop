@@ -1,5 +1,4 @@
 import { execFileSync } from 'child_process';
-import type { DiscussionId } from '@foundation/discussion-types';
 import type {
   DiscussionRepository,
   DiscussionMessageRepository,
