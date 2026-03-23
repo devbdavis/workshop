@@ -71,6 +71,8 @@ export interface Session {
   background: boolean;
   createdAt: string;
   updatedAt: string;
+  /** NOT persisted — enriched at runtime from in-memory activity tracking */
+  lastActivityAt?: string;
 }
 
 // External ticket
