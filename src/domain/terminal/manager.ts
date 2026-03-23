@@ -33,6 +33,8 @@ export interface CreateSessionOptions {
 export interface SyncResult {
   cleaned: { sessionId: SessionId; trackId: TrackId }[];
   suspended: { sessionId: SessionId; trackId: TrackId }[];
+  dying: { sessionId: SessionId; trackId: TrackId }[];
+  activityChanged: TrackId[];
 }
 
 export interface TerminalManager {
@@ -42,4 +44,8 @@ export interface TerminalManager {
   syncSessionStates(): SyncResult;
   /** Resume all sessions marked 'suspended' that have a Claude resume ID. */
   resumeSuspendedSessions(): Promise<Session[]>;
+  /** Get the last time activity was detected for a session (ISO string), or undefined */
+  getLastActivityAt(sessionId: SessionId): string | undefined;
+  /** Whether a session is in the dying grace period (tmux dead, awaiting reap/suspend) */
+  isDying(sessionId: SessionId): boolean;
 }
