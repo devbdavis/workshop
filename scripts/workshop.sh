@@ -47,6 +47,13 @@ start() {
 
   if is_running; then
     echo "Server started (PID $(cat "$PID_FILE"))"
+    AUTH_TOKEN_FILE="$WORKSHOP_DIR/auth-token"
+    if [ -f "$AUTH_TOKEN_FILE" ]; then
+      echo "  Auth: token at $AUTH_TOKEN_FILE"
+    else
+      echo "  Auth: token will be generated on first request"
+    fi
+    echo "  Open: http://localhost:$WORKSHOP_PORT"
   else
     echo "Server failed to start. Check $LOG_FILE"
     rm -f "$PID_FILE"
