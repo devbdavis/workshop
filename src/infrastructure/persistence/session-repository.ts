@@ -17,6 +17,7 @@ export function createSessionRepository(): SessionRepository {
   const updateStateStmt = db.prepare('UPDATE sessions SET state = ?, updated_at = ? WHERE id = ?');
   const updateNameStmt = db.prepare('UPDATE sessions SET name = ?, updated_at = ? WHERE id = ?');
   const updateClaudeResumeIdStmt = db.prepare('UPDATE sessions SET claude_resume_id = ?, updated_at = ? WHERE id = ?');
+  const updateTmuxSessionStmt = db.prepare('UPDATE sessions SET tmux_session = ?, updated_at = ? WHERE id = ?');
   const deleteStmt = db.prepare('DELETE FROM sessions WHERE id = ?');
 
   return {
@@ -77,6 +78,13 @@ export function createSessionRepository(): SessionRepository {
     updateClaudeResumeId(id: SessionId, claudeResumeId: string): Session | null {
       const now = new Date().toISOString();
       const result = updateClaudeResumeIdStmt.run(claudeResumeId, now, id);
+      if (result.changes === 0) return null;
+      return this.findById(id);
+    },
+
+    updateTmuxSession(id: SessionId, tmuxSession: string): Session | null {
+      const now = new Date().toISOString();
+      const result = updateTmuxSessionStmt.run(tmuxSession, now, id);
       if (result.changes === 0) return null;
       return this.findById(id);
     },

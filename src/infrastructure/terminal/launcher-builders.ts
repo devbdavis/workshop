@@ -4,6 +4,7 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import type { SessionProvider } from '@foundation/types';
 import type { CreateSessionOptions } from './manager.js';
+import { readAuthToken } from '@foundation/auth.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -11,48 +12,47 @@ const __dirname = path.dirname(__filename);
 /** Workshop API URL for hook callbacks */
 const WORKSHOP_API_URL = process.env.WORKSHOP_API_URL || 'http://localhost:3002';
 
-/** Write a Claude Code settings file with permission + optional execution hooks */
+/** Build auth headers for HTTP hooks (includes auth token if available). */
+function buildHookHeaders(sessionId: string, extra?: Record<string, string>): Record<string, string> {
+  const headers: Record<string, string> = { 'X-Workshop-Session': sessionId };
+  const authToken = readAuthToken();
+  if (authToken) {
+    headers['Authorization'] = `Bearer ${authToken}`;
+  }
+  return extra ? { ...headers, ...extra } : headers;
+}
+
+/**
+ * Write a Claude Code settings file with hooks.
+ *
+ * ALL sessions get SessionStart + SessionEnd hooks so we can track Claude's
+ * session ID for --resume support. Permission hooks (PreToolUse, SubagentStop)
+ * are only added for background/hooked sessions.
+ */
 export function writeHookSettings(
   sessionDir: string,
   sessionId: string,
-  executionTicketId?: string,
+  options?: { includePermissionHooks?: boolean; executionTicketId?: string },
 ): string {
   const settingsFile = path.join(sessionDir, 'settings.json');
+  const hooks: Record<string, unknown[]> = {};
 
-  const hooks: Record<string, unknown[]> = {
-    PreToolUse: [
-      {
-        matcher: 'Bash|Edit|Write|NotebookEdit|mcp__.*',
-        hooks: [
-          {
-            type: 'http',
-            url: `${WORKSHOP_API_URL}/api/hooks/permission`,
-            headers: { 'X-Workshop-Session': sessionId },
-          },
-        ],
-      },
-    ],
-  };
+  // --- Always-on hooks: SessionStart + SessionEnd ---
 
-  if (executionTicketId) {
-    hooks.SubagentStop = [
-      {
-        hooks: [
-          {
-            type: 'http',
-            url: `${WORKSHOP_API_URL}/api/hooks/agent-progress`,
-            headers: {
-              'X-Workshop-Session': sessionId,
-              'X-Workshop-Ticket': executionTicketId,
-            },
-          },
-        ],
-      },
-    ];
-  }
+  // SessionStart: capture Claude's session ID for --resume support
+  hooks.SessionStart = [
+    {
+      hooks: [
+        {
+          type: 'http',
+          url: `${WORKSHOP_API_URL}/api/hooks/session-start`,
+          headers: buildHookHeaders(sessionId),
+        },
+      ],
+    },
+  ];
 
-  // SessionEnd hook — always register so Workshop can clean up when Claude exits.
-  // For workflow tickets this also serves as a safety net for completion detection.
+  // SessionEnd: clean up when Claude exits
   const hookScript = path.resolve(__dirname, '../../../scripts/session-end-hook.sh');
   hooks.SessionEnd = [
     {
@@ -64,6 +64,39 @@ export function writeHookSettings(
       ],
     },
   ];
+
+  // --- Permission hooks (background/hooked sessions only) ---
+
+  if (options?.includePermissionHooks) {
+    hooks.PreToolUse = [
+      {
+        matcher: 'Bash|Edit|Write|NotebookEdit|mcp__.*',
+        hooks: [
+          {
+            type: 'http',
+            url: `${WORKSHOP_API_URL}/api/hooks/permission`,
+            headers: buildHookHeaders(sessionId),
+          },
+        ],
+      },
+    ];
+
+    if (options.executionTicketId) {
+      hooks.SubagentStop = [
+        {
+          hooks: [
+            {
+              type: 'http',
+              url: `${WORKSHOP_API_URL}/api/hooks/agent-progress`,
+              headers: buildHookHeaders(sessionId, {
+                'X-Workshop-Ticket': options.executionTicketId,
+              }),
+            },
+          ],
+        },
+      ];
+    }
+  }
 
   const settings = { hooks };
   writeFileSync(settingsFile, JSON.stringify(settings, null, 2), 'utf-8');
@@ -114,7 +147,12 @@ export function buildClaudeLauncher(
 ): void {
   const claudeArgs = ['claude'];
 
-  if (options?.systemPrompt) {
+  // Resume a previous Claude session if we have a resume ID
+  if (options?.claudeResumeId) {
+    claudeArgs.push('--resume', options.claudeResumeId);
+  }
+
+  if (options?.systemPrompt && !options?.claudeResumeId) {
     let prompt = options.systemPrompt;
     if (options.background) {
       prompt = appendBackgroundInstructions(prompt, options.todoId);
@@ -125,14 +163,19 @@ export function buildClaudeLauncher(
   }
 
   // Route permissions through Workshop UI for background or hook-enabled sessions
-  const needsHooks = options?.background || options?.usePermissionHooks;
-  if (needsHooks) {
-    if (options?.dangerouslySkipPermissions) {
-      claudeArgs.push('--dangerously-skip-permissions');
-    } else {
-      const settingsFile = writeHookSettings(sessionDir, sessionId, options?.executionTicketId);
-      claudeArgs.push('--settings', JSON.stringify(settingsFile));
-    }
+  const needsPermissionHooks = options?.background || options?.usePermissionHooks;
+  if (needsPermissionHooks && options?.dangerouslySkipPermissions) {
+    claudeArgs.push('--dangerously-skip-permissions');
+  }
+
+  // Always write a settings file (SessionStart + SessionEnd hooks for resume tracking).
+  // Permission hooks added only for background/hooked sessions.
+  if (!options?.dangerouslySkipPermissions) {
+    const settingsFile = writeHookSettings(sessionDir, sessionId, {
+      includePermissionHooks: needsPermissionHooks && !options?.dangerouslySkipPermissions,
+      executionTicketId: options?.executionTicketId,
+    });
+    claudeArgs.push('--settings', JSON.stringify(settingsFile));
   }
 
   // Pre-approve tool patterns so interactive sessions don't block on permission prompts
@@ -163,7 +206,8 @@ export function buildClaudeLauncher(
   // Pass the initial prompt as a positional argument to claude so it's sent
   // as the first message. This is reliable — no tmux paste race conditions.
   // We write it to a file and use $(cat ...) to avoid shell quoting issues.
-  if (options?.initialPrompt) {
+  // (Not used for resumed sessions — they already have conversation context.)
+  if (options?.initialPrompt && !options?.claudeResumeId) {
     const promptMsgFile = path.join(sessionDir, 'initial-prompt.txt');
     writeFileSync(promptMsgFile, options.initialPrompt, 'utf-8');
     lines.push(`exec ${claudeArgs.join(' ')} "$(cat ${JSON.stringify(promptMsgFile)})"`);

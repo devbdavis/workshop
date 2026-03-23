@@ -58,6 +58,44 @@ export function createTerminalManager(sessionRepo: SessionRepository, soulLoader
     }
   }
 
+  /** Launch an AI CLI inside an existing tmux session */
+  function launchCli(
+    session: Session,
+    tmuxName: string,
+    cwd: string,
+    effectiveOptions?: CreateSessionOptions,
+  ): void {
+    const provider = session.provider;
+    const sessionDir = getSessionDir(session.id);
+    const launcherFile = path.join(sessionDir, 'launch.sh');
+    const launcherLines = ['#!/bin/bash', 'set -e', ''];
+
+    if (provider === 'codex') {
+      buildCodexLauncher(launcherLines, sessionDir, cwd, effectiveOptions);
+    } else if (provider === 'gemini') {
+      buildGeminiLauncher(launcherLines, sessionDir, cwd, effectiveOptions);
+    } else if (provider === 'claude') {
+      buildClaudeLauncher(launcherLines, session.id, sessionDir, tmuxName, effectiveOptions);
+    } else {
+      throw new Error(`Unknown session provider: ${provider}`);
+    }
+
+    writeFileSync(launcherFile, launcherLines.join('\n') + '\n', 'utf-8');
+    chmodSync(launcherFile, 0o755);
+
+    execSync(
+      `tmux send-keys -t ${tmuxName} ${JSON.stringify(launcherFile)} Enter`,
+      { stdio: 'pipe' },
+    );
+
+    // For non-Claude providers, use the tmux paste helper to deliver the
+    // initial prompt after the TUI is ready. Claude handles this via
+    // positional argument in the launch script (no race condition).
+    if (effectiveOptions?.initialPrompt && provider !== 'claude') {
+      sendInitialPrompt(sessionDir, tmuxName, provider);
+    }
+  }
+
   return {
     async createSession(trackId: TrackId, options?: CreateSessionOptions): Promise<Session> {
       const provider = options?.provider || 'claude';
@@ -100,35 +138,7 @@ export function createTerminalManager(sessionRepo: SessionRepository, soulLoader
       });
 
       if (!options?.skipClaude) {
-        const sessionDir = getSessionDir(session.id);
-        const launcherFile = path.join(sessionDir, 'launch.sh');
-        const launcherLines = ['#!/bin/bash', 'set -e', ''];
-
-        if (provider === 'codex') {
-          buildCodexLauncher(launcherLines, sessionDir, cwd, effectiveOptions);
-        } else if (provider === 'gemini') {
-          buildGeminiLauncher(launcherLines, sessionDir, cwd, effectiveOptions);
-        } else if (provider === 'claude') {
-          buildClaudeLauncher(launcherLines, session.id, sessionDir, tmuxName, effectiveOptions);
-        } else {
-          throw new Error(`Unknown session provider: ${provider}`);
-        }
-
-        writeFileSync(launcherFile, launcherLines.join('\n') + '\n', 'utf-8');
-        chmodSync(launcherFile, 0o755);
-
-        // Launch via the script — avoids all quoting issues with tmux send-keys
-        execSync(
-          `tmux send-keys -t ${tmuxName} ${JSON.stringify(launcherFile)} Enter`,
-          { stdio: 'pipe' },
-        );
-
-        // For non-Claude providers, use the tmux paste helper to deliver the
-        // initial prompt after the TUI is ready. Claude handles this via
-        // positional argument in the launch script (no race condition).
-        if (options?.initialPrompt && provider !== 'claude') {
-          sendInitialPrompt(sessionDir, tmuxName, provider);
-        }
+        launchCli(session, tmuxName, cwd, effectiveOptions);
       }
 
       return session;
@@ -161,6 +171,7 @@ export function createTerminalManager(sessionRepo: SessionRepository, soulLoader
     syncSessionStates(): SyncResult {
       const allSessions = sessionRepo.findAll();
       const cleaned: SyncResult['cleaned'] = [];
+      const suspended: SyncResult['suspended'] = [];
 
       /** Reap a session: kill tmux, clean up files, remove from DB */
       const reap = (session: Session, reason: string) => {
@@ -176,12 +187,29 @@ export function createTerminalManager(sessionRepo: SessionRepository, soulLoader
         cleaned.push({ sessionId: session.id, trackId: session.trackId });
       };
 
+      /** Suspend a session: keep the DB record for later --resume */
+      const suspend = (session: Session, reason: string) => {
+        console.log(
+          `Session sync: suspending ${session.id} (resume: ${session.claudeResumeId}) — ${reason}`,
+        );
+        sessionRepo.updateState(session.id, 'suspended');
+        idleFirstSeen.delete(session.id);
+        suspended.push({ sessionId: session.id, trackId: session.trackId });
+      };
+
       for (const session of allSessions) {
+        // Already suspended — leave alone (resumeSuspendedSessions handles these)
+        if (session.state === 'suspended') continue;
+
         const alive = this.isSessionAlive(session);
 
-        // 1. tmux session is gone — clean up the DB record
+        // 1. tmux session is gone — suspend if resumable, otherwise reap
         if (!alive && session.state !== 'dead') {
-          reap(session, 'tmux session dead');
+          if (session.claudeResumeId && session.provider === 'claude') {
+            suspend(session, 'tmux session dead (resumable)');
+          } else {
+            reap(session, 'tmux session dead');
+          }
           continue;
         }
 
@@ -224,7 +252,66 @@ export function createTerminalManager(sessionRepo: SessionRepository, soulLoader
       if (cleaned.length > 0) {
         console.log(`Session sync: cleaned up ${cleaned.length} dead/idle session(s)`);
       }
-      return { cleaned };
+      if (suspended.length > 0) {
+        console.log(`Session sync: suspended ${suspended.length} resumable session(s)`);
+      }
+      return { cleaned, suspended };
+    },
+
+    async resumeSuspendedSessions(): Promise<Session[]> {
+      const allSessions = sessionRepo.findAll();
+      const suspendedSessions = allSessions.filter(
+        (s) => s.state === 'suspended' && s.claudeResumeId && s.provider === 'claude',
+      );
+
+      if (suspendedSessions.length === 0) return [];
+
+      console.log(`Resuming ${suspendedSessions.length} suspended session(s)...`);
+      const resumed: Session[] = [];
+
+      for (const session of suspendedSessions) {
+        try {
+          const tmuxName = `workshop-${uuid().slice(0, 8)}`;
+          // Use the track's first repo path, or HOME
+          const cwd = process.env.HOME || '/tmp';
+
+          const cleanEnv = { ...process.env };
+          delete cleanEnv.CLAUDECODE;
+
+          execSync(
+            `tmux new-session -d -s ${tmuxName} -x 120 -y 40 -c ${JSON.stringify(cwd)}`,
+            { stdio: 'pipe', env: cleanEnv },
+          );
+
+          // Update the tmux session name and reactivate
+          sessionRepo.updateTmuxSession(session.id, tmuxName);
+          sessionRepo.updateState(session.id, 'active');
+
+          // Build a fresh session object with updated fields
+          const updatedSession: Session = {
+            ...session,
+            tmuxSession: tmuxName,
+            state: 'active',
+          };
+
+          // Launch Claude with --resume
+          launchCli(updatedSession, tmuxName, cwd, {
+            claudeResumeId: session.claudeResumeId,
+            background: session.background,
+          });
+
+          console.log(
+            `Resumed session ${session.id} → ${tmuxName} (claude --resume ${session.claudeResumeId})`,
+          );
+          resumed.push(updatedSession);
+        } catch (err) {
+          console.error(`Failed to resume session ${session.id}:`, err);
+          // Mark as dead rather than leaving in suspended limbo
+          sessionRepo.updateState(session.id, 'dead');
+        }
+      }
+
+      return resumed;
     },
   };
 }
