@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeAll, afterAll } from 'vitest';
+import { describe, it, expect, afterAll } from 'vitest';
 import { randomUUID } from 'crypto';
 import path from 'path';
 import fs from 'fs';
@@ -11,7 +11,7 @@ process.env.WORKSHOP_DB_PATH = testDbPath;
 import { createSessionRepository } from '@infrastructure/persistence/session-repository';
 import { createTrackRepository } from '@infrastructure/persistence/track-repository';
 import { resetDatabase } from '@infrastructure/persistence/database';
-import type { SessionId, TrackId } from '@foundation/types';
+import type { SessionId } from '@foundation/types';
 
 describe('Session Repository', () => {
   const sessionRepo = createSessionRepository();
