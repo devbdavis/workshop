@@ -1,10 +1,17 @@
-import type { StageDefinition } from './types.js';
+import type { StageDefinition, CapabilityTier } from './types.js';
 
 export interface GraphValidationResult {
   valid: boolean;
   errors: string[];
   warnings: string[];
 }
+
+/** Ordered tier levels for comparison: higher index = more powerful */
+const TIER_LEVELS: Record<string, number> = {
+  'advisory': 0,
+  'code-modification': 1,
+  'infrastructure': 2,
+};
 
 /**
  * Validates a workflow graph against structural and semantic rules.
@@ -22,7 +29,10 @@ export interface GraphValidationResult {
  * 10. Capability tier gating: States with agent roles above 'advisory' must have
  *     human-approve on inbound path
  */
-export function validateWorkflowGraph(stages: StageDefinition[]): GraphValidationResult {
+export function validateWorkflowGraph(
+  stages: StageDefinition[],
+  agentRoleTiers?: Map<string, CapabilityTier>,
+): GraphValidationResult {
   const errors: string[] = [];
   const warnings: string[] = [];
 
@@ -100,8 +110,9 @@ export function validateWorkflowGraph(stages: StageDefinition[]): GraphValidatio
   }
 
   // Rule 10: Capability tier gating
-  const tierGatingErrors = validateCapabilityTierGating(stages, stateMap, entryState);
-  errors.push(...tierGatingErrors);
+  const tierGatingResult = validateCapabilityTierGating(stages, stateMap, entryState, agentRoleTiers);
+  errors.push(...tierGatingResult.errors);
+  warnings.push(...tierGatingResult.warnings);
 
   return {
     valid: errors.length === 0,
@@ -217,20 +228,26 @@ function followAutoChain(
 function validateCapabilityTierGating(
   stages: StageDefinition[],
   stateMap: Map<string, StageDefinition>,
-  entryState: string
-): string[] {
+  entryState: string,
+  agentRoleTiers?: Map<string, CapabilityTier>
+): { errors: string[]; warnings: string[] } {
   const errors: string[] = [];
+  const warnings: string[] = [];
 
-  // States requiring human approval on inbound path
-  const highTierStates = stages.filter(s => {
-    // If agentRoleId is set, assume it needs checking
-    // The tier is determined by the stage's capability requirements
-    return s.agentActionable && s.agentRoleId;
-  });
+  // States with agent roles that need checking
+  const agentStates = stages.filter(s => s.agentActionable && s.agentRoleId);
 
-  // For each high-tier state, verify human-approve exists on some path from entry
+  // When tier info is available, filter to only states above 'advisory'
+  const highTierStates = agentRoleTiers
+    ? agentStates.filter(s => {
+        const tier = agentRoleTiers.get(s.agentRoleId!);
+        return tier !== undefined && TIER_LEVELS[tier] > TIER_LEVELS['advisory'];
+      })
+    : agentStates;
+
   for (const targetStage of highTierStates) {
-    // Build reverse graph to find all paths to this state
+    if (targetStage.state === entryState) continue;
+
     const hasHumanApproveOnPath = checkHumanApproveOnPath(
       entryState,
       targetStage.state,
@@ -238,24 +255,34 @@ function validateCapabilityTierGating(
       stages
     );
 
-    // Only error if it's explicitly marked as requiring gating
-    // For now, we warn if no human-approve on any path to agent-actionable states
-    if (!hasHumanApproveOnPath && targetStage.state !== entryState) {
-      // Check if there's at least one inbound transition that's human-approve
-      const hasDirectHumanApprove = stages.some(s =>
-        s.validTransitions.some(t =>
-          t.to === targetStage.state && t.trigger === 'human-approve'
-        )
-      );
+    if (hasHumanApproveOnPath) continue;
 
-      if (!hasDirectHumanApprove) {
-        // This is a warning rather than error - advisory tier is exempt
-        // Higher tiers should have human-approve, but we can't verify tier without AgentRole
+    // Check if there's at least one inbound transition that's human-approve
+    const hasDirectHumanApprove = stages.some(s =>
+      s.validTransitions.some(t =>
+        t.to === targetStage.state && t.trigger === 'human-approve'
+      )
+    );
+
+    if (!hasDirectHumanApprove) {
+      if (agentRoleTiers) {
+        // Tier info available: this is a hard error for above-advisory states
+        const tier = agentRoleTiers.get(targetStage.agentRoleId!);
+        errors.push(
+          `State "${targetStage.state}" references agent role "${targetStage.agentRoleId}" ` +
+          `with capability tier "${tier}" which requires a human-approve trigger on an inbound transition path`
+        );
+      } else {
+        // No tier info: emit a warning for any agent-actionable state lacking human-approve
+        warnings.push(
+          `State "${targetStage.state}" is agent-actionable with role "${targetStage.agentRoleId}" ` +
+          `but has no human-approve trigger on any inbound transition path from entry`
+        );
       }
     }
   }
 
-  return errors;
+  return { errors, warnings };
 }
 
 /**

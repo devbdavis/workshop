@@ -90,6 +90,8 @@ export interface WorkflowEngineDeps {
   topologyLoader: TopologyLoader;
   /** Called when an epic advances to a new state (e.g., all tasks done) */
   onEpicAdvanced?: (ticket: WorkflowTicket) => Promise<void>;
+  /** Called when any ticket transitions into a terminal state (zero outgoing transitions). */
+  onTerminalState?: (ticket: WorkflowTicket) => Promise<void>;
 }
 
 // ---------------------------------------------------------------------------
@@ -226,6 +228,14 @@ export function createWorkflowEngine(deps: WorkflowEngineDeps): WorkflowEngine {
           return applyTransition(updated, autoTarget.to, autoActor, undefined, undefined, _depth + 1);
         }
       }
+    }
+
+    // Terminal-state hook — fire when ticket reaches a state with no outgoing transitions
+    const finalStage = getStageDefinition(stages, updated.state);
+    if (finalStage && finalStage.validTransitions.length === 0) {
+      deps.onTerminalState?.(updated)?.catch((err) => {
+        console.warn(`[workflow] Terminal-state hook failed for ticket ${updated.id}:`, err);
+      });
     }
 
     return updated;

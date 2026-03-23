@@ -1,10 +1,16 @@
 /**
  * Composes system prompts for each agent role in the workflow lifecycle.
+ *
+ * Supports two modes:
+ * 1. Data-driven (preferred): composeDataDrivenPrompt() assembles prompts from
+ *    AgentRoleRow + StageDefinition + PromptOverrides with merge priority:
+ *      stage.promptOverride > template.promptOverrides[agentRoleId] > agentRole.promptBlock.preamble
+ * 2. Legacy fallback: composeWorkflowPrompt() uses switch-based role matching
+ *    for tickets without templates.
  */
 import type { WorkflowTicket } from '@foundation/types';
-
-// AgentRole is now a string (dynamic)
-type AgentRole = string;
+import type { AgentRoleRow } from './agent-role-repository.js';
+import type { StageDefinition, PromptOverrides } from './types.js';
 
 export interface CritiqueFinding {
   text: string;
@@ -83,7 +89,139 @@ export function formatPlanContent(planDraft: string, heading: string): string {
 }
 
 /**
+ * Format stateData into readable prompt sections.
+ * Dynamically assembled from stateData keys — no hardcoded structure.
+ */
+function formatStateData(stateData: Record<string, unknown>): string {
+  const sections: string[] = [];
+
+  if (stateData.planDraft && typeof stateData.planDraft === 'string') {
+    sections.push(formatPlanContent(stateData.planDraft, 'Plan'));
+  }
+
+  if (stateData.refinedSpec && typeof stateData.refinedSpec === 'string') {
+    sections.push(`## Refined Spec\n\n${stateData.refinedSpec}`);
+  }
+
+  if (Array.isArray(stateData.findings)) {
+    const findings = stateData.findings as Array<{ text: string; severity: string; resolved?: boolean }>;
+    const blocking = findings.filter(f => f.severity === 'blocking' && !f.resolved);
+    const suggestions = findings.filter(f => f.severity === 'suggestion' && !f.resolved);
+    if (blocking.length > 0) {
+      sections.push('## Blocking Findings\n\n' + blocking.map((f, i) => `${i + 1}. ${f.text}`).join('\n'));
+    }
+    if (suggestions.length > 0) {
+      sections.push('## Suggestions\n\n' + suggestions.map(f => `- ${f.text}`).join('\n'));
+    }
+  }
+
+  if (Array.isArray(stateData.answers)) {
+    const answers = stateData.answers as Array<{ text: string; answer: string }>;
+    if (answers.length > 0) {
+      sections.push(
+        '## Human Answers (AUTHORITATIVE)\n\n' +
+        answers.map(a => `**Q:** ${a.text}\n**A:** ${a.answer}`).join('\n\n'),
+      );
+    }
+  }
+
+  if (Array.isArray(stateData.feedback)) {
+    const feedback = stateData.feedback as string[];
+    if (feedback.length > 0) {
+      sections.push('## Feedback\n\n' + feedback.map(f => `- ${f}`).join('\n'));
+    }
+  }
+
+  // Integration review findings (structured)
+  if (stateData.integrationReviewFindings && typeof stateData.integrationReviewFindings === 'object') {
+    const irf = stateData.integrationReviewFindings as Record<string, unknown>;
+    const lines: string[] = ['## Integration Review Findings'];
+    if (Array.isArray(irf.blockingFindings)) {
+      for (const f of irf.blockingFindings as Array<Record<string, unknown>>) {
+        lines.push(`- [${f.severity}] ${f.title}: ${f.description}`);
+      }
+    }
+    sections.push(lines.join('\n'));
+  }
+
+  return sections.join('\n\n');
+}
+
+/**
+ * Data-driven prompt composition.
+ *
+ * Assembles prompts from structured building blocks with merge priority:
+ *   stage.promptOverride > template.promptOverrides[agentRoleId] > agentRole.promptBlock.preamble
+ *
+ * This is the preferred path for tickets with workflow templates and agent roles.
+ */
+export function composeDataDrivenPrompt(
+  agentRole: AgentRoleRow | null,
+  ticket: WorkflowTicket,
+  stage: StageDefinition,
+  templateOverrides?: PromptOverrides,
+  context?: PromptContext,
+): string {
+  const parts: string[] = [];
+
+  // 1. Preamble from the agent role's prompt block (lowest priority base)
+  if (agentRole) {
+    parts.push(agentRole.promptBlock.preamble);
+  }
+
+  // 2. Template-level prompt override for this role (medium priority)
+  const roleId = agentRole?.id ?? stage.agentRoleId;
+  if (roleId && templateOverrides?.[roleId]) {
+    parts.push(templateOverrides[roleId]);
+  }
+
+  // 3. Per-stage prompt override (highest specificity)
+  if (stage.promptOverride) {
+    parts.push(stage.promptOverride);
+  }
+
+  // 4. Ticket context (title, description)
+  parts.push(`## Ticket: ${ticket.title}\n\n${ticket.description}`);
+
+  // 5. State data context (plan drafts, findings, answers, etc.)
+  if (ticket.stateData && Object.keys(ticket.stateData).length > 0) {
+    const stateDataContent = formatStateData(ticket.stateData as Record<string, unknown>);
+    if (stateDataContent) {
+      parts.push(stateDataContent);
+    }
+  }
+
+  // 6. Constraints from the agent role
+  if (agentRole && agentRole.promptBlock.constraints.length > 0) {
+    parts.push('## Constraints\n\n' + agentRole.promptBlock.constraints.map(c => `- ${c}`).join('\n'));
+  }
+
+  // 7. Completion instructions
+  if (agentRole) {
+    parts.push('## Completion\n\n' + agentRole.promptBlock.completionInstructions);
+  }
+
+  // 8. Track context and summary
+  if (context?.trackContext) {
+    parts.push(`## Track Context\n\n${context.trackContext}`);
+  }
+  if (context?.summary) {
+    parts.push(`## Current Status\n\n${context.summary}`);
+  }
+
+  return parts.join('\n\n---\n\n');
+}
+
+// ---------------------------------------------------------------------------
+// Legacy fallback — used for tickets without workflow templates
+// ---------------------------------------------------------------------------
+
+// AgentRole is now a string (dynamic)
+type AgentRole = string;
+
+/**
  * Build a system prompt tailored to the given agent role and ticket context.
+ * Legacy fallback for tickets without workflow templates.
  */
 export function composeWorkflowPrompt(
   role: AgentRole,

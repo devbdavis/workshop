@@ -21,7 +21,8 @@ import type { TerminalManager } from '@infrastructure/terminal/manager.js';
 import type { TopologyLoader } from './topology-loader.js';
 import type { AgentRoleRepository, AgentRoleRow } from './agent-role-repository.js';
 import { getStageDefinition, isAgentActionable } from './types.js';
-import { composeWorkflowPrompt, type PromptContext } from './prompt-composer.js';
+import type { StageDefinition } from './types.js';
+import { composeWorkflowPrompt, composeDataDrivenPrompt, type PromptContext } from './prompt-composer.js';
 
 // ---------------------------------------------------------------------------
 // Public interface
@@ -231,6 +232,7 @@ export function createAgentDispatcher(deps: AgentDispatcherDeps): AgentDispatche
     roleName: string;
     agentCount: number;
     agentRole: AgentRoleRow | null;
+    stage: StageDefinition | null;
   } | null {
     try {
       const stages = topologyLoader.loadForTicket(ticket);
@@ -247,13 +249,14 @@ export function createAgentDispatcher(deps: AgentDispatcherDeps): AgentDispatche
       const roleName = agentRole?.name ?? stage.agentRoleId ?? deriveRoleFromState(ticket.state);
       const agentCount = stage.agentCount ?? 1;
 
-      return { roleName, agentCount, agentRole };
+      return { roleName, agentCount, agentRole, stage };
     } catch {
       // No template — fallback to hardcoded role derivation
       return {
         roleName: deriveRoleFromState(ticket.state),
         agentCount: 1,
         agentRole: null,
+        stage: null,
       };
     }
   }
@@ -308,14 +311,26 @@ export function createAgentDispatcher(deps: AgentDispatcherDeps): AgentDispatche
         return;
       }
 
-      const { roleName, agentCount, agentRole } = roleInfo;
+      const { roleName, agentCount, agentRole, stage } = roleInfo;
 
       // Kill previous agent sessions before dispatching new ones
       await killPreviousSessions(ticket);
 
       const workingDir = resolveWorkingDir(ticket);
       const context = buildPromptContext(ticket);
-      const systemPrompt = composeWorkflowPrompt(roleName, ticket, context);
+
+      // Data-driven prompt composition when a stage definition is available
+      // (agentRole may be null if the role isn't in the DB yet).
+      // Legacy switch-based composer is only used when there's no stage at all.
+      let systemPrompt: string;
+      if (stage) {
+        const template = topologyLoader.loadTemplateForTicket(ticket);
+        const templateOverrides = template?.promptOverrides;
+        systemPrompt = composeDataDrivenPrompt(agentRole, ticket, stage, templateOverrides, context);
+      } else {
+        systemPrompt = composeWorkflowPrompt(roleName, ticket, context);
+      }
+
       const initialPrompt = buildInitialPrompt(ticket, roleName, agentRole);
       const trackId = ticket.trackId ?? resolveTrackIdFromParent(ticket) ?? getOrCreateWorkflowTrack();
 
