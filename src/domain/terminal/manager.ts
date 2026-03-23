@@ -26,10 +26,13 @@ export interface CreateSessionOptions {
   allowedTools?: string[];
   /** Route tool permissions through Workshop UI even for interactive (non-background) sessions. */
   usePermissionHooks?: boolean;
+  /** Claude session ID to resume (passed as --resume to claude CLI). */
+  claudeResumeId?: string;
 }
 
 export interface SyncResult {
   cleaned: { sessionId: SessionId; trackId: TrackId }[];
+  suspended: { sessionId: SessionId; trackId: TrackId }[];
 }
 
 export interface TerminalManager {
@@ -37,4 +40,6 @@ export interface TerminalManager {
   destroySession(sessionId: SessionId): Promise<void>;
   isSessionAlive(session: Session): boolean;
   syncSessionStates(): SyncResult;
+  /** Resume all sessions marked 'suspended' that have a Claude resume ID. */
+  resumeSuspendedSessions(): Promise<Session[]>;
 }
