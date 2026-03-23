@@ -5,7 +5,9 @@ import { v4 as uuid } from 'uuid';
 import type { SessionRepository } from '@domain/session/repository';
 import type { Session, SessionId, TrackId } from '@foundation/types';
 import type { SoulLoader } from '@infrastructure/soul/soul-loader.js';
-import { isSessionIdle, isSessionLoggedOut, isSessionExited } from './pane-detection.js';
+import {
+  capturePaneLines, isSessionIdle, isSessionLoggedOut, isSessionExited,
+} from './pane-detection.js';
 import {
   buildClaudeLauncher, buildGeminiLauncher, buildCodexLauncher,
   sendInitialPrompt,
@@ -25,6 +27,18 @@ const SESSION_DATA_DIR = path.join(
 /** Minutes a background session can sit idle at the CLI prompt before being reaped */
 const BACKGROUND_IDLE_TIMEOUT_MINUTES = 5;
 
+/** Seconds a dead tmux session gets before being reaped/suspended */
+const DYING_GRACE_PERIOD_MS = 30_000;
+
+/** djb2 hash — fast, simple, deterministic string→number */
+function hashString(s: string): number {
+  let hash = 5381;
+  for (let i = 0; i < s.length; i++) {
+    hash = ((hash << 5) + hash + s.charCodeAt(i)) | 0; // hash * 33 + c
+  }
+  return hash >>> 0; // unsigned 32-bit
+}
+
 export function createTerminalManager(sessionRepo: SessionRepository, soulLoader?: SoulLoader): TerminalManager {
   try {
     execSync('which tmux', { stdio: 'pipe' });
@@ -35,6 +49,15 @@ export function createTerminalManager(sessionRepo: SessionRepository, soulLoader
   /** Track when we first observe a session idle, keyed by session ID */
   const idleFirstSeen = new Map<string, number>();
 
+  /** Last hash of captured pane content, keyed by session ID */
+  const lastPaneHash = new Map<string, number>();
+
+  /** ISO timestamp of last detected activity change, keyed by session ID */
+  const lastActivityAt = new Map<string, string>();
+
+  /** Timestamp when we first observed a dead tmux session, keyed by session ID */
+  const dyingSince = new Map<string, number>();
+
   /** Get how many minutes a session has been observed idle */
   function getIdleMinutes(session: Session): number {
     const firstSeen = idleFirstSeen.get(session.id);
@@ -43,6 +66,14 @@ export function createTerminalManager(sessionRepo: SessionRepository, soulLoader
       return 0;
     }
     return (Date.now() - firstSeen) / 60_000;
+  }
+
+  /** Clean all in-memory tracking for a session */
+  function clearSessionMaps(sessionId: string): void {
+    idleFirstSeen.delete(sessionId);
+    lastPaneHash.delete(sessionId);
+    lastActivityAt.delete(sessionId);
+    dyingSince.delete(sessionId);
   }
 
   function getSessionDir(sessionId: string): string {
@@ -156,7 +187,7 @@ export function createTerminalManager(sessionRepo: SessionRepository, soulLoader
 
       cleanSessionDir(sessionId);
       sessionRepo.delete(sessionId);
-      idleFirstSeen.delete(sessionId);
+      clearSessionMaps(sessionId);
     },
 
     isSessionAlive(session: Session): boolean {
@@ -168,10 +199,20 @@ export function createTerminalManager(sessionRepo: SessionRepository, soulLoader
       }
     },
 
+    getLastActivityAt(sessionId: SessionId): string | undefined {
+      return lastActivityAt.get(sessionId);
+    },
+
+    isDying(sessionId: SessionId): boolean {
+      return dyingSince.has(sessionId);
+    },
+
     syncSessionStates(): SyncResult {
       const allSessions = sessionRepo.findAll();
       const cleaned: SyncResult['cleaned'] = [];
       const suspended: SyncResult['suspended'] = [];
+      const dying: SyncResult['dying'] = [];
+      const activityChangedSet = new Set<TrackId>();
 
       /** Reap a session: kill tmux, clean up files, remove from DB */
       const reap = (session: Session, reason: string) => {
@@ -183,7 +224,7 @@ export function createTerminalManager(sessionRepo: SessionRepository, soulLoader
         } catch { /* already dead */ }
         cleanSessionDir(session.id);
         sessionRepo.delete(session.id);
-        idleFirstSeen.delete(session.id);
+        clearSessionMaps(session.id);
         cleaned.push({ sessionId: session.id, trackId: session.trackId });
       };
 
@@ -193,7 +234,7 @@ export function createTerminalManager(sessionRepo: SessionRepository, soulLoader
           `Session sync: suspending ${session.id} (resume: ${session.claudeResumeId}) — ${reason}`,
         );
         sessionRepo.updateState(session.id, 'suspended');
-        idleFirstSeen.delete(session.id);
+        clearSessionMaps(session.id);
         suspended.push({ sessionId: session.id, trackId: session.trackId });
       };
 
@@ -203,14 +244,36 @@ export function createTerminalManager(sessionRepo: SessionRepository, soulLoader
 
         const alive = this.isSessionAlive(session);
 
-        // 1. tmux session is gone — suspend if resumable, otherwise reap
+        // 1. tmux session is gone — dying grace period before reap/suspend
         if (!alive && session.state !== 'dead') {
+          const now = Date.now();
+          const deathStart = dyingSince.get(session.id);
+
+          if (!deathStart) {
+            // First observation — start the grace period
+            dyingSince.set(session.id, now);
+            dying.push({ sessionId: session.id, trackId: session.trackId });
+            continue;
+          }
+
+          if (now - deathStart < DYING_GRACE_PERIOD_MS) {
+            // Still within grace period
+            dying.push({ sessionId: session.id, trackId: session.trackId });
+            continue;
+          }
+
+          // Grace period expired — reap or suspend
           if (session.claudeResumeId && session.provider === 'claude') {
             suspend(session, 'tmux session dead (resumable)');
           } else {
             reap(session, 'tmux session dead');
           }
           continue;
+        }
+
+        // tmux came back alive — clear dying state
+        if (alive && dyingSince.has(session.id)) {
+          dyingSince.delete(session.id);
         }
 
         // 2. Marked dead in DB but tmux is still alive — resurrect
@@ -222,22 +285,36 @@ export function createTerminalManager(sessionRepo: SessionRepository, soulLoader
         // Skip non-alive sessions from here on
         if (!alive) continue;
 
+        // --- Shared pane capture for alive sessions ---
+        const capturedLines = capturePaneLines(session.tmuxSession, 20);
+
+        // Activity hash comparison
+        const contentStr = capturedLines.join('\n');
+        const currentHash = hashString(contentStr);
+        const previousHash = lastPaneHash.get(session.id);
+
+        if (previousHash === undefined || currentHash !== previousHash) {
+          lastPaneHash.set(session.id, currentHash);
+          lastActivityAt.set(session.id, new Date().toISOString());
+          activityChangedSet.add(session.trackId);
+        }
+
         // --- Background session cleanup (aggressive) ---
         if (session.background) {
           // Background session not logged in — reap immediately
-          if (isSessionLoggedOut(session)) {
+          if (isSessionLoggedOut(session, capturedLines)) {
             reap(session, 'background: Claude not logged in');
             continue;
           }
 
           // Background CLI exited (bare shell prompt) — reap immediately
-          if (isSessionExited(session)) {
+          if (isSessionExited(session, capturedLines)) {
             reap(session, 'background: CLI exited (bare shell prompt)');
             continue;
           }
 
           // Background idle timeout — Claude at prompt with no work
-          if (isSessionIdle(session)) {
+          if (isSessionIdle(session, capturedLines)) {
             const idleMinutes = getIdleMinutes(session);
             if (idleMinutes >= BACKGROUND_IDLE_TIMEOUT_MINUTES) {
               reap(session, `background: idle ${Math.round(idleMinutes)}m`);
@@ -255,7 +332,7 @@ export function createTerminalManager(sessionRepo: SessionRepository, soulLoader
       if (suspended.length > 0) {
         console.log(`Session sync: suspended ${suspended.length} resumable session(s)`);
       }
-      return { cleaned, suspended };
+      return { cleaned, suspended, dying, activityChanged: [...activityChangedSet] };
     },
 
     async resumeSuspendedSessions(): Promise<Session[]> {

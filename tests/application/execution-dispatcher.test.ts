@@ -145,7 +145,10 @@ function createMockTerminal(): TerminalManager {
     } satisfies Session),
     destroySession: vi.fn(),
     isSessionAlive: vi.fn().mockReturnValue(true),
-    syncSessionStates: vi.fn().mockReturnValue({ cleaned: [] }),
+    syncSessionStates: vi.fn().mockReturnValue({ cleaned: [], suspended: [], dying: [], activityChanged: [] }),
+    resumeSuspendedSessions: vi.fn().mockResolvedValue([]),
+    getLastActivityAt: vi.fn().mockReturnValue(undefined),
+    isDying: vi.fn().mockReturnValue(false),
   };
 }
 
