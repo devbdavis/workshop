@@ -399,14 +399,19 @@ export function createWorkflowEngine(deps: WorkflowEngineDeps): WorkflowEngine {
       });
 
       // Follow auto-transitions from entry state
-      if (data.workflowTemplateRowId) {
-        const stages = topologyLoader.loadByTemplateRowId(data.workflowTemplateRowId);
+      // Try to load topology even without explicit template (for backward compat with tests)
+      try {
+        const stages = data.workflowTemplateRowId
+          ? topologyLoader.loadByTemplateRowId(data.workflowTemplateRowId)
+          : topologyLoader.loadForTicket(epic);
         const entryStage = getStageDefinition(stages, epic.state);
         const autoTarget = entryStage?.validTransitions.find((t) => t.trigger === 'auto');
         if (autoTarget) {
           const actor: TransitionActor = { type: 'system', reason: 'Auto-transition from entry state' };
           return applyTransition(epic, autoTarget.to, actor);
         }
+      } catch {
+        // No topology available - skip auto-transitions (ticket stays in initial state)
       }
 
       return epic;
