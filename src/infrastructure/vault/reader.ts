@@ -2,18 +2,9 @@ import fs from 'fs';
 import path from 'path';
 import { safePath, trackVaultPath } from './utils.js';
 
-export interface VaultReader {
-  /** Read a file relative to the vault root. Returns content or null if not found. */
-  readFile(filePath: string): string | null;
-  /** List .md files in a directory relative to vault root. Returns relative file paths. */
-  listFiles(dirPath: string): string[];
-  /** Read the 3 "hot" files from Workshop/{trackSlug}/ */
-  readTrackFiles(trackSlug: string): {
-    overview: string | null;
-    decisions: string | null;
-    learnings: string | null;
-  };
-}
+// Re-export domain interface so existing consumers are not broken
+export type { VaultReader } from '@domain/vault/reader.js';
+import type { VaultReader } from '@domain/vault/reader.js';
 
 export function createVaultReader(vaultRoot: string): VaultReader {
   return {

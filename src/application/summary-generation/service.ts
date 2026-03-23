@@ -4,7 +4,7 @@ import type { TrackId, TrackSummary, TrackRepo, ExternalTicket } from '@foundati
 import type { SummaryRepository } from '@domain/summary/repository';
 import type { TrackRepository } from '@domain/track/repository';
 import type { TicketRepository } from '@domain/ticket/repository';
-import type { GitAdapter, GitStatus } from '@infrastructure/git/git-adapter';
+import type { GitAdapter, GitStatus } from '@domain/git/types.js';
 
 const execFile = promisify(execFileCb);
 

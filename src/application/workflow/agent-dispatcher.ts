@@ -17,7 +17,7 @@ import type {
 import type { WorkflowTicketRepository } from '@domain/workflow/ticket-repository.js';
 import type { TrackRepository } from '@domain/track/repository.js';
 import type { SummaryRepository } from '@domain/summary/repository.js';
-import type { TerminalManager } from '@infrastructure/terminal/manager.js';
+import type { TerminalManager } from '@domain/terminal/manager.js';
 import type { TopologyLoader } from './topology-loader.js';
 import type { AgentRoleRepository, AgentRoleRow } from '@domain/workflow/agent-role-repository.js';
 import { getStageDefinition, isAgentActionable } from '@domain/workflow/types.js';
