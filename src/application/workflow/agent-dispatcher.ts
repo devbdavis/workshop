@@ -14,14 +14,14 @@ import type {
   TrackId,
   SessionId,
 } from '@foundation/types.js';
-import type { WorkflowTicketRepository } from './ticket-repository.js';
+import type { WorkflowTicketRepository } from '@domain/workflow/ticket-repository.js';
 import type { TrackRepository } from '@domain/track/repository.js';
 import type { SummaryRepository } from '@domain/summary/repository.js';
 import type { TerminalManager } from '@infrastructure/terminal/manager.js';
 import type { TopologyLoader } from './topology-loader.js';
-import type { AgentRoleRepository, AgentRoleRow } from './agent-role-repository.js';
-import { getStageDefinition, isAgentActionable } from './types.js';
-import type { StageDefinition } from './types.js';
+import type { AgentRoleRepository, AgentRoleRow } from '@domain/workflow/agent-role-repository.js';
+import { getStageDefinition, isAgentActionable } from '@domain/workflow/types.js';
+import type { StageDefinition } from '@domain/workflow/types.js';
 import { composeWorkflowPrompt, composeDataDrivenPrompt, type PromptContext } from './prompt-composer.js';
 
 // ---------------------------------------------------------------------------

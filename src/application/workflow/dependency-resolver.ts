@@ -2,9 +2,9 @@
  * Resolves inter-ticket dependencies and detects when blocked tickets become unblocked.
  */
 import type { WorkflowTicketId } from '@foundation/types.js';
-import type { WorkflowTicketRepository, TicketDependencyRepository } from './ticket-repository.js';
+import type { WorkflowTicketRepository, TicketDependencyRepository } from '@domain/workflow/ticket-repository.js';
 import type { TopologyLoader } from './topology-loader.js';
-import { isTerminal } from './types.js';
+import { isTerminal } from '@domain/workflow/types.js';
 
 export interface DependencyResolver {
   /** Check if all dependencies for a ticket are resolved */

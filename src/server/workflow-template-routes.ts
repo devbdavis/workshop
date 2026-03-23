@@ -2,9 +2,9 @@
  * Workflow template routes — template registry, agent roles, graph validation.
  */
 import { Router } from 'express';
-import type { WorkflowTemplateRepository } from '@application/workflow/template-repository.js';
-import type { AgentRoleRepository } from '@application/workflow/agent-role-repository.js';
-import { StageDefinitionsSchema } from '@application/workflow/schemas.js';
+import type { WorkflowTemplateRepository } from '@domain/workflow/template-repository.js';
+import type { AgentRoleRepository } from '@domain/workflow/agent-role-repository.js';
+import { StageDefinitionsSchema } from '@domain/workflow/schemas.js';
 import { validateWorkflowGraph } from '@application/workflow/graph-validator.js';
 
 export interface WorkflowTemplateRouterDeps {

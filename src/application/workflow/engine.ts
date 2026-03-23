@@ -16,10 +16,10 @@ import type {
   WorkflowTicketRepository,
   WorkflowTransitionRepository,
   TicketDependencyRepository,
-} from './ticket-repository.js';
+} from '@domain/workflow/ticket-repository.js';
 import type { TopologyLoader } from './topology-loader.js';
-import type { StageDefinition } from './types.js';
-import { isHumanGate, isTerminal, getStageDefinition } from './types.js';
+import type { StageDefinition } from '@domain/workflow/types.js';
+import { isHumanGate, isTerminal, getStageDefinition } from '@domain/workflow/types.js';
 import { createDependencyResolver } from './dependency-resolver.js';
 import type { DependencyResolver } from './dependency-resolver.js';
 

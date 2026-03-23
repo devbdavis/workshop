@@ -1,9 +1,8 @@
 /**
  * Repository interfaces for workflow ticket persistence.
  *
- * Moved from domain/workflow/repository.ts to application layer as part of
- * the dynamic workflow engine refactor — repositories now use string-based
- * types for states and roles (runtime validated via Zod schemas).
+ * States and roles are string-based (runtime validated via Zod schemas in
+ * domain/workflow/schemas.ts) rather than compile-time union types.
  */
 import type {
   WorkflowTicket,

@@ -21,7 +21,7 @@ import type { TerminalManager } from '@infrastructure/terminal/manager';
 import type { TrackRepository } from '@domain/track/repository';
 import type { SummaryRepository } from '@domain/summary/repository';
 import type { TopologyLoader } from '@application/workflow/topology-loader';
-import type { StageDefinition } from '@application/workflow/types';
+import type { StageDefinition } from '@domain/workflow/types';
 
 // ---------------------------------------------------------------------------
 // Mock topology loader matching the old static EPIC_STAGES and TASK_STAGES

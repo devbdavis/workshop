@@ -4,12 +4,12 @@
 import { Router } from 'express';
 import { z } from 'zod';
 import type { WorkflowTicketId, WorkflowState } from '@foundation/types.js';
-import type { WorkflowTicketRepository } from '@application/workflow/ticket-repository.js';
-import type { WorkflowTemplateRepository } from '@application/workflow/template-repository.js';
-import type { AgentRoleRepository } from '@application/workflow/agent-role-repository.js';
+import type { WorkflowTicketRepository } from '@domain/workflow/ticket-repository.js';
+import type { WorkflowTemplateRepository } from '@domain/workflow/template-repository.js';
+import type { AgentRoleRepository } from '@domain/workflow/agent-role-repository.js';
 import type { TopologyLoader } from '@application/workflow/topology-loader.js';
 import type { WorkflowEngine } from '@application/workflow/engine.js';
-import { StageDefinitionsSchema, AgentRoleSchema } from '@application/workflow/schemas.js';
+import { StageDefinitionsSchema, AgentRoleSchema } from '@domain/workflow/schemas.js';
 import { validateWorkflowGraph } from '@application/workflow/graph-validator.js';
 import { broadcast } from './events.js';
 

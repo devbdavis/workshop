@@ -6,7 +6,7 @@
  */
 import { Router } from 'express';
 import type { SessionId, WorkflowTicketId, ExecutionData } from '@foundation/types';
-import type { WorkflowTicketRepository } from '@application/workflow/ticket-repository.js';
+import type { WorkflowTicketRepository } from '@domain/workflow/ticket-repository.js';
 import type { WorkflowEngine } from '@application/workflow/engine.js';
 import type { TerminalManager } from '@infrastructure/terminal/manager.js';
 import { broadcast } from './events.js';
