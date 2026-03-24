@@ -11,6 +11,7 @@ import { WorkflowPage } from './workflow/WorkflowPage';
 import { EpicDetail } from './workflow/EpicDetail';
 import { DiscussionsPage } from './discussions/DiscussionsPage';
 import { NotificationsPage } from './notifications/NotificationsPage';
+import { OfficeVisualization } from './office/OfficeVisualization';
 import { TopNav } from './TopNav';
 
 export function App() {
@@ -31,6 +32,7 @@ export function App() {
             <Route path="/workflow" element={<WorkflowPage />} />
             <Route path="/workflow/:id" element={<EpicDetail />} />
             <Route path="/notifications" element={<NotificationsPage />} />
+            <Route path="/office" element={<OfficeVisualization />} />
           </Routes>
         </div>
       </div>

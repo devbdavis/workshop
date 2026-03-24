@@ -9,6 +9,7 @@ const navItems = [
   { to: '/workflow', label: 'Workflow', end: false },
   { to: '/discussions', label: 'Discussions', end: false },
   { to: '/agents', label: 'Agents', end: false },
+  { to: '/office', label: 'Office', end: false },
   { to: '/settings', label: 'Settings', end: false },
 ];
 
