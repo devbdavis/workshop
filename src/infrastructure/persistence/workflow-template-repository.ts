@@ -20,6 +20,9 @@ export function createWorkflowTemplateRepository(): WorkflowTemplateRepository {
   const findByIdAndVersionStmt = db.prepare('SELECT * FROM workflow_templates WHERE id = ? AND version = ?');
   const findAllLatestStmt = db.prepare('SELECT * FROM workflow_templates WHERE is_latest = true ORDER BY name ASC');
   const findMaxVersionStmt = db.prepare('SELECT MAX(version) as max_version FROM workflow_templates WHERE id = ?');
+  const findTaskByParentStmt = db.prepare(
+    "SELECT * FROM workflow_templates WHERE parent_template_id = ? AND ticket_type = 'task' AND is_latest = true LIMIT 1",
+  );
 
   const insertStmt = db.prepare(`
     INSERT INTO workflow_templates
@@ -46,6 +49,11 @@ export function createWorkflowTemplateRepository(): WorkflowTemplateRepository {
 
     findByIdAndVersion(id: string, version: number): WorkflowTemplateRow | null {
       const row = findByIdAndVersionStmt.get(id, version) as TemplateDbRow | undefined;
+      return row ? rowToTemplate(row) : null;
+    },
+
+    findTaskTemplateByParent(parentTemplateId: string): WorkflowTemplateRow | null {
+      const row = findTaskByParentStmt.get(parentTemplateId) as TemplateDbRow | undefined;
       return row ? rowToTemplate(row) : null;
     },
 

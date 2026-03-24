@@ -193,6 +193,7 @@ export function createApiRouter(deps: ApiRouterDeps = {}): Router {
     transitions: workflowTransitions,
     dependencies: ticketDependencies,
     topologyLoader,
+    templates: workflowTemplates,
     onEpicAdvanced: async (ticket) => {
       if (epicAdvancedCallback) await epicAdvancedCallback(ticket);
     },
