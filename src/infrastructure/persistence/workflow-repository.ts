@@ -22,7 +22,7 @@ export function createWorkflowTicketRepository(): WorkflowTicketRepository {
   const findChildrenStmt = db.prepare('SELECT * FROM workflow_tickets WHERE parent_id = ? ORDER BY sort_order ASC');
   const findByStateStmt = db.prepare('SELECT * FROM workflow_tickets WHERE state = ? ORDER BY sort_order ASC, created_at DESC');
   const findByExecSessionStmt = db.prepare('SELECT * FROM workflow_tickets WHERE execution_session_id = ? LIMIT 1');
-  const findHumanGatePendingStmt = db.prepare("SELECT * FROM workflow_tickets WHERE state IN ('spec-review', 'plan-review', 'final-review') ORDER BY sort_order ASC, created_at DESC");
+  const findHumanGatePendingStmt = db.prepare("SELECT * FROM workflow_tickets WHERE state IN ('spec-review', 'plan-review', 'final-review', 'code-review', 'needs-input') AND state NOT IN ('done', 'cancelled', 'merged') ORDER BY sort_order ASC, created_at DESC");
   const insertStmt = db.prepare(
     `INSERT INTO workflow_tickets
      (id, type, title, description, state, state_data, parent_id, track_id,

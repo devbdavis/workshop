@@ -16,14 +16,19 @@ export function WorkflowPage() {
   const [filter, setFilter] = useState<FilterTab>('all');
   const [showCreateForm, setShowCreateForm] = useState(false);
 
+  // Also fetch all tasks so we can surface child-level human gates on epics
+  const [allTasks, setAllTasks] = useState<WorkflowTicket[]>([]);
+
   const loadData = useCallback(async () => {
     try {
-      const [epicsRes, tracksRes] = await Promise.all([
+      const [epicsRes, tracksRes, tasksRes] = await Promise.all([
         fetch('/api/workflow/tickets?type=epic'),
         fetch('/api/tracks'),
+        fetch('/api/workflow/tickets?type=task'),
       ]);
       if (epicsRes.ok) setEpics(await epicsRes.json());
       if (tracksRes.ok) setTracks(await tracksRes.json());
+      if (tasksRes.ok) setAllTasks(await tasksRes.json());
     } catch (err) {
       console.error('Failed to load workflow data:', err);
     } finally {
@@ -109,6 +114,7 @@ export function WorkflowPage() {
         <EpicList
           epics={epics}
           tracks={tracks}
+          allTasks={allTasks}
           filter={filter}
           onFilterChange={setFilter}
           onEpicClick={(id) => navigate(`/workflow/${id}`)}
