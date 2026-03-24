@@ -9,11 +9,24 @@ interface EnrichedPermission extends PermissionRequest {
   sessionName: string;
 }
 
-const HUMAN_GATE_STATES = ['spec-review', 'plan-review', 'final-review', 'needs-input'];
+const LEGACY_HUMAN_GATE_STATES = new Set([
+  'spec-review', 'plan-review', 'final-review', 'needs-input',
+  'code-review', 'decomposition-review', 'integration-review',
+]);
+
+/** Check if a ticket needs human action (template-aware + legacy fallback) */
+function isHumanGate(ticket: WorkflowTicket): boolean {
+  const sd = ticket.stateData as Record<string, unknown> | undefined;
+  if (sd?.currentStateHumanGate === true) return true;
+  return LEGACY_HUMAN_GATE_STATES.has(ticket.state);
+}
 
 const GATE_LABELS: Record<string, { label: string; description: string; action: string }> = {
   'spec-review': { label: 'Spec Review', description: 'Specification is ready for your review', action: 'Review Spec' },
   'plan-review': { label: 'Plan Review', description: 'Implementation plan needs your approval', action: 'Review Plan' },
+  'decomposition-review': { label: 'Task Decomposition', description: 'Task breakdown needs your approval', action: 'Review Tasks' },
+  'code-review': { label: 'Code Review', description: 'Implementation is ready for code review', action: 'Review Code' },
+  'integration-review': { label: 'Integration Review', description: 'Full implementation ready for review', action: 'Review Changes' },
   'final-review': { label: 'Final Review', description: 'Implementation is ready for final review', action: 'Review Changes' },
   'needs-input': { label: 'Needs Input', description: 'Agent has questions that need your answers', action: 'Answer Questions' },
 };
@@ -33,7 +46,7 @@ export function NotificationsPage() {
       if (permRes.ok) setRequests(await permRes.json());
       if (wfRes.ok) {
         const tickets: WorkflowTicket[] = await wfRes.json();
-        setWorkflowItems(tickets.filter((t) => HUMAN_GATE_STATES.includes(t.state)));
+        setWorkflowItems(tickets.filter(isHumanGate));
       }
     } catch (err) {
       console.error('Failed to load pending items:', err);
