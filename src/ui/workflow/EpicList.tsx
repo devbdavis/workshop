@@ -19,7 +19,7 @@ const FILTER_TABS: { value: FilterTab; label: string }[] = [
 
 // Legacy state sets — kept for backward compatibility with tickets without templates
 const LEGACY_TERMINAL_STATES = new Set(['merged', 'cancelled', 'done']);
-const LEGACY_HUMAN_REVIEW_STATES = new Set(['spec-review', 'plan-review', 'final-review']);
+const LEGACY_HUMAN_REVIEW_STATES = new Set(['spec-review', 'plan-review', 'final-review', 'code-review', 'needs-input']);
 const LEGACY_DONE_STATES = new Set(['merged', 'approved', 'done']);
 
 /** Check if ticket is in a terminal state (dynamic template or legacy fallback) */
@@ -46,6 +46,7 @@ function isDoneState(ticket: WorkflowTicket): boolean {
 interface EpicListProps {
   epics: WorkflowTicket[];
   tracks: Track[];
+  allTasks?: WorkflowTicket[];
   filter: FilterTab;
   onFilterChange: (filter: FilterTab) => void;
   onEpicClick: (epicId: string) => void;
@@ -55,6 +56,7 @@ interface EpicListProps {
 export function EpicList({
   epics,
   tracks,
+  allTasks,
   filter,
   onFilterChange,
   onEpicClick,
@@ -62,9 +64,19 @@ export function EpicList({
 }: EpicListProps) {
   const trackNames = Object.fromEntries(tracks.map((t) => [t.id, t.name]));
 
+  // Build a set of epic IDs that have children at human gates
+  const epicsWithChildReview = new Set<string>();
+  if (allTasks) {
+    for (const task of allTasks) {
+      if (task.parentId && isHumanReviewState(task)) {
+        epicsWithChildReview.add(task.parentId);
+      }
+    }
+  }
+
   const filtered = epics.filter((e) => {
     if (filter === 'active') return !isTerminalState(e);
-    if (filter === 'review') return isHumanReviewState(e);
+    if (filter === 'review') return isHumanReviewState(e) || epicsWithChildReview.has(e.id);
     if (filter === 'done') return isDoneState(e);
     return true;
   });
@@ -105,14 +117,20 @@ export function EpicList({
           </div>
         ) : (
           <div className="grid gap-4 max-w-4xl">
-            {filtered.map((epic) => (
-              <EpicCard
-                key={epic.id}
-                epic={epic}
-                trackName={epic.trackId ? trackNames[epic.trackId] : undefined}
-                onClick={() => onEpicClick(epic.id)}
-              />
-            ))}
+            {filtered.map((epic) => {
+              const childReviewCount = allTasks
+                ? allTasks.filter((t) => t.parentId === epic.id && isHumanReviewState(t)).length
+                : 0;
+              return (
+                <EpicCard
+                  key={epic.id}
+                  epic={epic}
+                  trackName={epic.trackId ? trackNames[epic.trackId] : undefined}
+                  childReviewCount={childReviewCount}
+                  onClick={() => onEpicClick(epic.id)}
+                />
+              );
+            })}
           </div>
         )}
       </div>
@@ -123,10 +141,12 @@ export function EpicList({
 function EpicCard({
   epic,
   trackName,
+  childReviewCount,
   onClick,
 }: {
   epic: WorkflowTicket;
   trackName?: string;
+  childReviewCount?: number;
   onClick: () => void;
 }) {
   const stateData = epic.stateData as Record<string, unknown> | undefined;
@@ -144,6 +164,11 @@ function EpicCard({
           <div className="flex items-center gap-2 mb-1">
             <h3 className="text-sm font-medium text-gray-200 truncate">{epic.title}</h3>
             <WorkflowStateIndicator state={epic.state} ticketType="epic" stateData={epic.stateData as Record<string, unknown> | undefined} />
+            {childReviewCount != null && childReviewCount > 0 && (
+              <span className="text-[10px] px-1.5 py-0.5 bg-amber-900/60 text-amber-300 rounded-full animate-pulse">
+                {childReviewCount} task{childReviewCount > 1 ? 's' : ''} awaiting review
+              </span>
+            )}
             <span className={`text-[10px] px-1.5 py-0.5 rounded ${PRIORITY_STYLES[epic.priority]}`}>
               {epic.priority}
             </span>

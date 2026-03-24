@@ -26,8 +26,12 @@ export function TopNav() {
       if (permRes.ok) count += (await permRes.json()).length;
       if (wfRes.ok) {
         const tickets = await wfRes.json();
-        const humanStates = ['spec-review', 'plan-review', 'final-review', 'needs-input'];
-        count += tickets.filter((t: { state: string }) => humanStates.includes(t.state)).length;
+        // Dynamic: use template-enriched stateData, fallback to legacy state names
+        const legacyHumanStates = new Set(['spec-review', 'plan-review', 'final-review', 'needs-input', 'code-review']);
+        count += tickets.filter((t: { state: string; stateData?: Record<string, unknown> }) => {
+          if (t.stateData?.currentStateHumanGate === true) return true;
+          return legacyHumanStates.has(t.state);
+        }).length;
       }
       setPendingCount(count);
     } catch { /* ignore */ }
