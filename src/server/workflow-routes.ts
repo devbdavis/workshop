@@ -199,7 +199,7 @@ export function createWorkflowRouter(deps: WorkflowRouterDeps): Router {
     }
 
     const { title, description, trackId, priority, labels, sortOrder, stateData,
-      assignedAgentRole, assignedAgentIds, provider, state } = req.body;
+      assignedAgentRole, assignedAgentIds, provider, state, workflowTemplateRowId } = req.body;
 
     const updated = tickets.update(ticketId, {
       title,
@@ -209,6 +209,7 @@ export function createWorkflowRouter(deps: WorkflowRouterDeps): Router {
       labels,
       sortOrder,
       stateData,
+      workflowTemplateRowId,
       assignedAgentRole,
       assignedAgentIds,
       provider,
