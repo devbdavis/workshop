@@ -93,6 +93,8 @@ export interface WorkflowEngineDeps {
   templates?: WorkflowTemplateRepository;
   /** Called when an epic advances to a new state (e.g., all tasks done) */
   onEpicAdvanced?: (ticket: WorkflowTicket) => Promise<void>;
+  /** Called when a blocked task becomes unblocked and transitions to its ready state */
+  onTaskUnblocked?: (ticket: WorkflowTicket) => Promise<void>;
   /** Called when any ticket transitions into a terminal state (zero outgoing transitions). */
   onTerminalState?: (ticket: WorkflowTicket) => Promise<void>;
 }
@@ -196,6 +198,29 @@ export function createWorkflowEngine(deps: WorkflowEngineDeps): WorkflowEngine {
 
     // Validate the transition
     validateTransition(stages, ticket, toState);
+
+    // Guard: epics transitioning to a terminal state must have all children done or cancelled
+    const targetStage = getStageDefinition(stages, toState);
+    if (ticket.type === 'epic' && targetStage?.semanticRole === 'terminal' && toState !== 'cancelled') {
+      const children = tickets.findChildren(ticket.id);
+      if (children.length > 0) {
+        const nonTerminal = children.filter((c) => {
+          try {
+            const childStages = topologyLoader.loadForTicket(c);
+            return !isTerminal(childStages, c.state);
+          } catch {
+            // No template — use legacy check
+            return !['done', 'cancelled', 'merged'].includes(c.state);
+          }
+        });
+        if (nonTerminal.length > 0) {
+          const summary = nonTerminal.map((c) => `${c.title.slice(0, 40)} (${c.state})`).join(', ');
+          throw new Error(
+            `Cannot close epic: ${nonTerminal.length} child task(s) not in terminal state: ${summary}`,
+          );
+        }
+      }
+    }
 
     const now = new Date().toISOString();
 
@@ -360,7 +385,9 @@ export function createWorkflowEngine(deps: WorkflowEngineDeps): WorkflowEngine {
             (t) => t.trigger === 'all-deps-resolved',
           );
           if (unblockTransition) {
-            applyTransition(blocked, unblockTransition.to, systemActor);
+            const unblocked = applyTransition(blocked, unblockTransition.to, systemActor);
+            // Dispatch agents for the newly unblocked task
+            deps.onTaskUnblocked?.(unblocked);
           }
         } catch (err) {
           console.warn(`Failed to unblock ticket ${unblockedId}:`, err);
