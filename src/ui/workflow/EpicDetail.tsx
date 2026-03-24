@@ -264,7 +264,12 @@ export function EpicDetail() {
 
             {childTasks.length > 0 && (
               <Section title="Tasks">
-                <MiniTaskBoard tasks={childTasks} onClickTask={(t) => navigate(`/workflow/${t.id}`)} />
+                <MiniTaskBoard
+                  tasks={childTasks}
+                  sessions={sessions}
+                  onClickTask={(t) => navigate(`/workflow/${t.id}`)}
+                  onAttachSession={setAttachedSession}
+                />
               </Section>
             )}
           </div>
