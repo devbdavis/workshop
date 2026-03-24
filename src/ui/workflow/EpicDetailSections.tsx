@@ -1,4 +1,5 @@
-import type { WorkflowTicket } from '@foundation/types.js';
+import { useMemo } from 'react';
+import type { WorkflowTicket, Session } from '@foundation/types.js';
 
 // State-specific data interfaces — now defined locally (runtime validated by stateData shape)
 interface NeedsInputData {
@@ -20,7 +21,11 @@ interface FinalReviewData {
 }
 import { WorkflowStateIndicator } from './WorkflowStateIndicator';
 
-const TASK_COLUMNS = ['blocked', 'ready', 'in-progress', 'code-review', 'done'] as const;
+/** Fallback ordering for known task states. Dynamic states sort after these. */
+const STATE_ORDER: Record<string, number> = {
+  blocked: 0, waiting: 1, ready: 2, 'in-progress': 3, implementing: 3,
+  'code-review': 4, 'changes-requested': 5, done: 6, cancelled: 7,
+};
 
 export function Section({ title, children }: { title: string; children: React.ReactNode }) {
   return (
@@ -255,30 +260,86 @@ export function FinalReviewSection({ data }: { data: FinalReviewData | undefined
   );
 }
 
-export function MiniTaskBoard({ tasks, onClickTask }: {
+export function MiniTaskBoard({ tasks, sessions, onClickTask, onAttachSession }: {
   tasks: WorkflowTicket[];
+  sessions?: Session[];
   onClickTask: (t: WorkflowTicket) => void;
+  onAttachSession?: (session: Session) => void;
 }) {
+  // Derive columns dynamically from actual task states
+  const columns = useMemo(() => {
+    const stateSet = new Set(tasks.map((t) => t.state));
+    return [...stateSet].sort((a, b) => {
+      const oa = STATE_ORDER[a] ?? 50;
+      const ob = STATE_ORDER[b] ?? 50;
+      return oa - ob;
+    });
+  }, [tasks]);
+
+  // Build session lookup: sessionId → Session (active only)
+  const sessionMap = useMemo(() => {
+    const map = new Map<string, Session>();
+    if (sessions) {
+      for (const s of sessions) {
+        if (s.state === 'active') map.set(s.id, s);
+      }
+    }
+    return map;
+  }, [sessions]);
+
+  /** Find the first live session for a task */
+  function findLiveSession(task: WorkflowTicket): Session | undefined {
+    const sd = task.stateData as Record<string, unknown> | undefined;
+    const ids = (sd?.agentSessionIds as string[] | undefined) ?? [];
+    for (const sid of ids) {
+      const s = sessionMap.get(sid);
+      if (s) return s;
+    }
+    return undefined;
+  }
+
   return (
     <div className="flex gap-3 overflow-x-auto pb-2">
-      {TASK_COLUMNS.map((col) => {
+      {columns.map((col) => {
         const colTasks = tasks.filter((t) => t.state === col);
         return (
-          <div key={col} className="min-w-[140px] flex-1">
+          <div key={col} className="min-w-[150px] flex-1">
             <div className="text-[10px] font-semibold text-gray-500 uppercase tracking-wider mb-2">
               {col.replace(/-/g, ' ')} ({colTasks.length})
             </div>
             <div className="space-y-1.5">
-              {colTasks.map((task) => (
-                <button
-                  key={task.id}
-                  onClick={() => onClickTask(task)}
-                  className="w-full text-left p-2 bg-gray-800 border border-gray-700 rounded hover:border-gray-600 transition-colors"
-                >
-                  <p className="text-xs text-gray-200 truncate">{task.title}</p>
-                  <WorkflowStateIndicator state={task.state} ticketType="task" size="sm" />
-                </button>
-              ))}
+              {colTasks.map((task) => {
+                const liveSession = findLiveSession(task);
+                return (
+                  <div
+                    key={task.id}
+                    className={`p-2 bg-gray-800 border rounded transition-colors ${
+                      liveSession ? 'border-blue-800/60' : 'border-gray-700 hover:border-gray-600'
+                    }`}
+                  >
+                    <button
+                      onClick={() => onClickTask(task)}
+                      className="w-full text-left"
+                    >
+                      <p className="text-xs text-gray-200 truncate">{task.title}</p>
+                      <div className="flex items-center gap-1.5 mt-1">
+                        <WorkflowStateIndicator state={task.state} ticketType="task" size="sm" />
+                        {liveSession && (
+                          <span className="w-1.5 h-1.5 rounded-full bg-blue-400 animate-pulse" title="Agent running" />
+                        )}
+                      </div>
+                    </button>
+                    {liveSession && onAttachSession && (
+                      <button
+                        onClick={(e) => { e.stopPropagation(); onAttachSession(liveSession); }}
+                        className="mt-1.5 w-full text-[10px] px-2 py-1 bg-blue-600 hover:bg-blue-500 text-white rounded transition-colors"
+                      >
+                        Attach to session
+                      </button>
+                    )}
+                  </div>
+                );
+              })}
             </div>
           </div>
         );
