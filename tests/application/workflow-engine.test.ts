@@ -14,13 +14,124 @@ import {
 import { createTicketDependencyRepository } from '@infrastructure/persistence/workflow-dependency-repository';
 import { createWorkflowEngine } from '@application/workflow/engine';
 import { resetDatabase } from '@infrastructure/persistence/database';
-import type { WorkflowTicketId } from '@foundation/types';
+import type { WorkflowTicketId, WorkflowTicket } from '@foundation/types';
+import type { TopologyLoader } from '@application/workflow/topology-loader';
+import type { StageDefinition } from '@domain/workflow/types';
+
+// ---------------------------------------------------------------------------
+// Mock topology loader matching the old static EPIC_STAGES and TASK_STAGES
+// ---------------------------------------------------------------------------
+
+const EPIC_STAGES: StageDefinition[] = [
+  { state: 'idea', semanticRole: 'entry', agentActionable: false, humanGate: false, validTransitions: [{ to: 'triaging', trigger: 'auto' }] },
+  { state: 'triaging', semanticRole: 'processing', agentActionable: true, humanGate: false, agentRoleId: 'triage', validTransitions: [
+    { to: 'needs-input', trigger: 'agent-complete' },
+    { to: 'specced', trigger: 'agent-complete' },
+    { to: 'cancelled', trigger: 'manual' },
+  ]},
+  { state: 'needs-input', semanticRole: 'waiting', agentActionable: false, humanGate: false, validTransitions: [
+    { to: 'triaging', trigger: 'manual' },
+    { to: 'cancelled', trigger: 'manual' },
+  ]},
+  { state: 'specced', semanticRole: 'processing', agentActionable: false, humanGate: false, validTransitions: [{ to: 'spec-review', trigger: 'auto' }] },
+  { state: 'spec-review', semanticRole: 'human-gate', agentActionable: false, humanGate: true, validTransitions: [
+    { to: 'planning', trigger: 'human-approve' },
+    { to: 'triaging', trigger: 'human-reject' },
+    { to: 'cancelled', trigger: 'manual' },
+  ]},
+  { state: 'planning', semanticRole: 'processing', agentActionable: true, humanGate: false, agentRoleId: 'planner', validTransitions: [
+    { to: 'plan-critique', trigger: 'agent-complete' },
+    { to: 'cancelled', trigger: 'manual' },
+  ]},
+  { state: 'plan-critique', semanticRole: 'processing', agentActionable: true, humanGate: false, agentRoleId: 'plan-critic', validTransitions: [
+    { to: 'plan-review', trigger: 'agent-complete' },
+    { to: 'planning', trigger: 'agent-complete' },
+    { to: 'cancelled', trigger: 'manual' },
+  ]},
+  { state: 'plan-review', semanticRole: 'human-gate', agentActionable: false, humanGate: true, validTransitions: [
+    { to: 'executing', trigger: 'human-approve' },
+    { to: 'planning', trigger: 'human-reject' },
+    { to: 'cancelled', trigger: 'manual' },
+  ]},
+  { state: 'executing', semanticRole: 'processing', agentActionable: true, humanGate: false, validTransitions: [
+    { to: 'integration-review', trigger: 'execution-complete' },
+    { to: 'execution-failed', trigger: 'execution-failed' },
+    { to: 'cancelled', trigger: 'manual' },
+  ]},
+  { state: 'execution-failed', semanticRole: 'error', agentActionable: false, humanGate: false, validTransitions: [
+    { to: 'executing', trigger: 'manual' },
+    { to: 'planning', trigger: 'manual' },
+    { to: 'cancelled', trigger: 'manual' },
+  ]},
+  { state: 'splitting', semanticRole: 'processing', agentActionable: true, humanGate: false, agentRoleId: 'splitter', validTransitions: [
+    { to: 'in-progress', trigger: 'agent-complete' },
+    { to: 'cancelled', trigger: 'manual' },
+  ]},
+  { state: 'in-progress', semanticRole: 'waiting', agentActionable: false, humanGate: false, validTransitions: [
+    { to: 'integration-review', trigger: 'all-tasks-done' },
+    { to: 'cancelled', trigger: 'manual' },
+  ]},
+  { state: 'integration-review', semanticRole: 'processing', agentActionable: true, humanGate: false, agentRoleId: 'integration-reviewer', validTransitions: [
+    { to: 'final-review', trigger: 'agent-complete' },
+    { to: 'integration-fix', trigger: 'agent-complete' },
+    { to: 'cancelled', trigger: 'manual' },
+  ]},
+  { state: 'integration-fix', semanticRole: 'processing', agentActionable: true, humanGate: false, agentRoleId: 'fixer', validTransitions: [
+    { to: 'integration-review', trigger: 'agent-complete' },
+    { to: 'cancelled', trigger: 'manual' },
+  ]},
+  { state: 'final-review', semanticRole: 'human-gate', agentActionable: false, humanGate: true, validTransitions: [
+    { to: 'approved', trigger: 'human-approve' },
+    { to: 'integration-fix', trigger: 'human-reject' },
+    { to: 'cancelled', trigger: 'manual' },
+  ]},
+  { state: 'approved', semanticRole: 'processing', agentActionable: false, humanGate: false, validTransitions: [{ to: 'merged', trigger: 'auto' }] },
+  { state: 'merged', semanticRole: 'terminal', agentActionable: false, humanGate: false, validTransitions: [] },
+  { state: 'cancelled', semanticRole: 'terminal', agentActionable: false, humanGate: false, validTransitions: [] },
+];
+
+const TASK_STAGES: StageDefinition[] = [
+  { state: 'blocked', semanticRole: 'waiting', agentActionable: false, humanGate: false, validTransitions: [
+    { to: 'ready', trigger: 'all-deps-resolved' },
+    { to: 'cancelled', trigger: 'manual' },
+  ]},
+  { state: 'ready', semanticRole: 'processing', agentActionable: true, humanGate: false, agentRoleId: 'implementer', validTransitions: [{ to: 'in-progress', trigger: 'auto' }] },
+  { state: 'in-progress', semanticRole: 'processing', agentActionable: true, humanGate: false, agentRoleId: 'implementer', validTransitions: [
+    { to: 'code-review', trigger: 'agent-complete' },
+    { to: 'cancelled', trigger: 'manual' },
+  ]},
+  { state: 'code-review', semanticRole: 'processing', agentActionable: true, humanGate: false, agentRoleId: 'code-reviewer', validTransitions: [
+    { to: 'done', trigger: 'agent-complete' },
+    { to: 'changes-requested', trigger: 'agent-complete' },
+    { to: 'cancelled', trigger: 'manual' },
+  ]},
+  { state: 'changes-requested', semanticRole: 'processing', agentActionable: true, humanGate: false, agentRoleId: 'implementer', validTransitions: [{ to: 'in-progress', trigger: 'auto' }] },
+  { state: 'done', semanticRole: 'terminal', agentActionable: false, humanGate: false, validTransitions: [] },
+  { state: 'cancelled', semanticRole: 'terminal', agentActionable: false, humanGate: false, validTransitions: [] },
+];
+
+function createMockTopologyLoader(): TopologyLoader {
+  return {
+    loadForTicket(ticket: WorkflowTicket): StageDefinition[] {
+      if (ticket.type === 'epic') return EPIC_STAGES;
+      return TASK_STAGES;
+    },
+    loadByTemplateRowId(_rowId: string): StageDefinition[] {
+      return EPIC_STAGES; // default to epic for template loads
+    },
+    loadTemplateForTicket(_ticket: WorkflowTicket) {
+      return null;
+    },
+    clearCache() {},
+  };
+}
 
 describe('WorkflowEngine', () => {
   const tickets = createWorkflowTicketRepository();
   const transitions = createWorkflowTransitionRepository();
   const dependencies = createTicketDependencyRepository();
-  const engine = createWorkflowEngine({ tickets, transitions, dependencies });
+  const topologyLoader = createMockTopologyLoader();
+  const engine = createWorkflowEngine({ tickets, transitions, dependencies, topologyLoader });
 
   afterAll(() => {
     resetDatabase();

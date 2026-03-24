@@ -3,12 +3,9 @@ import path from 'path';
 import os from 'os';
 import type { Agent, AgentId, AgentSource, SessionProvider } from '@foundation/types';
 
-export interface FilesystemAgentScanner {
-  scanGlobalAgents(): Agent[];
-  scanProjectAgents(projectRoot: string): Agent[];
-  scanAll(projectRoot?: string): Agent[];
-  findById(id: AgentId, projectRoot?: string): Agent | null;
-}
+// Re-export domain interface so existing consumers are not broken
+export type { AgentScanner as FilesystemAgentScanner } from '@domain/agent/scanner.js';
+import type { AgentScanner as FilesystemAgentScanner } from '@domain/agent/scanner.js';
 
 export function createFilesystemAgentScanner(): FilesystemAgentScanner {
   return {

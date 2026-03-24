@@ -1,4 +1,4 @@
-import type { VaultReader } from '@infrastructure/vault/reader.js';
+import type { VaultReader } from '@domain/vault/reader.js';
 
 /**
  * Extract the last N entries from a markdown section.

@@ -3,6 +3,8 @@ import { createServer } from 'http';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { createApiRouter } from './api.js';
+import { createAuthRoutes } from './auth-routes.js';
+import { createAuthMiddleware } from './auth-middleware.js';
 import { setupWebSocket } from './websocket.js';
 import { closeDatabase } from '@infrastructure/persistence/database.js';
 import { createAutomationRuleRepository, createAutomationRunRepository } from '@infrastructure/persistence/automation-repository.js';
@@ -22,6 +24,12 @@ automationEngine.start();
 
 const app = express();
 app.use(express.json());
+
+// Auth routes (public — no middleware gate)
+app.use('/api/auth', createAuthRoutes());
+
+// Auth middleware (gates all other /api/* routes)
+app.use('/api', createAuthMiddleware());
 
 // API routes
 app.use('/api', createApiRouter({ automationEngine }));

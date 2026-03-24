@@ -9,7 +9,7 @@ import type {
   DiscussionVote,
   DiscussionSession,
 } from '@foundation/discussion-types';
-import type { AgentId, SessionId, TrackId } from '@foundation/types';
+import type { AgentId, TrackId } from '@foundation/types';
 
 export interface DiscussionTeamRepository {
   findAll(): DiscussionTeam[];

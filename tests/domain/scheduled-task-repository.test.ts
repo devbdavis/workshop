@@ -14,7 +14,7 @@ import {
 } from '@infrastructure/persistence/scheduled-task-repository';
 import { createTrackRepository } from '@infrastructure/persistence/track-repository';
 import { resetDatabase } from '@infrastructure/persistence/database';
-import type { ScheduledTaskId, ScheduleConfig, TrackId } from '@foundation/types';
+import type { ScheduledTaskId, ScheduleConfig } from '@foundation/types';
 
 describe('Scheduled Task Repository', () => {
   const taskRepo = createScheduledTaskRepository();

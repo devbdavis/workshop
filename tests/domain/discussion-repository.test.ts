@@ -13,11 +13,8 @@ import { createDiscussionTeamRepository } from '@infrastructure/persistence/disc
 import { createDiscussionRepository } from '@infrastructure/persistence/discussion-repository';
 import { createDiscussionMessageRepository } from '@infrastructure/persistence/discussion-message-repository';
 import { createDiscussionVoteRepository } from '@infrastructure/persistence/discussion-vote-repository';
-import { createDiscussionSessionRepository } from '@infrastructure/persistence/discussion-session-repository';
-import { createTrackRepository } from '@infrastructure/persistence/track-repository';
-import { createSessionRepository } from '@infrastructure/persistence/session-repository';
-import type { DiscussionTeamId, DiscussionId, DiscussionMessageId } from '@foundation/discussion-types';
-import type { AgentId, SessionId, TrackId } from '@foundation/types';
+import type { DiscussionTeamId, DiscussionId } from '@foundation/discussion-types';
+import type { AgentId } from '@foundation/types';
 
 afterAll(() => {
   resetDatabase();

@@ -1,4 +1,4 @@
-import { WorkflowStateIndicator } from './WorkflowStateIndicator';
+import { WorkflowStateIndicator } from './WorkflowStateIndicator.js';
 
 interface TransitionEntry {
   id: string;

@@ -1,8 +1,8 @@
 import { v4 as uuid } from 'uuid';
 import { getDatabase } from './database.js';
-import type { AgentRoleRepository, AgentRoleRow } from '@application/workflow/agent-role-repository.js';
-import { PromptBlockSchema } from '@application/workflow/schemas.js';
-import type { CapabilityTier } from '@application/workflow/types.js';
+import type { AgentRoleRepository, AgentRoleRow } from '@domain/workflow/agent-role-repository.js';
+import { PromptBlockSchema } from '@domain/workflow/schemas.js';
+import type { CapabilityTier } from '@domain/workflow/types.js';
 
 // ---------------------------------------------------------------------------
 // SQLite implementation of AgentRoleRepository

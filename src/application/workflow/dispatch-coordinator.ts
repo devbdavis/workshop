@@ -12,12 +12,12 @@ import type {
   WorkflowState,
   TransitionActor,
 } from '@foundation/types.js';
-import type { WorkflowTicketRepository } from './ticket-repository.js';
+import type { WorkflowTicketRepository } from '@domain/workflow/ticket-repository.js';
 import type { WorkflowEngine } from './engine.js';
 import type { ExecutionDispatcher } from './execution-dispatcher.js';
 import type { AgentDispatcher } from './agent-dispatcher.js';
 import type { TopologyLoader } from './topology-loader.js';
-import { getStageDefinition, isTerminal } from './types.js';
+import { getStageDefinition, isTerminal } from '@domain/workflow/types.js';
 
 // ---------------------------------------------------------------------------
 // Public interface

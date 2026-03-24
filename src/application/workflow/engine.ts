@@ -16,10 +16,10 @@ import type {
   WorkflowTicketRepository,
   WorkflowTransitionRepository,
   TicketDependencyRepository,
-} from './ticket-repository.js';
+} from '@domain/workflow/ticket-repository.js';
 import type { TopologyLoader } from './topology-loader.js';
-import type { StageDefinition } from './types.js';
-import { isHumanGate, isTerminal, getStageDefinition } from './types.js';
+import type { StageDefinition } from '@domain/workflow/types.js';
+import { isHumanGate, isTerminal, getStageDefinition } from '@domain/workflow/types.js';
 import { createDependencyResolver } from './dependency-resolver.js';
 import type { DependencyResolver } from './dependency-resolver.js';
 
@@ -90,6 +90,8 @@ export interface WorkflowEngineDeps {
   topologyLoader: TopologyLoader;
   /** Called when an epic advances to a new state (e.g., all tasks done) */
   onEpicAdvanced?: (ticket: WorkflowTicket) => Promise<void>;
+  /** Called when any ticket transitions into a terminal state (zero outgoing transitions). */
+  onTerminalState?: (ticket: WorkflowTicket) => Promise<void>;
 }
 
 // ---------------------------------------------------------------------------
@@ -226,6 +228,14 @@ export function createWorkflowEngine(deps: WorkflowEngineDeps): WorkflowEngine {
           return applyTransition(updated, autoTarget.to, autoActor, undefined, undefined, _depth + 1);
         }
       }
+    }
+
+    // Terminal-state hook — fire when ticket reaches a state with no outgoing transitions
+    const finalStage = getStageDefinition(stages, updated.state);
+    if (finalStage && finalStage.validTransitions.length === 0) {
+      deps.onTerminalState?.(updated)?.catch((err) => {
+        console.warn(`[workflow] Terminal-state hook failed for ticket ${updated.id}:`, err);
+      });
     }
 
     return updated;
@@ -399,14 +409,19 @@ export function createWorkflowEngine(deps: WorkflowEngineDeps): WorkflowEngine {
       });
 
       // Follow auto-transitions from entry state
-      if (data.workflowTemplateRowId) {
-        const stages = topologyLoader.loadByTemplateRowId(data.workflowTemplateRowId);
+      // Try to load topology even without explicit template (for backward compat with tests)
+      try {
+        const stages = data.workflowTemplateRowId
+          ? topologyLoader.loadByTemplateRowId(data.workflowTemplateRowId)
+          : topologyLoader.loadForTicket(epic);
         const entryStage = getStageDefinition(stages, epic.state);
         const autoTarget = entryStage?.validTransitions.find((t) => t.trigger === 'auto');
         if (autoTarget) {
           const actor: TransitionActor = { type: 'system', reason: 'Auto-transition from entry state' };
           return applyTransition(epic, autoTarget.to, actor);
         }
+      } catch {
+        // No topology available - skip auto-transitions (ticket stays in initial state)
       }
 
       return epic;
