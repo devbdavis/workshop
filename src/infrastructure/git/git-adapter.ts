@@ -3,20 +3,9 @@ import { promisify } from 'util';
 
 const execFile = promisify(execFileCb);
 
-export interface GitStatus {
-  branch: string;
-  lastCommitHash: string;
-  lastCommitMessage: string;
-  dirty: boolean;
-  modifiedCount: number;
-  untrackedCount: number;
-  remoteUrl?: string;
-}
-
-export interface GitAdapter {
-  getStatus(repoPath: string): Promise<GitStatus>;
-  isGitRepo(path: string): Promise<boolean>;
-}
+// Re-export domain interfaces so existing consumers are not broken
+export type { GitStatus, GitAdapter } from '@domain/git/types.js';
+import type { GitStatus, GitAdapter } from '@domain/git/types.js';
 
 /**
  * Runs a git command in the given directory, returning stdout.

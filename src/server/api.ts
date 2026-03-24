@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import type { TrackId, SessionId, SessionProvider, RepoId, PathId, AutomationRuleId, TemplateId, TerminalLayout } from '@foundation/types';
+import type { TrackId, SessionId, SessionProvider, RepoId, PathId, AutomationRuleId, TemplateId, TerminalLayout, WorkflowTicket } from '@foundation/types';
 import { VAULT_ROOT } from '@foundation/config.js';
 import { createTrackRepository } from '@infrastructure/persistence/track-repository.js';
 import { createSessionRepository } from '@infrastructure/persistence/session-repository.js';
@@ -29,6 +29,8 @@ import { createAgentRouter } from './agent-routes.js';
 import { createVaultRouter } from './vault-routes.js';
 import { createScheduledTaskRouter } from './scheduled-task-routes.js';
 import { createWorkflowRouter } from './workflow-routes.js';
+import { createWorkflowTemplateRouter } from './workflow-template-routes.js';
+import { createWorkflowProposalRouter } from './workflow-proposal-routes.js';
 import { createWorkflowTicketRepository, createWorkflowTransitionRepository } from '@infrastructure/persistence/workflow-repository.js';
 import { createTicketDependencyRepository } from '@infrastructure/persistence/workflow-dependency-repository.js';
 import { createWorkflowEngine } from '@application/workflow/engine.js';
@@ -160,13 +162,20 @@ export function createApiRouter(deps: ApiRouterDeps = {}): Router {
   const workflowTransitions = createWorkflowTransitionRepository();
   const ticketDependencies = createTicketDependencyRepository();
   const workflowTemplates = createWorkflowTemplateRepository();
+  const workflowAgentRoles = createAgentRoleRepository();
   const topologyLoader = createTopologyLoader({ templates: workflowTemplates });
-  const agentRoles = createAgentRoleRepository();
+
+  // Create a mutable callback holder for epic advanced events (circular dependency resolution)
+  let epicAdvancedCallback: ((ticket: WorkflowTicket) => Promise<void>) | undefined;
+
   const workflowEngine = createWorkflowEngine({
     tickets: workflowTickets,
     transitions: workflowTransitions,
     dependencies: ticketDependencies,
     topologyLoader,
+    onEpicAdvanced: async (ticket) => {
+      if (epicAdvancedCallback) await epicAdvancedCallback(ticket);
+    },
   });
 
   // Execution dispatcher — handles plan-review → executing dispatch
@@ -186,7 +195,7 @@ export function createApiRouter(deps: ApiRouterDeps = {}): Router {
     summaries,
     terminal,
     topologyLoader,
-    agentRoles,
+    agentRoles: workflowAgentRoles,
   });
 
   // Unified coordinator — routes transitions through the right dispatcher
@@ -198,14 +207,37 @@ export function createApiRouter(deps: ApiRouterDeps = {}): Router {
     topologyLoader,
   });
 
+  // Wire the callback after coordinator exists (B4 fix: parent epic dispatch)
+  epicAdvancedCallback = async (epic) => {
+    await dispatchCoordinator.dispatchForCurrentState(epic.id);
+  };
+
   const workflowRouter = createWorkflowRouter({
     engine: workflowEngine,
     tickets: workflowTickets,
     transitions: workflowTransitions,
     dependencies: ticketDependencies,
     dispatcher: dispatchCoordinator,
+    topologyLoader,
   });
   router.use(workflowRouter);
+
+  // Workflow template routes (template registry, agent roles, validation)
+  const workflowTemplateRouter = createWorkflowTemplateRouter({
+    templates: workflowTemplates,
+    agentRoles: workflowAgentRoles,
+  });
+  router.use(workflowTemplateRouter);
+
+  // Workflow proposal routes (propose and approve workflow assignments)
+  const workflowProposalRouter = createWorkflowProposalRouter({
+    engine: workflowEngine,
+    tickets: workflowTickets,
+    templates: workflowTemplates,
+    agentRoles: workflowAgentRoles,
+    topologyLoader,
+  });
+  router.use(workflowProposalRouter);
 
   // Execution hook routes (SubagentStop + SessionEnd callbacks)
   const executionHookRouter = createExecutionHookRouter({
@@ -222,6 +254,7 @@ export function createApiRouter(deps: ApiRouterDeps = {}): Router {
         tickets: workflowTickets,
         sessions,
         dispatcher: dispatchCoordinator,
+        topologyLoader,
       });
       if (result.redispatched.length > 0) {
         console.log(
@@ -243,7 +276,7 @@ export function createApiRouter(deps: ApiRouterDeps = {}): Router {
 
   // Periodic workflow recovery — check every 2 minutes for agent-actionable
   // tickets whose sessions have died mid-operation
-  const recoveryDeps = { tickets: workflowTickets, sessions, dispatcher: dispatchCoordinator };
+  const recoveryDeps = { tickets: workflowTickets, sessions, dispatcher: dispatchCoordinator, topologyLoader };
   const recoveryInterval = setInterval(async () => {
     try {
       const result = await recoverStuckTickets(recoveryDeps);

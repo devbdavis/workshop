@@ -1,287 +1,291 @@
 /**
- * Interactive SVG state diagram for workflow visualization.
- * Shows epic or task state machine with transitions.
+ * StateDiagram — renders a workflow's stage definitions as an interactive
+ * state diagram. Accepts dynamic stages as props (no hardcoded templates).
  */
-import { useState, useMemo, useId } from 'react';
-import {
-  getDiagramConfig,
-  getPhaseBands,
-  type DiagramNode as DiagramNodeData,
-} from './workflow-diagram-config';
-import { DiagramNode } from './DiagramNode';
-import { DiagramEdge } from './DiagramEdge';
-import { DiagramTooltip } from './DiagramTooltip';
-import { DiagramLegend } from './DiagramLegend';
-// TODO: Phase 3 Round 2 — replace with dynamic template fetching from API
-// import { getTemplatesForType, type WorkflowTemplate } from '@domain/workflow/templates';
+import { useMemo } from 'react';
 
-// Temporary stub until dynamic templates are implemented
-interface WorkflowTemplate {
-  id: string;
-  name: string;
-  description: string;
-  ticketType: string;
-  entryState: string;
-  activeStates: string[];
-  skippedStates: string[];
-  requiredFields: string[];
-  builtin: boolean;
+// Mirrors the StageDefinition type from the workflow schemas
+interface StageDefinition {
+  state: string;
+  semanticRole: string;
+  agentActionable: boolean;
+  humanGate: boolean;
+  agentRoleId?: string;
+  validTransitions: Array<{
+    to: string;
+    trigger: string;
+    condition?: string;
+  }>;
+  promptOverride?: string;
 }
 
-// Hardcoded templates for backward compat
-const BUILTIN_TEMPLATES: WorkflowTemplate[] = [
-  {
-    id: 'epic-standard',
-    name: 'Standard',
-    description: 'Full workflow',
-    ticketType: 'epic',
-    entryState: 'idea',
-    activeStates: ['idea', 'triaging', 'needs-input', 'specced', 'spec-review', 'planning', 'plan-critique', 'plan-review', 'executing', 'execution-failed', 'splitting', 'in-progress', 'integration-review', 'integration-fix', 'final-review', 'approved', 'merged', 'cancelled'],
-    skippedStates: [],
-    requiredFields: ['description'],
-    builtin: true,
-  },
-  {
-    id: 'task-standard',
-    name: 'Standard',
-    description: 'Full task flow',
-    ticketType: 'task',
-    entryState: 'ready',
-    activeStates: ['blocked', 'ready', 'in-progress', 'code-review', 'changes-requested', 'done', 'cancelled'],
-    skippedStates: [],
-    requiredFields: ['description'],
-    builtin: true,
-  },
-];
-
-function getTemplatesForType(ticketType: string): WorkflowTemplate[] {
-  return BUILTIN_TEMPLATES.filter(t => t.ticketType === ticketType);
+interface WorkflowTransition {
+  fromState: string;
+  toState: string;
+  createdAt: string;
 }
 
 interface StateDiagramProps {
-  ticketType: 'epic' | 'task';
-  /** Optional: highlight active states for a selected template */
-  activeStates?: string[];
-  /** Optional: states to show as skipped/dimmed */
-  skippedStates?: string[];
+  stages: StageDefinition[];
+  currentState?: string;
+  transitions?: WorkflowTransition[];
 }
 
-interface TooltipState {
-  node: DiagramNodeData;
-  position: { x: number; y: number };
+// Layout constants
+const NODE_WIDTH = 140;
+const NODE_HEIGHT = 44;
+const X_SPACING = 180;
+const Y_SPACING = 80;
+const PADDING = 40;
+
+// Semantic role colors — matches WorkflowStateIndicator palette
+const ROLE_COLORS: Record<string, { bg: string; border: string; text: string }> = {
+  entry:      { bg: '#1e3a5f', border: '#3b82f6', text: '#93c5fd' },
+  processing: { bg: '#1e3a5f', border: '#3b82f6', text: '#93c5fd' },
+  'human-gate': { bg: '#4a3728', border: '#f59e0b', text: '#fcd34d' },
+  terminal:   { bg: '#1a3a2a', border: '#22c55e', text: '#86efac' },
+  error:      { bg: '#3b1c1c', border: '#ef4444', text: '#fca5a5' },
+  waiting:    { bg: '#2e1a4a', border: '#a855f7', text: '#d8b4fe' },
+};
+
+const DEFAULT_COLOR = { bg: '#1f2937', border: '#6b7280', text: '#d1d5db' };
+
+// Trigger label abbreviations for edge annotations
+const TRIGGER_LABELS: Record<string, string> = {
+  'agent-complete': 'agent',
+  'human-approve': 'approve',
+  'human-reject': 'reject',
+  auto: 'auto',
+  'all-deps-resolved': 'deps ok',
+  'all-tasks-done': 'tasks done',
+  manual: 'manual',
+  'execution-complete': 'exec ok',
+  'execution-failed': 'exec fail',
+};
+
+/**
+ * Assign (col, row) positions to each stage using a BFS layering approach.
+ */
+function layoutStages(
+  stages: StageDefinition[],
+): Map<string, { x: number; y: number }> {
+  const positions = new Map<string, { x: number; y: number }>();
+  if (stages.length === 0) return positions;
+
+  // BFS from entry to assign column layers
+  const layers = new Map<string, number>();
+  const queue: string[] = [stages[0].state];
+  layers.set(stages[0].state, 0);
+
+  while (queue.length > 0) {
+    const current = queue.shift()!;
+    const currentLayer = layers.get(current)!;
+    const stage = stages.find((s) => s.state === current);
+    if (!stage) continue;
+
+    for (const t of stage.validTransitions) {
+      if (!layers.has(t.to)) {
+        layers.set(t.to, currentLayer + 1);
+        queue.push(t.to);
+      }
+    }
+  }
+
+  // Assign any unreachable stages to the last layer + 1
+  const maxLayer = Math.max(0, ...layers.values());
+  for (const stage of stages) {
+    if (!layers.has(stage.state)) {
+      layers.set(stage.state, maxLayer + 1);
+    }
+  }
+
+  // Group by layer, then assign Y positions within each layer
+  const layerGroups = new Map<number, string[]>();
+  for (const [state, layer] of layers) {
+    const group = layerGroups.get(layer) ?? [];
+    group.push(state);
+    layerGroups.set(layer, group);
+  }
+
+  for (const [layer, states] of layerGroups) {
+    for (let i = 0; i < states.length; i++) {
+      positions.set(states[i], {
+        x: PADDING + layer * X_SPACING,
+        y: PADDING + i * Y_SPACING,
+      });
+    }
+  }
+
+  return positions;
 }
 
-export function StateDiagram({ ticketType, activeStates, skippedStates }: StateDiagramProps) {
-  const uniqueId = useId().replace(/:/g, '');
-  const config = getDiagramConfig(ticketType);
-  const phaseBands = getPhaseBands(ticketType);
-  const templates = useMemo(() => getTemplatesForType(ticketType), [ticketType]);
+export function StateDiagram({ stages, currentState, transitions }: StateDiagramProps) {
+  const positions = useMemo(() => layoutStages(stages), [stages]);
 
-  const [selectedTemplateId, setSelectedTemplateId] = useState<string | null>(null);
-  const [tooltip, setTooltip] = useState<TooltipState | null>(null);
-  const [hoveredNode, setHoveredNode] = useState<string | null>(null);
-  const [showEdgeLabels, setShowEdgeLabels] = useState(true);
-
-  // Determine active/skipped states from template or props
-  const effectiveActive = useMemo(() => {
-    if (activeStates) return new Set(activeStates);
-    if (selectedTemplateId) {
-      const template = templates.find(t => t.id === selectedTemplateId);
-      if (template) return new Set(template.activeStates);
+  // Compute which state transitions have been traversed
+  const traversedEdges = useMemo(() => {
+    const edges = new Set<string>();
+    if (transitions) {
+      for (const t of transitions) {
+        edges.add(`${t.fromState}->${t.toState}`);
+      }
     }
-    return new Set(config.nodes.map(n => n.id));
-  }, [activeStates, selectedTemplateId, templates, config.nodes]);
+    return edges;
+  }, [transitions]);
 
-  const effectiveSkipped = useMemo(() => {
-    if (skippedStates) return new Set(skippedStates);
-    if (selectedTemplateId) {
-      const template = templates.find(t => t.id === selectedTemplateId);
-      if (template) return new Set(template.skippedStates);
-    }
-    return new Set<string>();
-  }, [skippedStates, selectedTemplateId, templates]);
+  if (stages.length === 0) {
+    return (
+      <div className="text-sm text-gray-500 italic p-4">
+        No stage definitions available.
+      </div>
+    );
+  }
 
-  // Build node map for edge lookups
-  const nodeMap = useMemo(() => {
-    const map = new Map<string, DiagramNodeData>();
-    for (const node of config.nodes) {
-      map.set(node.id, node);
-    }
-    return map;
-  }, [config.nodes]);
-
-  const handleNodeMouseEnter = (node: DiagramNodeData, e: React.MouseEvent) => {
-    setHoveredNode(node.id);
-    setTooltip({
-      node,
-      position: { x: e.clientX, y: e.clientY },
-    });
-  };
-
-  const handleNodeMouseLeave = () => {
-    setHoveredNode(null);
-    setTooltip(null);
-  };
-
-  const handleTemplateChange = (templateId: string) => {
-    setSelectedTemplateId(templateId === 'all' ? null : templateId);
-  };
-
-  // SVG marker definitions
-  const markerId = `arrow-${uniqueId}`;
-  const markerIdBackward = `arrow-backward-${uniqueId}`;
+  // Compute SVG dimensions
+  const maxX = Math.max(...[...positions.values()].map((p) => p.x)) + NODE_WIDTH + PADDING;
+  const maxY = Math.max(...[...positions.values()].map((p) => p.y)) + NODE_HEIGHT + PADDING;
 
   return (
-    <div className="relative flex flex-col">
-      {/* Controls header */}
-      <div className="flex items-center gap-4 mb-3 px-1">
-        <label className="flex items-center gap-2 text-sm text-gray-400">
-          <span>Template:</span>
-          <select
-            value={selectedTemplateId ?? 'all'}
-            onChange={(e) => handleTemplateChange(e.target.value)}
-            className="bg-gray-800 border border-gray-700 rounded px-2 py-1 text-sm text-gray-200 focus:outline-none focus:border-blue-500"
-          >
-            <option value="all">All States</option>
-            {templates.map((t: WorkflowTemplate) => (
-              <option key={t.id} value={t.id}>
-                {t.name}
-              </option>
-            ))}
-          </select>
-        </label>
-
-        <label className="flex items-center gap-2 text-sm text-gray-400">
-          <input
-            type="checkbox"
-            checked={showEdgeLabels}
-            onChange={(e) => setShowEdgeLabels(e.target.checked)}
-            className="rounded border-gray-600 bg-gray-800 text-blue-500 focus:ring-blue-500 focus:ring-offset-gray-900"
-          />
-          <span>Show transition labels</span>
-        </label>
-      </div>
-
-      {/* Diagram container with scroll */}
-      <div className="overflow-auto border border-gray-800 rounded-lg bg-gray-950">
-        <svg
-          width={config.width}
-          height={config.height}
-          viewBox={`0 0 ${config.width} ${config.height}`}
-          className="block"
+    <svg
+      viewBox={`0 0 ${maxX} ${maxY}`}
+      className="w-full"
+      style={{ maxHeight: Math.min(maxY, 500), minHeight: 120 }}
+    >
+      <defs>
+        <marker
+          id="arrowhead"
+          markerWidth="8"
+          markerHeight="6"
+          refX="8"
+          refY="3"
+          orient="auto"
         >
-          {/* Definitions */}
-          <defs>
-            {/* Forward arrow marker */}
-            <marker
-              id={markerId}
-              markerWidth="8"
-              markerHeight="8"
-              refX="7"
-              refY="4"
-              orient="auto"
-            >
-              <polygon
-                points="0,1 8,4 0,7"
-                fill="rgb(107, 114, 128)"
-              />
-            </marker>
-            {/* Backward arrow marker */}
-            <marker
-              id={markerIdBackward}
-              markerWidth="8"
-              markerHeight="8"
-              refX="7"
-              refY="4"
-              orient="auto"
-            >
-              <polygon
-                points="0,1 8,4 0,7"
-                fill="rgb(239, 68, 68)"
-              />
-            </marker>
-          </defs>
+          <polygon points="0 0, 8 3, 0 6" fill="#6b7280" />
+        </marker>
+        <marker
+          id="arrowhead-active"
+          markerWidth="8"
+          markerHeight="6"
+          refX="8"
+          refY="3"
+          orient="auto"
+        >
+          <polygon points="0 0, 8 3, 0 6" fill="#3b82f6" />
+        </marker>
+      </defs>
 
-          {/* Phase background bands */}
-          {phaseBands.map((band, i) => (
-            <g key={band.phase}>
-              <rect
-                x={0}
-                y={band.yStart}
-                width={config.width}
-                height={band.yEnd - band.yStart}
-                fill={i % 2 === 0 ? 'rgba(55, 65, 81, 0.15)' : 'rgba(55, 65, 81, 0.08)'}
+      {/* Edges */}
+      {stages.flatMap((stage) =>
+        stage.validTransitions.map((t) => {
+          const from = positions.get(stage.state);
+          const to = positions.get(t.to);
+          if (!from || !to) return null;
+
+          const edgeKey = `${stage.state}->${t.to}`;
+          const isTraversed = traversedEdges.has(edgeKey);
+          const strokeColor = isTraversed ? '#3b82f6' : '#4b5563';
+          const markerId = isTraversed ? 'arrowhead-active' : 'arrowhead';
+
+          // Simple line from right edge of source to left edge of target
+          const x1 = from.x + NODE_WIDTH;
+          const y1 = from.y + NODE_HEIGHT / 2;
+          const x2 = to.x;
+          const y2 = to.y + NODE_HEIGHT / 2;
+
+          // Compute label position at midpoint
+          const mx = (x1 + x2) / 2;
+          const my = (y1 + y2) / 2;
+          const label = TRIGGER_LABELS[t.trigger] ?? t.trigger;
+
+          return (
+            <g key={edgeKey + t.trigger}>
+              <line
+                x1={x1}
+                y1={y1}
+                x2={x2}
+                y2={y2}
+                stroke={strokeColor}
+                strokeWidth={isTraversed ? 2 : 1}
+                markerEnd={`url(#${markerId})`}
+                opacity={isTraversed ? 1 : 0.6}
               />
               <text
-                x={12}
-                y={band.yStart + 14}
-                fill="rgb(107, 114, 128)"
-                fontSize={10}
-                fontFamily="system-ui, sans-serif"
-                fontWeight={500}
+                x={mx}
+                y={my - 6}
+                textAnchor="middle"
+                fontSize="9"
+                fill="#9ca3af"
               >
-                {band.phase}
+                {label}
               </text>
             </g>
-          ))}
-
-          {/* Edges (drawn first, behind nodes) */}
-          {config.edges.map((edge, i) => {
-            const fromNode = nodeMap.get(edge.from);
-            const toNode = nodeMap.get(edge.to);
-            if (!fromNode || !toNode) return null;
-            return (
-              <DiagramEdge
-                key={i}
-                edge={edge}
-                fromNode={fromNode}
-                toNode={toNode}
-                showLabel={showEdgeLabels}
-                markerId={edge.backward ? markerIdBackward : markerId}
-              />
-            );
-          })}
-
-          {/* Nodes */}
-          {config.nodes.map((node) => (
-            <DiagramNode
-              key={node.id}
-              node={node}
-              isActive={effectiveActive.has(node.id)}
-              isSkipped={effectiveSkipped.has(node.id)}
-              isHighlighted={hoveredNode === node.id}
-              onMouseEnter={handleNodeMouseEnter}
-              onMouseLeave={handleNodeMouseLeave}
-            />
-          ))}
-
-          {/* Note about cancelled state */}
-          {config.nodes.some(n => n.id === 'cancelled') && (
-            <text
-              x={700}
-              y={590}
-              fill="rgb(107, 114, 128)"
-              fontSize={9}
-              fontFamily="system-ui, sans-serif"
-              textAnchor="middle"
-            >
-              (reachable from any state)
-            </text>
-          )}
-        </svg>
-      </div>
-
-      {/* Legend */}
-      <DiagramLegend />
-
-      {/* Tooltip */}
-      {tooltip && (
-        <DiagramTooltip
-          node={tooltip.node}
-          edges={config.edges}
-          position={tooltip.position}
-        />
+          );
+        }),
       )}
-    </div>
+
+      {/* Nodes */}
+      {stages.map((stage) => {
+        const pos = positions.get(stage.state);
+        if (!pos) return null;
+
+        const isCurrent = stage.state === currentState;
+        const colors = ROLE_COLORS[stage.semanticRole] ?? DEFAULT_COLOR;
+
+        return (
+          <g key={stage.state}>
+            <rect
+              x={pos.x}
+              y={pos.y}
+              width={NODE_WIDTH}
+              height={NODE_HEIGHT}
+              rx={6}
+              fill={colors.bg}
+              stroke={isCurrent ? '#f59e0b' : colors.border}
+              strokeWidth={isCurrent ? 2.5 : 1}
+              opacity={isCurrent ? 1 : 0.85}
+            />
+            {/* State name */}
+            <text
+              x={pos.x + NODE_WIDTH / 2}
+              y={pos.y + NODE_HEIGHT / 2 - 2}
+              textAnchor="middle"
+              dominantBaseline="middle"
+              fontSize="11"
+              fontWeight={isCurrent ? 600 : 400}
+              fill={colors.text}
+            >
+              {stage.state}
+            </text>
+            {/* Semantic role / agent indicator */}
+            <text
+              x={pos.x + NODE_WIDTH / 2}
+              y={pos.y + NODE_HEIGHT / 2 + 11}
+              textAnchor="middle"
+              dominantBaseline="middle"
+              fontSize="8"
+              fill="#9ca3af"
+            >
+              {stage.humanGate ? '\u{1F464}' : stage.agentActionable ? '\u{1F916}' : ''}
+              {stage.agentRoleId ? ` ${stage.agentRoleId}` : ''}
+            </text>
+            {/* Current state highlight ring */}
+            {isCurrent && (
+              <rect
+                x={pos.x - 3}
+                y={pos.y - 3}
+                width={NODE_WIDTH + 6}
+                height={NODE_HEIGHT + 6}
+                rx={9}
+                fill="none"
+                stroke="#f59e0b"
+                strokeWidth={1}
+                strokeDasharray="4 2"
+                opacity={0.5}
+              />
+            )}
+          </g>
+        );
+      })}
+    </svg>
   );
 }

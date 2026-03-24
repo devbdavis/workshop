@@ -2,7 +2,7 @@ import { useEffect, useState, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import type {
   WorkflowTicket, WorkflowTransition, Track, Session,
-} from '@foundation/types';
+} from '@foundation/types.js';
 
 // State-specific data interfaces — now defined locally (runtime validated by stateData shape)
 interface NeedsInputData {
@@ -38,8 +38,23 @@ const PRIORITY_STYLES: Record<string, string> = {
   low: 'bg-gray-800 text-gray-400',
 };
 
-const HUMAN_GATES = new Set(['spec-review', 'plan-review', 'final-review']);
-const TERMINAL_STATES = new Set(['merged', 'cancelled']);
+// Legacy state sets — kept for backward compatibility with tickets without templates
+const LEGACY_HUMAN_GATES = new Set(['spec-review', 'plan-review', 'final-review']);
+const LEGACY_TERMINAL_STATES = new Set(['merged', 'cancelled', 'done']);
+
+/** Check if ticket is at a human gate (dynamic template or legacy fallback) */
+function isAtHumanGate(ticket: WorkflowTicket): boolean {
+  const sd = ticket.stateData as Record<string, unknown> | undefined;
+  if (sd?.currentStateHumanGate === true) return true;
+  return LEGACY_HUMAN_GATES.has(ticket.state);
+}
+
+/** Check if ticket is in a terminal state (dynamic template or legacy fallback) */
+function isTerminalState(ticket: WorkflowTicket): boolean {
+  const sd = ticket.stateData as Record<string, unknown> | undefined;
+  if (sd?.currentStateSemanticRole === 'terminal') return true;
+  return LEGACY_TERMINAL_STATES.has(ticket.state);
+}
 
 export function EpicDetail() {
   const { id } = useParams<{ id: string }>();
@@ -166,7 +181,7 @@ export function EpicDetail() {
           </button>
           <div className="flex items-center gap-3 flex-wrap">
             <h1 className="text-lg font-semibold text-gray-100">{ticket.title}</h1>
-            <WorkflowStateIndicator state={ticket.state} ticketType={ticket.type} size="md" />
+            <WorkflowStateIndicator state={ticket.state} ticketType={ticket.type} size="md" stateData={sd} />
             <span className={`text-xs px-2 py-0.5 rounded ${PRIORITY_STYLES[ticket.priority]}`}>
               {ticket.priority}
             </span>
@@ -180,7 +195,7 @@ export function EpicDetail() {
         </div>
 
         {/* Human gate panel */}
-        {HUMAN_GATES.has(ticket.state) && (
+        {isAtHumanGate(ticket) && (
           <HumanGatePanel ticket={ticket} transitions={transitions} onApprove={handleApprove} onReject={handleReject} />
         )}
 
@@ -294,8 +309,8 @@ function ActionButtons({ ticket, onApprove, onReject, onTransition }: {
   onReject: (comment?: string) => void;
   onTransition: (toState: string, comment?: string) => void;
 }) {
-  const isTerminal = TERMINAL_STATES.has(ticket.state);
-  const isHumanGate = HUMAN_GATES.has(ticket.state);
+  const isTerminal = isTerminalState(ticket);
+  const isHumanGate = isAtHumanGate(ticket);
 
   return (
     <div className="flex items-center gap-2 mt-2 flex-wrap">

@@ -5,6 +5,7 @@ import * as pty from 'node-pty';
 import type { IncomingMessage } from 'http';
 import { createSessionRepository } from '@infrastructure/persistence/session-repository.js';
 import { addEventClient } from './events.js';
+import { extractToken, validateToken } from './auth-middleware.js';
 import type { SessionId } from '@foundation/types';
 import type { IPty } from 'node-pty';
 
@@ -34,6 +35,14 @@ export function setupWebSocket(server: HttpServer): void {
   const eventsWss = new WebSocketServer({ noServer: true });
 
   server.on('upgrade', (request: IncomingMessage, socket, head) => {
+    // Authenticate before allowing any WebSocket upgrade
+    const token = extractToken(request);
+    if (!validateToken(token)) {
+      socket.write('HTTP/1.1 401 Unauthorized\r\n\r\n');
+      socket.destroy();
+      return;
+    }
+
     const url = new URL(request.url || '', `http://${request.headers.host}`);
 
     // Event notification channel

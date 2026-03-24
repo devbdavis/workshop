@@ -1,8 +1,8 @@
 import { useState } from 'react';
-import type { WorkflowTicket, WorkflowTransition } from '@foundation/types';
+import type { WorkflowTicket, WorkflowTransition } from '@foundation/types.js';
 
-// HumanGateState is now just a string type (dynamic workflow)
-type HumanGateState = 'spec-review' | 'plan-review' | 'final-review';
+// Legacy human gate states (for backward compatibility with tickets without templates)
+type LegacyHumanGateState = 'spec-review' | 'plan-review' | 'final-review';
 
 interface Props {
   ticket: WorkflowTicket;
@@ -11,7 +11,7 @@ interface Props {
   onReject: (comment?: string) => void;
 }
 
-const GATE_MESSAGES: Record<HumanGateState, { heading: string; description: string }> = {
+const LEGACY_GATE_MESSAGES: Record<LegacyHumanGateState, { heading: string; description: string }> = {
   'spec-review': {
     heading: 'This specification is ready for your review',
     description:
@@ -27,6 +27,12 @@ const GATE_MESSAGES: Record<HumanGateState, { heading: string; description: stri
     description:
       'Review the completed implementation and approve to merge, or reject to request fixes.',
   },
+};
+
+// Default messages for dynamic workflow human gates
+const DEFAULT_GATE_MESSAGE = {
+  heading: 'Human review required',
+  description: 'Review the current state and approve to continue, or reject to send back for revision.',
 };
 
 /** Extract URLs that look like PR links from text */
@@ -70,17 +76,44 @@ function findReviewContext(transitions: WorkflowTransition[], currentState: stri
   return { prLinks: [...new Set(prLinks)], summaryComment };
 }
 
-function isHumanGate(state: string): state is HumanGateState {
+function isLegacyHumanGate(state: string): state is LegacyHumanGateState {
   return state === 'spec-review' || state === 'plan-review' || state === 'final-review';
+}
+
+/** Check if a ticket is at a human gate (dynamic template or legacy fallback) */
+function isAtHumanGate(ticket: WorkflowTicket): boolean {
+  const sd = ticket.stateData as Record<string, unknown> | undefined;
+  // Dynamic workflow check via stateData
+  if (sd?.currentStateHumanGate === true) return true;
+  // Legacy fallback
+  return isLegacyHumanGate(ticket.state);
+}
+
+/** Get gate message for current state */
+function getGateMessage(ticket: WorkflowTicket): { heading: string; description: string } {
+  const sd = ticket.stateData as Record<string, unknown> | undefined;
+
+  // Check for custom message from dynamic workflow
+  if (sd?.humanGatePrompt && typeof sd.humanGatePrompt === 'string') {
+    return { heading: 'Human review required', description: sd.humanGatePrompt };
+  }
+
+  // Legacy message lookup
+  if (isLegacyHumanGate(ticket.state)) {
+    return LEGACY_GATE_MESSAGES[ticket.state];
+  }
+
+  // Default fallback
+  return DEFAULT_GATE_MESSAGE;
 }
 
 export function HumanGatePanel({ ticket, transitions, onApprove, onReject }: Props) {
   const [comment, setComment] = useState('');
   const [submitting, setSubmitting] = useState(false);
 
-  if (!isHumanGate(ticket.state)) return null;
+  if (!isAtHumanGate(ticket)) return null;
 
-  const gate = GATE_MESSAGES[ticket.state];
+  const gate = getGateMessage(ticket);
   const { prLinks, summaryComment } = findReviewContext(transitions ?? [], ticket.state);
 
   async function handleApprove() {

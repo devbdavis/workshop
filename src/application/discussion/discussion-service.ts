@@ -20,7 +20,7 @@ import type { AgentRepository } from '@domain/agent/repository';
 import type { TrackRepository } from '@domain/track/repository';
 import type { SummaryRepository } from '@domain/summary/repository';
 import type { SessionRepository } from '@domain/session/repository';
-import type { FilesystemAgentScanner } from '@infrastructure/agents/filesystem-scanner.js';
+import type { AgentScanner as FilesystemAgentScanner } from '@domain/agent/scanner.js';
 import { buildGovernancePrompt } from './governance-prompt.js';
 import { buildActOnConsensusPrompt } from './act-on-consensus-prompt.js';
 import { resolveProvider } from './provider-mapping.js';

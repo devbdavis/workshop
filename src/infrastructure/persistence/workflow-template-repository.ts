@@ -1,11 +1,11 @@
 import { v4 as uuid } from 'uuid';
 import { getDatabase } from './database.js';
-import type { WorkflowTemplateRepository, WorkflowTemplateRow } from '@application/workflow/template-repository.js';
+import type { WorkflowTemplateRepository, WorkflowTemplateRow } from '@domain/workflow/template-repository.js';
 import {
   StageDefinitionsSchema,
   MatchCriteriaSchema,
   PromptOverridesSchema,
-} from '@application/workflow/schemas.js';
+} from '@domain/workflow/schemas.js';
 
 // ---------------------------------------------------------------------------
 // SQLite implementation of WorkflowTemplateRepository

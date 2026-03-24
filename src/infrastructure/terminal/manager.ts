@@ -3,7 +3,7 @@ import { writeFileSync, mkdirSync, rmSync, existsSync, chmodSync } from 'fs';
 import path from 'path';
 import { v4 as uuid } from 'uuid';
 import type { SessionRepository } from '@domain/session/repository';
-import type { Session, SessionId, SessionProvider, TrackId } from '@foundation/types';
+import type { Session, SessionId, TrackId } from '@foundation/types';
 import type { SoulLoader } from '@infrastructure/soul/soul-loader.js';
 import { isSessionIdle, isSessionLoggedOut, isSessionExited } from './pane-detection.js';
 import {
@@ -11,47 +11,16 @@ import {
   sendInitialPrompt,
 } from './launcher-builders.js';
 
+// Re-export domain interfaces so existing consumers are not broken
+export type { TerminalManager, CreateSessionOptions, SyncResult } from '@domain/terminal/manager.js';
+import type { TerminalManager, CreateSessionOptions, SyncResult } from '@domain/terminal/manager.js';
+
 /** Directory for per-session data (prompt files, hook config, etc.) */
 const SESSION_DATA_DIR = path.join(
   process.env.HOME || '/tmp',
   '.workshop',
   'sessions',
 );
-
-
-export interface CreateSessionOptions {
-  systemPrompt?: string;
-  workingDirectory?: string;
-  /** Which AI CLI to use. Defaults to 'claude'. */
-  provider?: SessionProvider;
-  /** If true, do not start the AI CLI in the tmux session. Defaults to false. */
-  skipClaude?: boolean;
-  /** If true, the session runs in the background with permission hooks. Defaults to false. */
-  background?: boolean;
-  /** Todo ID if dispatched from a todo (used in system prompt extension). */
-  todoId?: string;
-  /** Initial prompt to send to the AI CLI (the task to work on). */
-  initialPrompt?: string;
-  /** If true, skip permission hooks and run with --dangerously-skip-permissions. */
-  dangerouslySkipPermissions?: boolean;
-  /** Workflow ticket ID — if set, adds SubagentStop + SessionEnd hooks for execution tracking */
-  executionTicketId?: string;
-  /** Tool patterns to pre-approve (passed as --allowedTools to claude CLI). */
-  allowedTools?: string[];
-  /** Route tool permissions through Workshop UI even for interactive (non-background) sessions. */
-  usePermissionHooks?: boolean;
-}
-
-export interface SyncResult {
-  cleaned: { sessionId: SessionId; trackId: TrackId }[];
-}
-
-export interface TerminalManager {
-  createSession(trackId: TrackId, options?: CreateSessionOptions): Promise<Session>;
-  destroySession(sessionId: SessionId): Promise<void>;
-  isSessionAlive(session: Session): boolean;
-  syncSessionStates(): SyncResult;
-}
 
 /** Minutes a background session can sit idle at the CLI prompt before being reaped */
 const BACKGROUND_IDLE_TIMEOUT_MINUTES = 5;

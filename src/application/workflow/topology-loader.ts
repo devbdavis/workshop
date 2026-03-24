@@ -3,8 +3,8 @@
  * and provides caching to avoid repeated JSON parsing + Zod validation.
  */
 import type { WorkflowTicket } from '@foundation/types.js';
-import type { StageDefinition } from './types.js';
-import type { WorkflowTemplateRow, WorkflowTemplateRepository } from './template-repository.js';
+import type { StageDefinition } from '@domain/workflow/types.js';
+import type { WorkflowTemplateRow, WorkflowTemplateRepository } from '@domain/workflow/template-repository.js';
 
 export interface TopologyLoader {
   /** Load stage definitions for a ticket (requires workflowTemplateRowId) */
