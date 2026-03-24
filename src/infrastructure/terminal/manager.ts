@@ -24,8 +24,12 @@ const SESSION_DATA_DIR = path.join(
   'sessions',
 );
 
-/** Minutes a background session can sit idle at the CLI prompt before being reaped */
-const BACKGROUND_IDLE_TIMEOUT_MINUTES = 5;
+/** Minutes a background session can sit idle at the CLI prompt before being reaped.
+ *  Set to 15m to give workflow agents time to complete MCP tool calls and
+ *  transition tickets before being reaped. Previous value of 5m caused a
+ *  seven-verification loop where agents completed work but got reaped
+ *  before they could call transition_ticket. */
+const BACKGROUND_IDLE_TIMEOUT_MINUTES = 15;
 
 /** Seconds a dead tmux session gets before being reaped/suspended */
 const DYING_GRACE_PERIOD_MS = 30_000;
