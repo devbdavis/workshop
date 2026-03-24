@@ -35,6 +35,9 @@ import { createWorkflowEngine } from '@application/workflow/engine.js';
 import { createExecutionDispatcher } from '@application/workflow/execution-dispatcher.js';
 import { createAgentDispatcher } from '@application/workflow/agent-dispatcher.js';
 import { createDispatchCoordinator } from '@application/workflow/dispatch-coordinator.js';
+import { createTopologyLoader } from '@application/workflow/topology-loader.js';
+import { createWorkflowTemplateRepository } from '@infrastructure/persistence/workflow-template-repository.js';
+import { createAgentRoleRepository } from '@infrastructure/persistence/workflow-agent-role-repository.js';
 import { createExecutionHookRouter } from './execution-hook-routes.js';
 import { recoverStuckTickets } from '@application/workflow/startup-recovery.js';
 import { broadcast } from './events.js';
@@ -156,10 +159,14 @@ export function createApiRouter(deps: ApiRouterDeps = {}): Router {
   const workflowTickets = createWorkflowTicketRepository();
   const workflowTransitions = createWorkflowTransitionRepository();
   const ticketDependencies = createTicketDependencyRepository();
+  const workflowTemplates = createWorkflowTemplateRepository();
+  const topologyLoader = createTopologyLoader({ templates: workflowTemplates });
+  const agentRoles = createAgentRoleRepository();
   const workflowEngine = createWorkflowEngine({
     tickets: workflowTickets,
     transitions: workflowTransitions,
     dependencies: ticketDependencies,
+    topologyLoader,
   });
 
   // Execution dispatcher — handles plan-review → executing dispatch
@@ -169,6 +176,7 @@ export function createApiRouter(deps: ApiRouterDeps = {}): Router {
     tracks,
     summaries,
     terminal,
+    topologyLoader,
   });
 
   // Agent dispatcher — handles all other agent-actionable states
@@ -177,6 +185,8 @@ export function createApiRouter(deps: ApiRouterDeps = {}): Router {
     tracks,
     summaries,
     terminal,
+    topologyLoader,
+    agentRoles,
   });
 
   // Unified coordinator — routes transitions through the right dispatcher
@@ -185,6 +195,7 @@ export function createApiRouter(deps: ApiRouterDeps = {}): Router {
     tickets: workflowTickets,
     executionDispatcher,
     agentDispatcher,
+    topologyLoader,
   });
 
   const workflowRouter = createWorkflowRouter({
