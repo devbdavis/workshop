@@ -1,3 +1,6 @@
+import { existsSync } from 'fs';
+import { homedir } from 'os';
+import path from 'path';
 import { Router } from 'express';
 import type { TrackId, SessionId, SessionProvider, RepoId, PathId, AutomationRuleId, TemplateId, TerminalLayout, WorkflowTicket } from '@foundation/types';
 import { VAULT_ROOT } from '@foundation/config.js';
@@ -86,6 +89,12 @@ export function createApiRouter(deps: ApiRouterDeps = {}): Router {
       broadcast('session:deleted', trackId);
     }
     for (const { trackId } of result.suspended) {
+      broadcast('session:updated', trackId);
+    }
+    for (const { trackId } of result.dying) {
+      broadcast('session:updated', trackId);
+    }
+    for (const trackId of result.activityChanged) {
       broadcast('session:updated', trackId);
     }
   }
@@ -551,10 +560,13 @@ export function createApiRouter(deps: ApiRouterDeps = {}): Router {
   // --- Sessions ---
 
   router.get('/sessions', (_req, res) => {
-    // Sync before returning so the client always sees fresh state
-    runSessionSync();
     const allSessions = sessions.findAll();
-    res.json(allSessions);
+    const enriched = allSessions.map(s => ({
+      ...s,
+      lastActivityAt: terminal.getLastActivityAt(s.id),
+      dying: terminal.isDying(s.id),
+    }));
+    res.json(enriched);
   });
 
   router.get('/tracks/:id/sessions', (req, res) => {
@@ -897,6 +909,24 @@ export function createApiRouter(deps: ApiRouterDeps = {}): Router {
     soulLoader.reset();
     const info = soulLoader.getInfo();
     res.json(info);
+  });
+
+  // --- Sprites ---
+
+  const spritesDir = path.join(homedir(), '.workshop', 'sprites');
+  router.get('/sprites/:filename', (req, res) => {
+    const { filename } = req.params;
+    // Reject directory traversal attempts
+    if (filename.includes('/') || filename.includes('\\') || filename.includes('..')) {
+      res.status(400).json({ error: 'Invalid filename' });
+      return;
+    }
+    const filePath = path.join(spritesDir, filename);
+    if (!existsSync(filePath)) {
+      res.status(404).json({ error: 'Sprite not found' });
+      return;
+    }
+    res.sendFile(filePath);
   });
 
   return router;
