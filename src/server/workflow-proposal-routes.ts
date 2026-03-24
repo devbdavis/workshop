@@ -9,6 +9,7 @@ import type { WorkflowTemplateRepository } from '@domain/workflow/template-repos
 import type { AgentRoleRepository } from '@domain/workflow/agent-role-repository.js';
 import type { TopologyLoader } from '@application/workflow/topology-loader.js';
 import type { WorkflowEngine } from '@application/workflow/engine.js';
+import type { DispatchCoordinator } from '@application/workflow/dispatch-coordinator.js';
 import { StageDefinitionsSchema, AgentRoleSchema } from '@domain/workflow/schemas.js';
 import { validateWorkflowGraph } from '@application/workflow/graph-validator.js';
 import { broadcast } from './events.js';
@@ -38,11 +39,13 @@ export interface WorkflowProposalRouterDeps {
   templates: WorkflowTemplateRepository;
   agentRoles: AgentRoleRepository;
   topologyLoader: TopologyLoader;
+  /** Dispatch coordinator for triggering agent dispatch after workflow approval */
+  dispatcher?: DispatchCoordinator;
 }
 
 export function createWorkflowProposalRouter(deps: WorkflowProposalRouterDeps): Router {
   const router = Router();
-  const { engine, tickets, templates, agentRoles, topologyLoader } = deps;
+  const { engine, tickets, templates, agentRoles, topologyLoader, dispatcher } = deps;
 
   router.post('/workflow/tickets/:id/propose-workflow', (req, res) => {
     const ticketId = req.params.id as WorkflowTicketId;
@@ -156,7 +159,7 @@ export function createWorkflowProposalRouter(deps: WorkflowProposalRouterDeps): 
     });
   });
 
-  router.post('/workflow/tickets/:id/approve-workflow', (req, res) => {
+  router.post('/workflow/tickets/:id/approve-workflow', async (req, res) => {
     const ticketId = req.params.id as WorkflowTicketId;
     const ticket = tickets.findById(ticketId);
     if (!ticket) return res.status(404).json({ error: 'Ticket not found' });
@@ -246,20 +249,29 @@ export function createWorkflowProposalRouter(deps: WorkflowProposalRouterDeps): 
       topologyLoader.clearCache();
       templates.incrementUsage(epicTemplate.rowId);
 
-      // Transition to the entry state of the workflow
+      // Move to the template's entry state.
+      // We set the state directly rather than using engine.transition() because
+      // the pre-template state (e.g. 'idea') doesn't exist in the template's
+      // topology, so transition validation would reject it.
       const stages = epicTemplate.stageDefinitions;
-      const entryState = stages[0]?.state;
+      const entryStage = stages.find(
+        (s: Record<string, unknown>) => s.semanticRole === 'entry',
+      ) ?? stages[0];
+      const entryState = entryStage?.state as string | undefined;
 
       if (entryState && ticket.state !== entryState) {
+        tickets.update(ticketId, {
+          state: entryState as WorkflowState,
+          stateChangedAt: new Date().toISOString(),
+        });
+      }
+
+      // Dispatch agents for the entry state
+      if (dispatcher) {
         try {
-          engine.transition(
-            ticketId,
-            entryState as WorkflowState,
-            { type: 'system', reason: 'Workflow approved and assigned' },
-            'Workflow approved and assigned',
-          );
-        } catch {
-          // If transition fails, ticket stays in current state
+          await dispatcher.dispatchForCurrentState(ticketId);
+        } catch (dispatchErr) {
+          console.error('Failed to dispatch agents after workflow approval:', dispatchErr);
         }
       }
 
@@ -272,6 +284,7 @@ export function createWorkflowProposalRouter(deps: WorkflowProposalRouterDeps): 
         entryState,
       });
     } catch (err) {
+      console.error('Workflow approval error:', err);
       const message = err instanceof Error ? err.message : 'Failed to approve workflow';
       res.status(500).json({ error: message });
     }

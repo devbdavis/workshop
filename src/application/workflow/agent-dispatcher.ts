@@ -190,6 +190,7 @@ export function createAgentDispatcher(deps: AgentDispatcherDeps): AgentDispatche
     } else {
       // Fallback to hardcoded role-specific completion instructions
       const completionMap: Record<string, string> = {
+        'workflow-designer': 'When your workflow proposal is ready, call workshop_propose_workflow with the epicId, epicTemplate, taskTemplate (if needed), agentRoles, and rationale. The proposal will be stored for human approval — do NOT transition the ticket yourself.',
         'triage': 'When the spec is complete: (1) optionally update the description via workshop_update_ticket to reflect any Q&A refinements, (2) transition to "specced" with the refined spec: workshop_transition_ticket(ticketId, "specced", "summary", { refinedSpec: "full spec text..." }). If you have questions: transition to "needs-input" with: workshop_transition_ticket(ticketId, "needs-input", "summary", { pendingQuestions: [{ text: "question?" }] })',
         'planner': 'Transition to "plan-critique" when the plan is ready for review.',
         'plan-critic': 'Transition to "plan-review" if no blocking findings, or "planning" if blocking findings exist.',
@@ -266,6 +267,7 @@ export function createAgentDispatcher(deps: AgentDispatcherDeps): AgentDispatche
    */
   function deriveRoleFromState(state: string): string {
     const roleMap: Record<string, string> = {
+      'idea': 'workflow-designer',
       'triaging': 'triage',
       'planning': 'planner',
       'plan-critique': 'plan-critic',
@@ -290,7 +292,7 @@ export function createAgentDispatcher(deps: AgentDispatcherDeps): AgentDispatche
     } catch {
       // No template — fallback to hardcoded check
       const agentActionableStates: Record<string, string[]> = {
-        epic: ['triaging', 'planning', 'plan-critique', 'splitting', 'integration-review', 'integration-fix'],
+        epic: ['idea', 'triaging', 'planning', 'plan-critique', 'splitting', 'integration-review', 'integration-fix'],
         task: ['ready', 'in-progress', 'code-review', 'changes-requested'],
       };
       return agentActionableStates[ticket.type]?.includes(ticket.state) ?? false;
