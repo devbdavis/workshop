@@ -187,6 +187,7 @@ export function createApiRouter(deps: ApiRouterDeps = {}): Router {
 
   // Create a mutable callback holder for epic advanced events (circular dependency resolution)
   let epicAdvancedCallback: ((ticket: WorkflowTicket) => Promise<void>) | undefined;
+  let taskUnblockedCallback: ((ticket: WorkflowTicket) => Promise<void>) | undefined;
 
   const workflowEngine = createWorkflowEngine({
     tickets: workflowTickets,
@@ -196,6 +197,9 @@ export function createApiRouter(deps: ApiRouterDeps = {}): Router {
     templates: workflowTemplates,
     onEpicAdvanced: async (ticket) => {
       if (epicAdvancedCallback) await epicAdvancedCallback(ticket);
+    },
+    onTaskUnblocked: async (ticket) => {
+      if (taskUnblockedCallback) await taskUnblockedCallback(ticket);
     },
     onTerminalState: async (ticket) => {
       console.log(
@@ -238,6 +242,10 @@ export function createApiRouter(deps: ApiRouterDeps = {}): Router {
   // Wire the callback after coordinator exists (B4 fix: parent epic dispatch)
   epicAdvancedCallback = async (epic) => {
     await dispatchCoordinator.dispatchForCurrentState(epic.id);
+  };
+  taskUnblockedCallback = async (task) => {
+    console.log(`Task unblocked: ${task.id} -> ${task.state}, dispatching agent`);
+    await dispatchCoordinator.dispatchForCurrentState(task.id);
   };
 
   const workflowRouter = createWorkflowRouter({
