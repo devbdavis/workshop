@@ -263,6 +263,7 @@ export function createApiRouter(deps: ApiRouterDeps = {}): Router {
     templates: workflowTemplates,
     agentRoles: workflowAgentRoles,
     topologyLoader,
+    dispatcher: dispatchCoordinator,
   });
   router.use(workflowProposalRouter);
 

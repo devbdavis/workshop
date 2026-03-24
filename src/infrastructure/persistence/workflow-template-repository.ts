@@ -94,7 +94,7 @@ export function createWorkflowTemplateRepository(): WorkflowTemplateRepository {
         template.usageCount,
         template.avgRating ?? null,
         template.parentTemplateId ?? null,
-        true,
+        1,  // is_latest — SQLite integer (boolean)
         now,
         now,
         template.createdBy,
@@ -153,7 +153,7 @@ export function createWorkflowTemplateRepository(): WorkflowTemplateRepository {
           merged.usageCount,
           merged.avgRating ?? null,
           merged.parentTemplateId ?? null,
-          merged.isLatest,
+          merged.isLatest ? 1 : 0,  // SQLite integer (boolean)
           merged.createdAt,
           merged.updatedAt,
           merged.createdBy,
