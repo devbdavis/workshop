@@ -27,8 +27,9 @@ export function createWorkflowTicketRepository(): WorkflowTicketRepository {
     `INSERT INTO workflow_tickets
      (id, type, title, description, state, state_data, parent_id, track_id,
       external_ticket_id, assigned_agent_role, assigned_agent_ids, provider,
-      priority, labels, sort_order, state_changed_at, created_at, updated_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      priority, labels, sort_order, workflow_template_row_id,
+      state_changed_at, created_at, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
   );
   const updateStmt = db.prepare(
     `UPDATE workflow_tickets SET
@@ -36,6 +37,7 @@ export function createWorkflowTicketRepository(): WorkflowTicketRepository {
        external_ticket_id = ?, execution_session_id = ?,
        assigned_agent_role = ?, assigned_agent_ids = ?,
        provider = ?, priority = ?, labels = ?, sort_order = ?,
+       workflow_template_row_id = ?,
        state_changed_at = ?, updated_at = ?
      WHERE id = ?`,
   );
@@ -91,7 +93,8 @@ export function createWorkflowTicketRepository(): WorkflowTicketRepository {
         ticket.assignedAgentIds ? JSON.stringify(ticket.assignedAgentIds) : null,
         ticket.provider || 'claude', ticket.priority || 'medium',
         ticket.labels ? JSON.stringify(ticket.labels) : null,
-        ticket.sortOrder ?? 0, now, now, now,
+        ticket.sortOrder ?? 0, ticket.workflowTemplateRowId || null,
+        now, now, now,
       );
       return {
         id, ...ticket,
@@ -123,6 +126,7 @@ export function createWorkflowTicketRepository(): WorkflowTicketRepository {
         priority: data.priority ?? existing.priority,
         labels: data.labels !== undefined ? data.labels : existing.labels,
         sortOrder: data.sortOrder ?? existing.sortOrder,
+        workflowTemplateRowId: data.workflowTemplateRowId !== undefined ? data.workflowTemplateRowId : existing.workflowTemplateRowId,
         stateChangedAt: data.stateChangedAt ?? (stateChanged ? now : existing.stateChangedAt),
         updatedAt: now,
       };
@@ -136,7 +140,9 @@ export function createWorkflowTicketRepository(): WorkflowTicketRepository {
         merged.assignedAgentIds ? JSON.stringify(merged.assignedAgentIds) : null,
         merged.provider, merged.priority,
         merged.labels ? JSON.stringify(merged.labels) : null,
-        merged.sortOrder, merged.stateChangedAt, merged.updatedAt, id,
+        merged.sortOrder,
+        merged.workflowTemplateRowId || null,
+        merged.stateChangedAt, merged.updatedAt, id,
       );
       return merged;
     },
@@ -207,7 +213,8 @@ interface TicketRow {
   execution_session_id: string | null;
   assigned_agent_role: string | null; assigned_agent_ids: string | null;
   provider: string; priority: string; labels: string | null;
-  sort_order: number; state_changed_at: string; created_at: string; updated_at: string;
+  sort_order: number; workflow_template_row_id: string | null;
+  state_changed_at: string; created_at: string; updated_at: string;
 }
 
 interface TransitionRow {
@@ -239,6 +246,7 @@ function rowToTicket(row: TicketRow): WorkflowTicket {
     priority: row.priority as WorkflowTicket['priority'],
     labels: safeJsonParse<string[]>(row.labels),
     sortOrder: row.sort_order,
+    workflowTemplateRowId: row.workflow_template_row_id || undefined,
     stateChangedAt: row.state_changed_at,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
