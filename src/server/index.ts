@@ -40,8 +40,8 @@ const server = createServer(app);
 // WebSocket for terminal sessions
 setupWebSocket(server);
 
-server.listen(PORT, '127.0.0.1', () => {
-  console.log(`Workshop server running on http://localhost:${PORT}`);
+server.listen(PORT, '0.0.0.0', () => {
+  console.log(`Workshop server running on http://0.0.0.0:${PORT}`);
 });
 
 // Graceful shutdown
