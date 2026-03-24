@@ -18,6 +18,7 @@ import type {
   TicketDependencyRepository,
 } from '@domain/workflow/ticket-repository.js';
 import type { TopologyLoader } from './topology-loader.js';
+import type { WorkflowTemplateRepository } from '@domain/workflow/template-repository.js';
 import type { StageDefinition } from '@domain/workflow/types.js';
 import { isHumanGate, isTerminal, getStageDefinition } from '@domain/workflow/types.js';
 import { createDependencyResolver } from './dependency-resolver.js';
@@ -88,6 +89,8 @@ export interface WorkflowEngineDeps {
   transitions: WorkflowTransitionRepository;
   dependencies: TicketDependencyRepository;
   topologyLoader: TopologyLoader;
+  /** Template repository for resolving companion task templates */
+  templates?: WorkflowTemplateRepository;
   /** Called when an epic advances to a new state (e.g., all tasks done) */
   onEpicAdvanced?: (ticket: WorkflowTicket) => Promise<void>;
   /** Called when any ticket transitions into a terminal state (zero outgoing transitions). */
@@ -272,8 +275,12 @@ export function createWorkflowEngine(deps: WorkflowEngineDeps): WorkflowEngine {
     const parentTemplate = topologyLoader.loadTemplateForTicket(parent);
     if (!parentTemplate) return undefined;
 
-    // TODO: In Phase 4, we may have linked task templates; for now return undefined
-    // so tasks without explicit template fall back to legacy behavior
+    // Find companion task template whose parentTemplateId matches the epic template's id
+    if (deps.templates) {
+      const taskTemplate = deps.templates.findTaskTemplateByParent(parentTemplate.id);
+      if (taskTemplate) return taskTemplate.rowId;
+    }
+
     return undefined;
   }
 
