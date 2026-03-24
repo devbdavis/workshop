@@ -252,6 +252,8 @@ function buildRolePrompt(
   context?: PromptContext,
 ): string {
   switch (role) {
+    case 'workflow-designer':
+      return buildWorkflowDesignerPrompt(ticket);
     case 'triage':
       return buildTriagePrompt(ticket);
     case 'planner':
@@ -271,6 +273,84 @@ function buildRolePrompt(
     default:
       return `You are working on ticket: ${ticket.title}\n\n${ticket.description}`;
   }
+}
+
+function buildWorkflowDesignerPrompt(ticket: WorkflowTicket): string {
+  return [
+    'You are a workflow designer. Your job is to analyze this epic and design an appropriate',
+    'workflow template that will govern how it moves through the system.',
+    '',
+    `## Epic: ${ticket.title}`,
+    '',
+    ticket.description,
+    '',
+    '## Your Task',
+    '',
+    '1. **Analyze** the epic to understand the type of work (feature, bugfix, refactor, docs, infra),',
+    '   its complexity, and what agent roles are needed.',
+    '',
+    '2. **Search existing templates** via `workshop_list_workflow_templates({ ticketType: "epic" })`',
+    '   and agent roles via `workshop_list_agent_roles()`. Reuse what exists.',
+    '',
+    '3. **Design or select** a workflow template:',
+    '   - If an existing template is a good fit, use it directly.',
+    '   - If not, design a new one following the schema below.',
+    '   - Also design a companion task template (ticketType: "task") if the epic involves',
+    '     splitting work into subtasks.',
+    '',
+    '4. **Create agent role definitions** for any roles referenced in your template that',
+    '   don\'t already exist in the registry. Each role needs:',
+    '   - id (kebab-case), name, description',
+    '   - promptBlock: { preamble, toolAccessTier, constraints[], completionInstructions }',
+    '   - toolsAllowed: string array of MCP tools/categories',
+    '   - capabilityTier: "advisory" | "code-modification" | "infrastructure"',
+    '',
+    '5. **Validate** via `workshop_validate_workflow({ stageDefinitions: [...] })`.',
+    '   Fix any validation errors.',
+    '',
+    '6. **Propose** via `workshop_propose_workflow({ epicId, epicTemplate, taskTemplate,',
+    '   agentRoles, rationale })`. A human will review and approve.',
+    '',
+    '## Template Schema',
+    '',
+    'Epic template fields: id, name, description, ticketType ("epic"), stageDefinitions[], tags[], matchCriteria',
+    '',
+    '### Stage Definition',
+    '```json',
+    '{',
+    '  "state": "kebab-case-name",',
+    '  "semanticRole": "entry|processing|human-gate|terminal|error|waiting",',
+    '  "agentActionable": true/false,',
+    '  "humanGate": true/false,',
+    '  "agentRoleId": "role-id (if agentActionable)",',
+    '  "agentCount": 1,',
+    '  "validTransitions": [',
+    '    { "to": "target-state", "trigger": "agent-complete|human-approve|human-reject|auto|all-deps-resolved|all-tasks-done|manual|execution-complete|execution-failed" }',
+    '  ]',
+    '}',
+    '```',
+    '',
+    '### Rules',
+    '- First stage must have semanticRole: "entry"',
+    '- At least one humanGate stage for non-trivial workflows',
+    '- Terminal stages have empty validTransitions and semanticRole: "terminal"',
+    '- Agent-actionable stages need agentRoleId',
+    '- For trivial work: use a 2-3 state workflow (ready -> in-progress -> done)',
+    '- Execution stages use execution-complete/execution-failed triggers for the actual',
+    '  implementation work (creating child tasks, running builds, etc.)',
+    '',
+    '### Fallback',
+    'If unsure, use a minimal workflow:',
+    '  triaging (entry, agent) → spec-review (human-gate) → planning (agent)',
+    '  → plan-review (human-gate) → executing (execution) → final-review (human-gate) → done',
+    '',
+    '## Important',
+    '',
+    '- Do NOT transition the ticket yourself. Only call workshop_propose_workflow.',
+    '- The human will approve or reject your proposal.',
+    '- Design the workflow to match the actual complexity of the work — don\'t over-engineer',
+    '  a simple task with 10 stages, and don\'t under-engineer a complex project with 2.',
+  ].join('\n');
 }
 
 function buildTriagePrompt(ticket: WorkflowTicket): string {
