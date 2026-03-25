@@ -29,11 +29,31 @@ const LEGACY_GATE_MESSAGES: Record<LegacyHumanGateState, { heading: string; desc
   },
 };
 
-// Default messages for dynamic workflow human gates
-const DEFAULT_GATE_MESSAGE = {
-  heading: 'Human review required',
-  description: 'Review the current state and approve to continue, or reject to send back for revision.',
+// Messages for dynamic workflow human gates keyed by state name
+const DYNAMIC_GATE_MESSAGES: Record<string, { heading: string; description: string }> = {
+  'decomposition-review': {
+    heading: 'Task decomposition ready for review',
+    description: 'Review the proposed task breakdown below and approve to begin execution, or reject to revise.',
+  },
+  'code-review': {
+    heading: 'Code changes ready for review',
+    description: 'Review the implementation and approve to complete, or reject to request changes.',
+  },
+  'integration-review': {
+    heading: 'All tasks complete — ready for integration review',
+    description: 'All child tasks have finished. Review the full implementation and approve to close the epic, or reject to request fixes.',
+  },
 };
+
+function getDefaultGateMessage(state: string): { heading: string; description: string } {
+  if (DYNAMIC_GATE_MESSAGES[state]) return DYNAMIC_GATE_MESSAGES[state];
+  // Derive from state name as last resort
+  const label = state.replace(/-/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+  return {
+    heading: `${label} — awaiting your decision`,
+    description: 'Review the current state and approve to continue, or reject to send back for revision.',
+  };
+}
 
 /** Extract URLs that look like PR links from text */
 function extractPrLinks(text: string): string[] {
@@ -41,7 +61,7 @@ function extractPrLinks(text: string): string[] {
   return [...new Set(text.match(urlRegex) ?? [])];
 }
 
-/** Find the most recent transition comment that has meaningful content */
+/** Find review context relevant to the current human gate */
 function findReviewContext(transitions: WorkflowTransition[], currentState: string): {
   prLinks: string[];
   summaryComment: string | null;
@@ -49,27 +69,20 @@ function findReviewContext(transitions: WorkflowTransition[], currentState: stri
   const prLinks: string[] = [];
   let summaryComment: string | null = null;
 
-  // Walk transitions looking for comments with context
+  // Walk transitions looking for PR links (from any transition)
   for (const t of transitions) {
     if (!t.comment) continue;
-
     const links = extractPrLinks(t.comment);
     prLinks.push(...links);
-
-    // The transition INTO the current state usually has the review summary
-    if (t.toState === currentState && t.comment.length > 50) {
-      summaryComment = t.comment;
-    }
   }
 
-  // If we didn't find a summary for this state, look for the most recent
-  // substantial comment from any prior transition
-  if (!summaryComment) {
-    for (const t of transitions) {
-      if (t.comment && t.comment.length > 50) {
-        summaryComment = t.comment;
-        break; // transitions are newest-first
-      }
+  // Only show a summary if it's from the transition INTO this state.
+  // Don't fall back to older unrelated transitions — showing a decomposer's
+  // comment on an integration-review gate is actively misleading.
+  for (const t of transitions) {
+    if (t.toState === currentState && t.comment && t.comment.length > 20) {
+      summaryComment = t.comment;
+      break;
     }
   }
 
@@ -103,8 +116,8 @@ function getGateMessage(ticket: WorkflowTicket): { heading: string; description:
     return LEGACY_GATE_MESSAGES[ticket.state];
   }
 
-  // Default fallback
-  return DEFAULT_GATE_MESSAGE;
+  // Dynamic state fallback
+  return getDefaultGateMessage(ticket.state);
 }
 
 export function HumanGatePanel({ ticket, transitions, onApprove, onReject }: Props) {
