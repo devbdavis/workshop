@@ -3,8 +3,9 @@ import type { Track, TrackId, TrackRepo, TrackPath, RepoId, PathId, TemplateId, 
 export interface TrackRepository {
   findAll(): Track[];
   findById(id: TrackId): Track | null;
+  findByMatrixRoomId(roomId: string): Track | null;
   create(track: Omit<Track, 'id' | 'createdAt' | 'updatedAt' | 'repos' | 'paths' | 'tickets'>): Track;
-  update(id: TrackId, data: Partial<Pick<Track, 'name' | 'description' | 'context' | 'label' | 'status'>>): Track | null;
+  update(id: TrackId, data: Partial<Pick<Track, 'name' | 'description' | 'context' | 'label' | 'matrixRoomId' | 'status'>>): Track | null;
   delete(id: TrackId): boolean;
 
   // Prompt template association

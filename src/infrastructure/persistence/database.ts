@@ -541,6 +541,20 @@ function runMigrations(db: Database.Database): void {
     // Column already exists — safe to ignore
   }
 
+  // Migration: add matrix_room_id column to tracks
+  try {
+    db.exec(`ALTER TABLE tracks ADD COLUMN matrix_room_id TEXT;`);
+  } catch {
+    // Column already exists — safe to ignore
+  }
+
+  // Migration: create unique index on matrix_room_id (partial — only non-null values)
+  try {
+    db.exec(`CREATE UNIQUE INDEX idx_tracks_matrix_room ON tracks(matrix_room_id) WHERE matrix_room_id IS NOT NULL;`);
+  } catch {
+    // Index already exists — safe to ignore
+  }
+
   // Seed default prompt templates if the table is empty
   seedDefaultTemplates(db);
 }

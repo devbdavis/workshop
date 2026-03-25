@@ -53,6 +53,7 @@ import { createDiscussionVoteRepository } from '@infrastructure/persistence/disc
 import { createDiscussionSessionRepository } from '@infrastructure/persistence/discussion-session-repository.js';
 import { createDiscussionService } from '@application/discussion/discussion-service.js';
 import { createDiscussionPoller } from '@application/discussion/discussion-poller.js';
+import { createMatrixRouter } from '@application/matrix-router/router.js';
 import { createDiscussionRouter } from './discussion-routes.js';
 import { createMcpServerConfigRepository } from '@infrastructure/persistence/mcp-config-repository.js';
 import { createMcpConfigRouter } from './mcp-config-routes.js';
@@ -403,6 +404,22 @@ export function createApiRouter(deps: ApiRouterDeps = {}): Router {
   process.on('SIGINT', () => discussionPoller.stop());
   process.on('SIGTERM', () => discussionPoller.stop());
 
+  // Matrix router — ensures dedicated sessions for room-bound tracks
+  const matrixRouter = createMatrixRouter({
+    tracks,
+    sessions,
+    summaries,
+    tickets,
+    promptTemplates,
+    terminal,
+    vaultReader,
+    broadcast: broadcast as (type: string, id: string) => void,
+  });
+  matrixRouter.start();
+
+  process.on('SIGINT', () => matrixRouter.stop());
+  process.on('SIGTERM', () => matrixRouter.stop());
+
   // --- Tracks ---
 
   router.get('/tracks', (_req, res) => {
@@ -430,6 +447,17 @@ export function createApiRouter(deps: ApiRouterDeps = {}): Router {
     res.status(201).json(track);
   });
 
+  // Lookup track by Matrix room ID (must be before /:id to avoid matching "by-room" as an id)
+  router.get('/tracks/by-room/:roomId', (req, res) => {
+    const track = tracks.findByMatrixRoomId(req.params.roomId);
+    if (!track) {
+      res.status(404).json({ error: 'No track bound to this room' });
+      return;
+    }
+    track.tickets = tickets.findByTrack(track.id);
+    res.json(track);
+  });
+
   router.get('/tracks/:id', (req, res) => {
     const track = tracks.findById(req.params.id as TrackId);
     if (!track) {
@@ -442,8 +470,8 @@ export function createApiRouter(deps: ApiRouterDeps = {}): Router {
   });
 
   router.put('/tracks/:id', (req, res) => {
-    const { name, description, context, label, status } = req.body;
-    const track = tracks.update(req.params.id as TrackId, { name, description, context, label, status });
+    const { name, description, context, label, matrixRoomId, status } = req.body;
+    const track = tracks.update(req.params.id as TrackId, { name, description, context, label, matrixRoomId, status });
     if (!track) {
       res.status(404).json({ error: 'Track not found' });
       return;

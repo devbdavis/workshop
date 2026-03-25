@@ -9,11 +9,12 @@ export function createTrackRepository(): TrackRepository {
   // Prepare statements once
   const findAllStmt = db.prepare('SELECT * FROM tracks WHERE status != ? ORDER BY updated_at DESC');
   const findByIdStmt = db.prepare('SELECT * FROM tracks WHERE id = ?');
+  const findByMatrixRoomIdStmt = db.prepare('SELECT * FROM tracks WHERE matrix_room_id = ?');
   const insertStmt = db.prepare(
-    'INSERT INTO tracks (id, name, description, context, label, status, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+    'INSERT INTO tracks (id, name, description, context, label, matrix_room_id, status, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
   );
   const updateStmt = db.prepare(
-    'UPDATE tracks SET name = ?, description = ?, context = ?, label = ?, status = ?, updated_at = ? WHERE id = ?',
+    'UPDATE tracks SET name = ?, description = ?, context = ?, label = ?, matrix_room_id = ?, status = ?, updated_at = ? WHERE id = ?',
   );
   const deleteStmt = db.prepare('DELETE FROM tracks WHERE id = ?');
   const setDefaultPromptTemplateStmt = db.prepare(
@@ -49,11 +50,20 @@ export function createTrackRepository(): TrackRepository {
       return track;
     },
 
+    findByMatrixRoomId(roomId: string): Track | null {
+      const row = findByMatrixRoomIdStmt.get(roomId) as TrackRow | undefined;
+      if (!row) return null;
+      const track = rowToTrack(row);
+      track.repos = this.findReposByTrack(track.id);
+      track.paths = this.findPathsByTrack(track.id);
+      return track;
+    },
+
     create(data): Track {
       const id = uuid() as TrackId;
       const now = new Date().toISOString();
-      insertStmt.run(id, data.name, data.description || null, data.context || null, data.label || null, data.status || 'active', now, now);
-      return { id, name: data.name, description: data.description, context: data.context, label: data.label, status: data.status || 'active', createdAt: now, updatedAt: now };
+      insertStmt.run(id, data.name, data.description || null, data.context || null, data.label || null, data.matrixRoomId || null, data.status || 'active', now, now);
+      return { id, name: data.name, description: data.description, context: data.context, label: data.label, matrixRoomId: data.matrixRoomId, status: data.status || 'active', createdAt: now, updatedAt: now };
     },
 
     update(id: TrackId, data): Track | null {
@@ -64,9 +74,10 @@ export function createTrackRepository(): TrackRepository {
       const description = data.description ?? existing.description;
       const context = data.context !== undefined ? data.context : existing.context;
       const label = data.label !== undefined ? data.label : existing.label;
+      const matrixRoomId = data.matrixRoomId !== undefined ? data.matrixRoomId : existing.matrixRoomId;
       const status = data.status ?? existing.status;
-      updateStmt.run(name, description || null, context || null, label || null, status, now, id);
-      return { ...existing, name, description, context, label, status, updatedAt: now };
+      updateStmt.run(name, description || null, context || null, label || null, matrixRoomId || null, status, now, id);
+      return { ...existing, name, description, context, label, matrixRoomId, status, updatedAt: now };
     },
 
     delete(id: TrackId): boolean {
@@ -139,6 +150,7 @@ interface TrackRow {
   description: string | null;
   context: string | null;
   label: string | null;
+  matrix_room_id: string | null;
   status: string;
   default_prompt_template_id: string | null;
   terminal_layout: string | null;
@@ -177,6 +189,7 @@ function rowToTrack(row: TrackRow): Track {
     description: row.description || undefined,
     context: row.context || undefined,
     label: row.label || undefined,
+    matrixRoomId: row.matrix_room_id || undefined,
     status: row.status as Track['status'],
     defaultPromptTemplateId: (row.default_prompt_template_id as TemplateId) || undefined,
     terminalLayout,

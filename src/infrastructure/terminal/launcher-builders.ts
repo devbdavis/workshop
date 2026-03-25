@@ -32,7 +32,7 @@ function buildHookHeaders(sessionId: string, extra?: Record<string, string>): Re
 export function writeHookSettings(
   sessionDir: string,
   sessionId: string,
-  options?: { includePermissionHooks?: boolean; executionTicketId?: string },
+  options?: { includePermissionHooks?: boolean; executionTicketId?: string; mcpServers?: Record<string, unknown> },
 ): string {
   const settingsFile = path.join(sessionDir, 'settings.json');
   const hooks: Record<string, unknown[]> = {};
@@ -98,7 +98,10 @@ export function writeHookSettings(
     }
   }
 
-  const settings = { hooks };
+  const settings: Record<string, unknown> = { hooks };
+  if (options?.mcpServers) {
+    settings.mcpServers = options.mcpServers;
+  }
   writeFileSync(settingsFile, JSON.stringify(settings, null, 2), 'utf-8');
   return settingsFile;
 }
@@ -174,6 +177,7 @@ export function buildClaudeLauncher(
     const settingsFile = writeHookSettings(sessionDir, sessionId, {
       includePermissionHooks: needsPermissionHooks && !options?.dangerouslySkipPermissions,
       executionTicketId: options?.executionTicketId,
+      mcpServers: options?.mcpServers,
     });
     claudeArgs.push('--settings', JSON.stringify(settingsFile));
   }
