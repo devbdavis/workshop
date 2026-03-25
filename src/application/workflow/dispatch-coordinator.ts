@@ -172,6 +172,11 @@ export function createDispatchCoordinator(
     ): Promise<WorkflowTicket> {
       const updated = engine.approve(ticketId, comment);
 
+      // If a task reached a terminal state via approval, resolve dependencies
+      if (updated.type === 'task' && checkIsTerminal(updated, updated.state)) {
+        engine.onTaskCompleted(ticketId);
+      }
+
       await dispatchIfNeeded(updated);
 
       return tickets.findById(ticketId) ?? updated;
