@@ -110,3 +110,110 @@ button:focus-visible {
   background: rgba(0, 255, 65, 0.25);
   color: #c0ffc0;
 }
+
+/* ═══════════════════════════════════════════════════
+   OFFICE VISUALIZATION — character & desk animations
+   GPU-accelerated: transform / opacity / filter only
+   ═══════════════════════════════════════════════════ */
+
+/* ─── Working: typing bob + monitor glow ─── */
+@keyframes office-typing-bob {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-2px); }
+}
+@keyframes office-monitor-glow {
+  0%, 100% { filter: brightness(1); }
+  50% { filter: brightness(1.4); }
+}
+.office-char-working .char-arms {
+  transform-box: fill-box;
+  animation: office-typing-bob 0.5s ease-in-out infinite;
+}
+.office-char-working .char-monitor {
+  transform-box: fill-box;
+  animation: office-monitor-glow 2s ease-in-out infinite;
+}
+
+/* ─── Sleeping at desk: gentle bob + closed eyes + Zzz ─── */
+@keyframes office-sleep-bob {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(3px); }
+}
+@keyframes office-zzz-float {
+  0% { transform: translateY(0) scale(0.8); opacity: 0; }
+  30% { opacity: 1; }
+  100% { transform: translateY(-18px) scale(1.1); opacity: 0; }
+}
+.office-char-sleeping .char-body {
+  transform-box: fill-box;
+  animation: office-sleep-bob 2s ease-in-out infinite;
+}
+.office-char-sleeping .char-eyes {
+  transform-box: fill-box;
+  transform: scaleY(0.1);
+}
+.office-char-sleeping .char-zzz {
+  animation: office-zzz-float 2s ease-out infinite;
+}
+.office-char-sleeping .char-zzz:nth-child(2) {
+  animation-delay: 0.6s;
+}
+.office-char-sleeping .char-zzz:nth-child(3) {
+  animation-delay: 1.2s;
+}
+
+/* ─── Floor sleeping: rotated, dimmed, slower Zzz ─── */
+.office-char-floor-sleeping .char-body {
+  transform-box: fill-box;
+  transform: rotate(-80deg);
+  filter: brightness(0.6);
+}
+.office-char-floor-sleeping .char-zzz {
+  animation: office-zzz-float 2.5s ease-out infinite;
+}
+.office-char-floor-sleeping .char-zzz:nth-child(2) {
+  animation-delay: 0.8s;
+}
+.office-char-floor-sleeping .char-zzz:nth-child(3) {
+  animation-delay: 1.6s;
+}
+
+/* ─── Dying: 30s fade-out, non-interactive ─── */
+@keyframes office-dying-fade {
+  0% { opacity: 1; }
+  100% { opacity: 0; }
+}
+.office-char-dying {
+  animation: office-dying-fade 30s linear forwards;
+  pointer-events: none;
+}
+
+/* ─── Speech bubble pulse ─── */
+@keyframes office-bubble-pulse {
+  0%, 100% { transform: scale(1); opacity: 1; }
+  50% { transform: scale(1.05); opacity: 0.85; }
+}
+.office-speech-bubble {
+  transform-box: fill-box;
+  animation: office-bubble-pulse 2s ease-in-out infinite;
+}
+
+/* ─── Empty desk: hide character, dim desk ─── */
+.office-char-empty .char-body,
+.office-char-empty .char-arms,
+.office-char-empty .char-eyes,
+.office-char-empty .char-monitor {
+  opacity: 0;
+}
+.office-char-empty {
+  filter: brightness(0.5);
+}
+
+/* ─── Desk entrance animation ─── */
+@keyframes office-desk-enter {
+  0% { transform: scale(0.85); opacity: 0; }
+  100% { transform: scale(1); opacity: 1; }
+}
+.office-desk-unit {
+  animation: office-desk-enter 0.3s ease-out both;
+}
