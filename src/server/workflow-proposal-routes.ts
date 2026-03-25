@@ -196,39 +196,45 @@ export function createWorkflowProposalRouter(deps: WorkflowProposalRouterDeps): 
         }
       }
 
-      // Create the epic template
-      const epicTemplate = templates.create({
-        id: proposal.epicTemplate.id,
-        version: 1,
-        name: proposal.epicTemplate.name,
-        description: proposal.epicTemplate.description,
-        ticketType: proposal.epicTemplate.ticketType,
-        stageDefinitions: proposal.epicTemplate.stageDefinitions,
-        promptOverrides: proposal.epicTemplate.promptOverrides,
-        tags: proposal.epicTemplate.tags,
-        matchCriteria: proposal.epicTemplate.matchCriteria,
-        usageCount: 0,
-        parentTemplateId: undefined,
-        createdBy: 'workflow-proposal',
-      });
-
-      // Create the task template if provided
-      let taskTemplateRow = null;
-      if (proposal.taskTemplate) {
-        taskTemplateRow = templates.create({
-          id: proposal.taskTemplate.id,
+      // Resolve epic template — reuse existing if the proposed ID is already in the library
+      let epicTemplate = templates.findLatest(proposal.epicTemplate.id);
+      if (!epicTemplate) {
+        epicTemplate = templates.create({
+          id: proposal.epicTemplate.id,
           version: 1,
-          name: proposal.taskTemplate.name,
-          description: proposal.taskTemplate.description,
-          ticketType: proposal.taskTemplate.ticketType,
-          stageDefinitions: proposal.taskTemplate.stageDefinitions,
-          promptOverrides: proposal.taskTemplate.promptOverrides,
-          tags: proposal.taskTemplate.tags,
-          matchCriteria: proposal.taskTemplate.matchCriteria,
+          name: proposal.epicTemplate.name,
+          description: proposal.epicTemplate.description,
+          ticketType: proposal.epicTemplate.ticketType,
+          stageDefinitions: proposal.epicTemplate.stageDefinitions,
+          promptOverrides: proposal.epicTemplate.promptOverrides,
+          tags: proposal.epicTemplate.tags,
+          matchCriteria: proposal.epicTemplate.matchCriteria,
           usageCount: 0,
-          parentTemplateId: epicTemplate.id,
+          parentTemplateId: undefined,
           createdBy: 'workflow-proposal',
         });
+      }
+
+      // Resolve task template — reuse existing if the proposed ID is already in the library
+      let taskTemplateRow = null;
+      if (proposal.taskTemplate) {
+        taskTemplateRow = templates.findLatest(proposal.taskTemplate.id);
+        if (!taskTemplateRow) {
+          taskTemplateRow = templates.create({
+            id: proposal.taskTemplate.id,
+            version: 1,
+            name: proposal.taskTemplate.name,
+            description: proposal.taskTemplate.description,
+            ticketType: proposal.taskTemplate.ticketType,
+            stageDefinitions: proposal.taskTemplate.stageDefinitions,
+            promptOverrides: proposal.taskTemplate.promptOverrides,
+            tags: proposal.taskTemplate.tags,
+            matchCriteria: proposal.taskTemplate.matchCriteria,
+            usageCount: 0,
+            parentTemplateId: epicTemplate.id,
+            createdBy: 'workflow-proposal',
+          });
+        }
       }
 
       // Bind the template to the ticket
