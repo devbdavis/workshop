@@ -152,12 +152,13 @@ server.tool(
 
 server.tool(
   'workshop_update_track',
-  'Update a track\'s name, description, context, or status',
+  'Update a track\'s name, description, context, matrixRoomId, or status',
   {
     trackId: z.string().describe('The track ID'),
     name: z.string().optional().describe('New track name'),
     description: z.string().optional().describe('New track description'),
     context: z.string().optional().describe('New freeform context'),
+    matrixRoomId: z.string().optional().describe('Matrix room ID to bind to this track (e.g. !abc123:example.com)'),
     status: z.enum(['active', 'archived']).optional().describe('New status'),
   },
   async ({ trackId, ...data }) => {
@@ -166,6 +167,22 @@ server.tool(
       body: JSON.stringify(data),
     });
     return { content: [{ type: 'text', text: JSON.stringify(track, null, 2) }] };
+  },
+);
+
+// --- Lookup Track by Matrix Room ---
+
+server.tool(
+  'workshop_get_track_by_room',
+  'Find the project track bound to a Matrix room ID. Returns the track with repos, paths, and context.',
+  { roomId: z.string().describe('The Matrix room ID (e.g. !abc123:example.com)') },
+  async ({ roomId }) => {
+    try {
+      const track = await api(`/tracks/by-room/${encodeURIComponent(roomId)}`);
+      return { content: [{ type: 'text', text: JSON.stringify(track, null, 2) }] };
+    } catch {
+      return { content: [{ type: 'text', text: `No track bound to room ${roomId}` }] };
+    }
   },
 );
 

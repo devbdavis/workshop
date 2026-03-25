@@ -28,6 +28,8 @@ export interface CreateSessionOptions {
   usePermissionHooks?: boolean;
   /** Claude session ID to resume (passed as --resume to claude CLI). */
   claudeResumeId?: string;
+  /** Per-session MCP server configs to inject into the session's settings.json */
+  mcpServers?: Record<string, unknown>;
 }
 
 export interface SyncResult {

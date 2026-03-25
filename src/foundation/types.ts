@@ -22,6 +22,8 @@ export interface Track {
   context?: string;
   /** Optional label for categorisation (e.g. 'system' for internal tracks) */
   label?: string;
+  /** Matrix room ID bound to this track (e.g. '!abc123:example.com') */
+  matrixRoomId?: string;
   status: 'active' | 'archived';
   defaultPromptTemplateId?: TemplateId;
   terminalLayout?: TerminalLayout;
