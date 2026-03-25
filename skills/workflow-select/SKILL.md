@@ -70,7 +70,16 @@ For trivial work (single-file fix, doc update): create a 2-3 state workflow (rea
 
 ### Companion Task Template
 
-Every epic template with a splitting/in-progress phase needs a companion task template with ticket_type: 'task'
+Every epic template with a splitting/execution phase needs a companion task template with ticket_type: 'task'.
+
+**IMPORTANT**: Task templates MUST include a `blocked` state (semanticRole: `waiting`) with an `all-deps-resolved` trigger. The engine creates tasks with dependencies in `blocked` state. Without this state in the template, dependency resolution cannot transition the task and it stays blocked forever.
+
+Required pattern:
+```
+blocked (waiting) --[all-deps-resolved]--> ready (entry) --[auto]--> implementing (processing)
+```
+
+Also include a `cancelled` terminal state reachable from `blocked`, `ready`, and `implementing` via manual trigger.
 
 ## Template Structure
 
@@ -180,23 +189,34 @@ Every epic template with a splitting/in-progress phase needs a companion task te
   "ticketType": "task",
   "stageDefinitions": [
     {
+      "state": "blocked",
+      "semanticRole": "waiting",
+      "agentActionable": false,
+      "humanGate": false,
+      "validTransitions": [
+        { "to": "ready", "trigger": "all-deps-resolved" },
+        { "to": "cancelled", "trigger": "manual" }
+      ]
+    },
+    {
       "state": "ready",
       "semanticRole": "entry",
       "agentActionable": false,
       "humanGate": false,
       "validTransitions": [
-        { "to": "in-progress", "trigger": "all-deps-resolved" },
-        { "to": "in-progress", "trigger": "manual" }
+        { "to": "implementing", "trigger": "auto" },
+        { "to": "cancelled", "trigger": "manual" }
       ]
     },
     {
-      "state": "in-progress",
+      "state": "implementing",
       "semanticRole": "processing",
       "agentActionable": true,
       "humanGate": false,
       "agentRoleId": "coder-agent",
       "validTransitions": [
-        { "to": "code-review", "trigger": "agent-complete" }
+        { "to": "code-review", "trigger": "agent-complete" },
+        { "to": "cancelled", "trigger": "manual" }
       ]
     },
     {
@@ -206,11 +226,18 @@ Every epic template with a splitting/in-progress phase needs a companion task te
       "humanGate": true,
       "validTransitions": [
         { "to": "done", "trigger": "human-approve" },
-        { "to": "in-progress", "trigger": "human-reject" }
+        { "to": "implementing", "trigger": "human-reject" }
       ]
     },
     {
       "state": "done",
+      "semanticRole": "terminal",
+      "agentActionable": false,
+      "humanGate": false,
+      "validTransitions": []
+    },
+    {
+      "state": "cancelled",
       "semanticRole": "terminal",
       "agentActionable": false,
       "humanGate": false,
