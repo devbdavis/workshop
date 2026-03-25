@@ -115,7 +115,7 @@ export function createMatrixRouter(deps: MatrixRouterDeps): MatrixRouter {
       systemPrompt,
       workingDirectory,
       provider: 'claude' as SessionProvider,
-      background: false,
+      background: true,
       mcpServers: buildMatrixMcpConfig(
         prepareMatrixStateDir(
           getMatrixStateDir(track.id),
