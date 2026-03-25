@@ -25,6 +25,7 @@ interface FinalReviewData {
 import { WorkflowStateIndicator } from './WorkflowStateIndicator';
 import { StateTimeline } from './StateTimeline';
 import { HumanGatePanel } from './HumanGatePanel';
+import { WorkflowAssignmentPanel } from './WorkflowAssignmentPanel';
 import {
   Section, CollapsibleSection, DetailRow, NeedsInputSection,
   FindingsSection, FinalReviewSection, MiniTaskBoard,
@@ -115,6 +116,19 @@ export function EpicDetail() {
     loadData();
   }
 
+  async function handleApproveWorkflow() {
+    if (!id) return;
+    const res = await fetch(`/api/workflow/tickets/${id}/approve-workflow`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+    });
+    if (!res.ok) {
+      const body = await res.json().catch(() => ({ error: 'Unknown error' }));
+      throw new Error(body.error ?? 'Failed to approve workflow');
+    }
+    loadData();
+  }
+
   async function handleReject(comment?: string) {
     if (!id) return;
     await fetch(`/api/workflow/tickets/${id}/reject`, {
@@ -193,6 +207,11 @@ export function EpicDetail() {
             onTransition={handleTransition}
           />
         </div>
+
+        {/* Workflow template proposal (shown for epics in 'idea' state without a template) */}
+        {ticket.type === 'epic' && !ticket.workflowTemplateRowId && (
+          <WorkflowAssignmentPanel ticket={ticket} onApprove={handleApproveWorkflow} />
+        )}
 
         {/* Human gate panel */}
         {isAtHumanGate(ticket) && (
