@@ -304,7 +304,9 @@ export function createTerminalManager(sessionRepo: SessionRepository, soulLoader
         }
 
         // --- Background session cleanup (aggressive) ---
-        if (session.background) {
+        // Matrix-dedicated sessions are long-lived — skip idle reaping
+        const isMatrixSession = session.name?.startsWith('[matrix] ');
+        if (session.background && !isMatrixSession) {
           // Background session not logged in — reap immediately
           if (isSessionLoggedOut(session, capturedLines)) {
             reap(session, 'background: Claude not logged in');
