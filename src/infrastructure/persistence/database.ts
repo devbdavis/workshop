@@ -555,6 +555,42 @@ function runMigrations(db: Database.Database): void {
     // Index already exists — safe to ignore
   }
 
+  // Migration: rename workflow_templates table to workflow_playbooks
+  try {
+    db.exec(`ALTER TABLE workflow_templates RENAME TO workflow_playbooks;`);
+  } catch {
+    // Table already renamed — safe to ignore
+  }
+
+  // Migration: recreate indexes with new names after table rename
+  try {
+    db.exec(`DROP INDEX IF EXISTS idx_wf_templates_id;`);
+    db.exec(`CREATE INDEX idx_wf_playbooks_id ON workflow_playbooks(id);`);
+  } catch {
+    // Index already exists — safe to ignore
+  }
+
+  try {
+    db.exec(`DROP INDEX IF EXISTS idx_wf_templates_tags;`);
+    db.exec(`CREATE INDEX idx_wf_playbooks_tags ON workflow_playbooks(tags);`);
+  } catch {
+    // Index already exists — safe to ignore
+  }
+
+  try {
+    db.exec(`DROP INDEX IF EXISTS idx_wf_templates_ticket_type;`);
+    db.exec(`CREATE INDEX idx_wf_playbooks_ticket_type ON workflow_playbooks(ticket_type);`);
+  } catch {
+    // Index already exists — safe to ignore
+  }
+
+  try {
+    db.exec(`DROP INDEX IF EXISTS idx_wf_templates_latest;`);
+    db.exec(`CREATE INDEX idx_wf_playbooks_latest ON workflow_playbooks(id, is_latest) WHERE is_latest = true;`);
+  } catch {
+    // Index already exists — safe to ignore
+  }
+
   // Seed default prompt templates if the table is empty
   seedDefaultTemplates(db);
 }

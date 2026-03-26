@@ -22,7 +22,7 @@ export interface WorkflowRouterDeps {
 }
 
 /**
- * Enrich a ticket with semantic role info from its workflow template.
+ * Enrich a ticket with semantic role info from its workflow playbook.
  * This adds currentStateSemanticRole, currentStateHumanGate, currentStateAgentActionable
  * to the ticket's stateData for UI rendering.
  */
@@ -30,7 +30,7 @@ function enrichTicketWithSemanticInfo(
   ticket: WorkflowTicket,
   topologyLoader?: TopologyLoader
 ): WorkflowTicket {
-  if (!topologyLoader || !ticket.workflowTemplateRowId) {
+  if (!topologyLoader || !ticket.playbookRowId) {
     return ticket;
   }
 
@@ -52,7 +52,7 @@ function enrichTicketWithSemanticInfo(
 
     return { ...ticket, stateData: enrichedStateData };
   } catch {
-    // Template not found or loading failed — return ticket as-is
+    // Playbook not found or loading failed — return ticket as-is
     return ticket;
   }
 }
@@ -78,7 +78,7 @@ export function createWorkflowRouter(deps: WorkflowRouterDeps): Router {
     if (parentId) filters.parentId = parentId as WorkflowTicketId;
 
     const rawTickets = tickets.findAll(filters);
-    // Enrich each ticket with semantic info from its template
+    // Enrich each ticket with semantic info from its playbook
     const enrichedTickets = rawTickets.map(t => enrichTicketWithSemanticInfo(t, topologyLoader));
     res.json(enrichedTickets);
   });
@@ -96,7 +96,7 @@ export function createWorkflowRouter(deps: WorkflowRouterDeps): Router {
     const children = tickets.findChildren(ticket.id);
     ticket.childIds = children.map((c) => c.id);
 
-    // Enrich with semantic info from template
+    // Enrich with semantic info from playbook
     const enriched = enrichTicketWithSemanticInfo(ticket, topologyLoader);
     res.json(enriched);
   });
@@ -199,7 +199,7 @@ export function createWorkflowRouter(deps: WorkflowRouterDeps): Router {
     }
 
     const { title, description, trackId, priority, labels, sortOrder, stateData,
-      assignedAgentRole, assignedAgentIds, provider, state, workflowTemplateRowId } = req.body;
+      assignedAgentRole, assignedAgentIds, provider, state, playbookRowId } = req.body;
 
     const updated = tickets.update(ticketId, {
       title,
@@ -209,7 +209,7 @@ export function createWorkflowRouter(deps: WorkflowRouterDeps): Router {
       labels,
       sortOrder,
       stateData,
-      workflowTemplateRowId,
+      playbookRowId,
       assignedAgentRole,
       assignedAgentIds,
       provider,

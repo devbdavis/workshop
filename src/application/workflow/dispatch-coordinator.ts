@@ -71,7 +71,7 @@ function isExecutionStage(
       (t) => t.trigger === 'execution-complete' || t.trigger === 'execution-failed',
     ) ?? false;
   } catch {
-    // No template — fallback to hardcoded check for backward compat
+    // No playbook — fallback to hardcoded check for backward compat
     return ticket.state === 'executing';
   }
 }
@@ -140,7 +140,7 @@ export function createDispatchCoordinator(
       const stages = topologyLoader.loadForTicket(ticket);
       return isTerminal(stages, state);
     } catch {
-      // No template — fallback to hardcoded check
+      // No playbook — fallback to hardcoded check
       return state === 'done' || state === 'cancelled' || state === 'merged';
     }
   }

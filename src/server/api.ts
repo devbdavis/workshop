@@ -32,7 +32,7 @@ import { createAgentRouter } from './agent-routes.js';
 import { createVaultRouter } from './vault-routes.js';
 import { createScheduledTaskRouter } from './scheduled-task-routes.js';
 import { createWorkflowRouter } from './workflow-routes.js';
-import { createWorkflowTemplateRouter } from './workflow-template-routes.js';
+import { createPlaybookRouter } from './workflow-playbook-routes.js';
 import { createWorkflowProposalRouter } from './workflow-proposal-routes.js';
 import { createWorkflowTicketRepository, createWorkflowTransitionRepository } from '@infrastructure/persistence/workflow-repository.js';
 import { createTicketDependencyRepository } from '@infrastructure/persistence/workflow-dependency-repository.js';
@@ -41,7 +41,7 @@ import { createExecutionDispatcher } from '@application/workflow/execution-dispa
 import { createAgentDispatcher } from '@application/workflow/agent-dispatcher.js';
 import { createDispatchCoordinator } from '@application/workflow/dispatch-coordinator.js';
 import { createTopologyLoader } from '@application/workflow/topology-loader.js';
-import { createWorkflowTemplateRepository } from '@infrastructure/persistence/workflow-template-repository.js';
+import { createPlaybookRepository } from '@infrastructure/persistence/workflow-playbook-repository.js';
 import { createAgentRoleRepository } from '@infrastructure/persistence/workflow-agent-role-repository.js';
 import { createExecutionHookRouter } from './execution-hook-routes.js';
 import { recoverStuckTickets } from '@application/workflow/startup-recovery.js';
@@ -126,6 +126,7 @@ export function createApiRouter(deps: ApiRouterDeps = {}): Router {
   const vaultReader = createVaultReader(VAULT_ROOT);
   const vaultWriter = createVaultWriter(VAULT_ROOT);
   const vaultProvisioner = createVaultProvisioner(VAULT_ROOT);
+  vaultProvisioner.seedPlaybookPatterns();
   const summaryGeneration = createSummaryGenerationService({
     trackRepo: tracks,
     ticketRepo: tickets,
@@ -191,9 +192,9 @@ export function createApiRouter(deps: ApiRouterDeps = {}): Router {
   const workflowTickets = createWorkflowTicketRepository();
   const workflowTransitions = createWorkflowTransitionRepository();
   const ticketDependencies = createTicketDependencyRepository();
-  const workflowTemplates = createWorkflowTemplateRepository();
+  const workflowPlaybooks = createPlaybookRepository();
   const workflowAgentRoles = createAgentRoleRepository();
-  const topologyLoader = createTopologyLoader({ templates: workflowTemplates });
+  const topologyLoader = createTopologyLoader({ playbooks: workflowPlaybooks });
 
   // Create a mutable callback holder for epic advanced events (circular dependency resolution)
   let epicAdvancedCallback: ((ticket: WorkflowTicket) => Promise<void>) | undefined;
@@ -204,7 +205,7 @@ export function createApiRouter(deps: ApiRouterDeps = {}): Router {
     transitions: workflowTransitions,
     dependencies: ticketDependencies,
     topologyLoader,
-    templates: workflowTemplates,
+    playbooks: workflowPlaybooks,
     onEpicAdvanced: async (ticket) => {
       if (epicAdvancedCallback) await epicAdvancedCallback(ticket);
     },
@@ -214,7 +215,7 @@ export function createApiRouter(deps: ApiRouterDeps = {}): Router {
     onTerminalState: async (ticket) => {
       console.log(
         `[workflow] Ticket ${ticket.id} reached terminal state "${ticket.state}"` +
-        (ticket.workflowTemplateRowId ? ` (template: ${ticket.workflowTemplateRowId})` : ''),
+        (ticket.playbookRowId ? ` (playbook: ${ticket.playbookRowId})` : ''),
       );
       broadcast('workflow:terminal', ticket.trackId ?? ticket.id);
     },
@@ -268,18 +269,18 @@ export function createApiRouter(deps: ApiRouterDeps = {}): Router {
   });
   router.use(workflowRouter);
 
-  // Workflow template routes (template registry, agent roles, validation)
-  const workflowTemplateRouter = createWorkflowTemplateRouter({
-    templates: workflowTemplates,
+  // Workflow playbook routes (playbook registry, agent roles, validation)
+  const playbookRouter = createPlaybookRouter({
+    playbooks: workflowPlaybooks,
     agentRoles: workflowAgentRoles,
   });
-  router.use(workflowTemplateRouter);
+  router.use(playbookRouter);
 
   // Workflow proposal routes (propose and approve workflow assignments)
   const workflowProposalRouter = createWorkflowProposalRouter({
     engine: workflowEngine,
     tickets: workflowTickets,
-    templates: workflowTemplates,
+    playbooks: workflowPlaybooks,
     agentRoles: workflowAgentRoles,
     topologyLoader,
     dispatcher: dispatchCoordinator,

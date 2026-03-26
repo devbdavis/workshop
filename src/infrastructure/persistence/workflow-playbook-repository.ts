@@ -1,6 +1,6 @@
 import { v4 as uuid } from 'uuid';
 import { getDatabase } from './database.js';
-import type { WorkflowTemplateRepository, WorkflowTemplateRow } from '@domain/workflow/template-repository.js';
+import type { PlaybookRepository, PlaybookRow } from '@domain/workflow/playbook-repository.js';
 import {
   StageDefinitionsSchema,
   MatchCriteriaSchema,
@@ -8,60 +8,60 @@ import {
 } from '@domain/workflow/schemas.js';
 
 // ---------------------------------------------------------------------------
-// SQLite implementation of WorkflowTemplateRepository
+// SQLite implementation of PlaybookRepository
 // ---------------------------------------------------------------------------
 
-export function createWorkflowTemplateRepository(): WorkflowTemplateRepository {
+export function createPlaybookRepository(): PlaybookRepository {
   const db = getDatabase();
 
   // Prepared statements
-  const findByRowIdStmt = db.prepare('SELECT * FROM workflow_templates WHERE row_id = ?');
-  const findLatestStmt = db.prepare('SELECT * FROM workflow_templates WHERE id = ? AND is_latest = true');
-  const findByIdAndVersionStmt = db.prepare('SELECT * FROM workflow_templates WHERE id = ? AND version = ?');
-  const findAllLatestStmt = db.prepare('SELECT * FROM workflow_templates WHERE is_latest = true ORDER BY name ASC');
-  const findMaxVersionStmt = db.prepare('SELECT MAX(version) as max_version FROM workflow_templates WHERE id = ?');
+  const findByRowIdStmt = db.prepare('SELECT * FROM workflow_playbooks WHERE row_id = ?');
+  const findLatestStmt = db.prepare('SELECT * FROM workflow_playbooks WHERE id = ? AND is_latest = true');
+  const findByIdAndVersionStmt = db.prepare('SELECT * FROM workflow_playbooks WHERE id = ? AND version = ?');
+  const findAllLatestStmt = db.prepare('SELECT * FROM workflow_playbooks WHERE is_latest = true ORDER BY name ASC');
+  const findMaxVersionStmt = db.prepare('SELECT MAX(version) as max_version FROM workflow_playbooks WHERE id = ?');
   const findTaskByParentStmt = db.prepare(
-    "SELECT * FROM workflow_templates WHERE parent_template_id = ? AND ticket_type = 'task' AND is_latest = true LIMIT 1",
+    "SELECT * FROM workflow_playbooks WHERE parent_template_id = ? AND ticket_type = 'task' AND is_latest = true LIMIT 1",
   );
 
   const insertStmt = db.prepare(`
-    INSERT INTO workflow_templates
+    INSERT INTO workflow_playbooks
     (row_id, id, version, name, description, ticket_type, stage_definitions,
      prompt_overrides, tags, match_criteria, usage_count, avg_rating,
      parent_template_id, is_latest, created_at, updated_at, created_by)
     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `);
 
-  const clearLatestStmt = db.prepare('UPDATE workflow_templates SET is_latest = false WHERE id = ?');
-  const incrementUsageStmt = db.prepare('UPDATE workflow_templates SET usage_count = usage_count + 1 WHERE row_id = ?');
-  const updateRatingStmt = db.prepare('UPDATE workflow_templates SET avg_rating = ? WHERE row_id = ?');
+  const clearLatestStmt = db.prepare('UPDATE workflow_playbooks SET is_latest = false WHERE id = ?');
+  const incrementUsageStmt = db.prepare('UPDATE workflow_playbooks SET usage_count = usage_count + 1 WHERE row_id = ?');
+  const updateRatingStmt = db.prepare('UPDATE workflow_playbooks SET avg_rating = ? WHERE row_id = ?');
 
   return {
-    findByRowId(rowId: string): WorkflowTemplateRow | null {
-      const row = findByRowIdStmt.get(rowId) as TemplateDbRow | undefined;
-      return row ? rowToTemplate(row) : null;
+    findByRowId(rowId: string): PlaybookRow | null {
+      const row = findByRowIdStmt.get(rowId) as PlaybookDbRow | undefined;
+      return row ? rowToPlaybook(row) : null;
     },
 
-    findLatest(id: string): WorkflowTemplateRow | null {
-      const row = findLatestStmt.get(id) as TemplateDbRow | undefined;
-      return row ? rowToTemplate(row) : null;
+    findLatest(id: string): PlaybookRow | null {
+      const row = findLatestStmt.get(id) as PlaybookDbRow | undefined;
+      return row ? rowToPlaybook(row) : null;
     },
 
-    findByIdAndVersion(id: string, version: number): WorkflowTemplateRow | null {
-      const row = findByIdAndVersionStmt.get(id, version) as TemplateDbRow | undefined;
-      return row ? rowToTemplate(row) : null;
+    findByIdAndVersion(id: string, version: number): PlaybookRow | null {
+      const row = findByIdAndVersionStmt.get(id, version) as PlaybookDbRow | undefined;
+      return row ? rowToPlaybook(row) : null;
     },
 
-    findTaskTemplateByParent(parentTemplateId: string): WorkflowTemplateRow | null {
-      const row = findTaskByParentStmt.get(parentTemplateId) as TemplateDbRow | undefined;
-      return row ? rowToTemplate(row) : null;
+    findTaskPlaybookByParent(parentPlaybookId: string): PlaybookRow | null {
+      const row = findTaskByParentStmt.get(parentPlaybookId) as PlaybookDbRow | undefined;
+      return row ? rowToPlaybook(row) : null;
     },
 
-    findAllLatest(filters?: { ticketType?: string; tags?: string[] }): WorkflowTemplateRow[] {
+    findAllLatest(filters?: { ticketType?: string; tags?: string[] }): PlaybookRow[] {
       // For dynamic filtering, we build the query
       if (!filters || (!filters.ticketType && !filters.tags?.length)) {
-        const rows = findAllLatestStmt.all() as TemplateDbRow[];
-        return rows.map(rowToTemplate);
+        const rows = findAllLatestStmt.all() as PlaybookDbRow[];
+        return rows.map(rowToPlaybook);
       }
 
       const clauses: string[] = ['is_latest = true'];
@@ -79,48 +79,48 @@ export function createWorkflowTemplateRepository(): WorkflowTemplateRepository {
         filters.tags.forEach(tag => params.push(`%"${tag}"%`));
       }
 
-      const sql = `SELECT * FROM workflow_templates WHERE ${clauses.join(' AND ')} ORDER BY name ASC`;
-      const rows = db.prepare(sql).all(...params) as TemplateDbRow[];
-      return rows.map(rowToTemplate);
+      const sql = `SELECT * FROM workflow_playbooks WHERE ${clauses.join(' AND ')} ORDER BY name ASC`;
+      const rows = db.prepare(sql).all(...params) as PlaybookDbRow[];
+      return rows.map(rowToPlaybook);
     },
 
-    create(template: Omit<WorkflowTemplateRow, 'rowId' | 'createdAt' | 'updatedAt' | 'isLatest'>): WorkflowTemplateRow {
+    create(playbook: Omit<PlaybookRow, 'rowId' | 'createdAt' | 'updatedAt' | 'isLatest'>): PlaybookRow {
       const rowId = uuid();
       const now = new Date().toISOString();
 
       insertStmt.run(
         rowId,
-        template.id,
-        template.version,
-        template.name,
-        template.description,
-        template.ticketType,
-        JSON.stringify(template.stageDefinitions),
-        template.promptOverrides ? JSON.stringify(template.promptOverrides) : null,
-        template.tags ? JSON.stringify(template.tags) : null,
-        template.matchCriteria ? JSON.stringify(template.matchCriteria) : null,
-        template.usageCount,
-        template.avgRating ?? null,
-        template.parentTemplateId ?? null,
+        playbook.id,
+        playbook.version,
+        playbook.name,
+        playbook.description,
+        playbook.ticketType,
+        JSON.stringify(playbook.stageDefinitions),
+        playbook.promptOverrides ? JSON.stringify(playbook.promptOverrides) : null,
+        playbook.tags ? JSON.stringify(playbook.tags) : null,
+        playbook.matchCriteria ? JSON.stringify(playbook.matchCriteria) : null,
+        playbook.usageCount,
+        playbook.avgRating ?? null,
+        playbook.parentPlaybookId ?? null,
         1,  // is_latest — SQLite integer (boolean)
         now,
         now,
-        template.createdBy,
+        playbook.createdBy,
       );
 
       return {
         rowId,
-        ...template,
+        ...playbook,
         isLatest: true,
         createdAt: now,
         updatedAt: now,
       };
     },
 
-    createNewVersion(id: string, changes: Partial<WorkflowTemplateRow>): WorkflowTemplateRow {
+    createNewVersion(id: string, changes: Partial<PlaybookRow>): PlaybookRow {
       const existing = this.findLatest(id);
       if (!existing) {
-        throw new Error(`Template not found: ${id}`);
+        throw new Error(`Playbook not found: ${id}`);
       }
 
       // Get next version number
@@ -160,7 +160,7 @@ export function createWorkflowTemplateRepository(): WorkflowTemplateRepository {
           merged.matchCriteria ? JSON.stringify(merged.matchCriteria) : null,
           merged.usageCount,
           merged.avgRating ?? null,
-          merged.parentTemplateId ?? null,
+          merged.parentPlaybookId ?? null,
           merged.isLatest ? 1 : 0,  // SQLite integer (boolean)
           merged.createdAt,
           merged.updatedAt,
@@ -187,7 +187,7 @@ export function createWorkflowTemplateRepository(): WorkflowTemplateRepository {
 // Row type and mapper
 // ---------------------------------------------------------------------------
 
-interface TemplateDbRow {
+interface PlaybookDbRow {
   row_id: string;
   id: string;
   version: number;
@@ -207,7 +207,7 @@ interface TemplateDbRow {
   created_by: string;
 }
 
-function rowToTemplate(row: TemplateDbRow): WorkflowTemplateRow {
+function rowToPlaybook(row: PlaybookDbRow): PlaybookRow {
   return {
     rowId: row.row_id,
     id: row.id,
@@ -225,7 +225,7 @@ function rowToTemplate(row: TemplateDbRow): WorkflowTemplateRow {
       : undefined,
     usageCount: row.usage_count,
     avgRating: row.avg_rating ?? undefined,
-    parentTemplateId: row.parent_template_id ?? undefined,
+    parentPlaybookId: row.parent_template_id ?? undefined,
     isLatest: row.is_latest === 1,
     createdAt: row.created_at,
     updatedAt: row.updated_at,

@@ -2,7 +2,7 @@
  * Core workflow orchestrator — validates state transitions, manages ticket
  * lifecycle, and resolves inter-ticket dependencies.
  *
- * Uses dynamic topology from workflow templates rather than hardcoded state machines.
+ * Uses dynamic topology from workflow playbooks rather than hardcoded state machines.
  */
 import type {
   WorkflowTicket,
@@ -18,7 +18,7 @@ import type {
   TicketDependencyRepository,
 } from '@domain/workflow/ticket-repository.js';
 import type { TopologyLoader } from './topology-loader.js';
-import type { WorkflowTemplateRepository } from '@domain/workflow/template-repository.js';
+import type { PlaybookRepository } from '@domain/workflow/playbook-repository.js';
 import type { StageDefinition } from '@domain/workflow/types.js';
 import { isHumanGate, isTerminal, getStageDefinition } from '@domain/workflow/types.js';
 import { createDependencyResolver } from './dependency-resolver.js';
@@ -54,7 +54,7 @@ export interface WorkflowEngine {
     trackId?: TrackId;
     provider?: SessionProvider;
     priority?: 'low' | 'medium' | 'high' | 'critical';
-    workflowTemplateRowId?: string;
+    playbookRowId?: string;
   }): WorkflowTicket;
 
   /** Create a child task under an epic */
@@ -65,7 +65,7 @@ export interface WorkflowEngine {
     provider?: SessionProvider;
     priority?: 'low' | 'medium' | 'high' | 'critical';
     dependsOn?: WorkflowTicketId[];
-    workflowTemplateRowId?: string;
+    playbookRowId?: string;
   }): WorkflowTicket;
 
   /** Create an epic that starts directly at plan-review with a pre-written plan */
@@ -76,7 +76,7 @@ export interface WorkflowEngine {
     trackId?: TrackId;
     provider?: SessionProvider;
     priority?: 'low' | 'medium' | 'high' | 'critical';
-    workflowTemplateRowId?: string;
+    playbookRowId?: string;
   }): WorkflowTicket;
 }
 
@@ -89,8 +89,8 @@ export interface WorkflowEngineDeps {
   transitions: WorkflowTransitionRepository;
   dependencies: TicketDependencyRepository;
   topologyLoader: TopologyLoader;
-  /** Template repository for resolving companion task templates */
-  templates?: WorkflowTemplateRepository;
+  /** Playbook repository for resolving companion task playbooks */
+  playbooks?: PlaybookRepository;
   /** Called when an epic advances to a new state (e.g., all tasks done) */
   onEpicAdvanced?: (ticket: WorkflowTicket) => Promise<void>;
   /** Called when a blocked task becomes unblocked and transitions to its ready state */
@@ -131,7 +131,7 @@ export function createWorkflowEngine(deps: WorkflowEngineDeps): WorkflowEngine {
     const currentStage = getStageDefinition(stages, ticket.state);
     if (!currentStage) {
       throw new Error(
-        `Invalid state: ${ticket.type}:${ticket.state} not found in template`,
+        `Invalid state: ${ticket.type}:${ticket.state} not found in playbook`,
       );
     }
 
@@ -209,7 +209,7 @@ export function createWorkflowEngine(deps: WorkflowEngineDeps): WorkflowEngine {
             const childStages = topologyLoader.loadForTicket(c);
             return !isTerminal(childStages, c.state);
           } catch {
-            // No template — use legacy check
+            // No playbook — use legacy check
             return !['done', 'cancelled', 'merged'].includes(c.state);
           }
         });
@@ -270,7 +270,7 @@ export function createWorkflowEngine(deps: WorkflowEngineDeps): WorkflowEngine {
   }
 
   /**
-   * Get the entry state (first stage) from a template.
+   * Get the entry state (first stage) from a playbook.
    */
   function getEntryState(stages: StageDefinition[]): string {
     // Entry state is the first one with semanticRole === 'entry', or just the first stage
@@ -291,19 +291,19 @@ export function createWorkflowEngine(deps: WorkflowEngineDeps): WorkflowEngine {
   }
 
   /**
-   * Resolve the task template row ID from a parent epic.
+   * Resolve the task playbook row ID from a parent epic.
    */
-  function resolveTaskTemplate(parentId: WorkflowTicketId): string | undefined {
+  function resolveTaskPlaybook(parentId: WorkflowTicketId): string | undefined {
     const parent = tickets.findById(parentId);
-    if (!parent?.workflowTemplateRowId) return undefined;
+    if (!parent?.playbookRowId) return undefined;
 
-    const parentTemplate = topologyLoader.loadTemplateForTicket(parent);
-    if (!parentTemplate) return undefined;
+    const parentPlaybook = topologyLoader.loadPlaybookForTicket(parent);
+    if (!parentPlaybook) return undefined;
 
-    // Find companion task template whose parentTemplateId matches the epic template's id
-    if (deps.templates) {
-      const taskTemplate = deps.templates.findTaskTemplateByParent(parentTemplate.id);
-      if (taskTemplate) return taskTemplate.rowId;
+    // Find companion task playbook whose parentPlaybookId matches the epic playbook's id
+    if (deps.playbooks) {
+      const taskPlaybook = deps.playbooks.findTaskPlaybookByParent(parentPlaybook.id);
+      if (taskPlaybook) return taskPlaybook.rowId;
     }
 
     return undefined;
@@ -422,11 +422,11 @@ export function createWorkflowEngine(deps: WorkflowEngineDeps): WorkflowEngine {
     },
 
     createEpic(data): WorkflowTicket {
-      // Determine initial state from template
+      // Determine initial state from playbook
       let initialState: WorkflowState = 'idea';
 
-      if (data.workflowTemplateRowId) {
-        const stages = topologyLoader.loadByTemplateRowId(data.workflowTemplateRowId);
+      if (data.playbookRowId) {
+        const stages = topologyLoader.loadByPlaybookRowId(data.playbookRowId);
         initialState = getEntryState(stages);
       }
 
@@ -439,14 +439,14 @@ export function createWorkflowEngine(deps: WorkflowEngineDeps): WorkflowEngine {
         provider: data.provider || 'claude',
         priority: data.priority || 'medium',
         sortOrder: 0,
-        workflowTemplateRowId: data.workflowTemplateRowId,
+        playbookRowId: data.playbookRowId,
       });
 
       // Follow auto-transitions from entry state
-      // Try to load topology even without explicit template (for backward compat with tests)
+      // Try to load topology even without explicit playbook (for backward compat with tests)
       try {
-        const stages = data.workflowTemplateRowId
-          ? topologyLoader.loadByTemplateRowId(data.workflowTemplateRowId)
+        const stages = data.playbookRowId
+          ? topologyLoader.loadByPlaybookRowId(data.playbookRowId)
           : topologyLoader.loadForTicket(epic);
         const entryStage = getStageDefinition(stages, epic.state);
         const autoTarget = entryStage?.validTransitions.find((t) => t.trigger === 'auto');
@@ -465,12 +465,12 @@ export function createWorkflowEngine(deps: WorkflowEngineDeps): WorkflowEngine {
       const hasDeps = data.dependsOn && data.dependsOn.length > 0;
       let initialState: WorkflowState = hasDeps ? 'blocked' : 'ready';
 
-      // Resolve task template from parent if not provided
-      const templateRowId = data.workflowTemplateRowId ?? resolveTaskTemplate(data.parentId);
+      // Resolve task playbook from parent if not provided
+      const playbookRowId = data.playbookRowId ?? resolveTaskPlaybook(data.parentId);
 
-      if (templateRowId) {
+      if (playbookRowId) {
         try {
-          const stages = topologyLoader.loadByTemplateRowId(templateRowId);
+          const stages = topologyLoader.loadByPlaybookRowId(playbookRowId);
           if (hasDeps) {
             // Find the state with 'all-deps-resolved' trigger (the blocked state)
             const blockedState = findStateWithTrigger(stages, 'all-deps-resolved');
@@ -480,7 +480,7 @@ export function createWorkflowEngine(deps: WorkflowEngineDeps): WorkflowEngine {
             initialState = getEntryState(stages);
           }
         } catch {
-          // Template not found, use defaults
+          // Playbook not found, use defaults
         }
       }
 
@@ -493,7 +493,7 @@ export function createWorkflowEngine(deps: WorkflowEngineDeps): WorkflowEngine {
         provider: data.provider || 'claude',
         priority: data.priority || 'medium',
         sortOrder: 0,
-        workflowTemplateRowId: templateRowId,
+        playbookRowId: playbookRowId,
       });
 
       // Create dependency records
@@ -510,8 +510,8 @@ export function createWorkflowEngine(deps: WorkflowEngineDeps): WorkflowEngine {
       // Find the human gate state to start at
       let planReviewState: WorkflowState = 'plan-review';
 
-      if (data.workflowTemplateRowId) {
-        const stages = topologyLoader.loadByTemplateRowId(data.workflowTemplateRowId);
+      if (data.playbookRowId) {
+        const stages = topologyLoader.loadByPlaybookRowId(data.playbookRowId);
         // Find first human gate with semanticRole 'human-gate'
         const humanGateStage = stages.find((s) => s.humanGate && s.semanticRole === 'human-gate');
         if (humanGateStage) {
@@ -529,7 +529,7 @@ export function createWorkflowEngine(deps: WorkflowEngineDeps): WorkflowEngine {
         priority: data.priority || 'medium',
         sortOrder: 0,
         stateData: { planDraft: data.planDraft },
-        workflowTemplateRowId: data.workflowTemplateRowId,
+        playbookRowId: data.playbookRowId,
       });
 
       // Synthetic audit trail showing this epic was fast-tracked

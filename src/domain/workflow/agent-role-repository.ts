@@ -7,7 +7,7 @@ export interface AgentRoleRow {
   promptBlock: PromptBlock;
   toolsAllowed?: string[];
   capabilityTier: CapabilityTier;
-  createdByTemplateRowId?: string;
+  createdByPlaybookRowId?: string;
   reusable: boolean;
   usageCount: number;
   createdAt: string;

@@ -1,13 +1,13 @@
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
 
-export function registerWorkflowTemplateTools(
+export function registerPlaybookTools(
   server: McpServer,
   api: (path: string, options?: RequestInit) => Promise<any>,
 ): void {
   server.tool(
-    'workshop_list_workflow_templates',
-    'List all latest workflow templates. Filter by ticket_type (epic/task) or tags.',
+    'workshop_list_playbooks',
+    'List all latest workflow playbooks. Filter by ticket_type (epic/task) or tags.',
     {
       ticketType: z.enum(['epic', 'task']).optional().describe('Filter by ticket type'),
       tags: z.array(z.string()).optional().describe('Filter by tags (all must match)'),
@@ -17,7 +17,7 @@ export function registerWorkflowTemplateTools(
       if (ticketType) params.set('ticketType', ticketType);
       if (tags && tags.length > 0) params.set('tags', tags.join(','));
       const qs = params.toString();
-      const path = `/workflow/templates${qs ? `?${qs}` : ''}`;
+      const path = `/workflow/playbooks${qs ? `?${qs}` : ''}`;
       const result = await api(path);
       return { content: [{ type: 'text' as const, text: JSON.stringify(result, null, 2) }] };
     },
@@ -62,15 +62,15 @@ export function registerWorkflowTemplateTools(
   );
 
   server.tool(
-    'workshop_propose_workflow',
-    'Propose a workflow template for an epic. Stores the proposal for human approval.',
+    'workshop_propose_playbook',
+    'Propose a workflow playbook for an epic. Stores the proposal for human approval.',
     {
       epicId: z.string().describe('The epic ticket ID to propose a workflow for'),
-      epicTemplate: z.record(z.unknown()).describe('The workflow template for the epic'),
+      epicTemplate: z.record(z.unknown()).describe('The workflow playbook for the epic'),
       taskTemplate: z
         .record(z.unknown())
         .optional()
-        .describe('Optional companion task template'),
+        .describe('Optional companion task playbook'),
       agentRoles: z
         .array(z.record(z.unknown()))
         .optional()
@@ -94,8 +94,8 @@ export function registerWorkflowTemplateTools(
   );
 
   server.tool(
-    'workshop_approve_workflow_assignment',
-    'Approve a pending workflow proposal for an epic. Creates the template(s) and binds to the ticket.',
+    'workshop_approve_playbook_assignment',
+    'Approve a pending workflow proposal for an epic. Creates the playbook(s) and binds to the ticket.',
     {
       epicId: z.string().describe('The epic ticket ID with a pending workflow proposal'),
     },

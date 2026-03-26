@@ -1,29 +1,29 @@
 /**
- * Topology loader — loads workflow stage definitions from templates
+ * Topology loader — loads workflow stage definitions from playbooks
  * and provides caching to avoid repeated JSON parsing + Zod validation.
  */
 import type { WorkflowTicket } from '@foundation/types.js';
 import type { StageDefinition } from '@domain/workflow/types.js';
-import type { WorkflowTemplateRow, WorkflowTemplateRepository } from '@domain/workflow/template-repository.js';
+import type { PlaybookRow, PlaybookRepository } from '@domain/workflow/playbook-repository.js';
 
 export interface TopologyLoader {
-  /** Load stage definitions for a ticket (requires workflowTemplateRowId) */
+  /** Load stage definitions for a ticket (requires playbookRowId) */
   loadForTicket(ticket: WorkflowTicket): StageDefinition[];
 
-  /** Load stage definitions by template row_id */
-  loadByTemplateRowId(rowId: string): StageDefinition[];
+  /** Load stage definitions by playbook row_id */
+  loadByPlaybookRowId(rowId: string): StageDefinition[];
 
-  /** Load the full template row for a ticket (null if no template bound) */
-  loadTemplateForTicket(ticket: WorkflowTicket): WorkflowTemplateRow | null;
+  /** Load the full playbook row for a ticket (null if no playbook bound) */
+  loadPlaybookForTicket(ticket: WorkflowTicket): PlaybookRow | null;
 
-  /** Clear the cache (useful for testing or template updates) */
+  /** Clear the cache (useful for testing or playbook updates) */
   clearCache(): void;
 }
 
 export function createTopologyLoader(deps: {
-  templates: WorkflowTemplateRepository;
+  playbooks: PlaybookRepository;
 }): TopologyLoader {
-  const { templates } = deps;
+  const { playbooks } = deps;
 
   // LRU cache keyed by row_id to avoid repeated JSON parsing + Zod validation
   const cache = new Map<string, StageDefinition[]>();
@@ -33,12 +33,12 @@ export function createTopologyLoader(deps: {
     const cached = cache.get(rowId);
     if (cached) return cached;
 
-    const template = templates.findByRowId(rowId);
-    if (!template) {
-      throw new Error(`Workflow template not found: row_id=${rowId}`);
+    const playbook = playbooks.findByRowId(rowId);
+    if (!playbook) {
+      throw new Error(`Workflow playbook not found: row_id=${rowId}`);
     }
 
-    const stages = template.stageDefinitions; // already parsed by repository
+    const stages = playbook.stageDefinitions; // already parsed by repository
 
     // Evict oldest if cache is full
     if (cache.size >= MAX_CACHE_SIZE) {
@@ -51,22 +51,22 @@ export function createTopologyLoader(deps: {
 
   return {
     loadForTicket(ticket: WorkflowTicket): StageDefinition[] {
-      if (!ticket.workflowTemplateRowId) {
+      if (!ticket.playbookRowId) {
         throw new Error(
-          `Ticket ${ticket.id} has no workflow template assigned. ` +
-          `Cannot load topology without a template binding.`
+          `Ticket ${ticket.id} has no workflow playbook assigned. ` +
+          `Cannot load topology without a playbook binding.`
         );
       }
-      return loadAndCache(ticket.workflowTemplateRowId);
+      return loadAndCache(ticket.playbookRowId);
     },
 
-    loadByTemplateRowId(rowId: string): StageDefinition[] {
+    loadByPlaybookRowId(rowId: string): StageDefinition[] {
       return loadAndCache(rowId);
     },
 
-    loadTemplateForTicket(ticket: WorkflowTicket): WorkflowTemplateRow | null {
-      if (!ticket.workflowTemplateRowId) return null;
-      return templates.findByRowId(ticket.workflowTemplateRowId);
+    loadPlaybookForTicket(ticket: WorkflowTicket): PlaybookRow | null {
+      if (!ticket.playbookRowId) return null;
+      return playbooks.findByRowId(ticket.playbookRowId);
     },
 
     clearCache(): void {

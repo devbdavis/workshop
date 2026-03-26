@@ -40,8 +40,8 @@ export interface WorkflowRecoveryDeps {
 
 function checkIsTerminal(deps: WorkflowRecoveryDeps, ticket: WorkflowTicket): boolean {
   try {
-    if (ticket.workflowTemplateRowId) {
-      const stages = deps.topologyLoader.loadByTemplateRowId(ticket.workflowTemplateRowId);
+    if (ticket.playbookRowId) {
+      const stages = deps.topologyLoader.loadByPlaybookRowId(ticket.playbookRowId);
       return topologyIsTerminal(stages, ticket.state);
     }
   } catch { /* fall through */ }
@@ -50,12 +50,12 @@ function checkIsTerminal(deps: WorkflowRecoveryDeps, ticket: WorkflowTicket): bo
 
 function checkIsAgentActionable(deps: WorkflowRecoveryDeps, ticket: WorkflowTicket): boolean {
   try {
-    if (ticket.workflowTemplateRowId) {
-      const stages = deps.topologyLoader.loadByTemplateRowId(ticket.workflowTemplateRowId);
+    if (ticket.playbookRowId) {
+      const stages = deps.topologyLoader.loadByPlaybookRowId(ticket.playbookRowId);
       return topologyIsAgentActionable(stages, ticket.state);
     }
   } catch { /* fall through */ }
-  // Fallback for tickets without templates
+  // Fallback for tickets without playbooks
   const agentStates: Record<string, string[]> = {
     epic: ['triaging', 'planning', 'plan-critique', 'splitting', 'integration-review', 'integration-fix'],
     task: ['ready', 'in-progress', 'code-review', 'changes-requested'],
@@ -65,15 +65,15 @@ function checkIsAgentActionable(deps: WorkflowRecoveryDeps, ticket: WorkflowTick
 
 function checkIsExecutionStage(deps: WorkflowRecoveryDeps, ticket: WorkflowTicket): boolean {
   try {
-    if (ticket.workflowTemplateRowId) {
-      const stages = deps.topologyLoader.loadByTemplateRowId(ticket.workflowTemplateRowId);
+    if (ticket.playbookRowId) {
+      const stages = deps.topologyLoader.loadByPlaybookRowId(ticket.playbookRowId);
       const stage = getStageDefinition(stages, ticket.state);
       return stage?.validTransitions.some(
         (t) => t.trigger === 'execution-complete' || t.trigger === 'execution-failed',
       ) ?? false;
     }
   } catch { /* fall through */ }
-  // Fallback for tickets without templates
+  // Fallback for tickets without playbooks
   return ticket.state === 'executing';
 }
 
