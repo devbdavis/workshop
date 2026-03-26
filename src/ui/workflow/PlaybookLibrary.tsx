@@ -1,6 +1,6 @@
 /**
- * TemplateLibrary — Card-based display of all workflow templates.
- * Click a template to see its state diagram and agent role details.
+ * PlaybookLibrary — Card-based display of all workflow playbooks.
+ * Click a playbook to see its state diagram and agent role details.
  */
 import { useEffect, useState, useMemo } from 'react';
 import { StateDiagram } from './StateDiagram';
@@ -21,8 +21,8 @@ interface StageDefinition {
   promptOverride?: string;
 }
 
-// Template type from server response (mirrors WorkflowTemplateRow)
-interface WorkflowTemplate {
+// Playbook type from server response (mirrors PlaybookRow)
+interface Playbook {
   rowId: string;
   id: string;
   version: number;
@@ -45,8 +45,8 @@ interface WorkflowTemplate {
 
 type TicketTypeFilter = 'all' | 'epic' | 'task';
 
-export function TemplateLibrary() {
-  const [templates, setTemplates] = useState<WorkflowTemplate[]>([]);
+export function PlaybookLibrary() {
+  const [playbooks, setPlaybooks] = useState<Playbook[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -55,16 +55,16 @@ export function TemplateLibrary() {
   const [ticketTypeFilter, setTicketTypeFilter] = useState<TicketTypeFilter>('all');
   const [searchQuery, setSearchQuery] = useState('');
 
-  // Load templates
+  // Load playbooks
   useEffect(() => {
     async function load() {
       try {
-        const res = await fetch('/api/workflow/templates');
-        if (!res.ok) throw new Error('Failed to load templates');
+        const res = await fetch('/api/workflow/playbooks');
+        if (!res.ok) throw new Error('Failed to load playbooks');
         const data = await res.json();
-        setTemplates(data);
+        setPlaybooks(data);
       } catch (err) {
-        const message = err instanceof Error ? err.message : 'Failed to load templates';
+        const message = err instanceof Error ? err.message : 'Failed to load playbooks';
         setError(message);
       } finally {
         setLoading(false);
@@ -73,9 +73,9 @@ export function TemplateLibrary() {
     load();
   }, []);
 
-  // Filter templates
-  const filteredTemplates = useMemo(() => {
-    return templates.filter((t) => {
+  // Filter playbooks
+  const filteredPlaybooks = useMemo(() => {
+    return playbooks.filter((t) => {
       if (ticketTypeFilter !== 'all' && t.ticketType !== ticketTypeFilter) return false;
       if (searchQuery.trim()) {
         const query = searchQuery.toLowerCase();
@@ -86,15 +86,15 @@ export function TemplateLibrary() {
       }
       return true;
     });
-  }, [templates, ticketTypeFilter, searchQuery]);
+  }, [playbooks, ticketTypeFilter, searchQuery]);
 
-  const selected = selectedId ? templates.find((t) => t.rowId === selectedId) : null;
+  const selected = selectedId ? playbooks.find((t) => t.rowId === selectedId) : null;
 
   if (loading) {
     return (
       <div className="p-8 text-gray-400 flex items-center gap-2">
         <div className="w-4 h-4 border-2 border-gray-600 border-t-transparent rounded-full animate-spin" />
-        Loading templates...
+        Loading playbooks...
       </div>
     );
   }
@@ -107,15 +107,15 @@ export function TemplateLibrary() {
     <div className="p-6 max-w-7xl">
       {/* Header and filters */}
       <div className="flex items-center gap-4 mb-6 flex-wrap">
-        <h2 className="text-lg font-semibold text-gray-200">Workflow Templates</h2>
-        <span className="text-sm text-gray-500">{filteredTemplates.length} templates</span>
+        <h2 className="text-lg font-semibold text-gray-200">Workflow Playbooks</h2>
+        <span className="text-sm text-gray-500">{filteredPlaybooks.length} playbooks</span>
 
         <div className="ml-auto flex items-center gap-3">
           <input
             type="text"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder="Search templates..."
+            placeholder="Search playbooks..."
             className="px-3 py-1.5 bg-gray-800 border border-gray-700 rounded text-sm text-gray-200 placeholder-gray-500 w-48 focus:outline-none focus:border-blue-500"
           />
           <div className="flex items-center gap-1 p-0.5 bg-gray-800 rounded">
@@ -136,30 +136,30 @@ export function TemplateLibrary() {
         </div>
       </div>
 
-      {filteredTemplates.length === 0 ? (
+      {filteredPlaybooks.length === 0 ? (
         <div className="text-center py-12 text-gray-500">
-          {templates.length === 0
-            ? 'No workflow templates available.'
-            : 'No templates match the current filters.'}
+          {playbooks.length === 0
+            ? 'No workflow playbooks available.'
+            : 'No playbooks match the current filters.'}
         </div>
       ) : (
         <div className="flex gap-6">
-          {/* Template grid */}
+          {/* Playbook grid */}
           <div className={`grid gap-4 ${selected ? 'md:grid-cols-1 w-72 shrink-0' : 'md:grid-cols-2 lg:grid-cols-3 flex-1'}`}>
-            {filteredTemplates.map((template) => (
-              <TemplateCard
-                key={template.rowId}
-                template={template}
-                isSelected={template.rowId === selectedId}
-                onClick={() => setSelectedId(template.rowId === selectedId ? null : template.rowId)}
+            {filteredPlaybooks.map((playbook) => (
+              <PlaybookCard
+                key={playbook.rowId}
+                playbook={playbook}
+                isSelected={playbook.rowId === selectedId}
+                onClick={() => setSelectedId(playbook.rowId === selectedId ? null : playbook.rowId)}
               />
             ))}
           </div>
 
           {/* Detail panel */}
           {selected && (
-            <TemplateDetailPanel
-              template={selected}
+            <PlaybookDetailPanel
+              playbook={selected}
               onClose={() => setSelectedId(null)}
             />
           )}
@@ -169,17 +169,17 @@ export function TemplateLibrary() {
   );
 }
 
-function TemplateCard({
-  template,
+function PlaybookCard({
+  playbook,
   isSelected,
   onClick,
 }: {
-  template: WorkflowTemplate;
+  playbook: Playbook;
   isSelected: boolean;
   onClick: () => void;
 }) {
   const typeColor =
-    template.ticketType === 'epic'
+    playbook.ticketType === 'epic'
       ? 'bg-purple-900/50 text-purple-300'
       : 'bg-cyan-900/50 text-cyan-300';
 
@@ -193,34 +193,34 @@ function TemplateCard({
       }`}
     >
       <div className="flex items-start justify-between gap-2 mb-2">
-        <h3 className="text-sm font-medium text-gray-200">{template.name}</h3>
+        <h3 className="text-sm font-medium text-gray-200">{playbook.name}</h3>
         <span className={`text-[10px] px-1.5 py-0.5 rounded shrink-0 ${typeColor}`}>
-          {template.ticketType}
+          {playbook.ticketType}
         </span>
       </div>
 
       <p className="text-xs text-gray-500 line-clamp-2 mb-3">
-        {template.description || 'No description'}
+        {playbook.description || 'No description'}
       </p>
 
-      {template.tags && template.tags.length > 0 && (
+      {playbook.tags && playbook.tags.length > 0 && (
         <div className="flex flex-wrap gap-1 mb-3">
-          {template.tags.slice(0, 5).map((tag) => (
+          {playbook.tags.slice(0, 5).map((tag) => (
             <span key={tag} className="text-[10px] px-1.5 py-0.5 bg-gray-800 text-gray-400 rounded">
               {tag}
             </span>
           ))}
-          {template.tags.length > 5 && (
-            <span className="text-[10px] text-gray-500">+{template.tags.length - 5} more</span>
+          {playbook.tags.length > 5 && (
+            <span className="text-[10px] text-gray-500">+{playbook.tags.length - 5} more</span>
           )}
         </div>
       )}
 
       <div className="flex items-center gap-3 text-[10px] text-gray-500">
-        <span>v{template.version}</span>
-        <span>{template.usageCount} uses</span>
-        <span>{template.stageDefinitions.length} stages</span>
-        {template.avgRating != null && <span>{template.avgRating.toFixed(1)} rating</span>}
+        <span>v{playbook.version}</span>
+        <span>{playbook.usageCount} uses</span>
+        <span>{playbook.stageDefinitions.length} stages</span>
+        {playbook.avgRating != null && <span>{playbook.avgRating.toFixed(1)} rating</span>}
       </div>
     </button>
   );
@@ -236,48 +236,48 @@ const ROLE_INFO: Record<string, { label: string; color: string; description: str
   waiting:      { label: 'Waiting',    color: 'text-purple-400', description: 'Blocked on dependency' },
 };
 
-function TemplateDetailPanel({
-  template,
+function PlaybookDetailPanel({
+  playbook,
   onClose,
 }: {
-  template: WorkflowTemplate;
+  playbook: Playbook;
   onClose: () => void;
 }) {
   const typeColor =
-    template.ticketType === 'epic'
+    playbook.ticketType === 'epic'
       ? 'bg-purple-900/50 text-purple-300 border-purple-800'
       : 'bg-cyan-900/50 text-cyan-300 border-cyan-800';
 
-  // Collect unique semantic roles used in this template
+  // Collect unique semantic roles used in this playbook
   const usedRoles = useMemo(() => {
     const roles = new Set<string>();
-    for (const stage of template.stageDefinitions) {
+    for (const stage of playbook.stageDefinitions) {
       roles.add(stage.semanticRole);
     }
     return [...roles];
-  }, [template.stageDefinitions]);
+  }, [playbook.stageDefinitions]);
 
   // Collect unique agent roles referenced
   const agentRoles = useMemo(() => {
     const roles: Array<{ state: string; roleId: string }> = [];
-    for (const stage of template.stageDefinitions) {
+    for (const stage of playbook.stageDefinitions) {
       if (stage.agentRoleId) {
         roles.push({ state: stage.state, roleId: stage.agentRoleId });
       }
     }
     return roles;
-  }, [template.stageDefinitions]);
+  }, [playbook.stageDefinitions]);
 
   return (
     <div className="flex-1 border border-gray-800 bg-gray-900 rounded-lg overflow-hidden min-w-0">
       {/* Header */}
       <div className="flex items-center justify-between px-5 py-3 border-b border-gray-800">
         <div className="flex items-center gap-3">
-          <h3 className="text-sm font-semibold text-gray-200">{template.name}</h3>
+          <h3 className="text-sm font-semibold text-gray-200">{playbook.name}</h3>
           <span className={`text-[10px] px-1.5 py-0.5 rounded border ${typeColor}`}>
-            {template.ticketType}
+            {playbook.ticketType}
           </span>
-          <span className="text-[10px] text-gray-500">v{template.version}</span>
+          <span className="text-[10px] text-gray-500">v{playbook.version}</span>
         </div>
         <button
           onClick={onClose}
@@ -290,22 +290,22 @@ function TemplateDetailPanel({
 
       {/* Diagram */}
       <div className="px-5 py-4 border-b border-gray-800 bg-gray-950/50">
-        <StateDiagram stages={template.stageDefinitions} />
+        <StateDiagram stages={playbook.stageDefinitions} />
       </div>
 
       {/* Details */}
       <div className="px-5 py-4 space-y-4 text-xs">
         {/* Description */}
-        {template.description && (
+        {playbook.description && (
           <div>
             <h4 className="text-gray-400 font-medium mb-1">Description</h4>
-            <p className="text-gray-300">{template.description}</p>
+            <p className="text-gray-300">{playbook.description}</p>
           </div>
         )}
 
         {/* Stage summary table */}
         <div>
-          <h4 className="text-gray-400 font-medium mb-2">Stages ({template.stageDefinitions.length})</h4>
+          <h4 className="text-gray-400 font-medium mb-2">Stages ({playbook.stageDefinitions.length})</h4>
           <div className="border border-gray-800 rounded overflow-hidden">
             <table className="w-full text-[11px]">
               <thead>
@@ -317,7 +317,7 @@ function TemplateDetailPanel({
                 </tr>
               </thead>
               <tbody>
-                {template.stageDefinitions.map((stage) => {
+                {playbook.stageDefinitions.map((stage) => {
                   const roleInfo = ROLE_INFO[stage.semanticRole];
                   return (
                     <tr key={stage.state} className="border-t border-gray-800/50">
@@ -388,13 +388,13 @@ function TemplateDetailPanel({
         </div>
 
         {/* Match criteria & tags */}
-        {(template.tags?.length || template.matchCriteria) && (
+        {(playbook.tags?.length || playbook.matchCriteria) && (
           <div className="flex gap-6">
-            {template.tags && template.tags.length > 0 && (
+            {playbook.tags && playbook.tags.length > 0 && (
               <div>
                 <h4 className="text-gray-400 font-medium mb-1">Tags</h4>
                 <div className="flex flex-wrap gap-1">
-                  {template.tags.map((tag) => (
+                  {playbook.tags.map((tag) => (
                     <span key={tag} className="px-1.5 py-0.5 bg-gray-800 text-gray-400 rounded">
                       {tag}
                     </span>
@@ -402,11 +402,11 @@ function TemplateDetailPanel({
                 </div>
               </div>
             )}
-            {template.matchCriteria?.keywords && (
+            {playbook.matchCriteria?.keywords && (
               <div>
                 <h4 className="text-gray-400 font-medium mb-1">Keywords</h4>
                 <div className="flex flex-wrap gap-1">
-                  {template.matchCriteria.keywords.map((kw) => (
+                  {playbook.matchCriteria.keywords.map((kw) => (
                     <span key={kw} className="px-1.5 py-0.5 bg-gray-800 text-gray-400 rounded">
                       {kw}
                     </span>

@@ -8,7 +8,7 @@ export interface PerStateTiming {
 
 export interface WorkflowReviewRow {
   id: string;
-  templateRowId: string;
+  playbookRowId: string;
   epicId: string;
   structuredFindings: ReviewFinding[];
   suggestedChanges?: SuggestedChange[];
@@ -21,7 +21,7 @@ export interface WorkflowReviewRow {
 
 export interface WorkflowReviewRepository {
   findById(id: string): WorkflowReviewRow | null;
-  findByTemplate(templateRowId: string): WorkflowReviewRow[];
+  findByPlaybook(playbookRowId: string): WorkflowReviewRow[];
   findByEpic(epicId: string): WorkflowReviewRow | null;
   create(review: Omit<WorkflowReviewRow, 'id' | 'createdAt'>): WorkflowReviewRow;
   update(id: string, changes: Partial<WorkflowReviewRow>): WorkflowReviewRow | null;

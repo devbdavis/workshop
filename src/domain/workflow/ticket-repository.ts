@@ -41,8 +41,8 @@ export type WorkflowTicketUpdate = Partial<
     | 'labels'
     | 'sortOrder'
     | 'stateChangedAt'
-    | 'workflowTemplateRowId'
-    | 'workflowTemplateVersion'
+    | 'playbookRowId'
+    | 'playbookVersion'
   >
 >;
 

@@ -1,24 +1,24 @@
 /**
- * Workflow template routes — template registry, agent roles, graph validation.
+ * Workflow playbook routes — playbook registry, agent roles, graph validation.
  */
 import { Router } from 'express';
-import type { WorkflowTemplateRepository } from '@domain/workflow/template-repository.js';
+import type { PlaybookRepository } from '@domain/workflow/playbook-repository.js';
 import type { AgentRoleRepository } from '@domain/workflow/agent-role-repository.js';
 import { StageDefinitionsSchema } from '@domain/workflow/schemas.js';
 import { validateWorkflowGraph } from '@application/workflow/graph-validator.js';
 
-export interface WorkflowTemplateRouterDeps {
-  templates: WorkflowTemplateRepository;
+export interface PlaybookRouterDeps {
+  playbooks: PlaybookRepository;
   agentRoles: AgentRoleRepository;
 }
 
-export function createWorkflowTemplateRouter(deps: WorkflowTemplateRouterDeps): Router {
+export function createPlaybookRouter(deps: PlaybookRouterDeps): Router {
   const router = Router();
-  const { templates, agentRoles } = deps;
+  const { playbooks, agentRoles } = deps;
 
-  // --- List all latest templates ---
+  // --- List all latest playbooks ---
 
-  router.get('/workflow/templates', (req, res) => {
+  router.get('/workflow/playbooks', (req, res) => {
     const { ticketType, tags } = req.query;
     const filters: { ticketType?: string; tags?: string[] } = {};
 
@@ -29,19 +29,19 @@ export function createWorkflowTemplateRouter(deps: WorkflowTemplateRouterDeps): 
       filters.tags = tags.split(',').map((t) => t.trim());
     }
 
-    const result = templates.findAllLatest(filters);
+    const result = playbooks.findAllLatest(filters);
     res.json(result);
   });
 
-  // --- Get single template by rowId ---
+  // --- Get single playbook by rowId ---
 
-  router.get('/workflow/templates/:rowId', (req, res) => {
-    const template = templates.findByRowId(req.params.rowId);
-    if (!template) {
-      res.status(404).json({ error: 'Template not found' });
+  router.get('/workflow/playbooks/:rowId', (req, res) => {
+    const playbook = playbooks.findByRowId(req.params.rowId);
+    if (!playbook) {
+      res.status(404).json({ error: 'Playbook not found' });
       return;
     }
-    res.json(template);
+    res.json(playbook);
   });
 
   // --- List all agent roles ---

@@ -310,9 +310,9 @@ export interface WorkflowTicket {
   labels?: string[];
   sortOrder: number;
 
-  // Dynamic workflow template binding
-  workflowTemplateRowId?: string;
-  workflowTemplateVersion?: number;
+  // Dynamic playbook binding
+  playbookRowId?: string;
+  playbookVersion?: number;
 
   // Audit
   stateChangedAt: string;

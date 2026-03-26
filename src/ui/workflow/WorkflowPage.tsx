@@ -3,9 +3,9 @@ import { useNavigate } from 'react-router-dom';
 import type { WorkflowTicket, Track } from '@foundation/types.js';
 import { CreateEpicModal, type CreateEpicData } from './CreateEpicModal.js';
 import { EpicList, type FilterTab } from './EpicList.js';
-import { TemplateLibrary } from './TemplateLibrary.js';
+import { PlaybookLibrary } from './PlaybookLibrary.js';
 
-type SubTab = 'epics' | 'templates';
+type SubTab = 'epics' | 'playbooks';
 
 export function WorkflowPage() {
   const navigate = useNavigate();
@@ -98,14 +98,14 @@ export function WorkflowPage() {
             Epics
           </button>
           <button
-            onClick={() => setActiveTab('templates')}
+            onClick={() => setActiveTab('playbooks')}
             className={`px-4 py-1.5 text-xs rounded-md transition-colors ${
-              activeTab === 'templates'
+              activeTab === 'playbooks'
                 ? 'bg-gray-700 text-white'
                 : 'text-gray-400 hover:text-gray-200'
             }`}
           >
-            Templates
+            Playbooks
           </button>
         </div>
       </header>
@@ -122,9 +122,9 @@ export function WorkflowPage() {
         />
       )}
 
-      {activeTab === 'templates' && (
+      {activeTab === 'playbooks' && (
         <div className="flex-1 overflow-y-auto">
-          <TemplateLibrary />
+          <PlaybookLibrary />
         </div>
       )}
 

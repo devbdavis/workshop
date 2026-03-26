@@ -57,7 +57,7 @@ function isExecutionStage(
       (t) => t.trigger === 'execution-complete' || t.trigger === 'execution-failed',
     ) ?? false;
   } catch {
-    // No template — fallback to hardcoded check for backward compat
+    // No playbook — fallback to hardcoded check for backward compat
     return ticket.state === 'executing';
   }
 }

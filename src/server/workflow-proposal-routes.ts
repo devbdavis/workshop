@@ -5,7 +5,7 @@ import { Router } from 'express';
 import { z } from 'zod';
 import type { WorkflowTicketId, WorkflowState } from '@foundation/types.js';
 import type { WorkflowTicketRepository } from '@domain/workflow/ticket-repository.js';
-import type { WorkflowTemplateRepository } from '@domain/workflow/template-repository.js';
+import type { PlaybookRepository } from '@domain/workflow/playbook-repository.js';
 import type { AgentRoleRepository } from '@domain/workflow/agent-role-repository.js';
 import type { TopologyLoader } from '@application/workflow/topology-loader.js';
 import type { WorkflowEngine } from '@application/workflow/engine.js';
@@ -14,8 +14,8 @@ import { StageDefinitionsSchema, AgentRoleSchema } from '@domain/workflow/schema
 import { validateWorkflowGraph } from '@application/workflow/graph-validator.js';
 import { broadcast } from './events.js';
 
-// Zod schema for the full template payload (for validation during proposal)
-const WorkflowTemplatePayloadSchema = z.object({
+// Zod schema for the full playbook payload (for validation during proposal)
+const PlaybookPayloadSchema = z.object({
   id: z.string().min(1).max(128),
   name: z.string().min(1).max(128),
   description: z.string().max(2000),
@@ -36,7 +36,7 @@ const WorkflowTemplatePayloadSchema = z.object({
 export interface WorkflowProposalRouterDeps {
   engine: WorkflowEngine;
   tickets: WorkflowTicketRepository;
-  templates: WorkflowTemplateRepository;
+  playbooks: PlaybookRepository;
   agentRoles: AgentRoleRepository;
   topologyLoader: TopologyLoader;
   /** Dispatch coordinator for triggering agent dispatch after workflow approval */
@@ -45,27 +45,27 @@ export interface WorkflowProposalRouterDeps {
 
 export function createWorkflowProposalRouter(deps: WorkflowProposalRouterDeps): Router {
   const router = Router();
-  const { engine, tickets, templates, agentRoles, topologyLoader, dispatcher } = deps;
+  const { engine, tickets, playbooks, agentRoles, topologyLoader, dispatcher } = deps;
 
   router.post('/workflow/tickets/:id/propose-workflow', (req, res) => {
     const ticketId = req.params.id as WorkflowTicketId;
-    const { epicTemplate, taskTemplate, agentRoles: proposedRoles, rationale } = req.body;
+    const { epicTemplate: epicPlaybook, taskTemplate: taskPlaybook, agentRoles: proposedRoles, rationale } = req.body;
 
     const ticket = tickets.findById(ticketId);
     if (!ticket) return res.status(404).json({ error: 'Ticket not found' });
     if (ticket.type !== 'epic') {
       return res.status(400).json({ error: 'Workflow proposals can only be made for epics' });
     }
-    if (!epicTemplate) return res.status(400).json({ error: 'epicTemplate is required' });
+    if (!epicPlaybook) return res.status(400).json({ error: 'epicTemplate is required' });
     if (!rationale || typeof rationale !== 'string') {
       return res.status(400).json({ error: 'rationale is required' });
     }
 
-    // Validate epic template
-    const epicParseResult = WorkflowTemplatePayloadSchema.safeParse(epicTemplate);
+    // Validate epic playbook
+    const epicParseResult = PlaybookPayloadSchema.safeParse(epicPlaybook);
     if (!epicParseResult.success) {
       res.status(400).json({
-        error: 'Invalid epicTemplate',
+        error: 'Invalid epic playbook',
         parseErrors: epicParseResult.error.errors.map((e) => ({
           path: e.path.join('.'),
           message: e.message,
@@ -85,13 +85,13 @@ export function createWorkflowProposalRouter(deps: WorkflowProposalRouterDeps): 
       return;
     }
 
-    // Validate task template if provided
-    let validatedTaskTemplate = null;
-    if (taskTemplate) {
-      const taskParseResult = WorkflowTemplatePayloadSchema.safeParse(taskTemplate);
+    // Validate task playbook if provided
+    let validatedTaskPlaybook = null;
+    if (taskPlaybook) {
+      const taskParseResult = PlaybookPayloadSchema.safeParse(taskPlaybook);
       if (!taskParseResult.success) {
         res.status(400).json({
-          error: 'Invalid taskTemplate',
+          error: 'Invalid task playbook',
           parseErrors: taskParseResult.error.errors.map((e) => ({
             path: e.path.join('.'),
             message: e.message,
@@ -110,7 +110,7 @@ export function createWorkflowProposalRouter(deps: WorkflowProposalRouterDeps): 
         return;
       }
 
-      validatedTaskTemplate = taskParseResult.data;
+      validatedTaskPlaybook = taskParseResult.data;
     }
 
     // Validate agent roles if provided
@@ -136,7 +136,7 @@ export function createWorkflowProposalRouter(deps: WorkflowProposalRouterDeps): 
     const existingStateData = (ticket.stateData || {}) as Record<string, unknown>;
     const workflowProposal = {
       epicTemplate: epicParseResult.data,
-      taskTemplate: validatedTaskTemplate,
+      taskTemplate: validatedTaskPlaybook,
       agentRoles: validatedRoles.length > 0 ? validatedRoles : undefined,
       rationale,
       proposedAt: new Date().toISOString(),
@@ -166,8 +166,8 @@ export function createWorkflowProposalRouter(deps: WorkflowProposalRouterDeps): 
 
     const stateData = (ticket.stateData || {}) as Record<string, unknown>;
     const proposal = stateData.workflowProposal as {
-      epicTemplate: z.infer<typeof WorkflowTemplatePayloadSchema>;
-      taskTemplate?: z.infer<typeof WorkflowTemplatePayloadSchema>;
+      epicTemplate: z.infer<typeof PlaybookPayloadSchema>;
+      taskTemplate?: z.infer<typeof PlaybookPayloadSchema>;
       agentRoles?: Array<z.infer<typeof AgentRoleSchema>>;
       rationale: string;
       proposedAt: string;
@@ -196,10 +196,10 @@ export function createWorkflowProposalRouter(deps: WorkflowProposalRouterDeps): 
         }
       }
 
-      // Resolve epic template — reuse existing if the proposed ID is already in the library
-      let epicTemplate = templates.findLatest(proposal.epicTemplate.id);
-      if (!epicTemplate) {
-        epicTemplate = templates.create({
+      // Resolve epic playbook — reuse existing if the proposed ID is already in the library
+      let epicPlaybook = playbooks.findLatest(proposal.epicTemplate.id);
+      if (!epicPlaybook) {
+        epicPlaybook = playbooks.create({
           id: proposal.epicTemplate.id,
           version: 1,
           name: proposal.epicTemplate.name,
@@ -210,17 +210,17 @@ export function createWorkflowProposalRouter(deps: WorkflowProposalRouterDeps): 
           tags: proposal.epicTemplate.tags,
           matchCriteria: proposal.epicTemplate.matchCriteria,
           usageCount: 0,
-          parentTemplateId: undefined,
+          parentPlaybookId: undefined,
           createdBy: 'workflow-proposal',
         });
       }
 
-      // Resolve task template — reuse existing if the proposed ID is already in the library
-      let taskTemplateRow = null;
+      // Resolve task playbook — reuse existing if the proposed ID is already in the library
+      let taskPlaybookRow = null;
       if (proposal.taskTemplate) {
-        taskTemplateRow = templates.findLatest(proposal.taskTemplate.id);
-        if (!taskTemplateRow) {
-          taskTemplateRow = templates.create({
+        taskPlaybookRow = playbooks.findLatest(proposal.taskTemplate.id);
+        if (!taskPlaybookRow) {
+          taskPlaybookRow = playbooks.create({
             id: proposal.taskTemplate.id,
             version: 1,
             name: proposal.taskTemplate.name,
@@ -231,35 +231,35 @@ export function createWorkflowProposalRouter(deps: WorkflowProposalRouterDeps): 
             tags: proposal.taskTemplate.tags,
             matchCriteria: proposal.taskTemplate.matchCriteria,
             usageCount: 0,
-            parentTemplateId: epicTemplate.id,
+            parentPlaybookId: epicPlaybook.id,
             createdBy: 'workflow-proposal',
           });
         }
       }
 
-      // Bind the template to the ticket
+      // Bind the playbook to the ticket
       const updatedStateData = { ...stateData };
       delete updatedStateData.workflowProposal;
 
       const updated = tickets.update(ticketId, {
-        workflowTemplateRowId: epicTemplate.rowId,
+        playbookRowId: epicPlaybook.rowId,
         stateData: updatedStateData,
       });
 
       if (!updated) {
-        res.status(500).json({ error: 'Failed to bind template to ticket' });
+        res.status(500).json({ error: 'Failed to bind playbook to ticket' });
         return;
       }
 
       // Clear topology cache and increment usage
       topologyLoader.clearCache();
-      templates.incrementUsage(epicTemplate.rowId);
+      playbooks.incrementUsage(epicPlaybook.rowId);
 
-      // Move to the template's entry state.
+      // Move to the playbook's entry state.
       // We set the state directly rather than using engine.transition() because
-      // the pre-template state (e.g. 'idea') doesn't exist in the template's
+      // the pre-playbook state (e.g. 'idea') doesn't exist in the playbook's
       // topology, so transition validation would reject it.
-      const stages = epicTemplate.stageDefinitions;
+      const stages = epicPlaybook.stageDefinitions;
       const entryStage = stages.find(
         (s: Record<string, unknown>) => s.semanticRole === 'entry',
       ) ?? stages[0];
@@ -285,8 +285,8 @@ export function createWorkflowProposalRouter(deps: WorkflowProposalRouterDeps): 
       res.json({
         message: 'Workflow approved and applied',
         ticketId,
-        epicTemplateRowId: epicTemplate.rowId,
-        taskTemplateRowId: taskTemplateRow?.rowId ?? null,
+        epicPlaybookRowId: epicPlaybook.rowId,
+        taskPlaybookRowId: taskPlaybookRow?.rowId ?? null,
         entryState,
       });
     } catch (err) {

@@ -27,14 +27,14 @@ export function createDependencyResolver(deps: DependencyResolverDeps): Dependen
   const { tickets, dependencies, topologyLoader } = deps;
 
   /** Check if a ticket is in a terminal state using topology or fallback. */
-  function checkIsTerminal(ticket: { state: string; workflowTemplateRowId?: string }): boolean {
+  function checkIsTerminal(ticket: { state: string; playbookRowId?: string }): boolean {
     try {
-      if (ticket.workflowTemplateRowId) {
-        const stages = topologyLoader.loadByTemplateRowId(ticket.workflowTemplateRowId);
+      if (ticket.playbookRowId) {
+        const stages = topologyLoader.loadByPlaybookRowId(ticket.playbookRowId);
         return isTerminal(stages, ticket.state);
       }
     } catch {
-      // Template not found — fall through to hardcoded check
+      // Playbook not found — fall through to hardcoded check
     }
     return ticket.state === 'done' || ticket.state === 'cancelled' || ticket.state === 'merged';
   }

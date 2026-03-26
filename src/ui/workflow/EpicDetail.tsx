@@ -39,18 +39,18 @@ const PRIORITY_STYLES: Record<string, string> = {
   low: 'bg-gray-800 text-gray-400',
 };
 
-// Legacy state sets — kept for backward compatibility with tickets without templates
+// Legacy state sets — kept for backward compatibility with tickets without playbooks
 const LEGACY_HUMAN_GATES = new Set(['spec-review', 'plan-review', 'final-review']);
 const LEGACY_TERMINAL_STATES = new Set(['merged', 'cancelled', 'done']);
 
-/** Check if ticket is at a human gate (dynamic template or legacy fallback) */
+/** Check if ticket is at a human gate (dynamic playbook or legacy fallback) */
 function isAtHumanGate(ticket: WorkflowTicket): boolean {
   const sd = ticket.stateData as Record<string, unknown> | undefined;
   if (sd?.currentStateHumanGate === true) return true;
   return LEGACY_HUMAN_GATES.has(ticket.state);
 }
 
-/** Check if ticket is in a terminal state (dynamic template or legacy fallback) */
+/** Check if ticket is in a terminal state (dynamic playbook or legacy fallback) */
 function isTerminalState(ticket: WorkflowTicket): boolean {
   const sd = ticket.stateData as Record<string, unknown> | undefined;
   if (sd?.currentStateSemanticRole === 'terminal') return true;
@@ -208,8 +208,8 @@ export function EpicDetail() {
           />
         </div>
 
-        {/* Workflow template proposal (shown for epics in 'idea' state without a template) */}
-        {ticket.type === 'epic' && !ticket.workflowTemplateRowId && (
+        {/* Workflow playbook proposal (shown for epics in 'idea' state without a playbook) */}
+        {ticket.type === 'epic' && !ticket.playbookRowId && (
           <WorkflowAssignmentPanel ticket={ticket} onApprove={handleApproveWorkflow} />
         )}
 

@@ -20,9 +20,9 @@ const TIER_LABELS: Record<string, string> = {
 };
 
 interface WorkflowProposal {
-  templateId: string;
-  templateName: string;
-  templateDescription?: string;
+  playbookId: string;
+  playbookName: string;
+  playbookDescription?: string;
   rationale?: string;
   confidence?: number;
   agentRoles?: Array<{
@@ -47,8 +47,8 @@ export function WorkflowAssignmentPanel({ ticket, onApprove, onSelectManually }:
   const proposal = sd?.workflowProposal as WorkflowProposal | undefined;
   const proposalStatus = sd?.workflowProposalStatus as string | undefined;
 
-  // If ticket already has a template assigned, don't show the panel
-  if (ticket.workflowTemplateRowId) {
+  // If ticket already has a playbook assigned, don't show the panel
+  if (ticket.playbookRowId) {
     return null;
   }
 
@@ -75,7 +75,7 @@ export function WorkflowAssignmentPanel({ ticket, onApprove, onSelectManually }:
           <div>
             <h3 className="text-sm font-medium text-gray-300">Designing workflow...</h3>
             <p className="text-xs text-gray-500">
-              Analyzing ticket to select the best workflow template
+              Analyzing ticket to select the best workflow playbook
             </p>
           </div>
         </div>
@@ -92,14 +92,14 @@ export function WorkflowAssignmentPanel({ ticket, onApprove, onSelectManually }:
           <h3 className="text-sm font-semibold text-red-300">Workflow selection failed</h3>
         </div>
         <p className="text-xs text-gray-400 mb-3">
-          Could not automatically select a workflow template for this ticket.
+          Could not automatically select a workflow playbook for this ticket.
         </p>
         {onSelectManually && (
           <button
             onClick={onSelectManually}
             className="px-3 py-1.5 text-xs bg-gray-800 hover:bg-gray-700 text-gray-300 rounded transition-colors"
           >
-            Select template manually
+            Select playbook manually
           </button>
         )}
       </div>
@@ -116,7 +116,7 @@ export function WorkflowAssignmentPanel({ ticket, onApprove, onSelectManually }:
       {/* Header */}
       <div className="flex items-center gap-2 mb-3">
         <span className="w-2.5 h-2.5 rounded-full bg-blue-400" />
-        <h3 className="text-sm font-semibold text-blue-300">Workflow Template Selected</h3>
+        <h3 className="text-sm font-semibold text-blue-300">Workflow Playbook Selected</h3>
         {proposal.confidence != null && (
           <span className="text-[10px] px-1.5 py-0.5 bg-blue-900/50 text-blue-400 rounded ml-auto">
             {Math.round(proposal.confidence * 100)}% confidence
@@ -124,11 +124,11 @@ export function WorkflowAssignmentPanel({ ticket, onApprove, onSelectManually }:
         )}
       </div>
 
-      {/* Template info */}
+      {/* Playbook info */}
       <div className="mb-3">
-        <h4 className="text-sm font-medium text-gray-200">{proposal.templateName}</h4>
-        {proposal.templateDescription && (
-          <p className="text-xs text-gray-400 mt-1">{proposal.templateDescription}</p>
+        <h4 className="text-sm font-medium text-gray-200">{proposal.playbookName}</h4>
+        {proposal.playbookDescription && (
+          <p className="text-xs text-gray-400 mt-1">{proposal.playbookDescription}</p>
         )}
       </div>
 
@@ -191,7 +191,7 @@ export function WorkflowAssignmentPanel({ ticket, onApprove, onSelectManually }:
             disabled={submitting}
             className="px-3 py-1.5 text-xs text-gray-400 hover:text-gray-300 transition-colors disabled:opacity-50"
           >
-            Choose different template
+            Choose different playbook
           </button>
         )}
       </div>

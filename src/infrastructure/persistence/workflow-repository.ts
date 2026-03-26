@@ -93,7 +93,7 @@ export function createWorkflowTicketRepository(): WorkflowTicketRepository {
         ticket.assignedAgentIds ? JSON.stringify(ticket.assignedAgentIds) : null,
         ticket.provider || 'claude', ticket.priority || 'medium',
         ticket.labels ? JSON.stringify(ticket.labels) : null,
-        ticket.sortOrder ?? 0, ticket.workflowTemplateRowId || null,
+        ticket.sortOrder ?? 0, ticket.playbookRowId || null,
         now, now, now,
       );
       return {
@@ -126,7 +126,7 @@ export function createWorkflowTicketRepository(): WorkflowTicketRepository {
         priority: data.priority ?? existing.priority,
         labels: data.labels !== undefined ? data.labels : existing.labels,
         sortOrder: data.sortOrder ?? existing.sortOrder,
-        workflowTemplateRowId: data.workflowTemplateRowId !== undefined ? data.workflowTemplateRowId : existing.workflowTemplateRowId,
+        playbookRowId: data.playbookRowId !== undefined ? data.playbookRowId : existing.playbookRowId,
         stateChangedAt: data.stateChangedAt ?? (stateChanged ? now : existing.stateChangedAt),
         updatedAt: now,
       };
@@ -141,7 +141,7 @@ export function createWorkflowTicketRepository(): WorkflowTicketRepository {
         merged.provider, merged.priority,
         merged.labels ? JSON.stringify(merged.labels) : null,
         merged.sortOrder,
-        merged.workflowTemplateRowId || null,
+        merged.playbookRowId || null,
         merged.stateChangedAt, merged.updatedAt, id,
       );
       return merged;
@@ -246,7 +246,7 @@ function rowToTicket(row: TicketRow): WorkflowTicket {
     priority: row.priority as WorkflowTicket['priority'],
     labels: safeJsonParse<string[]>(row.labels),
     sortOrder: row.sort_order,
-    workflowTemplateRowId: row.workflow_template_row_id || undefined,
+    playbookRowId: row.workflow_template_row_id || undefined,
     stateChangedAt: row.state_changed_at,
     createdAt: row.created_at,
     updatedAt: row.updated_at,

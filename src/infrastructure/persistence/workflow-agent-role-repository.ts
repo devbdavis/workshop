@@ -89,7 +89,7 @@ export function createAgentRoleRepository(): AgentRoleRepository {
         JSON.stringify(role.promptBlock),
         role.toolsAllowed ? JSON.stringify(role.toolsAllowed) : null,
         role.capabilityTier,
-        role.createdByTemplateRowId ?? null,
+        role.createdByPlaybookRowId ?? null,
         role.reusable ? 1 : 0,
         0,
         now,
@@ -117,9 +117,9 @@ export function createAgentRoleRepository(): AgentRoleRepository {
         promptBlock: changes.promptBlock ?? existing.promptBlock,
         toolsAllowed: changes.toolsAllowed !== undefined ? changes.toolsAllowed : existing.toolsAllowed,
         capabilityTier: changes.capabilityTier ?? existing.capabilityTier,
-        createdByTemplateRowId: changes.createdByTemplateRowId !== undefined
-          ? changes.createdByTemplateRowId
-          : existing.createdByTemplateRowId,
+        createdByPlaybookRowId: changes.createdByPlaybookRowId !== undefined
+          ? changes.createdByPlaybookRowId
+          : existing.createdByPlaybookRowId,
         reusable: changes.reusable ?? existing.reusable,
         updatedAt: now,
       };
@@ -130,7 +130,7 @@ export function createAgentRoleRepository(): AgentRoleRepository {
         JSON.stringify(merged.promptBlock),
         merged.toolsAllowed ? JSON.stringify(merged.toolsAllowed) : null,
         merged.capabilityTier,
-        merged.createdByTemplateRowId ?? null,
+        merged.createdByPlaybookRowId ?? null,
         merged.reusable ? 1 : 0,
         merged.updatedAt,
         id,
@@ -171,7 +171,7 @@ function rowToAgentRole(row: AgentRoleDbRow): AgentRoleRow {
     promptBlock: PromptBlockSchema.parse(JSON.parse(row.prompt_block)),
     toolsAllowed: row.tools_allowed ? (JSON.parse(row.tools_allowed) as string[]) : undefined,
     capabilityTier: row.capability_tier as CapabilityTier,
-    createdByTemplateRowId: row.created_by_template_row_id ?? undefined,
+    createdByPlaybookRowId: row.created_by_template_row_id ?? undefined,
     reusable: row.reusable === 1,
     usageCount: row.usage_count,
     createdAt: row.created_at,

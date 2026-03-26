@@ -4,9 +4,9 @@
  * Supports two modes:
  * 1. Data-driven (preferred): composeDataDrivenPrompt() assembles prompts from
  *    AgentRoleRow + StageDefinition + PromptOverrides with merge priority:
- *      stage.promptOverride > template.promptOverrides[agentRoleId] > agentRole.promptBlock.preamble
+ *      stage.promptOverride > playbook.promptOverrides[agentRoleId] > agentRole.promptBlock.preamble
  * 2. Legacy fallback: composeWorkflowPrompt() uses switch-based role matching
- *    for tickets without templates.
+ *    for tickets without playbooks.
  */
 import type { WorkflowTicket } from '@foundation/types';
 import type { AgentRoleRow } from '@domain/workflow/agent-role-repository.js';
@@ -151,15 +151,15 @@ function formatStateData(stateData: Record<string, unknown>): string {
  * Data-driven prompt composition.
  *
  * Assembles prompts from structured building blocks with merge priority:
- *   stage.promptOverride > template.promptOverrides[agentRoleId] > agentRole.promptBlock.preamble
+ *   stage.promptOverride > playbook.promptOverrides[agentRoleId] > agentRole.promptBlock.preamble
  *
- * This is the preferred path for tickets with workflow templates and agent roles.
+ * This is the preferred path for tickets with workflow playbooks and agent roles.
  */
 export function composeDataDrivenPrompt(
   agentRole: AgentRoleRow | null,
   ticket: WorkflowTicket,
   stage: StageDefinition,
-  templateOverrides?: PromptOverrides,
+  playbookOverrides?: PromptOverrides,
   context?: PromptContext,
 ): string {
   const parts: string[] = [];
@@ -169,10 +169,10 @@ export function composeDataDrivenPrompt(
     parts.push(agentRole.promptBlock.preamble);
   }
 
-  // 2. Template-level prompt override for this role (medium priority)
+  // 2. Playbook-level prompt override for this role (medium priority)
   const roleId = agentRole?.id ?? stage.agentRoleId;
-  if (roleId && templateOverrides?.[roleId]) {
-    parts.push(templateOverrides[roleId]);
+  if (roleId && playbookOverrides?.[roleId]) {
+    parts.push(playbookOverrides[roleId]);
   }
 
   // 3. Per-stage prompt override (highest specificity)
@@ -213,7 +213,7 @@ export function composeDataDrivenPrompt(
 }
 
 // ---------------------------------------------------------------------------
-// Legacy fallback — used for tickets without workflow templates
+// Legacy fallback — used for tickets without workflow playbooks
 // ---------------------------------------------------------------------------
 
 // AgentRole is now a string (dynamic)
@@ -221,7 +221,7 @@ type AgentRole = string;
 
 /**
  * Build a system prompt tailored to the given agent role and ticket context.
- * Legacy fallback for tickets without workflow templates.
+ * Legacy fallback for tickets without workflow playbooks.
  */
 export function composeWorkflowPrompt(
   role: AgentRole,
@@ -278,7 +278,7 @@ function buildRolePrompt(
 function buildWorkflowDesignerPrompt(ticket: WorkflowTicket): string {
   return [
     'You are a workflow designer. Your job is to analyze this epic and design an appropriate',
-    'workflow template that will govern how it moves through the system.',
+    'workflow playbook that will govern how it moves through the system.',
     '',
     `## Epic: ${ticket.title}`,
     '',
@@ -289,16 +289,16 @@ function buildWorkflowDesignerPrompt(ticket: WorkflowTicket): string {
     '1. **Analyze** the epic to understand the type of work (feature, bugfix, refactor, docs, infra),',
     '   its complexity, and what agent roles are needed.',
     '',
-    '2. **Search existing templates** via `workshop_list_workflow_templates({ ticketType: "epic" })`',
+    '2. **Search existing playbooks** via `workshop_list_playbooks({ ticketType: "epic" })`',
     '   and agent roles via `workshop_list_agent_roles()`. Reuse what exists.',
     '',
-    '3. **Design or select** a workflow template:',
-    '   - If an existing template is a good fit, use it directly.',
+    '3. **Design or select** a workflow playbook:',
+    '   - If an existing playbook is a good fit, use it directly.',
     '   - If not, design a new one following the schema below.',
-    '   - Also design a companion task template (ticketType: "task") if the epic involves',
+    '   - Also design a companion task playbook (ticketType: "task") if the epic involves',
     '     splitting work into subtasks.',
     '',
-    '4. **Create agent role definitions** for any roles referenced in your template that',
+    '4. **Create agent role definitions** for any roles referenced in your playbook that',
     '   don\'t already exist in the registry. Each role needs:',
     '   - id (kebab-case), name, description',
     '   - promptBlock: { preamble, toolAccessTier, constraints[], completionInstructions }',
@@ -308,12 +308,12 @@ function buildWorkflowDesignerPrompt(ticket: WorkflowTicket): string {
     '5. **Validate** via `workshop_validate_workflow({ stageDefinitions: [...] })`.',
     '   Fix any validation errors.',
     '',
-    '6. **Propose** via `workshop_propose_workflow({ epicId, epicTemplate, taskTemplate,',
+    '6. **Propose** via `workshop_propose_playbook({ epicId, epicPlaybook, taskPlaybook,',
     '   agentRoles, rationale })`. A human will review and approve.',
     '',
-    '## Template Schema',
+    '## Playbook Schema',
     '',
-    'Epic template fields: id, name, description, ticketType ("epic"), stageDefinitions[], tags[], matchCriteria',
+    'Epic playbook fields: id, name, description, ticketType ("epic"), stageDefinitions[], tags[], matchCriteria',
     '',
     '### Stage Definition',
     '```json',
@@ -338,7 +338,7 @@ function buildWorkflowDesignerPrompt(ticket: WorkflowTicket): string {
     '- For trivial work: use a 2-3 state workflow (ready -> in-progress -> done)',
     '- Execution stages use execution-complete/execution-failed triggers for the actual',
     '  implementation work (creating child tasks, running builds, etc.)',
-    '- CRITICAL: Task templates MUST include a "blocked" state (semanticRole: "waiting")',
+    '- CRITICAL: Task playbooks MUST include a "blocked" state (semanticRole: "waiting")',
     '  with an "all-deps-resolved" trigger → "ready". The engine creates tasks with',
     '  dependencies in "blocked" state. Without this, dependency resolution fails silently.',
     '  Pattern: blocked (waiting) → ready (entry) → implementing (processing)',
@@ -351,7 +351,7 @@ function buildWorkflowDesignerPrompt(ticket: WorkflowTicket): string {
     '',
     '## Important',
     '',
-    '- Do NOT transition the ticket yourself. Only call workshop_propose_workflow.',
+    '- Do NOT transition the ticket yourself. Only call workshop_propose_playbook.',
     '- The human will approve or reject your proposal.',
     '- Design the workflow to match the actual complexity of the work — don\'t over-engineer',
     '  a simple task with 10 stages, and don\'t under-engineer a complex project with 2.',

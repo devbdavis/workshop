@@ -29,7 +29,7 @@ export function createWorkflowReviewRepository(): WorkflowReviewRepository {
 
   // Prepared statements
   const findByIdStmt = db.prepare('SELECT * FROM workflow_reviews WHERE id = ?');
-  const findByTemplateStmt = db.prepare(
+  const findByPlaybookStmt = db.prepare(
     'SELECT * FROM workflow_reviews WHERE template_row_id = ? ORDER BY created_at DESC',
   );
   const findByEpicStmt = db.prepare('SELECT * FROM workflow_reviews WHERE epic_id = ? LIMIT 1');
@@ -54,8 +54,8 @@ export function createWorkflowReviewRepository(): WorkflowReviewRepository {
       return row ? rowToReview(row) : null;
     },
 
-    findByTemplate(templateRowId: string): WorkflowReviewRow[] {
-      const rows = findByTemplateStmt.all(templateRowId) as ReviewDbRow[];
+    findByPlaybook(playbookRowId: string): WorkflowReviewRow[] {
+      const rows = findByPlaybookStmt.all(playbookRowId) as ReviewDbRow[];
       return rows.map(rowToReview);
     },
 
@@ -70,7 +70,7 @@ export function createWorkflowReviewRepository(): WorkflowReviewRepository {
 
       insertStmt.run(
         id,
-        review.templateRowId,
+        review.playbookRowId,
         review.epicId,
         JSON.stringify(review.structuredFindings),
         review.suggestedChanges ? JSON.stringify(review.suggestedChanges) : null,
@@ -147,7 +147,7 @@ interface ReviewDbRow {
 function rowToReview(row: ReviewDbRow): WorkflowReviewRow {
   return {
     id: row.id,
-    templateRowId: row.template_row_id,
+    playbookRowId: row.template_row_id,
     epicId: row.epic_id,
     structuredFindings: ReviewFindingsArraySchema.parse(JSON.parse(row.structured_findings)),
     suggestedChanges: row.suggested_changes

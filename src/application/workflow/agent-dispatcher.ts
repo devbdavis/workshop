@@ -63,7 +63,7 @@ function isExecutionStage(
       (t) => t.trigger === 'execution-complete' || t.trigger === 'execution-failed',
     ) ?? false;
   } catch {
-    // No template — fallback to hardcoded check
+    // No playbook — fallback to hardcoded check
     return ticket.state === 'executing';
   }
 }
@@ -190,7 +190,7 @@ export function createAgentDispatcher(deps: AgentDispatcherDeps): AgentDispatche
     } else {
       // Fallback to hardcoded role-specific completion instructions
       const completionMap: Record<string, string> = {
-        'workflow-designer': 'When your workflow proposal is ready, call workshop_propose_workflow with the epicId, epicTemplate, taskTemplate (if needed), agentRoles, and rationale. The proposal will be stored for human approval — do NOT transition the ticket yourself.',
+        'workflow-designer': 'When your workflow proposal is ready, call workshop_propose_playbook with the epicId, epicPlaybook, taskPlaybook (if needed), agentRoles, and rationale. The proposal will be stored for human approval — do NOT transition the ticket yourself.',
         'triage': 'When the spec is complete: (1) optionally update the description via workshop_update_ticket to reflect any Q&A refinements, (2) transition to "specced" with the refined spec: workshop_transition_ticket(ticketId, "specced", "summary", { refinedSpec: "full spec text..." }). If you have questions: transition to "needs-input" with: workshop_transition_ticket(ticketId, "needs-input", "summary", { pendingQuestions: [{ text: "question?" }] })',
         'planner': 'Transition to "plan-critique" when the plan is ready for review.',
         'plan-critic': 'Transition to "plan-review" if no blocking findings, or "planning" if blocking findings exist.',
@@ -252,7 +252,7 @@ export function createAgentDispatcher(deps: AgentDispatcherDeps): AgentDispatche
 
       return { roleName, agentCount, agentRole, stage };
     } catch {
-      // No template — fallback to hardcoded role derivation
+      // No playbook — fallback to hardcoded role derivation
       return {
         roleName: deriveRoleFromState(ticket.state),
         agentCount: 1,
@@ -263,7 +263,7 @@ export function createAgentDispatcher(deps: AgentDispatcherDeps): AgentDispatche
   }
 
   /**
-   * Derive role name from state (backward compat for tickets without templates).
+   * Derive role name from state (backward compat for tickets without playbooks).
    */
   function deriveRoleFromState(state: string): string {
     const roleMap: Record<string, string> = {
@@ -290,7 +290,7 @@ export function createAgentDispatcher(deps: AgentDispatcherDeps): AgentDispatche
       const stages = topologyLoader.loadForTicket(ticket);
       return isAgentActionable(stages, ticket.state);
     } catch {
-      // No template — fallback to hardcoded check
+      // No playbook — fallback to hardcoded check
       const agentActionableStates: Record<string, string[]> = {
         epic: ['idea', 'triaging', 'planning', 'plan-critique', 'splitting', 'integration-review', 'integration-fix'],
         task: ['ready', 'in-progress', 'code-review', 'changes-requested'],
@@ -326,9 +326,9 @@ export function createAgentDispatcher(deps: AgentDispatcherDeps): AgentDispatche
       // Legacy switch-based composer is only used when there's no stage at all.
       let systemPrompt: string;
       if (stage) {
-        const template = topologyLoader.loadTemplateForTicket(ticket);
-        const templateOverrides = template?.promptOverrides;
-        systemPrompt = composeDataDrivenPrompt(agentRole, ticket, stage, templateOverrides, context);
+        const playbook = topologyLoader.loadPlaybookForTicket(ticket);
+        const playbookOverrides = playbook?.promptOverrides;
+        systemPrompt = composeDataDrivenPrompt(agentRole, ticket, stage, playbookOverrides, context);
       } else {
         systemPrompt = composeWorkflowPrompt(roleName, ticket, context);
       }

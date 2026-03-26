@@ -1,31 +1,49 @@
 ---
 name: workflow-select
-description: "Select or create a workflow template for a new epic. Tagged: workshop."
+description: "Select or design a workflow playbook for a new epic. Tagged: workshop."
 user-invocable: true
 argument-hint: "<epic-ticket-id>"
 ---
 
-# Workflow Selection Skill
+# Playbook Selection Skill
 
-Select or create a workflow template for a new epic.
+Select or design a workflow playbook for a new epic.
 
 ## Trigger
 
-When a new epic is created and needs a workflow assigned.
+When a new epic is created and needs a playbook assigned.
 
 ## Behavior
 
 1. Read the epic description and context
-2. Query the template registry via `workshop_list_workflow_templates` MCP tool
-3. Query the agent role registry via `workshop_list_agent_roles` MCP tool
-4. Either select the best match or design a new workflow template
-5. If designing a new template, also design a companion task template
-6. Validate the workflow graph via `workshop_validate_workflow`
-7. Submit for human approval via `workshop_propose_workflow` MCP tool
+2. **Read design heuristics** from `Workshop/General/playbook-patterns.md` via `workshop_vault_read`
+3. **Read past learnings** from `Workshop/General/playbook-learnings.md` via `workshop_vault_read` (skip if not found — it's populated by post-execution reviews)
+4. Query the playbook registry via `workshop_list_playbooks` MCP tool
+5. Query the agent role registry via `workshop_list_agent_roles` MCP tool
+6. Either select the best match or design a new playbook
+7. If designing a new playbook, also design a companion task playbook
+8. Validate the workflow graph via `workshop_validate_workflow`
+9. Submit for human approval via `workshop_propose_playbook` MCP tool
+10. **Cite specific patterns** from playbook-patterns.md and learnings in your rationale
 
-## Template Design Guidelines
+## Design Knowledge
 
-When designing a new workflow template:
+Before designing or selecting a playbook, consult the patterns file for heuristics on:
+- When to include independent evaluator stages (generator-evaluator separation)
+- When to require testable acceptance criteria before execution
+- Whether to use single-agent or multi-agent orchestration (context management)
+- Where to place human gates (high-stakes decisions only, not mechanical checkpoints)
+- Whether a lightweight path is more appropriate (trivial work doesn't need full pipelines)
+
+If past learnings exist, check for:
+- Patterns that worked well for similar task types
+- Stages that were flagged as non-load-bearing overhead
+- Agent role definitions that were flagged as poorly fitting
+- Recurring issues that suggest structural changes
+
+## Playbook Design Guidelines
+
+When designing a new workflow playbook:
 
 ### Stage Definitions
 
@@ -66,13 +84,13 @@ Available roles:
 
 ### Lightweight Path
 
-For trivial work (single-file fix, doc update): create a 2-3 state workflow (ready -> in-progress -> done)
+For trivial work (single-file fix, doc update): create a 2-3 state workflow (ready -> in-progress -> done). Don't over-engineer the playbook for simple tasks.
 
-### Companion Task Template
+### Companion Task Playbook
 
-Every epic template with a splitting/execution phase needs a companion task template with ticket_type: 'task'.
+Every epic playbook with a splitting/execution phase needs a companion task playbook with ticket_type: 'task'.
 
-**IMPORTANT**: Task templates MUST include a `blocked` state (semanticRole: `waiting`) with an `all-deps-resolved` trigger. The engine creates tasks with dependencies in `blocked` state. Without this state in the template, dependency resolution cannot transition the task and it stays blocked forever.
+**IMPORTANT**: Task playbooks MUST include a `blocked` state (semanticRole: `waiting`) with an `all-deps-resolved` trigger. The engine creates tasks with dependencies in `blocked` state. Without this state in the playbook, dependency resolution cannot transition the task and it stays blocked forever.
 
 Required pattern:
 ```
@@ -81,9 +99,9 @@ blocked (waiting) --[all-deps-resolved]--> ready (entry) --[auto]--> implementin
 
 Also include a `cancelled` terminal state reachable from `blocked`, `ready`, and `implementing` via manual trigger.
 
-## Template Structure
+## Playbook Structure
 
-### Epic Template Example
+### Epic Playbook Example
 
 ```json
 {
@@ -179,7 +197,7 @@ Also include a `cancelled` terminal state reachable from `blocked`, `ready`, and
 }
 ```
 
-### Task Template Example
+### Task Playbook Example
 
 ```json
 {
@@ -286,36 +304,48 @@ With stages:
 
 ## Workflow
 
-### Step 1: Analyze the Epic
+### Step 1: Read Design Knowledge
+
+```
+workshop_vault_read({ path: "General/playbook-patterns.md" })
+workshop_vault_read({ path: "General/playbook-learnings.md" })
+```
+
+Use these heuristics and past findings to inform your design decisions.
+
+### Step 2: Analyze the Epic
 
 Read the epic ticket to understand:
 - What type of work is it? (feature, bugfix, refactor, docs, infra)
 - What is the complexity? (trivial, simple, moderate, complex)
 - Does it require human review gates?
 - What agent roles are needed?
+- Does it need an independent evaluator? (see pattern #1)
+- Should acceptance criteria be explicit? (see pattern #2)
 
-### Step 2: Search Existing Templates
+### Step 3: Search Existing Playbooks
 
 ```
-workshop_list_workflow_templates({ ticketType: "epic" })
+workshop_list_playbooks({ ticketType: "epic" })
 ```
 
-Look for templates with matching:
+Look for playbooks with matching:
 - tags
 - matchCriteria.keywords
 - matchCriteria.complexity
 
-### Step 3: Decide: Select or Create
+### Step 4: Decide: Select or Create
 
 If a good match exists:
-- Use that template
+- Use that playbook
 - May need minor customization via promptOverrides
 
 If no match or poor fit:
-- Design a new template following the guidelines above
-- Also design a companion task template if needed
+- Design a new playbook following the guidelines above
+- Also design a companion task playbook if needed
+- Apply relevant patterns from the design knowledge base
 
-### Step 4: Validate
+### Step 5: Validate
 
 ```
 workshop_validate_workflow({ stageDefinitions: [...] })
@@ -323,16 +353,16 @@ workshop_validate_workflow({ stageDefinitions: [...] })
 
 Fix any validation errors before proposing.
 
-### Step 5: Propose
+### Step 6: Propose
 
 ```
-workshop_propose_workflow({
+workshop_propose_playbook({
   epicId: "<ticket-id>",
-  epicTemplate: { ... },
-  taskTemplate: { ... },
+  epicPlaybook: { ... },
+  taskPlaybook: { ... },
   agentRoles: [ ... ],
-  rationale: "Selected standard-feature-epic because..."
+  rationale: "Selected standard-feature-epic because... Applied patterns: generator-evaluator separation (pattern #1) because task involves subjective UI quality."
 })
 ```
 
-The proposal is stored on the ticket for human review. A human must call `workshop_approve_workflow_assignment` to finalize.
+The proposal is stored on the ticket for human review. A human must call `workshop_approve_playbook_assignment` to finalize.
