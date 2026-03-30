@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import Markdown from 'react-markdown';
 import type { TrackSummary } from '@foundation/types';
 
 interface Props {
@@ -36,7 +37,9 @@ export function SummaryPanel({ summary, trackId, onRefresh }: Props) {
       </div>
       {summary ? (
         <>
-          <p className="text-sm text-gray-400 whitespace-pre-wrap">{summary.content}</p>
+          <div className="text-sm text-gray-400 prose prose-invert prose-sm max-w-none">
+            <Markdown>{summary.content}</Markdown>
+          </div>
           <p className="text-xs text-gray-600 mt-2">
             v{summary.version} &middot; {new Date(summary.createdAt).toLocaleString()}
           </p>
