@@ -19,6 +19,8 @@ export function TrackView() {
   const [pendingPermissions, setPendingPermissions] = useState<PermissionRequest[]>([]);
   const [loading, setLoading] = useState(true);
   const [sidebarTab, setSidebarTab] = useState<'context' | 'todos' | 'config'>('context');
+  const [editingName, setEditingName] = useState(false);
+  const [nameValue, setNameValue] = useState('');
 
   const loadTrack = useCallback(async () => {
     if (!trackId) return;
@@ -145,6 +147,22 @@ export function TrackView() {
     }
   }
 
+  async function saveTrackName() {
+    const trimmed = nameValue.trim();
+    if (!trimmed || trimmed === track?.name) { setEditingName(false); return; }
+    try {
+      const res = await fetch(`/api/tracks/${trackId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: trimmed }),
+      });
+      if (res.ok) setTrack(await res.json());
+    } catch (err) {
+      console.error('Failed to rename track:', err);
+    }
+    setEditingName(false);
+  }
+
   async function allowAllForSession(sessionId: string) {
     try {
       await fetch(`/api/permissions/sessions/${sessionId}/auto-approve`, { method: 'POST' });
@@ -173,7 +191,24 @@ export function TrackView() {
   return (
     <div className="h-full flex flex-col">
       <header className="flex items-center gap-4 px-6 py-2 border-b border-gray-800 shrink-0">
-        <h1 className="text-lg font-semibold">{track.name}</h1>
+        {editingName ? (
+          <input
+            autoFocus
+            value={nameValue}
+            onChange={(e) => setNameValue(e.target.value)}
+            onBlur={saveTrackName}
+            onKeyDown={(e) => { if (e.key === 'Enter') saveTrackName(); if (e.key === 'Escape') setEditingName(false); }}
+            className="text-lg font-semibold bg-gray-800 border border-gray-600 rounded px-2 py-0.5 outline-none focus:border-blue-500"
+          />
+        ) : (
+          <h1
+            className="text-lg font-semibold cursor-pointer hover:text-blue-300 transition-colors"
+            title="Click to rename"
+            onClick={() => { setNameValue(track.name); setEditingName(true); }}
+          >
+            {track.name}
+          </h1>
+        )}
         <span className="text-xs text-gray-500 bg-gray-800 px-2 py-0.5 rounded">{track.status}</span>
         {pendingPermissions.length > 0 && (
           <span className="text-xs bg-amber-900 text-amber-300 px-2 py-0.5 rounded animate-pulse">
