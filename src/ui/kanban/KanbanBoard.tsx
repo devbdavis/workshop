@@ -2,14 +2,17 @@ import { useEffect, useState, useCallback } from 'react';
 import {
   DndContext,
   DragOverlay,
-  closestCorners,
+  pointerWithin,
+  rectIntersection,
   PointerSensor,
   useSensor,
   useSensors,
   type DragStartEvent,
   type DragEndEvent,
   type DragOverEvent,
+  type CollisionDetection,
 } from '@dnd-kit/core';
+import { arrayMove } from '@dnd-kit/sortable';
 import type { Todo, TodoStatus, Track } from '@foundation/types';
 import type { DispatchOptions } from '../track-view/DispatchDropdown';
 import { KanbanColumn } from './KanbanColumn';
@@ -24,6 +27,8 @@ const COLUMNS: { status: TodoStatus; label: string; color: string }[] = [
   { status: 'done', label: 'Done', color: 'bg-green-500' },
 ];
 
+const COLUMN_IDS = new Set(['backlog', 'ready', 'in-progress', 'review', 'done']);
+
 export function KanbanBoard() {
   const [todos, setTodos] = useState<Todo[]>([]);
   const [tracks, setTracks] = useState<Track[]>([]);
@@ -31,6 +36,22 @@ export function KanbanBoard() {
   const [activeDrag, setActiveDrag] = useState<Todo | null>(null);
   const [selectedTodo, setSelectedTodo] = useState<Todo | null>(null);
   const [loading, setLoading] = useState(true);
+
+  // Cards win over columns for precise within-column reordering.
+  // The source column is excluded so you can't accidentally drop back into it;
+  // all other columns remain valid targets anywhere on their body.
+  const collisionDetection = useCallback<CollisionDetection>((args) => {
+    const sourceStatus = activeDrag?.status;
+    const cardHits = pointerWithin(args).filter((h) => !COLUMN_IDS.has(String(h.id)));
+    if (cardHits.length > 0) return cardHits;
+    const colHits = pointerWithin(args).filter(
+      (h) => COLUMN_IDS.has(String(h.id)) && h.id !== sourceStatus,
+    );
+    if (colHits.length > 0) return colHits;
+    return rectIntersection(args).filter(
+      (h) => !COLUMN_IDS.has(String(h.id)) || h.id !== sourceStatus,
+    );
+  }, [activeDrag]);
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
@@ -79,7 +100,9 @@ export function KanbanBoard() {
     : todos;
 
   const todosByStatus = (status: TodoStatus) =>
-    filteredTodos.filter((t) => t.status === status);
+    filteredTodos
+      .filter((t) => t.status === status)
+      .sort((a, b) => a.sortOrder - b.sortOrder || new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
 
   function handleDragStart(event: DragStartEvent) {
     const todo = todos.find((t) => t.id === event.active.id);
@@ -93,42 +116,60 @@ export function KanbanBoard() {
   async function handleDragEnd(event: DragEndEvent) {
     setActiveDrag(null);
     const { active, over } = event;
-    if (!over) return;
+    if (!over || active.id === over.id) return;
 
     const todoId = active.id as string;
     const todo = todos.find((t) => t.id === todoId);
     if (!todo) return;
 
-    // Determine target status: drop onto column or onto another card
-    let targetStatus: TodoStatus | null = null;
+    const isColumnDrop = COLUMNS.some((c) => c.status === over.id);
+    const targetTodo = !isColumnDrop ? todos.find((t) => t.id === over.id) : null;
+    const targetStatus: TodoStatus = isColumnDrop
+      ? (over.id as TodoStatus)
+      : (targetTodo?.status ?? todo.status);
 
-    // Check if dropped on a column directly
-    if (COLUMNS.some((c) => c.status === over.id)) {
-      targetStatus = over.id as TodoStatus;
-    } else {
-      // Dropped on another card — find that card's status
-      const targetTodo = todos.find((t) => t.id === over.id);
-      if (targetTodo) {
-        targetStatus = targetTodo.status;
+    if (targetStatus !== todo.status) {
+      // Cross-column: update status only
+      setTodos((prev) =>
+        prev.map((t) => (t.id === todoId ? { ...t, status: targetStatus } : t)),
+      );
+      try {
+        await fetch(`/api/todos/${todoId}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ status: targetStatus }),
+        });
+      } catch {
+        loadData();
       }
-    }
+    } else if (!isColumnDrop && targetTodo) {
+      // Same-column: reorder
+      const columnTodos = todos
+        .filter((t) => t.status === todo.status)
+        .sort((a, b) => a.sortOrder - b.sortOrder || new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
 
-    if (!targetStatus || targetStatus === todo.status) return;
+      const oldIndex = columnTodos.findIndex((t) => t.id === todoId);
+      const newIndex = columnTodos.findIndex((t) => t.id === over.id);
+      if (oldIndex === -1 || newIndex === -1) return;
 
-    // Optimistic update
-    setTodos((prev) =>
-      prev.map((t) => (t.id === todoId ? { ...t, status: targetStatus! } : t)),
-    );
+      const reordered = arrayMove(columnTodos, oldIndex, newIndex);
+      const updates = reordered.map((t, i) => ({ id: t.id, sortOrder: i }));
 
-    try {
-      await fetch(`/api/todos/${todoId}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ status: targetStatus }),
+      // Optimistic update
+      setTodos((prev) => {
+        const orderMap = new Map(updates.map((u) => [u.id, u.sortOrder]));
+        return prev.map((t) => (orderMap.has(t.id) ? { ...t, sortOrder: orderMap.get(t.id)! } : t));
       });
-    } catch {
-      // Rollback on failure
-      loadData();
+
+      try {
+        await fetch('/api/todos/reorder', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ updates }),
+        });
+      } catch {
+        loadData();
+      }
     }
   }
 
@@ -184,7 +225,7 @@ export function KanbanBoard() {
       <div className="flex-1 overflow-x-auto p-4">
         <DndContext
           sensors={sensors}
-          collisionDetection={closestCorners}
+          collisionDetection={collisionDetection}
           onDragStart={handleDragStart}
           onDragOver={handleDragOver}
           onDragEnd={handleDragEnd}
