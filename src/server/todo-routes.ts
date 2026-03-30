@@ -88,6 +88,23 @@ export function createTodoRouter(deps: TodoRouterDeps): Router {
     res.status(201).json(todo);
   });
 
+  // --- Batch reorder todos ---
+
+  router.post('/todos/reorder', (req, res) => {
+    const { updates } = req.body;
+    if (!Array.isArray(updates)) {
+      res.status(400).json({ error: 'updates must be an array' });
+      return;
+    }
+    for (const { id, sortOrder } of updates) {
+      if (typeof id === 'string' && typeof sortOrder === 'number') {
+        todos.update(id as TodoId, { sortOrder });
+      }
+    }
+    broadcast('todo:updated', '' as any);
+    res.json({ ok: true });
+  });
+
   // --- Get single todo ---
 
   router.get('/todos/:todoId', (req, res) => {
