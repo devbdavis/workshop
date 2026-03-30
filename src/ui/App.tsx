@@ -19,7 +19,7 @@ export function App() {
     <AuthGate>
       <div className="h-screen flex flex-col bg-gray-950 text-gray-100">
         <TopNav />
-        <div className="flex-1 min-h-0">
+        <div className="flex-1 min-h-0 overflow-y-auto">
           <Routes>
             <Route path="/" element={<Dashboard />} />
             <Route path="/tracks/:trackId" element={<TrackView />} />
