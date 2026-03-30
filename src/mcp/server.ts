@@ -33,6 +33,10 @@ const AUTH_TOKEN = (() => {
   }
 })();
 
+// Log startup info to stderr (safe — MCP uses stdout for JSON-RPC)
+console.error(`[workshop-mcp] API_URL: ${API_URL}`);
+console.error(`[workshop-mcp] AUTH_TOKEN: ${AUTH_TOKEN ? `set (${AUTH_TOKEN.length} chars)` : 'NOT SET'}`);
+
 async function api(apiPath: string, options?: RequestInit) {
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
@@ -40,12 +44,22 @@ async function api(apiPath: string, options?: RequestInit) {
   if (AUTH_TOKEN) {
     headers['Authorization'] = `Bearer ${AUTH_TOKEN}`;
   }
-  const res = await fetch(`${API_URL}/api${apiPath}`, {
-    ...options,
-    headers: { ...headers, ...options?.headers },
-  });
+  const url = `${API_URL}/api${apiPath}`;
+  let res: Response;
+  try {
+    res = await fetch(url, {
+      ...options,
+      headers: { ...headers, ...options?.headers },
+    });
+  } catch (err) {
+    const cause = err instanceof Error ? err.message : String(err);
+    const nested = (err as any)?.cause instanceof Error ? ` (cause: ${(err as any).cause.message})` : '';
+    console.error(`[workshop-mcp] fetch error: ${options?.method ?? 'GET'} ${url} — ${cause}${nested}`);
+    throw new Error(`Workshop API unreachable (${url}): ${cause}${nested}`);
+  }
   if (!res.ok) {
     const body = await res.text();
+    console.error(`[workshop-mcp] HTTP ${res.status}: ${options?.method ?? 'GET'} ${url} — ${body}`);
     throw new Error(`Workshop API ${res.status}: ${body}`);
   }
   if (res.status === 204) return null;
