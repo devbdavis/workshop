@@ -1,5 +1,4 @@
 import { useEffect, useState } from 'react';
-import { homedir } from 'os';
 
 interface GlobalRepo {
   id: string;
@@ -11,15 +10,8 @@ interface GlobalRepo {
 }
 
 function tildeify(p: string): string {
-  const home = typeof window !== 'undefined' ? '' : homedir();
-  // In the browser we can only do best-effort: replace common home prefix pattern
-  // The server sends absolute paths; we strip the home dir prefix client-side
-  // via a stored value, but here we just display as-is unless it starts with /Users or /home
-  const homePattern = /^\/(?:Users|home)\/[^/]+/;
-  const match = p.match(homePattern);
-  if (match) {
-    return '~' + p.slice(match[0].length);
-  }
+  const match = p.match(/^\/(?:Users|home)\/[^/]+/);
+  if (match) return '~' + p.slice(match[0].length);
   return p;
 }
 
