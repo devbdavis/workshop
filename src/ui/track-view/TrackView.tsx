@@ -87,13 +87,13 @@ export function TrackView() {
     return () => ws.close();
   }, [trackId, loadTrack]);
 
-  async function createSession(provider: SessionProvider = 'claude'): Promise<Session | null> {
+  async function createSession(provider: SessionProvider = 'claude', worktreeMode?: boolean): Promise<Session | null> {
     if (!trackId) return null;
     try {
       const res = await fetch(`/api/tracks/${trackId}/sessions`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ provider }),
+        body: JSON.stringify({ provider, ...(worktreeMode !== undefined ? { worktreeMode } : {}) }),
       });
       if (res.ok) {
         const session: Session = await res.json();
@@ -273,7 +273,7 @@ export function TrackView() {
               trackId={track.id}
               sessions={sessions}
               onDestroySession={destroySession}
-              onCreateSession={() => createSession()}
+              onCreateSession={createSession}
               onRenameSession={renameSession}
             />
           </div>
@@ -283,7 +283,7 @@ export function TrackView() {
   );
 }
 
-function NewSessionButton({ onCreateSession }: { onCreateSession: (provider: SessionProvider) => Promise<Session | null> }) {
+function NewSessionButton({ onCreateSession }: { onCreateSession: (provider: SessionProvider, worktreeMode?: boolean) => Promise<Session | null> }) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
 
@@ -314,13 +314,20 @@ function NewSessionButton({ onCreateSession }: { onCreateSession: (provider: Ses
         </svg>
       </button>
       {open && (
-        <div className="absolute right-0 top-full mt-1 bg-gray-800 border border-gray-700 rounded-lg shadow-lg py-1 z-50 min-w-[140px]">
+        <div className="absolute right-0 top-full mt-1 bg-gray-800 border border-gray-700 rounded-lg shadow-lg py-1 z-50 min-w-[160px]">
           <button
             onClick={() => { onCreateSession('claude'); setOpen(false); }}
             className="w-full text-left px-3 py-1.5 text-sm hover:bg-gray-700 flex items-center gap-2"
           >
             <span className="w-2 h-2 rounded-full bg-orange-400" />
             Claude
+          </button>
+          <button
+            onClick={() => { onCreateSession('claude', true); setOpen(false); }}
+            className="w-full text-left px-3 py-1.5 text-sm hover:bg-gray-700 flex items-center gap-2"
+          >
+            <span className="w-2 h-2 rounded-full bg-orange-400" />
+            <span>Claude <span className="text-[10px] text-gray-500 ml-0.5">(worktree)</span></span>
           </button>
           <button
             onClick={() => { onCreateSession('codex'); setOpen(false); }}

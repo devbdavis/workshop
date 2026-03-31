@@ -1,4 +1,5 @@
 import { existsSync } from 'fs';
+import { execSync } from 'child_process';
 import { homedir } from 'os';
 import path from 'path';
 import { Router } from 'express';
@@ -471,8 +472,8 @@ export function createApiRouter(deps: ApiRouterDeps = {}): Router {
   });
 
   router.put('/tracks/:id', (req, res) => {
-    const { name, description, context, label, matrixRoomId, status } = req.body;
-    const track = tracks.update(req.params.id as TrackId, { name, description, context, label, matrixRoomId, status });
+    const { name, description, context, label, matrixRoomId, status, worktreeMode } = req.body;
+    const track = tracks.update(req.params.id as TrackId, { name, description, context, label, matrixRoomId, status, worktreeMode });
     if (!track) {
       res.status(404).json({ error: 'Track not found' });
       return;
@@ -653,10 +654,20 @@ export function createApiRouter(deps: ApiRouterDeps = {}): Router {
       // Validate provider if provided
       const provider: SessionProvider = req.body?.provider === 'codex' ? 'codex' : 'claude';
 
+      // worktreeMode: explicit request body takes precedence, then track-level default
+      const requestWorktreeMode = req.body?.worktreeMode;
+      const worktreeMode = typeof requestWorktreeMode === 'boolean'
+        ? requestWorktreeMode
+        : (track.worktreeMode ?? false);
+
+      const repos = tracks.findReposByTrack(trackId);
+
       const session = await terminal.createSession(trackId, {
         systemPrompt,
         provider,
-        workingDirectory: track.repos?.[0]?.path,
+        workingDirectory: repos[0]?.path,
+        worktreeMode: worktreeMode && repos.length > 0,
+        repos: worktreeMode ? repos : undefined,
       });
       broadcast('session:created', trackId);
       res.status(201).json(session);
@@ -690,6 +701,41 @@ export function createApiRouter(deps: ApiRouterDeps = {}): Router {
     } catch (err) {
       console.error('Failed to destroy session:', err);
       res.status(500).json({ error: 'Failed to destroy session' });
+    }
+  });
+
+  // --- Open in editor ---
+
+  router.post('/shell/open-in-editor', (req, res) => {
+    const { path: targetPath, app } = req.body;
+    if (!targetPath || typeof targetPath !== 'string') {
+      res.status(400).json({ error: 'path is required' });
+      return;
+    }
+    // Reject traversal attempts
+    if (targetPath.includes('..')) {
+      res.status(400).json({ error: 'Invalid path' });
+      return;
+    }
+    if (!existsSync(targetPath)) {
+      res.status(404).json({ error: 'Path does not exist' });
+      return;
+    }
+    try {
+      if (app === 'terminal') {
+        execSync(`open -a iTerm ${JSON.stringify(targetPath)}`, { stdio: 'pipe' });
+      } else {
+        // Default: Cursor. Try CLI first, fall back to open -a.
+        try {
+          execSync(`cursor ${JSON.stringify(targetPath)}`, { stdio: 'pipe' });
+        } catch {
+          execSync(`open -a Cursor ${JSON.stringify(targetPath)}`, { stdio: 'pipe' });
+        }
+      }
+      res.json({ ok: true });
+    } catch (err) {
+      console.error('Failed to open in editor:', err);
+      res.status(500).json({ error: 'Failed to open in editor' });
     }
   });
 

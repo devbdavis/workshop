@@ -3,7 +3,7 @@
  *
  * Infrastructure provides the concrete implementation (tmux + node-pty).
  */
-import type { Session, SessionId, SessionProvider, TrackId } from '@foundation/types';
+import type { Session, SessionId, SessionProvider, TrackId, TrackRepo } from '@foundation/types';
 
 export interface CreateSessionOptions {
   systemPrompt?: string;
@@ -32,6 +32,10 @@ export interface CreateSessionOptions {
   claudeResumeId?: string;
   /** Per-session MCP server configs to inject into the session's settings.json */
   mcpServers?: Record<string, unknown>;
+  /** If true, create an isolated git worktree per repo for this session. */
+  worktreeMode?: boolean;
+  /** Repos to create worktrees for. Required when worktreeMode is true. */
+  repos?: TrackRepo[];
 }
 
 export interface SyncResult {

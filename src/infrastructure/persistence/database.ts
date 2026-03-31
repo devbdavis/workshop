@@ -548,6 +548,20 @@ function runMigrations(db: Database.Database): void {
     // Column already exists — safe to ignore
   }
 
+  // Migration: add worktree_mode column to tracks
+  try {
+    db.exec(`ALTER TABLE tracks ADD COLUMN worktree_mode INTEGER NOT NULL DEFAULT 0;`);
+  } catch {
+    // Column already exists — safe to ignore
+  }
+
+  // Migration: add worktree_root column to sessions
+  try {
+    db.exec(`ALTER TABLE sessions ADD COLUMN worktree_root TEXT;`);
+  } catch {
+    // Column already exists — safe to ignore
+  }
+
   // Migration: create unique index on matrix_room_id (partial — only non-null values)
   try {
     db.exec(`CREATE UNIQUE INDEX idx_tracks_matrix_room ON tracks(matrix_room_id) WHERE matrix_room_id IS NOT NULL;`);

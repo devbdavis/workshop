@@ -1,9 +1,9 @@
 import { execSync } from 'child_process';
-import { writeFileSync, mkdirSync, rmSync, existsSync, chmodSync } from 'fs';
+import { writeFileSync, readFileSync, mkdirSync, rmSync, existsSync, chmodSync, symlinkSync } from 'fs';
 import path from 'path';
 import { v4 as uuid } from 'uuid';
 import type { SessionRepository } from '@domain/session/repository';
-import type { Session, SessionId, TrackId } from '@foundation/types';
+import type { Session, SessionId, TrackId, TrackRepo } from '@foundation/types';
 import type { SoulLoader } from '@infrastructure/soul/soul-loader.js';
 import {
   capturePaneLines, isSessionIdle, isSessionLoggedOut, isSessionExited,
@@ -33,6 +33,92 @@ const BACKGROUND_IDLE_TIMEOUT_MINUTES = 15;
 
 /** Seconds a dead tmux session gets before being reaped/suspended */
 const DYING_GRACE_PERIOD_MS = 30_000;
+
+/** Cache dirs to symlink from the canonical clone into each worktree */
+const WORKTREE_SYMLINK_DIRS = ['node_modules', '.venv'];
+
+interface WorktreeMeta {
+  repos: Array<{ path: string; name: string }>;
+}
+
+/**
+ * Slugify a session name into a git-safe branch name component.
+ * Output: `workshop/{slug}-{shortId}` — at most ~50 chars total.
+ */
+function worktreeBranchName(name: string | undefined, sessionId: string): string {
+  const slug = name
+    ? name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 40)
+    : 'task';
+  return `workshop/${slug}-${sessionId.slice(0, 6)}`;
+}
+
+/**
+ * Create a workspace directory with one git worktree per repo.
+ * Returns the workspace path. Throws on failure (caller should handle gracefully).
+ */
+function createWorktrees(sessionId: string, repos: TrackRepo[], sessionName?: string): string {
+  const workspaceDir = path.join(SESSION_DATA_DIR, sessionId, 'workspace');
+  mkdirSync(workspaceDir, { recursive: true });
+
+  const branch = worktreeBranchName(sessionName, sessionId);
+
+  for (const repo of repos) {
+    const repoName = path.basename(repo.path);
+    const worktreePath = path.join(workspaceDir, repoName);
+
+    execSync(
+      `git -C ${JSON.stringify(repo.path)} worktree add ${JSON.stringify(worktreePath)} -b ${JSON.stringify(branch)}`,
+      { stdio: 'pipe' },
+    );
+
+    for (const dir of WORKTREE_SYMLINK_DIRS) {
+      const src = path.join(repo.path, dir);
+      const dst = path.join(worktreePath, dir);
+      if (existsSync(src) && !existsSync(dst)) {
+        try {
+          symlinkSync(src, dst);
+        } catch {
+          // Non-fatal — agent can reinstall if needed
+        }
+      }
+    }
+  }
+
+  // Write metadata so cleanup can locate the original repo paths
+  const meta: WorktreeMeta = {
+    repos: repos.map((r) => ({ path: r.path, name: path.basename(r.path) })),
+  };
+  writeFileSync(path.join(workspaceDir, '.worktree-meta.json'), JSON.stringify(meta), 'utf-8');
+
+  return workspaceDir;
+}
+
+/**
+ * Remove worktrees registered in workspace/.worktree-meta.json.
+ * Best-effort — directory removal via cleanSessionDir handles the rest.
+ */
+function cleanupWorktrees(workspaceDir: string): void {
+  const metaPath = path.join(workspaceDir, '.worktree-meta.json');
+  if (!existsSync(metaPath)) return;
+
+  try {
+    const meta = JSON.parse(readFileSync(metaPath, 'utf-8')) as WorktreeMeta;
+    for (const repo of meta.repos) {
+      const worktreePath = path.join(workspaceDir, repo.name);
+      if (!existsSync(worktreePath)) continue;
+      try {
+        execSync(
+          `git -C ${JSON.stringify(repo.path)} worktree remove --force ${JSON.stringify(worktreePath)}`,
+          { stdio: 'pipe' },
+        );
+      } catch {
+        // Best-effort — git prune will clean up the ref later
+      }
+    }
+  } catch {
+    // Malformed metadata — proceed; directory removal handles files
+  }
+}
 
 /** djb2 hash — fast, simple, deterministic string→number */
 function hashString(s: string): number {
@@ -135,7 +221,6 @@ export function createTerminalManager(sessionRepo: SessionRepository, soulLoader
     async createSession(trackId: TrackId, options?: CreateSessionOptions): Promise<Session> {
       const provider = options?.provider || 'claude';
       const tmuxName = `workshop-${uuid().slice(0, 8)}`;
-      const cwd = options?.workingDirectory || process.env.HOME || '/tmp';
 
       // Prepend soul to system prompt
       let systemPrompt = options?.systemPrompt || '';
@@ -145,6 +230,31 @@ export function createTerminalManager(sessionRepo: SessionRepository, soulLoader
           systemPrompt = systemPrompt
             ? soul + '\n\n---\n\n' + systemPrompt
             : soul;
+        }
+      }
+
+      // Create DB record first — we need session.id for the worktree path
+      const session = sessionRepo.create({
+        trackId,
+        tmuxSession: tmuxName,
+        name: options?.name,
+        systemPrompt: systemPrompt || undefined,
+        state: 'active',
+        provider,
+        background: options?.background ?? false,
+      });
+
+      // Create worktrees if requested
+      let cwd = options?.workingDirectory || process.env.HOME || '/tmp';
+      if (options?.worktreeMode && options.repos?.length) {
+        try {
+          const worktreeRoot = createWorktrees(session.id, options.repos, options.name);
+          sessionRepo.updateWorktreeRoot(session.id, worktreeRoot);
+          session.worktreeRoot = worktreeRoot;
+          cwd = worktreeRoot;
+        } catch (err) {
+          console.warn(`[worktree] Failed to create worktrees for session ${session.id}:`, err);
+          // Fall back to standard workingDirectory
         }
       }
 
@@ -163,16 +273,6 @@ export function createTerminalManager(sessionRepo: SessionRepository, soulLoader
         { stdio: 'pipe', env: cleanEnv },
       );
 
-      const session = sessionRepo.create({
-        trackId,
-        tmuxSession: tmuxName,
-        name: options?.name,
-        systemPrompt: systemPrompt || undefined,
-        state: 'active',
-        provider,
-        background: options?.background ?? false,
-      });
-
       if (!options?.skipClaude) {
         launchCli(session, tmuxName, cwd, effectiveOptions);
       }
@@ -183,6 +283,11 @@ export function createTerminalManager(sessionRepo: SessionRepository, soulLoader
     async destroySession(sessionId: SessionId): Promise<void> {
       const session = sessionRepo.findById(sessionId);
       if (!session) return;
+
+      // Clean up git worktrees before removing the session directory
+      if (session.worktreeRoot) {
+        cleanupWorktrees(session.worktreeRoot);
+      }
 
       try {
         execSync(`tmux kill-session -t ${session.tmuxSession}`, { stdio: 'pipe' });
