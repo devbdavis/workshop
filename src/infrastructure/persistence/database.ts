@@ -1,12 +1,9 @@
 import Database from 'better-sqlite3';
 import { v4 as uuid } from 'uuid';
 import path from 'path';
-import { fileURLToPath } from 'url';
-
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 function resolveDbPath(): string {
-  return process.env.WORKSHOP_DB_PATH || path.resolve(__dirname, '../../../workshop.db');
+  return process.env.WORKSHOP_DB_PATH || path.join(process.env.HOME || '/tmp', '.workshop', 'workshop.db');
 }
 
 let db: Database.Database | null = null;
