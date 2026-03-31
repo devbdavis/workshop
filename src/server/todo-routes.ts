@@ -128,13 +128,21 @@ export function createTodoRouter(deps: TodoRouterDeps): Router {
       return;
     }
 
+    // When moving away from in-progress, clear session and agent assignment.
+    // This handles dead agents whose sessions no longer exist in the DB —
+    // SQLite FK checks fire on every UPDATE, even when the value isn't changing.
+    const isLeavingInProgress = status && status !== 'in-progress' && existing.status === 'in-progress';
+    const resolvedSessionId = isLeavingInProgress ? null : sessionId;
+    const resolvedAgentId: null | undefined = isLeavingInProgress ? null : undefined;
+
     const todo = todos.update(req.params.todoId as TodoId, {
       title,
       description,
       status,
       priority,
       refined,
-      sessionId,
+      sessionId: resolvedSessionId,
+      agentId: resolvedAgentId,
       sortOrder,
     });
     if (!todo) {
