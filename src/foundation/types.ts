@@ -42,6 +42,8 @@ export interface TrackRepo {
   trackId: TrackId;
   path: string;
   remoteUrl?: string;
+  /** Reference to the global repo registry entry, if this track repo is linked */
+  repoId?: GlobalRepoId;
   createdAt: string;
   // Live state (not persisted, populated at runtime)
   branch?: string;
@@ -368,6 +370,18 @@ export interface Agent {
   allowedTools?: string[];
   /** Max agentic turns */
   maxTurns?: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+// Global Repo
+export type GlobalRepoId = string & { readonly __brand: 'GlobalRepoId' };
+
+export interface GlobalRepo {
+  id: GlobalRepoId;
+  path: string;
+  name: string;
+  mainBranch: 'main' | 'master';
   createdAt: string;
   updatedAt: string;
 }
