@@ -1,6 +1,13 @@
 import { useEffect, useState, useCallback } from 'react';
 import { NavLink, useMatch } from 'react-router-dom';
 
+const LAST_TRACK_KEY = 'workshop:last-track';
+
+interface LastTrack {
+  id: string;
+  name: string;
+}
+
 const navItems = [
   { to: '/', label: 'Tracks', end: true },
   { to: '/kanban', label: 'Kanban', end: false },
@@ -16,6 +23,14 @@ const navItems = [
 export function TopNav() {
   const trackMatch = useMatch('/tracks/:trackId');
   const [pendingCount, setPendingCount] = useState(0);
+  const [lastTrack, setLastTrack] = useState<LastTrack | null>(() => {
+    try {
+      const raw = localStorage.getItem(LAST_TRACK_KEY);
+      return raw ? (JSON.parse(raw) as LastTrack) : null;
+    } catch {
+      return null;
+    }
+  });
 
   const loadCount = useCallback(async () => {
     try {
@@ -41,6 +56,21 @@ export function TopNav() {
   useEffect(() => {
     loadCount();
   }, [loadCount]);
+
+  // Persist last-visited track so the Back button survives navigation away
+  useEffect(() => {
+    const trackId = trackMatch?.params.trackId;
+    if (!trackId) return;
+    fetch(`/api/tracks/${trackId}`)
+      .then((r) => (r.ok ? r.json() : null))
+      .then((track: { id: string; name: string } | null) => {
+        if (!track) return;
+        const entry: LastTrack = { id: track.id, name: track.name };
+        localStorage.setItem(LAST_TRACK_KEY, JSON.stringify(entry));
+        setLastTrack(entry);
+      })
+      .catch(() => { /* non-fatal */ });
+  }, [trackMatch?.params.trackId]);
 
   // WebSocket for real-time count updates
   useEffect(() => {
@@ -82,11 +112,14 @@ export function TopNav() {
           </NavLink>
         ))}
 
-        {/* Show a track breadcrumb pill when inside a track view */}
-        {trackMatch && (
-          <span className="ml-1 px-2 py-0.5 text-[10px] font-mono text-gray-500 bg-gray-900 rounded">
-            /{trackMatch.params.trackId?.slice(0, 8)}
-          </span>
+        {/* Persistent back-to-track button — always shows the most recently visited track */}
+        {lastTrack && (
+          <NavLink
+            to={`/tracks/${lastTrack.id}`}
+            className="ml-1 px-2 py-0.5 text-[10px] font-medium text-indigo-400 bg-gray-900 hover:bg-gray-800 hover:text-indigo-300 rounded transition-colors"
+          >
+            {lastTrack.name}
+          </NavLink>
         )}
       </div>
 

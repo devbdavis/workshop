@@ -16,6 +16,7 @@ interface Props {
   onDestroySession: (sessionId: string) => void;
   onRenameSession: (sessionId: string, name: string) => void;
   onMinimize: (sessionId: SessionId) => void;
+  autoFocusSessionId?: SessionId | null;
 }
 
 export function SplitPaneLayout({
@@ -29,6 +30,7 @@ export function SplitPaneLayout({
   onDestroySession,
   onRenameSession,
   onMinimize,
+  autoFocusSessionId,
 }: Props) {
   if (node.type === 'leaf') {
     return (
@@ -42,6 +44,7 @@ export function SplitPaneLayout({
         onDestroySession={onDestroySession}
         onRenameSession={onRenameSession}
         onMinimize={onMinimize}
+        autoFocusSessionId={autoFocusSessionId}
       />
     );
   }
@@ -58,6 +61,7 @@ export function SplitPaneLayout({
       onDestroySession={onDestroySession}
       onRenameSession={onRenameSession}
       onMinimize={onMinimize}
+      autoFocusSessionId={autoFocusSessionId}
     />
   );
 }
@@ -74,9 +78,10 @@ interface LeafProps {
   onDestroySession: (sessionId: string) => void;
   onRenameSession: (sessionId: string, name: string) => void;
   onMinimize: (sessionId: SessionId) => void;
+  autoFocusSessionId?: SessionId | null;
 }
 
-function LeafPane({ node, trackId, sessions, onSplit, onClose, onCreateSession, onDestroySession, onRenameSession, onMinimize }: LeafProps) {
+function LeafPane({ node, trackId, sessions, onSplit, onClose, onCreateSession, onDestroySession, onRenameSession, onMinimize, autoFocusSessionId }: LeafProps) {
   const session = sessions.find((s) => s.id === node.sessionId);
   const [editing, setEditing] = useState(false);
   const [editValue, setEditValue] = useState('');
@@ -195,7 +200,7 @@ function LeafPane({ node, trackId, sessions, onSplit, onClose, onCreateSession, 
       {/* Terminal content */}
       <div className="flex-1 min-h-0 min-w-0">
         {session ? (
-          <TerminalPanel trackId={trackId} sessionId={session.id} />
+          <TerminalPanel trackId={trackId} sessionId={session.id} autoFocus={autoFocusSessionId === session.id} />
         ) : (
           <div className="h-full flex items-center justify-center text-gray-500 text-sm">
             Session not found
@@ -219,6 +224,7 @@ interface SplitProps {
   onDestroySession: (sessionId: string) => void;
   onRenameSession: (sessionId: string, name: string) => void;
   onMinimize: (sessionId: SessionId) => void;
+  autoFocusSessionId?: SessionId | null;
 }
 
 function SplitContainer({
@@ -232,6 +238,7 @@ function SplitContainer({
   onDestroySession,
   onRenameSession,
   onMinimize,
+  autoFocusSessionId,
 }: SplitProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const sizesRef = useRef<number[]>(node.sizes);
@@ -303,6 +310,7 @@ function SplitContainer({
               onDestroySession={onDestroySession}
               onRenameSession={onRenameSession}
               onMinimize={onMinimize}
+              autoFocusSessionId={autoFocusSessionId}
             />
           </div>
           {i < node.children.length - 1 && (

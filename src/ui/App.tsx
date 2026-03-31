@@ -1,5 +1,7 @@
 import { Routes, Route } from 'react-router-dom';
+import { useEffect } from 'react';
 import { AuthGate } from './auth/AuthGate';
+import { applyTheme, type ThemeId } from './hooks/useTheme';
 import { Dashboard } from './dashboard/Dashboard';
 import { TrackView } from './track-view/TrackView';
 import { Settings } from './settings/Settings';
@@ -15,6 +17,12 @@ import { OfficeVisualization } from './office/OfficeVisualization';
 import { TopNav } from './TopNav';
 
 export function App() {
+  // Apply persisted theme before first paint to avoid flash
+  useEffect(() => {
+    const stored = localStorage.getItem('workshop-theme') as ThemeId | null;
+    if (stored) applyTheme(stored);
+  }, []);
+
   return (
     <AuthGate>
       <div className="h-screen flex flex-col bg-gray-950 text-gray-100">
