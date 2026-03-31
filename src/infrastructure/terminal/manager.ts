@@ -71,15 +71,36 @@ function createWorktrees(sessionId: string, repos: TrackRepo[], sessionName?: st
       { stdio: 'pipe' },
     );
 
+    const symlinksMade: string[] = [];
     for (const dir of WORKTREE_SYMLINK_DIRS) {
       const src = path.join(repo.path, dir);
       const dst = path.join(worktreePath, dir);
       if (existsSync(src) && !existsSync(dst)) {
         try {
           symlinkSync(src, dst);
+          symlinksMade.push(dir);
         } catch {
           // Non-fatal — agent can reinstall if needed
         }
+      }
+    }
+
+    // Suppress symlinked dirs in the per-worktree exclude file so
+    // `git status` stays clean. The .git file contains the gitdir path.
+    if (symlinksMade.length > 0) {
+      try {
+        const gitFileContent = readFileSync(path.join(worktreePath, '.git'), 'utf-8');
+        const match = gitFileContent.match(/^gitdir:\s*(.+)$/m);
+        if (match) {
+          const worktreeGitDir = match[1].trim();
+          const infoDir = path.join(worktreeGitDir, 'info');
+          mkdirSync(infoDir, { recursive: true });
+          const excludePath = path.join(infoDir, 'exclude');
+          const excludeLines = symlinksMade.map((d) => `/${d}`).join('\n') + '\n';
+          writeFileSync(excludePath, excludeLines, 'utf-8');
+        }
+      } catch {
+        // Non-fatal — cosmetic only
       }
     }
   }
