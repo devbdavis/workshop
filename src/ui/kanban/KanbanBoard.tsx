@@ -13,11 +13,12 @@ import {
   type CollisionDetection,
 } from '@dnd-kit/core';
 import { arrayMove } from '@dnd-kit/sortable';
-import type { Todo, TodoStatus, Track } from '@foundation/types';
+import type { Todo, TodoStatus, TodoPriority, Track } from '@foundation/types';
 import type { DispatchOptions } from '../track-view/DispatchDropdown';
 import { KanbanColumn } from './KanbanColumn';
 import { KanbanCard } from './KanbanCard';
 import { TodoDetailModal } from './TodoDetailModal';
+import { CreateTodoModal } from './CreateTodoModal';
 
 const COLUMNS: { status: TodoStatus; label: string; color: string }[] = [
   { status: 'backlog', label: 'Backlog', color: 'bg-gray-500' },
@@ -35,6 +36,7 @@ export function KanbanBoard() {
   const [filterTrackId, setFilterTrackId] = useState<string>('');
   const [activeDrag, setActiveDrag] = useState<Todo | null>(null);
   const [selectedTodo, setSelectedTodo] = useState<Todo | null>(null);
+  const [showCreateModal, setShowCreateModal] = useState(false);
   const [loading, setLoading] = useState(true);
 
   // Cards win over columns for precise within-column reordering.
@@ -194,13 +196,33 @@ export function KanbanBoard() {
     loadData();
   }
 
-  async function handleDispatchTodo(todoId: string, opts: DispatchOptions) {
+  async function handleDispatchTodo(todoId: string, opts: DispatchOptions, formData?: Partial<Todo>) {
+    if (formData) {
+      await fetch(`/api/todos/${todoId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(formData),
+      });
+    }
     await fetch(`/api/todos/${todoId}/dispatch`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(opts),
     });
     setSelectedTodo(null);
+    loadData();
+  }
+
+  async function handleCreateTodo(
+    trackId: string,
+    data: { title: string; description?: string; priority: TodoPriority; status: TodoStatus },
+  ) {
+    await fetch(`/api/tracks/${trackId}/todos`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data),
+    });
+    setShowCreateModal(false);
     loadData();
   }
 
@@ -224,6 +246,12 @@ export function KanbanBoard() {
               <option key={t.id} value={t.id}>{t.name}</option>
             ))}
           </select>
+          <button
+            onClick={() => setShowCreateModal(true)}
+            className="px-3 py-1.5 text-xs bg-blue-600 hover:bg-blue-500 text-white rounded-lg transition-colors"
+          >
+            + New Todo
+          </button>
         </div>
       </header>
 
@@ -269,6 +297,15 @@ export function KanbanBoard() {
           onSave={handleSaveTodo}
           onDelete={handleDeleteTodo}
           onDispatch={handleDispatchTodo}
+        />
+      )}
+
+      {showCreateModal && (
+        <CreateTodoModal
+          tracks={tracks}
+          defaultTrackId={filterTrackId || undefined}
+          onClose={() => setShowCreateModal(false)}
+          onCreate={handleCreateTodo}
         />
       )}
     </div>
