@@ -57,8 +57,12 @@ export function TerminalArea({ trackId, sessions, onDestroySession, onCreateSess
     });
   }, [sessions]);
 
-  // Track which session was just restored so its terminal can be auto-focused
-  const justRestoredRef = useRef<SessionId | null>(null);
+  // Track which session was just restored so its terminal can be auto-focused.
+  // Initialised to the first non-background session so the terminal is focused
+  // immediately when the track page loads.
+  const justRestoredRef = useRef<SessionId | null>(
+    sessions.find((s) => !s.background)?.id ?? null,
+  );
 
   const minimize = (id: SessionId) =>
     setMinimizedIds((prev) => { const n = new Set(prev); n.add(id); return n; });
