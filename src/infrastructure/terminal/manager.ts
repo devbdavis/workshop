@@ -115,6 +115,22 @@ function createWorktrees(sessionId: string, repos: TrackRepo[], sessionName?: st
 }
 
 /**
+ * Rewrite original repo paths in a prompt string to their worktree equivalents.
+ * Ensures agents directed by their system/initial prompt operate in the isolated
+ * worktree rather than the canonical clone.
+ */
+function rewritePathsForWorktree(prompt: string, repos: TrackRepo[], worktreeRoot: string): string {
+  let result = prompt;
+  for (const repo of repos) {
+    const worktreePath = path.join(worktreeRoot, path.basename(repo.path));
+    // Replace with-trailing-slash variant first to avoid partial replacements
+    result = result.split(repo.path + '/').join(worktreePath + '/');
+    result = result.split(repo.path).join(worktreePath);
+  }
+  return result;
+}
+
+/**
  * Remove worktrees registered in workspace/.worktree-meta.json.
  * Best-effort — directory removal via cleanSessionDir handles the rest.
  */
@@ -267,21 +283,31 @@ export function createTerminalManager(sessionRepo: SessionRepository, soulLoader
 
       // Create worktrees if requested
       let cwd = options?.workingDirectory || process.env.HOME || '/tmp';
+      let initialPrompt = options?.initialPrompt;
       if (options?.worktreeMode && options.repos?.length) {
         try {
           const worktreeRoot = createWorktrees(session.id, options.repos, options.name);
           sessionRepo.updateWorktreeRoot(session.id, worktreeRoot);
           session.worktreeRoot = worktreeRoot;
           cwd = worktreeRoot;
+
+          // Rewrite any original repo paths in prompts to point at the worktree
+          // so agents don't wander back to the canonical clone.
+          if (systemPrompt) {
+            systemPrompt = rewritePathsForWorktree(systemPrompt, options.repos, worktreeRoot);
+          }
+          if (initialPrompt) {
+            initialPrompt = rewritePathsForWorktree(initialPrompt, options.repos, worktreeRoot);
+          }
         } catch (err) {
           console.warn(`[worktree] Failed to create worktrees for session ${session.id}:`, err);
           // Fall back to standard workingDirectory
         }
       }
 
-      // Create modified options with soul-prepended system prompt
+      // Create modified options with soul-prepended system prompt (and rewritten paths if worktree)
       const effectiveOptions: CreateSessionOptions | undefined = options
-        ? { ...options, systemPrompt: systemPrompt || undefined }
+        ? { ...options, systemPrompt: systemPrompt || undefined, initialPrompt }
         : systemPrompt
           ? { systemPrompt }
           : undefined;
