@@ -13,11 +13,12 @@ import {
   type CollisionDetection,
 } from '@dnd-kit/core';
 import { arrayMove } from '@dnd-kit/sortable';
-import type { Todo, TodoStatus, Track } from '@foundation/types';
+import type { Todo, TodoStatus, TodoPriority, Track } from '@foundation/types';
 import type { DispatchOptions } from '../track-view/DispatchDropdown';
 import { KanbanColumn } from './KanbanColumn';
 import { KanbanCard } from './KanbanCard';
 import { TodoDetailModal } from './TodoDetailModal';
+import { CreateTodoModal } from './CreateTodoModal';
 
 const COLUMNS: { status: TodoStatus; label: string; color: string }[] = [
   { status: 'backlog', label: 'Backlog', color: 'bg-gray-500' },
@@ -29,12 +30,24 @@ const COLUMNS: { status: TodoStatus; label: string; color: string }[] = [
 
 const COLUMN_IDS = new Set(['backlog', 'ready', 'in-progress', 'review', 'done']);
 
+function fuzzyMatch(query: string, text: string): boolean {
+  const q = query.toLowerCase();
+  const t = text.toLowerCase();
+  let qi = 0;
+  for (let i = 0; i < t.length && qi < q.length; i++) {
+    if (t[i] === q[qi]) qi++;
+  }
+  return qi === q.length;
+}
+
 export function KanbanBoard() {
   const [todos, setTodos] = useState<Todo[]>([]);
   const [tracks, setTracks] = useState<Track[]>([]);
   const [filterTrackId, setFilterTrackId] = useState<string>('');
+  const [searchQuery, setSearchQuery] = useState('');
   const [activeDrag, setActiveDrag] = useState<Todo | null>(null);
   const [selectedTodo, setSelectedTodo] = useState<Todo | null>(null);
+  const [showCreateModal, setShowCreateModal] = useState(false);
   const [loading, setLoading] = useState(true);
 
   // Cards win over columns for precise within-column reordering.
@@ -95,9 +108,11 @@ export function KanbanBoard() {
 
   const trackNames = Object.fromEntries(tracks.map((t) => [t.id, t.name]));
 
-  const filteredTodos = filterTrackId
-    ? todos.filter((t) => t.trackId === filterTrackId)
-    : todos;
+  const filteredTodos = todos.filter((t) => {
+    if (filterTrackId && t.trackId !== filterTrackId) return false;
+    if (searchQuery && !fuzzyMatch(searchQuery, t.title)) return false;
+    return true;
+  });
 
   const SEVEN_DAYS_MS = 7 * 24 * 60 * 60 * 1000;
   const todosByStatus = (status: TodoStatus) =>
@@ -194,13 +209,33 @@ export function KanbanBoard() {
     loadData();
   }
 
-  async function handleDispatchTodo(todoId: string, opts: DispatchOptions) {
+  async function handleDispatchTodo(todoId: string, opts: DispatchOptions, formData?: Partial<Todo>) {
+    if (formData) {
+      await fetch(`/api/todos/${todoId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(formData),
+      });
+    }
     await fetch(`/api/todos/${todoId}/dispatch`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(opts),
     });
     setSelectedTodo(null);
+    loadData();
+  }
+
+  async function handleCreateTodo(
+    trackId: string,
+    data: { title: string; description?: string; priority: TodoPriority; status: TodoStatus },
+  ) {
+    await fetch(`/api/tracks/${trackId}/todos`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data),
+    });
+    setShowCreateModal(false);
     loadData();
   }
 
@@ -214,6 +249,13 @@ export function KanbanBoard() {
         <h1 className="text-lg font-semibold">Kanban</h1>
         <span className="text-xs text-gray-500">{filteredTodos.length} todos</span>
         <div className="ml-auto flex items-center gap-3">
+          <input
+            type="text"
+            placeholder="Search…"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            className="px-3 py-1.5 bg-gray-800 border border-gray-700 rounded-lg text-sm text-gray-300 w-44 placeholder-gray-600"
+          />
           <select
             value={filterTrackId}
             onChange={(e) => setFilterTrackId(e.target.value)}
@@ -224,6 +266,12 @@ export function KanbanBoard() {
               <option key={t.id} value={t.id}>{t.name}</option>
             ))}
           </select>
+          <button
+            onClick={() => setShowCreateModal(true)}
+            className="px-3 py-1.5 text-xs bg-blue-600 hover:bg-blue-500 text-white rounded-lg transition-colors"
+          >
+            + New Todo
+          </button>
         </div>
       </header>
 
@@ -269,6 +317,15 @@ export function KanbanBoard() {
           onSave={handleSaveTodo}
           onDelete={handleDeleteTodo}
           onDispatch={handleDispatchTodo}
+        />
+      )}
+
+      {showCreateModal && (
+        <CreateTodoModal
+          tracks={tracks}
+          defaultTrackId={filterTrackId || undefined}
+          onClose={() => setShowCreateModal(false)}
+          onCreate={handleCreateTodo}
         />
       )}
     </div>
