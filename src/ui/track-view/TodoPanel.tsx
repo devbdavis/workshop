@@ -41,6 +41,7 @@ export function TodoPanel({ track, todos, sessions, onUpdate }: Props) {
   const [agents, setAgents] = useState<Agent[]>([]);
   const [dispatchingTodoId, setDispatchingTodoId] = useState<string | null>(null);
   const [editingTodo, setEditingTodo] = useState<Todo | null>(null);
+  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
   const activeTodos = todos.filter((t) => t.status !== 'done');
 
   // Build a set of active session IDs for quick lookup
@@ -188,12 +189,30 @@ export function TodoPanel({ track, todos, sessions, onUpdate }: Props) {
                     ) : null}
                   </div>
                 </div>
-                <button
-                  onClick={() => deleteTodo(todo.id)}
-                  className="text-xs text-gray-600 hover:text-red-400 opacity-0 group-hover:opacity-100 shrink-0 ml-2"
-                >
-                  x
-                </button>
+                {confirmDeleteId === todo.id ? (
+                  <div className="flex items-center gap-1 shrink-0 ml-2">
+                    <button
+                      onClick={() => { deleteTodo(todo.id); setConfirmDeleteId(null); }}
+                      className="text-[10px] px-1.5 py-0.5 bg-red-700 hover:bg-red-600 text-white rounded transition-colors"
+                      autoFocus
+                    >
+                      Yes
+                    </button>
+                    <button
+                      onClick={() => setConfirmDeleteId(null)}
+                      className="text-[10px] px-1.5 py-0.5 bg-gray-700 hover:bg-gray-600 text-gray-200 rounded transition-colors"
+                    >
+                      No
+                    </button>
+                  </div>
+                ) : (
+                  <button
+                    onClick={() => setConfirmDeleteId(todo.id)}
+                    className="text-xs text-gray-600 hover:text-red-400 opacity-0 group-hover:opacity-100 shrink-0 ml-2"
+                  >
+                    x
+                  </button>
+                )}
               </div>
             </li>
           ))}

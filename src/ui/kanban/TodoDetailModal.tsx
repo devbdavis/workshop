@@ -33,6 +33,7 @@ export function TodoDetailModal({ todo, tracks, onClose, onSave, onDelete, onDis
   const [refined, setRefined] = useState(false);
   const [agents, setAgents] = useState<Agent[]>([]);
   const [showDispatch, setShowDispatch] = useState(false);
+  const [confirmDelete, setConfirmDelete] = useState(false);
 
   useEffect(() => {
     if (todo) {
@@ -42,6 +43,7 @@ export function TodoDetailModal({ todo, tracks, onClose, onSave, onDelete, onDis
       setPriority(todo.priority);
       setRefined(todo.refined);
       setShowDispatch(false);
+      setConfirmDelete(false);
     }
   }, [todo]);
 
@@ -155,12 +157,31 @@ export function TodoDetailModal({ todo, tracks, onClose, onSave, onDelete, onDis
         </div>
 
         <div className="flex items-center justify-between px-5 py-3 border-t border-gray-800 shrink-0">
-          <button
-            onClick={() => onDelete(todo.id)}
-            className="text-xs text-red-400 hover:text-red-300"
-          >
-            Delete
-          </button>
+          {confirmDelete ? (
+            <div className="flex items-center gap-2">
+              <span className="text-xs text-red-400">Delete?</span>
+              <button
+                onClick={() => onDelete(todo.id)}
+                className="px-2 py-1 text-xs bg-red-700 hover:bg-red-600 text-white rounded transition-colors"
+                autoFocus
+              >
+                Yes
+              </button>
+              <button
+                onClick={() => setConfirmDelete(false)}
+                className="px-2 py-1 text-xs bg-gray-700 hover:bg-gray-600 text-gray-200 rounded transition-colors"
+              >
+                Cancel
+              </button>
+            </div>
+          ) : (
+            <button
+              onClick={() => setConfirmDelete(true)}
+              className="text-xs text-red-400 hover:text-red-300"
+            >
+              Delete
+            </button>
+          )}
           <div className="flex gap-2">
             {canDispatch && (
               <div className="relative">
