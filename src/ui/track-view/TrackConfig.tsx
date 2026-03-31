@@ -170,6 +170,31 @@ export function TrackConfig({ track, onUpdate }: Props) {
         )}
       </section>
 
+      <section>
+        <h3 className="text-sm font-semibold text-gray-300 mb-2">Agent Behaviour</h3>
+        <label className="flex items-center gap-2 cursor-pointer group">
+          <input
+            type="checkbox"
+            checked={track.worktreeMode ?? false}
+            onChange={async (e) => {
+              await fetch(`/api/tracks/${track.id}`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ worktreeMode: e.target.checked }),
+              });
+              onUpdate();
+            }}
+            className="rounded border-gray-600 bg-gray-800 w-3 h-3"
+          />
+          <span className="text-xs text-gray-400 group-hover:text-gray-200">
+            Worktree mode
+          </span>
+        </label>
+        <p className="text-[10px] text-gray-600 mt-1">
+          Each background session gets isolated git worktrees of linked repos.
+        </p>
+      </section>
+
       <section className="pt-4 border-t border-gray-800">
         <button onClick={archiveTrack} className="text-xs text-red-500 hover:text-red-400">
           Archive Track

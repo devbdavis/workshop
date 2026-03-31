@@ -5,7 +5,7 @@ export interface TrackRepository {
   findById(id: TrackId): Track | null;
   findByMatrixRoomId(roomId: string): Track | null;
   create(track: Omit<Track, 'id' | 'createdAt' | 'updatedAt' | 'repos' | 'paths' | 'tickets'>): Track;
-  update(id: TrackId, data: Partial<Pick<Track, 'name' | 'description' | 'context' | 'label' | 'matrixRoomId' | 'status'>>): Track | null;
+  update(id: TrackId, data: Partial<Pick<Track, 'name' | 'description' | 'context' | 'label' | 'matrixRoomId' | 'status' | 'worktreeMode'>>): Track | null;
   delete(id: TrackId): boolean;
 
   // Prompt template association
