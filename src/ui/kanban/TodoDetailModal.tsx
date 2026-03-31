@@ -204,6 +204,14 @@ export function TodoDetailModal({ todo, tracks, onClose, onSave, onDelete, onDis
                 )}
               </div>
             )}
+            {status !== 'ready' && status !== 'done' && status !== 'in-progress' && (
+              <button
+                onClick={() => onSave(todo.id, { title, description: description || undefined, status: 'ready', priority, refined: true })}
+                className="px-3 py-1.5 text-xs bg-blue-700 hover:bg-blue-600 text-white rounded-lg transition-colors"
+              >
+                Mark Ready
+              </button>
+            )}
             {status !== 'done' && (
               <button
                 onClick={() => onSave(todo.id, { title, description: description || undefined, status: 'done', priority, refined })}

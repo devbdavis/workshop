@@ -30,10 +30,21 @@ const COLUMNS: { status: TodoStatus; label: string; color: string }[] = [
 
 const COLUMN_IDS = new Set(['backlog', 'ready', 'in-progress', 'review', 'done']);
 
+function fuzzyMatch(query: string, text: string): boolean {
+  const q = query.toLowerCase();
+  const t = text.toLowerCase();
+  let qi = 0;
+  for (let i = 0; i < t.length && qi < q.length; i++) {
+    if (t[i] === q[qi]) qi++;
+  }
+  return qi === q.length;
+}
+
 export function KanbanBoard() {
   const [todos, setTodos] = useState<Todo[]>([]);
   const [tracks, setTracks] = useState<Track[]>([]);
   const [filterTrackId, setFilterTrackId] = useState<string>('');
+  const [searchQuery, setSearchQuery] = useState('');
   const [activeDrag, setActiveDrag] = useState<Todo | null>(null);
   const [selectedTodo, setSelectedTodo] = useState<Todo | null>(null);
   const [showCreateModal, setShowCreateModal] = useState(false);
@@ -97,9 +108,11 @@ export function KanbanBoard() {
 
   const trackNames = Object.fromEntries(tracks.map((t) => [t.id, t.name]));
 
-  const filteredTodos = filterTrackId
-    ? todos.filter((t) => t.trackId === filterTrackId)
-    : todos;
+  const filteredTodos = todos.filter((t) => {
+    if (filterTrackId && t.trackId !== filterTrackId) return false;
+    if (searchQuery && !fuzzyMatch(searchQuery, t.title)) return false;
+    return true;
+  });
 
   const SEVEN_DAYS_MS = 7 * 24 * 60 * 60 * 1000;
   const todosByStatus = (status: TodoStatus) =>
@@ -236,6 +249,13 @@ export function KanbanBoard() {
         <h1 className="text-lg font-semibold">Kanban</h1>
         <span className="text-xs text-gray-500">{filteredTodos.length} todos</span>
         <div className="ml-auto flex items-center gap-3">
+          <input
+            type="text"
+            placeholder="Search…"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            className="px-3 py-1.5 bg-gray-800 border border-gray-700 rounded-lg text-sm text-gray-300 w-44 placeholder-gray-600"
+          />
           <select
             value={filterTrackId}
             onChange={(e) => setFilterTrackId(e.target.value)}
