@@ -9,8 +9,8 @@ import { readAuthToken } from '@foundation/auth.js';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-/** Workshop API URL for hook callbacks */
-const WORKSHOP_API_URL = process.env.WORKSHOP_API_URL || 'http://localhost:3002';
+/** Workshop API URL for hook callbacks — derived from PORT so it matches the server's own binding */
+const WORKSHOP_API_URL = process.env.WORKSHOP_API_URL || `http://localhost:${process.env.PORT || '3001'}`;
 
 /** Build auth headers for HTTP hooks (includes auth token if available). */
 function buildHookHeaders(sessionId: string, extra?: Record<string, string>): Record<string, string> {

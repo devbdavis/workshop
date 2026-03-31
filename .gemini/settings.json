@@ -5,7 +5,7 @@
       "args": []
     },
     "ai-cli-mcp": {
-      "command": "/Users/fabian.haupt/.local/share/fnm/node-versions/v22.17.1/installation/bin/npx",
+      "command": "npx",
       "args": [
         "-y",
         "ai-cli-mcp@latest"
@@ -31,7 +31,7 @@
       "command": "npx",
       "args": [
         "tsx",
-        "/Users/fabian.haupt/projects/workshop/src/mcp/server.ts"
+        "/Users/brendan.davis/Klaviyo/Repos/workshop/src/mcp/server.ts"
       ]
     }
   }
