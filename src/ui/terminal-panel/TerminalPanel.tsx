@@ -7,9 +7,10 @@ import '@xterm/xterm/css/xterm.css';
 interface Props {
   trackId: string;
   sessionId: string;
+  autoFocus?: boolean;
 }
 
-export function TerminalPanel({ trackId, sessionId }: Props) {
+export function TerminalPanel({ trackId, sessionId, autoFocus }: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
   const termRef = useRef<Terminal | null>(null);
   const wsRef = useRef<WebSocket | null>(null);
@@ -36,6 +37,7 @@ export function TerminalPanel({ trackId, sessionId }: Props) {
 
     term.open(containerRef.current);
     fitAddon.fit();
+    if (autoFocus) term.focus();
 
     termRef.current = term;
     fitAddonRef.current = fitAddon;

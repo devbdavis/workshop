@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import type { Session, SessionId } from '@foundation/types';
 import { SplitPaneLayout } from './SplitPaneLayout';
 import { useTerminalLayout } from './use-terminal-layout';
@@ -11,10 +11,27 @@ interface Props {
   onRenameSession: (sessionId: string, name: string) => void;
 }
 
+const storageKey = (trackId: string) => `workshop:minimized:${trackId}`;
+
 export function TerminalArea({ trackId, sessions, onDestroySession, onCreateSession, onRenameSession }: Props) {
-  const [minimizedIds, setMinimizedIds] = useState<Set<SessionId>>(() =>
-    new Set(sessions.filter((s) => s.background).map((s) => s.id)),
-  );
+  const [minimizedIds, setMinimizedIds] = useState<Set<SessionId>>(() => {
+    try {
+      const stored = localStorage.getItem(storageKey(trackId));
+      if (stored) {
+        const ids = JSON.parse(stored) as SessionId[];
+        const validIds = new Set(sessions.map((s) => s.id));
+        return new Set(ids.filter((id) => validIds.has(id)));
+      }
+    } catch { /* ignore */ }
+    return new Set(sessions.filter((s) => s.background).map((s) => s.id));
+  });
+
+  // Persist minimized state across navigation
+  useEffect(() => {
+    try {
+      localStorage.setItem(storageKey(trackId), JSON.stringify([...minimizedIds]));
+    } catch { /* ignore */ }
+  }, [trackId, minimizedIds]);
 
   // Auto-minimize newly arriving background sessions
   const seenIdsRef = useRef<Set<SessionId>>(new Set(sessions.map((s) => s.id)));
@@ -38,11 +55,16 @@ export function TerminalArea({ trackId, sessions, onDestroySession, onCreateSess
     });
   }, [sessions]);
 
+  // Track which session was just restored so its terminal can be auto-focused
+  const justRestoredRef = useRef<SessionId | null>(null);
+
   const minimize = (id: SessionId) =>
     setMinimizedIds((prev) => { const n = new Set(prev); n.add(id); return n; });
 
-  const restore = (id: SessionId) =>
+  const restore = useCallback((id: SessionId) => {
+    justRestoredRef.current = id;
     setMinimizedIds((prev) => { const n = new Set(prev); n.delete(id); return n; });
+  }, []);
 
   const visibleSessions = sessions.filter((s) => !minimizedIds.has(s.id));
   const minimizedSessions = sessions.filter((s) => minimizedIds.has(s.id));
@@ -69,6 +91,7 @@ export function TerminalArea({ trackId, sessions, onDestroySession, onCreateSess
             onDestroySession={onDestroySession}
             onRenameSession={onRenameSession}
             onMinimize={minimize}
+            autoFocusSessionId={justRestoredRef.current}
           />
         </div>
       )}
