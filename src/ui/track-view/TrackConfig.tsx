@@ -1,5 +1,19 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import type { Track } from '@foundation/types';
+
+interface GlobalRepo {
+  id: string;
+  path: string;
+  name: string;
+  mainBranch: 'main' | 'master';
+}
+
+function tildeify(p: string): string {
+  const homePattern = /^\/(?:Users|home)\/[^/]+/;
+  const match = p.match(homePattern);
+  if (match) return '~' + p.slice(match[0].length);
+  return p;
+}
 
 interface Props {
   track: Track;
@@ -117,12 +131,12 @@ export function TrackConfig({ track, onUpdate }: Props) {
             + Add
           </button>
         </div>
-        {showAddRepo && <AddRepoForm onAdd={addRepo} onCancel={() => setShowAddRepo(false)} />}
+        {showAddRepo && <AddRepoForm onAdd={(p) => addRepo(p)} onCancel={() => setShowAddRepo(false)} />}
         {track.repos && track.repos.length > 0 ? (
           <ul className="space-y-1">
             {track.repos.map((repo) => (
               <li key={repo.id} className="flex items-center justify-between text-sm group">
-                <span className="font-mono text-xs text-gray-400 truncate">{repo.path}</span>
+                <span className="font-mono text-xs text-gray-400 truncate">{tildeify(repo.path)}</span>
                 <button
                   onClick={() => removeRepo(repo.id)}
                   className="text-xs text-gray-600 hover:text-red-400 opacity-0 group-hover:opacity-100"
@@ -208,31 +222,56 @@ function AddRepoForm({
   onAdd,
   onCancel,
 }: {
-  onAdd: (path: string, remoteUrl?: string) => void;
+  onAdd: (path: string) => void;
   onCancel: () => void;
 }) {
-  const [path, setPath] = useState('');
-  const [remoteUrl, setRemoteUrl] = useState('');
+  const [globalRepos, setGlobalRepos] = useState<GlobalRepo[]>([]);
+  const [selectedId, setSelectedId] = useState('');
+  const [customPath, setCustomPath] = useState('');
+
+  useEffect(() => {
+    fetch('/api/repos')
+      .then((r) => r.ok ? r.json() : [])
+      .then(setGlobalRepos)
+      .catch(() => setGlobalRepos([]));
+  }, []);
+
+  function submit() {
+    if (selectedId) {
+      const repo = globalRepos.find((r) => r.id === selectedId);
+      if (repo) { onAdd(repo.path); return; }
+    }
+    if (customPath.trim()) {
+      onAdd(customPath.trim());
+    }
+  }
 
   return (
     <div className="mb-3 space-y-2 p-2 bg-gray-800/50 rounded">
+      {globalRepos.length > 0 && (
+        <select
+          value={selectedId}
+          onChange={(e) => { setSelectedId(e.target.value); if (e.target.value) setCustomPath(''); }}
+          className="block w-full px-2 py-1 bg-gray-800 border border-gray-700 rounded text-xs font-mono"
+        >
+          <option value="">-- Select a global repo --</option>
+          {globalRepos.map((r) => (
+            <option key={r.id} value={r.id}>{tildeify(r.path)}</option>
+          ))}
+        </select>
+      )}
       <input
-        value={path}
-        onChange={(e) => setPath(e.target.value)}
-        placeholder="/path/to/repo"
+        value={customPath}
+        onChange={(e) => { setCustomPath(e.target.value); if (e.target.value) setSelectedId(''); }}
+        placeholder="/path/to/repo (new path)"
         className="block w-full px-2 py-1 bg-gray-800 border border-gray-700 rounded text-xs font-mono"
-        autoFocus
-      />
-      <input
-        value={remoteUrl}
-        onChange={(e) => setRemoteUrl(e.target.value)}
-        placeholder="Remote URL (optional)"
-        className="block w-full px-2 py-1 bg-gray-800 border border-gray-700 rounded text-xs"
+        autoFocus={globalRepos.length === 0}
       />
       <div className="flex gap-2">
         <button
-          onClick={() => path.trim() && onAdd(path.trim(), remoteUrl.trim() || undefined)}
-          className="text-xs text-blue-400"
+          onClick={submit}
+          disabled={!selectedId && !customPath.trim()}
+          className="text-xs text-blue-400 disabled:opacity-40"
         >
           Add
         </button>

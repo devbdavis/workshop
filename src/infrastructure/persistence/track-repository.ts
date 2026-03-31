@@ -1,7 +1,7 @@
 import { v4 as uuid } from 'uuid';
 import { getDatabase } from './database.js';
 import type { TrackRepository } from '@domain/track/repository';
-import type { Track, TrackId, TrackRepo, TrackPath, RepoId, PathId, TemplateId, TerminalLayout } from '@foundation/types';
+import type { Track, TrackId, TrackRepo, TrackPath, RepoId, PathId, TemplateId, TerminalLayout, GlobalRepoId } from '@foundation/types';
 
 export function createTrackRepository(): TrackRepository {
   const db = getDatabase();
@@ -21,7 +21,7 @@ export function createTrackRepository(): TrackRepository {
     'UPDATE tracks SET default_prompt_template_id = ?, updated_at = ? WHERE id = ?',
   );
   const insertRepoStmt = db.prepare(
-    'INSERT INTO track_repos (id, track_id, path, remote_url, created_at) VALUES (?, ?, ?, ?, ?)',
+    'INSERT INTO track_repos (id, track_id, path, remote_url, repo_id, created_at) VALUES (?, ?, ?, ?, ?, ?)',
   );
   const deleteRepoStmt = db.prepare('DELETE FROM track_repos WHERE id = ?');
   const findReposByTrackStmt = db.prepare('SELECT * FROM track_repos WHERE track_id = ?');
@@ -91,11 +91,11 @@ export function createTrackRepository(): TrackRepository {
       return result.changes > 0;
     },
 
-    addRepo(trackId: TrackId, path: string, remoteUrl?: string): TrackRepo {
+    addRepo(trackId: TrackId, path: string, remoteUrl?: string, repoId?: GlobalRepoId): TrackRepo {
       const id = uuid() as RepoId;
       const now = new Date().toISOString();
-      insertRepoStmt.run(id, trackId, path, remoteUrl || null, now);
-      return { id, trackId, path, remoteUrl, createdAt: now };
+      insertRepoStmt.run(id, trackId, path, remoteUrl || null, repoId || null, now);
+      return { id, trackId, path, remoteUrl, repoId, createdAt: now };
     },
 
     removeRepo(repoId: RepoId): boolean {
@@ -165,6 +165,7 @@ interface RepoRow {
   track_id: string;
   path: string;
   remote_url: string | null;
+  repo_id: string | null;
   created_at: string;
 }
 
@@ -207,6 +208,7 @@ function rowToRepo(row: RepoRow): TrackRepo {
     trackId: row.track_id as TrackId,
     path: row.path,
     remoteUrl: row.remote_url || undefined,
+    repoId: (row.repo_id as GlobalRepoId) || undefined,
     createdAt: row.created_at,
   };
 }

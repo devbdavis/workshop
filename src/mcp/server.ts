@@ -341,6 +341,48 @@ server.tool(
   },
 );
 
+// --- List Global Repos ---
+
+server.tool(
+  'workshop_list_repos',
+  'List all global repos in the Workshop registry',
+  async () => {
+    const repos = await api('/repos');
+    return { content: [{ type: 'text', text: JSON.stringify(repos, null, 2) }] };
+  },
+);
+
+// --- Create Global Repo ---
+
+server.tool(
+  'workshop_create_repo',
+  'Register a git repository in the global Workshop repo registry',
+  {
+    path: z.string().describe('Absolute filesystem path to the git repository'),
+  },
+  async ({ path }) => {
+    const repo = await api('/repos', {
+      method: 'POST',
+      body: JSON.stringify({ path }),
+    });
+    return { content: [{ type: 'text', text: JSON.stringify(repo, null, 2) }] };
+  },
+);
+
+// --- Delete Global Repo ---
+
+server.tool(
+  'workshop_delete_repo',
+  'Remove a git repository from the global Workshop repo registry',
+  {
+    repoId: z.string().describe('The global repo ID to delete'),
+  },
+  async ({ repoId }) => {
+    await api(`/repos/${repoId}`, { method: 'DELETE' });
+    return { content: [{ type: 'text', text: `Repo ${repoId} deleted from global registry.` }] };
+  },
+);
+
 // --- Create Track ---
 
 server.tool(
