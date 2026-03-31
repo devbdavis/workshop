@@ -166,6 +166,7 @@ export function createTerminalManager(sessionRepo: SessionRepository, soulLoader
       const session = sessionRepo.create({
         trackId,
         tmuxSession: tmuxName,
+        name: options?.name,
         systemPrompt: systemPrompt || undefined,
         state: 'active',
         provider,
