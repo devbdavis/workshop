@@ -27,6 +27,8 @@ export interface Track {
   status: 'active' | 'archived';
   defaultPromptTemplateId?: TemplateId;
   terminalLayout?: TerminalLayout;
+  /** If true, all background sessions on this track get per-session git worktrees */
+  worktreeMode?: boolean;
   createdAt: string;
   updatedAt: string;
   // Populated relations
@@ -71,6 +73,8 @@ export interface Session {
   provider: SessionProvider;
   /** Background sessions run agents silently — not shown in the main terminal area */
   background: boolean;
+  /** Workspace directory containing per-session git worktrees, if worktree mode was used */
+  worktreeRoot?: string;
   createdAt: string;
   updatedAt: string;
   /** NOT persisted — enriched at runtime from in-memory activity tracking */

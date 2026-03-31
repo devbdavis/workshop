@@ -9,11 +9,13 @@ interface Props {
   onDestroySession: (sessionId: string) => void;
   onCreateSession: () => Promise<Session | null>;
   onRenameSession: (sessionId: string, name: string) => void;
+  /** Default path to open when session has no worktreeRoot (e.g. track's first repo) */
+  defaultOpenPath?: string;
 }
 
 const storageKey = (trackId: string) => `workshop:minimized:${trackId}`;
 
-export function TerminalArea({ trackId, sessions, onDestroySession, onCreateSession, onRenameSession }: Props) {
+export function TerminalArea({ trackId, sessions, onDestroySession, onCreateSession, onRenameSession, defaultOpenPath }: Props) {
   const [minimizedIds, setMinimizedIds] = useState<Set<SessionId>>(() => {
     try {
       const stored = localStorage.getItem(storageKey(trackId));
@@ -92,6 +94,7 @@ export function TerminalArea({ trackId, sessions, onDestroySession, onCreateSess
             onRenameSession={onRenameSession}
             onMinimize={minimize}
             autoFocusSessionId={justRestoredRef.current}
+            defaultOpenPath={defaultOpenPath}
           />
         </div>
       )}
