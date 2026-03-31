@@ -1,6 +1,6 @@
 import { v4 as uuid } from 'uuid';
 import { getDatabase } from './database.js';
-import type { TodoRepository } from '@domain/todo/repository';
+import type { TodoRepository, TodoUpdateData } from '@domain/todo/repository';
 import type { Todo, TodoId, TodoStatus, TrackId, SessionId, AgentId } from '@foundation/types';
 
 export function createTodoRepository(): TodoRepository {
@@ -84,7 +84,7 @@ export function createTodoRepository(): TodoRepository {
       };
     },
 
-    update(id, data): Todo | null {
+    update(id, data: TodoUpdateData): Todo | null {
       const existing = this.findById(id);
       if (!existing) return null;
 
@@ -94,8 +94,9 @@ export function createTodoRepository(): TodoRepository {
       const status = data.status ?? existing.status;
       const priority = data.priority ?? existing.priority;
       const refined = data.refined !== undefined ? data.refined : existing.refined;
-      const sessionId = data.sessionId !== undefined ? data.sessionId : existing.sessionId;
-      const agentId = data.agentId !== undefined ? data.agentId : existing.agentId;
+      // null = explicit clear; undefined = preserve existing
+      const sessionId = data.sessionId !== undefined ? (data.sessionId ?? undefined) : existing.sessionId;
+      const agentId = data.agentId !== undefined ? (data.agentId ?? undefined) : existing.agentId;
       const sortOrder = data.sortOrder ?? existing.sortOrder;
 
       updateStmt.run(
