@@ -202,7 +202,9 @@ export function useTerminalLayout(
     if (!serverLayoutReceivedRef.current) return;
 
     const currentLayout = layoutRef.current;
-    const foreground = sessions.filter((s) => !s.background);
+    // TerminalArea filters to non-minimized sessions before passing here.
+    // We no longer filter by background — visibility is TerminalArea's concern.
+    const foreground = sessions;
 
     // If there are no foreground sessions, do NOT wipe the layout.
     // The saved layout structure (split directions, sizes) is valuable

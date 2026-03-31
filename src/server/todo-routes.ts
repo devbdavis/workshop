@@ -27,7 +27,7 @@ export interface TodoRouterDeps {
   terminal: {
     createSession: (
       trackId: TrackId,
-      opts?: { systemPrompt?: string; workingDirectory?: string; background?: boolean; todoId?: string; initialPrompt?: string; provider?: SessionProvider; dangerouslySkipPermissions?: boolean },
+      opts?: { systemPrompt?: string; workingDirectory?: string; background?: boolean; todoId?: string; initialPrompt?: string; provider?: SessionProvider; dangerouslySkipPermissions?: boolean; name?: string },
     ) => Promise<{ id: SessionId; trackId: TrackId; tmuxSession: string; state: string }>;
     destroySession: (sessionId: SessionId) => Promise<void>;
   };
@@ -246,6 +246,7 @@ export function createTodoRouter(deps: TodoRouterDeps): Router {
         initialPrompt: taskPrompt,
         provider,
         dangerouslySkipPermissions,
+        name: todo.title,
       });
 
       // Update todo status, link session, and store agent reference

@@ -20,6 +20,8 @@ export interface CreateSessionOptions {
   initialPrompt?: string;
   /** If true, skip permission hooks and run with --dangerously-skip-permissions. */
   dangerouslySkipPermissions?: boolean;
+  /** Display name for the session (shown in the terminal pane header). */
+  name?: string;
   /** Workflow ticket ID — if set, adds SubagentStop + SessionEnd hooks for execution tracking */
   executionTicketId?: string;
   /** Tool patterns to pre-approve (passed as --allowedTools to claude CLI). */

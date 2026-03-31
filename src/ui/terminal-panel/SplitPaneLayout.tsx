@@ -1,5 +1,6 @@
 import { useRef, useCallback, useState } from 'react';
 import type { LayoutNode, LayoutNodeId, SessionId } from '@foundation/types';
+// SessionId is a branded type; using it directly keeps the prop contract tight.
 import type { Session } from '@foundation/types';
 import { TerminalPanel } from './TerminalPanel';
 import { SplitDivider } from './SplitDivider';
@@ -14,6 +15,7 @@ interface Props {
   onCreateSession: () => Promise<Session | null>;
   onDestroySession: (sessionId: string) => void;
   onRenameSession: (sessionId: string, name: string) => void;
+  onMinimize: (sessionId: SessionId) => void;
 }
 
 export function SplitPaneLayout({
@@ -26,6 +28,7 @@ export function SplitPaneLayout({
   onCreateSession,
   onDestroySession,
   onRenameSession,
+  onMinimize,
 }: Props) {
   if (node.type === 'leaf') {
     return (
@@ -38,6 +41,7 @@ export function SplitPaneLayout({
         onCreateSession={onCreateSession}
         onDestroySession={onDestroySession}
         onRenameSession={onRenameSession}
+        onMinimize={onMinimize}
       />
     );
   }
@@ -53,6 +57,7 @@ export function SplitPaneLayout({
       onCreateSession={onCreateSession}
       onDestroySession={onDestroySession}
       onRenameSession={onRenameSession}
+      onMinimize={onMinimize}
     />
   );
 }
@@ -68,9 +73,10 @@ interface LeafProps {
   onCreateSession: () => Promise<Session | null>;
   onDestroySession: (sessionId: string) => void;
   onRenameSession: (sessionId: string, name: string) => void;
+  onMinimize: (sessionId: SessionId) => void;
 }
 
-function LeafPane({ node, trackId, sessions, onSplit, onClose, onCreateSession, onDestroySession, onRenameSession }: LeafProps) {
+function LeafPane({ node, trackId, sessions, onSplit, onClose, onCreateSession, onDestroySession, onRenameSession, onMinimize }: LeafProps) {
   const session = sessions.find((s) => s.id === node.sessionId);
   const [editing, setEditing] = useState(false);
   const [editValue, setEditValue] = useState('');
@@ -149,6 +155,15 @@ function LeafPane({ node, trackId, sessions, onSplit, onClose, onCreateSession, 
               }`}
             />
           )}
+          {session && (
+            <button
+              onClick={() => onMinimize(session.id)}
+              className="text-xs text-gray-500 hover:text-yellow-400 px-1"
+              title="Minimize"
+            >
+              ─
+            </button>
+          )}
           <button
             onClick={() => handleSplit('horizontal')}
             className="text-xs text-gray-500 hover:text-blue-400 px-1"
@@ -203,6 +218,7 @@ interface SplitProps {
   onCreateSession: () => Promise<Session | null>;
   onDestroySession: (sessionId: string) => void;
   onRenameSession: (sessionId: string, name: string) => void;
+  onMinimize: (sessionId: SessionId) => void;
 }
 
 function SplitContainer({
@@ -215,6 +231,7 @@ function SplitContainer({
   onCreateSession,
   onDestroySession,
   onRenameSession,
+  onMinimize,
 }: SplitProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const sizesRef = useRef<number[]>(node.sizes);
@@ -285,6 +302,7 @@ function SplitContainer({
               onCreateSession={onCreateSession}
               onDestroySession={onDestroySession}
               onRenameSession={onRenameSession}
+              onMinimize={onMinimize}
             />
           </div>
           {i < node.children.length - 1 && (
