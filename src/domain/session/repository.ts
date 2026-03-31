@@ -10,5 +10,6 @@ export interface SessionRepository {
   updateName(id: SessionId, name: string): Session | null;
   updateClaudeResumeId(id: SessionId, claudeResumeId: string): Session | null;
   updateTmuxSession(id: SessionId, tmuxSession: string): Session | null;
+  updateWorktreeRoot(id: SessionId, worktreeRoot: string): Session | null;
   delete(id: SessionId): boolean;
 }

@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import type { TrackId, TodoId, SessionId, AgentId, SessionProvider } from '@foundation/types';
+import type { TrackId, TodoId, SessionId, AgentId, SessionProvider, TrackRepo } from '@foundation/types';
 import type { TodoRepository } from '@domain/todo/repository';
 import type { TrackRepository } from '@domain/track/repository';
 import type { SessionRepository } from '@domain/session/repository';
@@ -27,7 +27,7 @@ export interface TodoRouterDeps {
   terminal: {
     createSession: (
       trackId: TrackId,
-      opts?: { systemPrompt?: string; workingDirectory?: string; background?: boolean; todoId?: string; initialPrompt?: string; provider?: SessionProvider; dangerouslySkipPermissions?: boolean; name?: string },
+      opts?: { systemPrompt?: string; workingDirectory?: string; background?: boolean; todoId?: string; initialPrompt?: string; provider?: SessionProvider; dangerouslySkipPermissions?: boolean; name?: string; worktreeMode?: boolean; repos?: TrackRepo[] },
     ) => Promise<{ id: SessionId; trackId: TrackId; tmuxSession: string; state: string }>;
     destroySession: (sessionId: SessionId) => Promise<void>;
   };
@@ -247,6 +247,8 @@ export function createTodoRouter(deps: TodoRouterDeps): Router {
         provider,
         dangerouslySkipPermissions,
         name: todo.title,
+        worktreeMode: track.worktreeMode && repos.length > 0,
+        repos: track.worktreeMode ? repos : undefined,
       });
 
       // Update todo status, link session, and store agent reference

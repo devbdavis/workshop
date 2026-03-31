@@ -160,6 +160,32 @@ function LeafPane({ node, trackId, sessions, onSplit, onClose, onCreateSession, 
               }`}
             />
           )}
+          {session?.worktreeRoot && (
+            <>
+              <button
+                onClick={() => fetch('/api/shell/open-in-editor', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ path: session.worktreeRoot }),
+                })}
+                className="text-[10px] text-gray-500 hover:text-blue-400 px-1"
+                title={`Open worktree in Cursor: ${session.worktreeRoot}`}
+              >
+                ⬀
+              </button>
+              <button
+                onClick={() => fetch('/api/shell/open-in-editor', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ path: session.worktreeRoot, app: 'terminal' }),
+                })}
+                className="text-[10px] text-gray-500 hover:text-green-400 px-1"
+                title={`Open worktree in iTerm: ${session.worktreeRoot}`}
+              >
+                ⌨
+              </button>
+            </>
+          )}
           {session && (
             <button
               onClick={() => onMinimize(session.id)}

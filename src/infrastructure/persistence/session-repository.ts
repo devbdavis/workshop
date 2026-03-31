@@ -12,12 +12,13 @@ export function createSessionRepository(): SessionRepository {
   const findByTmuxSessionStmt = db.prepare('SELECT * FROM sessions WHERE tmux_session = ?');
   const findAllStmt = db.prepare('SELECT * FROM sessions ORDER BY created_at DESC');
   const insertStmt = db.prepare(
-    'INSERT INTO sessions (id, track_id, name, tmux_session, claude_resume_id, system_prompt, state, provider, background, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+    'INSERT INTO sessions (id, track_id, name, tmux_session, claude_resume_id, system_prompt, state, provider, background, worktree_root, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
   );
   const updateStateStmt = db.prepare('UPDATE sessions SET state = ?, updated_at = ? WHERE id = ?');
   const updateNameStmt = db.prepare('UPDATE sessions SET name = ?, updated_at = ? WHERE id = ?');
   const updateClaudeResumeIdStmt = db.prepare('UPDATE sessions SET claude_resume_id = ?, updated_at = ? WHERE id = ?');
   const updateTmuxSessionStmt = db.prepare('UPDATE sessions SET tmux_session = ?, updated_at = ? WHERE id = ?');
+  const updateWorktreeRootStmt = db.prepare('UPDATE sessions SET worktree_root = ?, updated_at = ? WHERE id = ?');
   const deleteStmt = db.prepare('DELETE FROM sessions WHERE id = ?');
 
   return {
@@ -45,7 +46,7 @@ export function createSessionRepository(): SessionRepository {
       const id = uuid() as SessionId;
       const now = new Date().toISOString();
       const provider = data.provider || 'claude';
-      insertStmt.run(id, data.trackId, data.name || null, data.tmuxSession, data.claudeResumeId || null, data.systemPrompt || null, data.state, provider, data.background ? 1 : 0, now, now);
+      insertStmt.run(id, data.trackId, data.name || null, data.tmuxSession, data.claudeResumeId || null, data.systemPrompt || null, data.state, provider, data.background ? 1 : 0, data.worktreeRoot || null, now, now);
       return {
         id,
         trackId: data.trackId,
@@ -56,6 +57,7 @@ export function createSessionRepository(): SessionRepository {
         state: data.state,
         provider,
         background: data.background ?? false,
+        worktreeRoot: data.worktreeRoot,
         createdAt: now,
         updatedAt: now,
       };
@@ -89,6 +91,13 @@ export function createSessionRepository(): SessionRepository {
       return this.findById(id);
     },
 
+    updateWorktreeRoot(id: SessionId, worktreeRoot: string): Session | null {
+      const now = new Date().toISOString();
+      const result = updateWorktreeRootStmt.run(worktreeRoot, now, id);
+      if (result.changes === 0) return null;
+      return this.findById(id);
+    },
+
     delete(id: SessionId): boolean {
       const result = deleteStmt.run(id);
       return result.changes > 0;
@@ -106,6 +115,7 @@ interface SessionRow {
   state: string;
   provider: string | null;
   background: number;
+  worktree_root: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -121,6 +131,7 @@ function rowToSession(row: SessionRow): Session {
     state: row.state as SessionState,
     provider: (row.provider as SessionProvider) || 'claude',
     background: row.background === 1,
+    worktreeRoot: row.worktree_root || undefined,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
