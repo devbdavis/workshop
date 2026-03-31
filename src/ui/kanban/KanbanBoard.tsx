@@ -99,9 +99,14 @@ export function KanbanBoard() {
     ? todos.filter((t) => t.trackId === filterTrackId)
     : todos;
 
+  const SEVEN_DAYS_MS = 7 * 24 * 60 * 60 * 1000;
   const todosByStatus = (status: TodoStatus) =>
     filteredTodos
-      .filter((t) => t.status === status)
+      .filter((t) => {
+        if (t.status !== status) return false;
+        if (status === 'done') return Date.now() - new Date(t.updatedAt).getTime() < SEVEN_DAYS_MS;
+        return true;
+      })
       .sort((a, b) => a.sortOrder - b.sortOrder || new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
 
   function handleDragStart(event: DragStartEvent) {
