@@ -86,5 +86,5 @@ export function TerminalPanel({ trackId, sessionId, autoFocus }: Props) {
     };
   }, [trackId, sessionId]);
 
-  return <div ref={containerRef} className="h-full w-full" />;
+  return <div ref={containerRef} className="h-full w-full" onClick={() => termRef.current?.focus()} />;
 }

@@ -212,7 +212,7 @@ export function TerminalModal({ trackId, sessionId, title, onClose }: Props) {
 
         {/* Terminal content */}
         <div className="flex-1 min-h-0">
-          <TerminalPanel trackId={trackId} sessionId={sessionId} />
+          <TerminalPanel trackId={trackId} sessionId={sessionId} autoFocus />
         </div>
 
         {/* Resize handles */}
