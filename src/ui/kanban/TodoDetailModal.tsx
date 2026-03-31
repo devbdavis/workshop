@@ -8,7 +8,7 @@ interface Props {
   onClose: () => void;
   onSave: (todoId: string, data: Partial<Todo>) => void;
   onDelete: (todoId: string) => void;
-  onDispatch: (todoId: string, opts: DispatchOptions) => void;
+  onDispatch: (todoId: string, opts: DispatchOptions, formData?: Partial<Todo>) => void;
 }
 
 const STATUSES: { value: TodoStatus; label: string }[] = [
@@ -197,16 +197,24 @@ export function TodoDetailModal({ todo, tracks, onClose, onSave, onDelete, onDis
                     popUp
                     onSelect={(opts) => {
                       setShowDispatch(false);
-                      onDispatch(todo.id, opts);
+                      onDispatch(todo.id, opts, { title, description: description || undefined, status, priority, refined });
                     }}
                     onClose={() => setShowDispatch(false)}
                   />
                 )}
               </div>
             )}
+            {status !== 'ready' && status !== 'done' && status !== 'in-progress' && (
+              <button
+                onClick={() => onSave(todo.id, { title, description: description || undefined, status: 'ready', priority, refined: true })}
+                className="px-3 py-1.5 text-xs bg-blue-700 hover:bg-blue-600 text-white rounded-lg transition-colors"
+              >
+                Mark Ready
+              </button>
+            )}
             {status !== 'done' && (
               <button
-                onClick={() => onSave(todo.id, { status: 'done' })}
+                onClick={() => onSave(todo.id, { title, description: description || undefined, status: 'done', priority, refined })}
                 className="px-3 py-1.5 text-xs bg-gray-700 hover:bg-gray-600 text-gray-200 rounded-lg transition-colors"
               >
                 Mark Done
