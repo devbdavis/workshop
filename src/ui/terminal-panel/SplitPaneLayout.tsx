@@ -17,6 +17,7 @@ interface Props {
   onRenameSession: (sessionId: string, name: string) => void;
   onMinimize: (sessionId: SessionId) => void;
   autoFocusSessionId?: SessionId | null;
+  defaultOpenPath?: string;
 }
 
 export function SplitPaneLayout({
@@ -31,6 +32,7 @@ export function SplitPaneLayout({
   onRenameSession,
   onMinimize,
   autoFocusSessionId,
+  defaultOpenPath,
 }: Props) {
   if (node.type === 'leaf') {
     return (
@@ -45,6 +47,7 @@ export function SplitPaneLayout({
         onRenameSession={onRenameSession}
         onMinimize={onMinimize}
         autoFocusSessionId={autoFocusSessionId}
+        defaultOpenPath={defaultOpenPath}
       />
     );
   }
@@ -62,6 +65,7 @@ export function SplitPaneLayout({
       onRenameSession={onRenameSession}
       onMinimize={onMinimize}
       autoFocusSessionId={autoFocusSessionId}
+      defaultOpenPath={defaultOpenPath}
     />
   );
 }
@@ -79,9 +83,10 @@ interface LeafProps {
   onRenameSession: (sessionId: string, name: string) => void;
   onMinimize: (sessionId: SessionId) => void;
   autoFocusSessionId?: SessionId | null;
+  defaultOpenPath?: string;
 }
 
-function LeafPane({ node, trackId, sessions, onSplit, onClose, onCreateSession, onDestroySession, onRenameSession, onMinimize, autoFocusSessionId }: LeafProps) {
+function LeafPane({ node, trackId, sessions, onSplit, onClose, onCreateSession, onDestroySession, onRenameSession, onMinimize, autoFocusSessionId, defaultOpenPath }: LeafProps) {
   const session = sessions.find((s) => s.id === node.sessionId);
   const [editing, setEditing] = useState(false);
   const [editValue, setEditValue] = useState('');
@@ -160,32 +165,40 @@ function LeafPane({ node, trackId, sessions, onSplit, onClose, onCreateSession, 
               }`}
             />
           )}
-          {session?.worktreeRoot && (
-            <>
-              <button
-                onClick={() => fetch('/api/shell/open-in-editor', {
-                  method: 'POST',
-                  headers: { 'Content-Type': 'application/json' },
-                  body: JSON.stringify({ path: session.worktreeRoot }),
-                })}
-                className="text-[10px] text-gray-500 hover:text-blue-400 px-1"
-                title={`Open worktree in Cursor: ${session.worktreeRoot}`}
-              >
-                ⬀
-              </button>
-              <button
-                onClick={() => fetch('/api/shell/open-in-editor', {
-                  method: 'POST',
-                  headers: { 'Content-Type': 'application/json' },
-                  body: JSON.stringify({ path: session.worktreeRoot, app: 'terminal' }),
-                })}
-                className="text-[10px] text-gray-500 hover:text-green-400 px-1"
-                title={`Open worktree in iTerm: ${session.worktreeRoot}`}
-              >
-                ⌨
-              </button>
-            </>
-          )}
+          {session && (session.worktreeRoot ?? defaultOpenPath) && (() => {
+            const openPath = session.worktreeRoot ?? defaultOpenPath!;
+            return (
+              <>
+                <button
+                  onClick={() => fetch('/api/shell/open-in-editor', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ path: openPath }),
+                  })}
+                  className="flex items-center gap-0.5 text-[10px] text-gray-500 hover:text-blue-400 px-1"
+                  title={`Open in Cursor: ${openPath}`}
+                >
+                  <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" />
+                    <polyline points="15 3 21 3 21 9" />
+                    <line x1="10" y1="14" x2="21" y2="3" />
+                  </svg>
+                  <span>Cursor</span>
+                </button>
+                <button
+                  onClick={() => fetch('/api/shell/open-in-editor', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ path: openPath, app: 'terminal' }),
+                  })}
+                  className="text-[10px] text-gray-500 hover:text-green-400 px-1 font-mono"
+                  title={`Open in iTerm: ${openPath}`}
+                >
+                  &gt;_
+                </button>
+              </>
+            );
+          })()}
           {session && (
             <button
               onClick={() => onMinimize(session.id)}
@@ -251,6 +264,7 @@ interface SplitProps {
   onRenameSession: (sessionId: string, name: string) => void;
   onMinimize: (sessionId: SessionId) => void;
   autoFocusSessionId?: SessionId | null;
+  defaultOpenPath?: string;
 }
 
 function SplitContainer({
@@ -265,6 +279,7 @@ function SplitContainer({
   onRenameSession,
   onMinimize,
   autoFocusSessionId,
+  defaultOpenPath,
 }: SplitProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const sizesRef = useRef<number[]>(node.sizes);
@@ -337,6 +352,7 @@ function SplitContainer({
               onRenameSession={onRenameSession}
               onMinimize={onMinimize}
               autoFocusSessionId={autoFocusSessionId}
+              defaultOpenPath={defaultOpenPath}
             />
           </div>
           {i < node.children.length - 1 && (

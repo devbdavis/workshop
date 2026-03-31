@@ -275,6 +275,7 @@ export function TrackView() {
               onDestroySession={destroySession}
               onCreateSession={createSession}
               onRenameSession={renameSession}
+              defaultOpenPath={track.repos?.[0]?.path}
             />
           </div>
         </main>
