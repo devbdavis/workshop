@@ -602,6 +602,44 @@ function runMigrations(db: Database.Database): void {
     // Index already exists — safe to ignore
   }
 
+  // Migration: create global repos table
+  try {
+    db.exec(`
+      CREATE TABLE repos (
+        id TEXT PRIMARY KEY,
+        path TEXT NOT NULL UNIQUE,
+        name TEXT NOT NULL,
+        main_branch TEXT NOT NULL DEFAULT 'main',
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      );
+    `);
+  } catch {
+    // Table already exists — safe to ignore
+  }
+
+  // Migration: create settings table (key/value store)
+  try {
+    db.exec(`
+      CREATE TABLE settings (
+        key TEXT PRIMARY KEY,
+        value TEXT NOT NULL
+      );
+    `);
+  } catch {
+    // Table already exists — safe to ignore
+  }
+
+  // Migration: add repo_id column to track_repos (optional FK to global repos)
+  try {
+    db.exec(`ALTER TABLE track_repos ADD COLUMN repo_id TEXT REFERENCES repos(id);`);
+  } catch {
+    // Column already exists — safe to ignore
+  }
+
+  // Seed default repo_root setting
+  db.exec(`INSERT OR IGNORE INTO settings (key, value) VALUES ('repo_root', '~/Klaviyo/Repos');`);
+
   // Seed default prompt templates if the table is empty
   seedDefaultTemplates(db);
 }

@@ -58,6 +58,8 @@ import { createMatrixRouter } from '@application/matrix-router/router.js';
 import { createDiscussionRouter } from './discussion-routes.js';
 import { createMcpServerConfigRepository } from '@infrastructure/persistence/mcp-config-repository.js';
 import { createMcpConfigRouter } from './mcp-config-routes.js';
+import { createGlobalRepoRepository, createSettingsRepository } from '@infrastructure/persistence/repo-repository.js';
+import { createRepoRouter } from './repo-routes.js';
 import { createClaudeAdapter } from '@infrastructure/mcp-tools/claude-adapter.js';
 import { createCodexAdapter } from '@infrastructure/mcp-tools/codex-adapter.js';
 import { createGeminiAdapter } from '@infrastructure/mcp-tools/gemini-adapter.js';
@@ -375,6 +377,12 @@ export function createApiRouter(deps: ApiRouterDeps = {}): Router {
   });
   router.use(discussionRouter);
 
+  // Mount repo + settings sub-router
+  const globalRepos = createGlobalRepoRepository();
+  const settingsRepo = createSettingsRepository();
+  const repoRouter = createRepoRouter({ repos: globalRepos, settings: settingsRepo });
+  router.use(repoRouter);
+
   // Mount MCP config sub-router
   const mcpConfigs = createMcpServerConfigRepository();
   const mcpConfigRouter = createMcpConfigRouter({
@@ -501,7 +509,9 @@ export function createApiRouter(deps: ApiRouterDeps = {}): Router {
       res.status(400).json({ error: 'path is required' });
       return;
     }
-    const repo = tracks.addRepo(req.params.id as TrackId, repoPath, remoteUrl);
+    // Link to global repo if one exists for this path
+    const globalRepo = globalRepos.findByPath(repoPath);
+    const repo = tracks.addRepo(req.params.id as TrackId, repoPath, remoteUrl, globalRepo?.id);
     res.status(201).json(repo);
   });
 
