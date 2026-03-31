@@ -69,22 +69,267 @@
   --color-white: #c0ffc0;
 }
 
-/* ─── Phosphor glow on hover ─── */
+/* ═══════════════════════════════════════════════════
+   THEME VARIABLES — shared across all themes
+   Applied to :root / [data-theme] selectors
+   ═══════════════════════════════════════════════════ */
+
+:root,
+[data-theme="matrix"] {
+  --glow-color-rgb: 0, 255, 65;
+  --scrollbar-track: #010a01;
+  --scrollbar-thumb: #183218;
+  --scrollbar-thumb-hover: #275027;
+  --selection-bg: rgba(0, 255, 65, 0.25);
+  --selection-text: #c0ffc0;
+}
+
+[data-theme="solarized-dark"] {
+  /* Base: Solarized dark backgrounds */
+  --color-gray-950: #001e27;
+  --color-gray-900: #002b36;
+  --color-gray-800: #073642;
+  --color-gray-700: #0a4052;
+  --color-gray-600: #586e75;
+  --color-gray-500: #657b83;
+  --color-gray-400: #839496;
+  --color-gray-300: #93a1a1;
+  --color-gray-200: #b5c1c2;
+  --color-gray-100: #d0d9d9;
+  --color-gray-50:  #eee8d5;
+  /* Primary: Solarized blue */
+  --color-blue-950: #0a2030;
+  --color-blue-900: #103050;
+  --color-blue-800: #184870;
+  --color-blue-700: #1a6090;
+  --color-blue-600: #1a7bbf;
+  --color-blue-500: #268bd2;
+  --color-blue-400: #3a9de0;
+  --color-blue-300: #52aee8;
+  --color-blue-200: #7cc4f0;
+  --color-blue-100: #a8daf8;
+  --color-blue-50:  #d4eefb;
+  /* Success: Solarized green */
+  --color-green-400: #859900;
+  --color-green-500: #6e8000;
+  /* Accents: Solarized cyan */
+  --color-cyan-300: #2aa198;
+  --color-cyan-500: #1a7068;
+  --color-indigo-300: #6c71c4;
+  --color-indigo-500: #4a4fa0;
+  --color-purple-300: #d33682;
+  --color-purple-500: #a02060;
+  /* White → Solarized base3/base1 */
+  --color-white: #fdf6e3;
+  /* Effects */
+  --glow-color-rgb: 38, 139, 210;
+  --scrollbar-track: #001e27;
+  --scrollbar-thumb: #073642;
+  --scrollbar-thumb-hover: #0a4052;
+  --selection-bg: rgba(38, 139, 210, 0.25);
+  --selection-text: #eee8d5;
+}
+
+[data-theme="blue-dark"] {
+  /* Base: Deep navy */
+  --color-gray-950: #0d1117;
+  --color-gray-900: #141b26;
+  --color-gray-800: #1c2a3a;
+  --color-gray-700: #243347;
+  --color-gray-600: #2d4a6a;
+  --color-gray-500: #4a7da8;
+  --color-gray-400: #6a9dc8;
+  --color-gray-300: #8ab5d8;
+  --color-gray-200: #a8cce8;
+  --color-gray-100: #c5ddf0;
+  --color-gray-50:  #e1eef8;
+  /* Primary: Bright blue */
+  --color-blue-950: #0a1628;
+  --color-blue-900: #0f2240;
+  --color-blue-800: #163358;
+  --color-blue-700: #1d4470;
+  --color-blue-600: #2563eb;
+  --color-blue-500: #3b82f6;
+  --color-blue-400: #60a5fa;
+  --color-blue-300: #93c5fd;
+  --color-blue-200: #bfdbfe;
+  --color-blue-100: #dbeafe;
+  --color-blue-50:  #eff6ff;
+  /* Success */
+  --color-green-400: #34d399;
+  --color-green-500: #10b981;
+  /* Accents */
+  --color-cyan-300: #67e8f9;
+  --color-cyan-500: #06b6d4;
+  --color-indigo-300: #a5b4fc;
+  --color-indigo-500: #6366f1;
+  --color-purple-300: #c4b5fd;
+  --color-purple-500: #8b5cf6;
+  /* White */
+  --color-white: #e1eef8;
+  /* Effects */
+  --glow-color-rgb: 59, 130, 246;
+  --scrollbar-track: #0d1117;
+  --scrollbar-thumb: #1c2a3a;
+  --scrollbar-thumb-hover: #2d4a6a;
+  --selection-bg: rgba(59, 130, 246, 0.25);
+  --selection-text: #e1eef8;
+}
+
+[data-theme="purple-dark"] {
+  /* Base: Deep violet/indigo */
+  --color-gray-950: #0d0b14;
+  --color-gray-900: #160f2a;
+  --color-gray-800: #1e1540;
+  --color-gray-700: #291e54;
+  --color-gray-600: #3a2b6e;
+  --color-gray-500: #5a459a;
+  --color-gray-400: #7a65ba;
+  --color-gray-300: #9885cc;
+  --color-gray-200: #b8a8de;
+  --color-gray-100: #d4ccee;
+  --color-gray-50:  #ede8f8;
+  /* Primary: Violet */
+  --color-blue-950: #150b2e;
+  --color-blue-900: #200e48;
+  --color-blue-800: #2e1460;
+  --color-blue-700: #3d1c7a;
+  --color-blue-600: #6d28d9;
+  --color-blue-500: #8b5cf6;
+  --color-blue-400: #a78bfa;
+  --color-blue-300: #c4b5fd;
+  --color-blue-200: #ddd6fe;
+  --color-blue-100: #ede9fe;
+  --color-blue-50:  #f5f3ff;
+  /* Success */
+  --color-green-400: #34d399;
+  --color-green-500: #10b981;
+  /* Accents */
+  --color-cyan-300: #5eead4;
+  --color-cyan-500: #14b8a6;
+  --color-indigo-300: #93c5fd;
+  --color-indigo-500: #3b82f6;
+  --color-purple-300: #f9a8d4;
+  --color-purple-500: #ec4899;
+  /* White */
+  --color-white: #ede8f8;
+  /* Effects */
+  --glow-color-rgb: 139, 92, 246;
+  --scrollbar-track: #0d0b14;
+  --scrollbar-thumb: #1e1540;
+  --scrollbar-thumb-hover: #3a2b6e;
+  --selection-bg: rgba(139, 92, 246, 0.25);
+  --selection-text: #ede8f8;
+}
+
+[data-theme="ocean"] {
+  /* Base: Deep teal/ocean */
+  --color-gray-950: #030d14;
+  --color-gray-900: #071b26;
+  --color-gray-800: #0d2a3a;
+  --color-gray-700: #103347;
+  --color-gray-600: #1a4a5e;
+  --color-gray-500: #2a6882;
+  --color-gray-400: #3d8aaa;
+  --color-gray-300: #57a8c8;
+  --color-gray-200: #78c2d8;
+  --color-gray-100: #a0d8e8;
+  --color-gray-50:  #c8eef8;
+  /* Primary: Bright cyan/teal */
+  --color-blue-950: #021018;
+  --color-blue-900: #041c28;
+  --color-blue-800: #0a3040;
+  --color-blue-700: #0e4258;
+  --color-blue-600: #0670a0;
+  --color-blue-500: #0891b2;
+  --color-blue-400: #22d3ee;
+  --color-blue-300: #67e8f9;
+  --color-blue-200: #a5f3fc;
+  --color-blue-100: #cffafe;
+  --color-blue-50:  #ecfeff;
+  /* Success */
+  --color-green-400: #34d399;
+  --color-green-500: #10b981;
+  /* Accents */
+  --color-cyan-300: #5eead4;
+  --color-cyan-500: #14b8a6;
+  --color-indigo-300: #7dd3fc;
+  --color-indigo-500: #0ea5e9;
+  --color-purple-300: #86efac;
+  --color-purple-500: #22c55e;
+  /* White */
+  --color-white: #e0f7fa;
+  /* Effects */
+  --glow-color-rgb: 8, 145, 178;
+  --scrollbar-track: #030d14;
+  --scrollbar-thumb: #0d2a3a;
+  --scrollbar-thumb-hover: #1a4a5e;
+  --selection-bg: rgba(8, 145, 178, 0.25);
+  --selection-text: #c8eef8;
+}
+
+[data-theme="light"] {
+  /* Base: Inverted scale — 950=lightest bg, 100=darkest text */
+  --color-gray-950: #f0f4f8;
+  --color-gray-900: #ffffff;
+  --color-gray-800: #e2e8f0;
+  --color-gray-700: #cbd5e1;
+  --color-gray-600: #94a3b8;
+  --color-gray-500: #64748b;
+  --color-gray-400: #475569;
+  --color-gray-300: #334155;
+  --color-gray-200: #1e293b;
+  --color-gray-100: #0f172a;
+  --color-gray-50:  #020617;
+  /* Primary: Slate blue */
+  --color-blue-950: #eff6ff;
+  --color-blue-900: #dbeafe;
+  --color-blue-800: #bfdbfe;
+  --color-blue-700: #93c5fd;
+  --color-blue-600: #3b82f6;
+  --color-blue-500: #2563eb;
+  --color-blue-400: #1d4ed8;
+  --color-blue-300: #1e40af;
+  --color-blue-200: #1e3a8a;
+  --color-blue-100: #172554;
+  --color-blue-50:  #0d1b3e;
+  /* Success */
+  --color-green-400: #16a34a;
+  --color-green-500: #15803d;
+  /* Accents */
+  --color-cyan-300: #0891b2;
+  --color-cyan-500: #0e7490;
+  --color-indigo-300: #4f46e5;
+  --color-indigo-500: #3730a3;
+  --color-purple-300: #7c3aed;
+  --color-purple-500: #6d28d9;
+  /* White → dark for button text */
+  --color-white: #0f172a;
+  /* Effects */
+  --glow-color-rgb: 37, 99, 235;
+  --scrollbar-track: #e2e8f0;
+  --scrollbar-thumb: #94a3b8;
+  --scrollbar-thumb-hover: #64748b;
+  --selection-bg: rgba(37, 99, 235, 0.15);
+  --selection-text: #0f172a;
+}
+
+/* ─── Glow on hover (theme-aware) ─── */
 button:hover,
 a:hover {
-  text-shadow: 0 0 6px rgba(0, 255, 65, 0.3);
+  text-shadow: 0 0 6px rgba(var(--glow-color-rgb), 0.3);
 }
 
 /* Active/focused buttons get a stronger glow */
 button:active,
 button:focus-visible {
-  box-shadow: 0 0 12px rgba(0, 255, 65, 0.2);
+  box-shadow: 0 0 12px rgba(var(--glow-color-rgb), 0.2);
 }
 
-/* ─── Matrix-green scrollbars ─── */
+/* ─── Theme-aware scrollbars ─── */
 * {
   scrollbar-width: thin;
-  scrollbar-color: #183218 #010a01;
+  scrollbar-color: var(--scrollbar-thumb) var(--scrollbar-track);
 }
 
 ::-webkit-scrollbar {
@@ -93,22 +338,22 @@ button:focus-visible {
 }
 
 ::-webkit-scrollbar-track {
-  background: #010a01;
+  background: var(--scrollbar-track);
 }
 
 ::-webkit-scrollbar-thumb {
-  background: #183218;
+  background: var(--scrollbar-thumb);
   border-radius: 3px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: #275027;
+  background: var(--scrollbar-thumb-hover);
 }
 
-/* ─── Selection highlight ─── */
+/* ─── Theme-aware selection ─── */
 ::selection {
-  background: rgba(0, 255, 65, 0.25);
-  color: #c0ffc0;
+  background: var(--selection-bg);
+  color: var(--selection-text);
 }
 
 /* ═══════════════════════════════════════════════════
