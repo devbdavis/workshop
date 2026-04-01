@@ -87,7 +87,10 @@ export function createApiRouter(deps: ApiRouterDeps = {}): Router {
 
   // Sync session states on startup and periodically (every 30s).
   // Dead tmux sessions are removed from the DB (or suspended if resumable).
-  function runSessionSync() {
+  // When the sync produces new suspensions, immediately attempt to resume them —
+  // this handles the post-restart case where sessions transition dying→suspended
+  // after the 30s grace period, which would otherwise outlive the startup resume call.
+  async function runSessionSync() {
     const result = terminal.syncSessionStates();
     for (const { trackId } of result.cleaned) {
       broadcast('session:deleted', trackId);
@@ -101,11 +104,25 @@ export function createApiRouter(deps: ApiRouterDeps = {}): Router {
     for (const trackId of result.activityChanged) {
       broadcast('session:updated', trackId);
     }
+    if (result.suspended.length > 0) {
+      try {
+        const resumed = await terminal.resumeSuspendedSessions();
+        for (const session of resumed) {
+          broadcast('session:created', session.trackId);
+        }
+        if (resumed.length > 0) {
+          console.log(`[session-resume] Resumed ${resumed.length} session(s)`);
+        }
+      } catch (err) {
+        console.error('[session-resume] Failed to resume suspended sessions:', err);
+      }
+    }
   }
   runSessionSync();
 
-  // Resume sessions that were suspended (e.g. after machine restart).
-  // Delayed slightly so the sync completes and the server is ready for hook callbacks.
+  // Resume any sessions that were already in suspended state before this startup
+  // (e.g. suspended in a previous run). Delayed slightly so the server is ready
+  // for hook callbacks.
   setTimeout(async () => {
     try {
       const resumed = await terminal.resumeSuspendedSessions();
