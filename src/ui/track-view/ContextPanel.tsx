@@ -6,15 +6,8 @@ interface Props {
   onUpdate: () => void;
 }
 
-const PREVIEW_LINES = 3;
-
 export function ContextPanel({ track, onUpdate }: Props) {
-  const [expanded, setExpanded] = useState(false);
   const [modalOpen, setModalOpen] = useState(false);
-
-  const lines = (track.context || '').split('\n');
-  const isLong = lines.length > PREVIEW_LINES;
-  const preview = lines.slice(0, PREVIEW_LINES).join('\n');
 
   return (
     <div className="p-4">
@@ -34,21 +27,7 @@ export function ContextPanel({ track, onUpdate }: Props) {
             Edit
           </button>
         </div>
-        {track.context ? (
-          <div>
-            <p className="text-sm text-gray-400 whitespace-pre-wrap">
-              {expanded || !isLong ? track.context : preview + '\u2026'}
-            </p>
-            {isLong && (
-              <button
-                onClick={() => setExpanded(!expanded)}
-                className="text-xs text-blue-400 hover:text-blue-300 mt-1"
-              >
-                {expanded ? 'Collapse' : `Show all (${lines.length} lines)`}
-              </button>
-            )}
-          </div>
-        ) : (
+        {!track.context && (
           <p className="text-xs text-gray-600 italic">
             No context set. Click Edit to add project context that will be included in new Claude
             sessions.
@@ -56,26 +35,7 @@ export function ContextPanel({ track, onUpdate }: Props) {
         )}
       </div>
 
-      {track.repos && track.repos.length > 0 && (
-        <div className="mb-4">
-          <h4 className="text-xs font-medium text-gray-500 uppercase tracking-wide mb-1">Repos</h4>
-          <ul className="space-y-1">
-            {track.repos.map((repo) => (
-              <li key={repo.id} className="text-sm text-gray-400">
-                <span className="font-mono text-xs">{repo.path}</span>
-                {repo.branch && (
-                  <span className="ml-2 text-xs text-blue-400">{repo.branch}</span>
-                )}
-                {repo.dirty && (
-                  <span className="ml-1 text-xs text-yellow-500">modified</span>
-                )}
-              </li>
-            ))}
-          </ul>
-        </div>
-      )}
-
-      {track.tickets && track.tickets.length > 0 && (
+{track.tickets && track.tickets.length > 0 && (
         <div className="mb-4">
           <h4 className="text-xs font-medium text-gray-500 uppercase tracking-wide mb-1">
             Tickets
