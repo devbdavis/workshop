@@ -18,9 +18,11 @@ interface Props {
   onClose: () => void;
   /** Position the dropdown above the button instead of below */
   popUp?: boolean;
+  /** Track's configured default agent, shown as the top option */
+  defaultAgent?: Agent;
 }
 
-export function DispatchDropdown({ agents, onSelect, onClose, popUp }: Props) {
+export function DispatchDropdown({ agents, onSelect, onClose, popUp, defaultAgent }: Props) {
   const [provider, setProvider] = useState<SessionProvider>('claude');
   const [skipPermissions, setSkipPermissions] = useState(false);
 
@@ -71,12 +73,19 @@ export function DispatchDropdown({ agents, onSelect, onClose, popUp }: Props) {
         </span>
       </label>
 
-      {/* Default option */}
+      {/* Default option — shows track default agent if configured */}
       <button
         onClick={() => handleSelect(undefined)}
-        className="w-full text-left px-3 py-1.5 text-xs text-gray-300 hover:bg-gray-700 border-b border-gray-700"
+        className="w-full text-left px-3 py-1.5 text-xs hover:bg-gray-700 border-b border-gray-700"
       >
-        Default (no agent)
+        {defaultAgent ? (
+          <span className="text-gray-300">
+            Track default:{' '}
+            <span className="font-medium text-blue-300">{defaultAgent.name}</span>
+          </span>
+        ) : (
+          <span className="text-gray-500">No default agent</span>
+        )}
       </button>
 
       {/* Flat agent list */}
