@@ -77,6 +77,8 @@ export interface Session {
   background: boolean;
   /** Workspace directory containing per-session git worktrees, if worktree mode was used */
   worktreeRoot?: string;
+  /** Working directory the session was originally launched from — used to restore CWD on resume */
+  workingDirectory?: string;
   createdAt: string;
   updatedAt: string;
   /** NOT persisted — enriched at runtime from in-memory activity tracking */

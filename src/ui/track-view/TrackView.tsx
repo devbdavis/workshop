@@ -69,22 +69,41 @@ export function TrackView() {
     loadTrack();
   }, [loadTrack]);
 
-  // Subscribe to WebSocket events — permission events trigger faster polling
+  // Subscribe to WebSocket events — permission events trigger faster polling.
+  // Auto-reconnects on disconnect (e.g. server restart) and reloads on reconnect
+  // to catch any events missed while disconnected.
   useEffect(() => {
     if (!trackId) return;
-    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-    const ws = new WebSocket(`${protocol}//${window.location.host}/ws/events`);
-    ws.onmessage = (evt) => {
-      try {
-        const event = JSON.parse(evt.data);
-        if (event.trackId === trackId || event.type?.startsWith('permission:')) {
-          loadTrack();
+    let ws: WebSocket;
+    let reconnectTimer: ReturnType<typeof setTimeout>;
+    let cancelled = false;
+
+    function connect() {
+      if (cancelled) return;
+      const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+      ws = new WebSocket(`${protocol}//${window.location.host}/ws/events`);
+      ws.onopen = () => { loadTrack(); };
+      ws.onmessage = (evt) => {
+        try {
+          const event = JSON.parse(evt.data);
+          if (event.trackId === trackId || event.type?.startsWith('permission:')) {
+            loadTrack();
+          }
+        } catch {
+          // ignore malformed messages
         }
-      } catch {
-        // ignore malformed messages
-      }
+      };
+      ws.onclose = () => {
+        if (!cancelled) reconnectTimer = setTimeout(connect, 2_000);
+      };
+    }
+
+    connect();
+    return () => {
+      cancelled = true;
+      clearTimeout(reconnectTimer);
+      ws?.close();
     };
-    return () => ws.close();
   }, [trackId, loadTrack]);
 
   async function createSession(provider: SessionProvider = 'claude', worktreeMode?: boolean): Promise<Session | null> {
