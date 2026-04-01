@@ -138,8 +138,15 @@ export function buildClaudeLauncher(
   sessionId: string,
   sessionDir: string,
   tmuxName: string,
+  cwd: string,
   options?: CreateSessionOptions,
 ): void {
+  // Change to the original working directory before launching Claude.
+  // Claude determines which project bucket to use based on its CWD — resuming
+  // from the wrong directory causes "No conversation found" errors.
+  lines.push(`cd ${JSON.stringify(cwd)}`);
+  lines.push('');
+
   const claudeArgs = ['claude'];
 
   // Resume a previous Claude session if we have a resume ID

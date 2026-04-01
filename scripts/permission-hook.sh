@@ -28,17 +28,15 @@ fi
 
 INPUT=$(cat)
 
-AUTH_HEADER=""
-if [ -n "$AUTH_TOKEN" ]; then
-  AUTH_HEADER="-H \"Authorization: Bearer ${AUTH_TOKEN}\""
-fi
-
 # Blocking POST — no -m timeout since Workshop long-polls until user decides
-RESPONSE=$(eval curl -s -X POST "${WORKSHOP_API_URL}/api/hooks/permission" \
-  -H "Content-Type: application/json" \
-  -H "X-Workshop-Session: ${SESSION_ID}" \
-  $AUTH_HEADER \
-  --data-raw "${INPUT}" 2>/dev/null) || {
+CURL_ARGS=(-s -X POST "${WORKSHOP_API_URL}/api/hooks/permission"
+  -H "Content-Type: application/json"
+  -H "X-Workshop-Session: ${SESSION_ID}"
+  --data-raw "${INPUT}")
+if [ -n "$AUTH_TOKEN" ]; then
+  CURL_ARGS+=(-H "Authorization: Bearer ${AUTH_TOKEN}")
+fi
+RESPONSE=$(curl "${CURL_ARGS[@]}" 2>/dev/null) || {
   # curl failed — allow so agent isn't stuck
   exit 0
 }

@@ -233,7 +233,7 @@ export function createTerminalManager(sessionRepo: SessionRepository, soulLoader
     } else if (provider === 'gemini') {
       buildGeminiLauncher(launcherLines, sessionDir, cwd, effectiveOptions);
     } else if (provider === 'claude') {
-      buildClaudeLauncher(launcherLines, session.id, sessionDir, tmuxName, effectiveOptions);
+      buildClaudeLauncher(launcherLines, session.id, sessionDir, tmuxName, cwd, effectiveOptions);
     } else {
       throw new Error(`Unknown session provider: ${provider}`);
     }
@@ -270,7 +270,9 @@ export function createTerminalManager(sessionRepo: SessionRepository, soulLoader
         }
       }
 
-      // Create DB record first — we need session.id for the worktree path
+      // Create DB record first — we need session.id for the worktree path.
+      // workingDirectory is recorded now (before worktree override below) so we
+      // have the pre-worktree fallback; it will be overwritten after worktree creation.
       const session = sessionRepo.create({
         trackId,
         tmuxSession: tmuxName,
@@ -279,6 +281,7 @@ export function createTerminalManager(sessionRepo: SessionRepository, soulLoader
         state: 'active',
         provider,
         background: options?.background ?? false,
+        workingDirectory: options?.workingDirectory || process.env.HOME || '/tmp',
       });
 
       // Create worktrees if requested
@@ -508,8 +511,9 @@ export function createTerminalManager(sessionRepo: SessionRepository, soulLoader
       for (const session of suspendedSessions) {
         try {
           const tmuxName = `workshop-${uuid().slice(0, 8)}`;
-          // Use the track's first repo path, or HOME
-          const cwd = process.env.HOME || '/tmp';
+          // Restore the original CWD so Claude finds the conversation in the right project bucket.
+          // Worktree sessions use worktreeRoot (most specific); others use the stored workingDirectory.
+          const cwd = session.worktreeRoot || session.workingDirectory || process.env.HOME || '/tmp';
 
           const cleanEnv = { ...process.env };
           delete cleanEnv.CLAUDECODE;
