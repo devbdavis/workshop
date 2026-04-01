@@ -83,6 +83,8 @@ export interface Session {
   updatedAt: string;
   /** NOT persisted — enriched at runtime from in-memory activity tracking */
   lastActivityAt?: string;
+  /** NOT persisted — enriched at runtime: current agent activity state */
+  activityStatus?: 'working' | 'idle' | 'awaiting-permission';
 }
 
 // External ticket

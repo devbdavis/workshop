@@ -83,7 +83,7 @@ export function createApiRouter(deps: ApiRouterDeps = {}): Router {
   const filesystemScanner = createFilesystemAgentScanner();
   const projectRoot = process.cwd();
   const soulLoader = createSoulLoader(projectRoot);
-  const terminal = createTerminalManager(sessions, soulLoader);
+  const terminal = createTerminalManager(sessions, soulLoader, todos);
 
   // Sync session states on startup and periodically (every 30s).
   // Dead tmux sessions are removed from the DB (or suspended if resumable).
@@ -628,10 +628,18 @@ export function createApiRouter(deps: ApiRouterDeps = {}): Router {
 
   router.get('/sessions', (_req, res) => {
     const allSessions = sessions.findAll();
+    // Build a set of session IDs with pending permission requests so the UI
+    // can show the "awaiting-permission" indicator without a separate fetch.
+    const pendingSessionIds = new Set(
+      permissions.findAllPending().map((p) => p.sessionId),
+    );
     const enriched = allSessions.map(s => ({
       ...s,
       lastActivityAt: terminal.getLastActivityAt(s.id),
       dying: terminal.isDying(s.id),
+      activityStatus: pendingSessionIds.has(s.id)
+        ? 'awaiting-permission'
+        : terminal.getActivityStatus(s.id),
     }));
     res.json(enriched);
   });

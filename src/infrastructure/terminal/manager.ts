@@ -5,6 +5,7 @@ import { v4 as uuid } from 'uuid';
 import type { SessionRepository } from '@domain/session/repository';
 import type { Session, SessionId, TrackId, TrackRepo } from '@foundation/types';
 import type { SoulLoader } from '@infrastructure/soul/soul-loader.js';
+import type { TodoRepository } from '@domain/todo/repository.js';
 import {
   capturePaneLines, isSessionIdle, isSessionLoggedOut, isSessionExited,
 } from './pane-detection.js';
@@ -166,7 +167,7 @@ function hashString(s: string): number {
   return hash >>> 0; // unsigned 32-bit
 }
 
-export function createTerminalManager(sessionRepo: SessionRepository, soulLoader?: SoulLoader): TerminalManager {
+export function createTerminalManager(sessionRepo: SessionRepository, soulLoader?: SoulLoader, todoRepo?: TodoRepository): TerminalManager {
   try {
     execSync('which tmux', { stdio: 'pipe' });
   } catch {
@@ -185,6 +186,9 @@ export function createTerminalManager(sessionRepo: SessionRepository, soulLoader
   /** Timestamp when we first observed a dead tmux session, keyed by session ID */
   const dyingSince = new Map<string, number>();
 
+  /** Current activity status derived from pane detection, keyed by session ID */
+  const activityStatusMap = new Map<string, 'working' | 'idle'>();
+
   /** Get how many minutes a session has been observed idle */
   function getIdleMinutes(session: Session): number {
     const firstSeen = idleFirstSeen.get(session.id);
@@ -201,6 +205,7 @@ export function createTerminalManager(sessionRepo: SessionRepository, soulLoader
     lastPaneHash.delete(sessionId);
     lastActivityAt.delete(sessionId);
     dyingSince.delete(sessionId);
+    activityStatusMap.delete(sessionId);
   }
 
   function getSessionDir(sessionId: string): string {
@@ -367,6 +372,10 @@ export function createTerminalManager(sessionRepo: SessionRepository, soulLoader
       return dyingSince.has(sessionId);
     },
 
+    getActivityStatus(sessionId: SessionId): 'working' | 'idle' | undefined {
+      return activityStatusMap.get(sessionId);
+    },
+
     syncSessionStates(): SyncResult {
       const allSessions = sessionRepo.findAll();
       const cleaned: SyncResult['cleaned'] = [];
@@ -459,6 +468,13 @@ export function createTerminalManager(sessionRepo: SessionRepository, soulLoader
           activityChangedSet.add(session.trackId);
         }
 
+        // --- Activity status tracking (all alive sessions) ---
+        if (isSessionIdle(session, capturedLines)) {
+          activityStatusMap.set(session.id, 'idle');
+        } else {
+          activityStatusMap.set(session.id, 'working');
+        }
+
         // --- Background session cleanup (aggressive) ---
         // Matrix-dedicated sessions are long-lived — skip idle reaping
         const isMatrixSession = session.name?.startsWith('[matrix] ');
@@ -479,7 +495,14 @@ export function createTerminalManager(sessionRepo: SessionRepository, soulLoader
           if (isSessionIdle(session, capturedLines)) {
             const idleMinutes = getIdleMinutes(session);
             if (idleMinutes >= BACKGROUND_IDLE_TIMEOUT_MINUTES) {
-              reap(session, `background: idle ${Math.round(idleMinutes)}m`);
+              // Spare sessions whose linked todo is awaiting human review —
+              // the agent has completed its task but the human hasn't reviewed yet.
+              const linkedTodo = todoRepo?.findBySession(session.id as SessionId);
+              if (linkedTodo?.status === 'review') {
+                // Leave it alone — reaping will resume once the todo is actioned.
+              } else {
+                reap(session, `background: idle ${Math.round(idleMinutes)}m`);
+              }
             }
           } else {
             idleFirstSeen.delete(session.id);
