@@ -495,11 +495,12 @@ export function createTerminalManager(sessionRepo: SessionRepository, soulLoader
           if (isSessionIdle(session, capturedLines)) {
             const idleMinutes = getIdleMinutes(session);
             if (idleMinutes >= BACKGROUND_IDLE_TIMEOUT_MINUTES) {
-              // Spare sessions whose linked todo is awaiting human review —
-              // the agent has completed its task but the human hasn't reviewed yet.
+              // Spare any session with a linked todo that isn't done yet.
+              // The only safe-to-reap state is 'done' — all others mean the
+              // work is still in flight or awaiting human action.
               const linkedTodo = todoRepo?.findBySession(session.id as SessionId);
-              if (linkedTodo?.status === 'review') {
-                // Leave it alone — reaping will resume once the todo is actioned.
+              if (linkedTodo && linkedTodo.status !== 'done') {
+                // Leave it alone — reaping will resume once the todo reaches done.
               } else {
                 reap(session, `background: idle ${Math.round(idleMinutes)}m`);
               }
