@@ -130,11 +130,16 @@ export function setupWebSocket(server: HttpServer): void {
       }
     });
 
-    // Handle pty exit
-    const exitDisposable = ptyProcess.onExit(({ exitCode }) => {
+    // Handle pty exit: dispose data handler first to prevent any final writes
+    // racing the close, then terminate immediately rather than sending a CLOSE
+    // frame — the client may already be gone (navigated away / component
+    // unmounted), and sending a CLOSE frame to a dead Vite proxy socket
+    // produces a spurious EPIPE.
+    const exitDisposable = ptyProcess.onExit(() => {
+      dataDisposable.dispose();
       activePtys.delete(sessionId);
-      if (ws.readyState === WebSocket.OPEN) {
-        ws.close(1000, `pty exited with code ${exitCode}`);
+      if (ws.readyState !== WebSocket.CLOSED) {
+        ws.terminate();
       }
     });
 
@@ -189,11 +194,15 @@ export function setupWebSocket(server: HttpServer): void {
       activePtys.delete(sessionId);
     });
 
-    // Handle WebSocket errors
-    ws.on('error', (err) => {
-      console.error(`WebSocket error for session ${sessionId}:`, err.message);
+    // Handle WebSocket errors — EPIPE and ECONNRESET are expected whenever the
+    // client disconnects while the session is still active; only log genuinely
+    // unexpected errors.
+    ws.on('error', (err: Error & { code?: string }) => {
       dataDisposable.dispose();
       exitDisposable.dispose();
+      if (err.code !== 'EPIPE' && err.code !== 'ECONNRESET') {
+        console.error(`WebSocket error for session ${sessionId}:`, err.message);
+      }
       try {
         ptyProcess.kill();
       } catch {
