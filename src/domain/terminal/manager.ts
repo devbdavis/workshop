@@ -56,4 +56,6 @@ export interface TerminalManager {
   getLastActivityAt(sessionId: SessionId): string | undefined;
   /** Whether a session is in the dying grace period (tmux dead, awaiting reap/suspend) */
   isDying(sessionId: SessionId): boolean;
+  /** Get the current activity status of a session based on pane detection (working/idle/undefined) */
+  getActivityStatus(sessionId: SessionId): 'working' | 'idle' | undefined;
 }

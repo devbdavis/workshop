@@ -157,12 +157,27 @@ function LeafPane({ node, trackId, sessions, onSplit, onClose, onCreateSession, 
           {session && (
             <span
               className={`w-2 h-2 rounded-full ${
-                session.state === 'active'
-                  ? 'bg-green-500'
-                  : session.state === 'detached'
+                session.activityStatus === 'awaiting-permission'
+                  ? 'bg-red-500'
+                  : session.activityStatus === 'idle'
                     ? 'bg-yellow-500'
-                    : 'bg-red-500'
+                    : session.activityStatus === 'working'
+                      ? 'bg-green-500'
+                      : session.state === 'active'
+                        ? 'bg-green-500'
+                        : session.state === 'detached'
+                          ? 'bg-yellow-500'
+                          : 'bg-red-500'
               }`}
+              title={
+                session.activityStatus === 'awaiting-permission'
+                  ? 'Needs permission'
+                  : session.activityStatus === 'idle'
+                    ? 'Idle'
+                    : session.activityStatus === 'working'
+                      ? 'Working'
+                      : session.state
+              }
             />
           )}
           {session && (session.worktreeRoot ?? defaultOpenPath) && (() => {
