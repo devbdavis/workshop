@@ -31,15 +31,12 @@ fi
 # Read stdin — Claude Code sends session metadata as JSON (contains session_id)
 INPUT=$(cat)
 
-AUTH_HEADER=""
-if [ -n "$AUTH_TOKEN" ]; then
-  AUTH_HEADER="-H \"Authorization: Bearer ${AUTH_TOKEN}\""
-fi
-
 # Fire-and-forget POST to Workshop (5s timeout)
-eval curl -s -m 5 -X POST "${WORKSHOP_API_URL}/api/hooks/session-start" \
-  -H "Content-Type: application/json" \
-  -H "X-Workshop-Session: ${SESSION_ID}" \
-  $AUTH_HEADER \
-  --data-raw "${INPUT}" \
-  >/dev/null 2>&1 || true
+CURL_ARGS=(-s -m 5 -X POST "${WORKSHOP_API_URL}/api/hooks/session-start"
+  -H "Content-Type: application/json"
+  -H "X-Workshop-Session: ${SESSION_ID}"
+  --data-raw "${INPUT}")
+if [ -n "$AUTH_TOKEN" ]; then
+  CURL_ARGS+=(-H "Authorization: Bearer ${AUTH_TOKEN}")
+fi
+curl "${CURL_ARGS[@]}" >/dev/null 2>&1 || true

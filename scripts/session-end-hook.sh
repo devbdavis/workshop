@@ -40,14 +40,11 @@ if ! echo "$SESSION_ID" | grep -qE '^[a-zA-Z0-9_-]+$'; then
 fi
 
 # Fire-and-forget POST to Workshop (timeout after 1s to stay within hook budget)
-AUTH_HEADER=""
+CURL_ARGS=(-s -m 1 -X POST "${WORKSHOP_API_URL}/api/hooks/session-end"
+  -H "Content-Type: application/json"
+  -H "X-Workshop-Session: ${SESSION_ID}"
+  --data-raw "{\"session_id\": \"${SESSION_ID}\"}")
 if [ -n "$AUTH_TOKEN" ]; then
-  AUTH_HEADER="-H \"Authorization: Bearer ${AUTH_TOKEN}\""
+  CURL_ARGS+=(-H "Authorization: Bearer ${AUTH_TOKEN}")
 fi
-
-eval curl -s -m 1 -X POST "${WORKSHOP_API_URL}/api/hooks/session-end" \
-  -H "Content-Type: application/json" \
-  -H "X-Workshop-Session: ${SESSION_ID}" \
-  $AUTH_HEADER \
-  --data-raw "{\"session_id\": \"${SESSION_ID}\"}" \
-  >/dev/null 2>&1 || true
+curl "${CURL_ARGS[@]}" >/dev/null 2>&1 || true

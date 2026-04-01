@@ -120,11 +120,21 @@ export function createApiRouter(deps: ApiRouterDeps = {}): Router {
   }
   runSessionSync();
 
-  // Resume any sessions that were already in suspended state before this startup
-  // (e.g. suspended in a previous run). Delayed slightly so the server is ready
-  // for hook callbacks.
+  // Resume any sessions that were suspended or orphaned before this startup.
+  // Delayed slightly so the server is ready for hook callbacks.
   setTimeout(async () => {
     try {
+      // Fast-path: suspend any 'active' sessions whose tmux is gone so
+      // resumeSuspendedSessions picks them up immediately — bypassing the
+      // normal 30s dying grace period that would otherwise delay recovery.
+      const allSessions = sessions.findAll();
+      for (const session of allSessions) {
+        if (session.state === 'active' && session.claudeResumeId && !terminal.isSessionAlive(session)) {
+          sessions.updateState(session.id, 'suspended');
+          console.log(`[session-resume] Fast-suspended orphaned session ${session.id} (${session.tmuxSession})`);
+        }
+      }
+
       const resumed = await terminal.resumeSuspendedSessions();
       for (const session of resumed) {
         broadcast('session:created', session.trackId);

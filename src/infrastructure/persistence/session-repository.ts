@@ -12,7 +12,7 @@ export function createSessionRepository(): SessionRepository {
   const findByTmuxSessionStmt = db.prepare('SELECT * FROM sessions WHERE tmux_session = ?');
   const findAllStmt = db.prepare('SELECT * FROM sessions ORDER BY created_at DESC');
   const insertStmt = db.prepare(
-    'INSERT INTO sessions (id, track_id, name, tmux_session, claude_resume_id, system_prompt, state, provider, background, worktree_root, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+    'INSERT INTO sessions (id, track_id, name, tmux_session, claude_resume_id, system_prompt, state, provider, background, worktree_root, working_directory, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
   );
   const updateStateStmt = db.prepare('UPDATE sessions SET state = ?, updated_at = ? WHERE id = ?');
   const updateNameStmt = db.prepare('UPDATE sessions SET name = ?, updated_at = ? WHERE id = ?');
@@ -46,7 +46,7 @@ export function createSessionRepository(): SessionRepository {
       const id = uuid() as SessionId;
       const now = new Date().toISOString();
       const provider = data.provider || 'claude';
-      insertStmt.run(id, data.trackId, data.name || null, data.tmuxSession, data.claudeResumeId || null, data.systemPrompt || null, data.state, provider, data.background ? 1 : 0, data.worktreeRoot || null, now, now);
+      insertStmt.run(id, data.trackId, data.name || null, data.tmuxSession, data.claudeResumeId || null, data.systemPrompt || null, data.state, provider, data.background ? 1 : 0, data.worktreeRoot || null, data.workingDirectory || null, now, now);
       return {
         id,
         trackId: data.trackId,
@@ -58,6 +58,7 @@ export function createSessionRepository(): SessionRepository {
         provider,
         background: data.background ?? false,
         worktreeRoot: data.worktreeRoot,
+        workingDirectory: data.workingDirectory,
         createdAt: now,
         updatedAt: now,
       };
@@ -116,6 +117,7 @@ interface SessionRow {
   provider: string | null;
   background: number;
   worktree_root: string | null;
+  working_directory: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -132,6 +134,7 @@ function rowToSession(row: SessionRow): Session {
     provider: (row.provider as SessionProvider) || 'claude',
     background: row.background === 1,
     worktreeRoot: row.worktree_root || undefined,
+    workingDirectory: row.working_directory || undefined,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
