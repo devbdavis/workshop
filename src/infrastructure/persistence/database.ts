@@ -559,6 +559,16 @@ function runMigrations(db: Database.Database): void {
     // Column already exists — safe to ignore
   }
 
+  // Migration: add working_directory column to sessions
+  // Stores the CWD used when the session was created so it can be restored on --resume.
+  // Claude buckets conversation history by CWD — resuming from the wrong directory
+  // causes "No conversation found" errors.
+  try {
+    db.exec(`ALTER TABLE sessions ADD COLUMN working_directory TEXT;`);
+  } catch {
+    // Column already exists — safe to ignore
+  }
+
   // Migration: create unique index on matrix_room_id (partial — only non-null values)
   try {
     db.exec(`CREATE UNIQUE INDEX idx_tracks_matrix_room ON tracks(matrix_room_id) WHERE matrix_room_id IS NOT NULL;`);
