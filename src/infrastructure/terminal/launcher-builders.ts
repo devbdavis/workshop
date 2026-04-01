@@ -4,7 +4,6 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import type { SessionProvider } from '@foundation/types';
 import type { CreateSessionOptions } from './manager.js';
-import { readAuthToken } from '@foundation/auth.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -12,22 +11,15 @@ const __dirname = path.dirname(__filename);
 /** Workshop API URL for hook callbacks — derived from PORT so it matches the server's own binding */
 const WORKSHOP_API_URL = process.env.WORKSHOP_API_URL || `http://localhost:${process.env.PORT || '3001'}`;
 
-/** Build auth headers for HTTP hooks (includes auth token if available). */
-function buildHookHeaders(sessionId: string, extra?: Record<string, string>): Record<string, string> {
-  const headers: Record<string, string> = { 'X-Workshop-Session': sessionId };
-  const authToken = readAuthToken();
-  if (authToken) {
-    headers['Authorization'] = `Bearer ${authToken}`;
-  }
-  return extra ? { ...headers, ...extra } : headers;
-}
-
 /**
  * Write a Claude Code settings file with hooks.
  *
  * ALL sessions get SessionStart + SessionEnd hooks so we can track Claude's
  * session ID for --resume support. Permission hooks (PreToolUse, SubagentStop)
  * are only added for background/hooked sessions.
+ *
+ * All hooks use type: 'command' (curl scripts) — Claude Code does not support
+ * type: 'http' hooks and silently ignores them.
  */
 export function writeHookSettings(
   sessionDir: string,
@@ -37,29 +29,31 @@ export function writeHookSettings(
   const settingsFile = path.join(sessionDir, 'settings.json');
   const hooks: Record<string, unknown[]> = {};
 
+  const scriptsDir = path.resolve(__dirname, '../../../scripts');
+
   // --- Always-on hooks: SessionStart + SessionEnd ---
 
   // SessionStart: capture Claude's session ID for --resume support
+  const sessionStartScript = path.join(scriptsDir, 'session-start-hook.sh');
   hooks.SessionStart = [
     {
       hooks: [
         {
-          type: 'http',
-          url: `${WORKSHOP_API_URL}/api/hooks/session-start`,
-          headers: buildHookHeaders(sessionId),
+          type: 'command',
+          command: `WORKSHOP_API_URL=${WORKSHOP_API_URL} WORKSHOP_SESSION_ID=${sessionId} ${sessionStartScript}`,
         },
       ],
     },
   ];
 
   // SessionEnd: clean up when Claude exits
-  const hookScript = path.resolve(__dirname, '../../../scripts/session-end-hook.sh');
+  const sessionEndScript = path.join(scriptsDir, 'session-end-hook.sh');
   hooks.SessionEnd = [
     {
       hooks: [
         {
           type: 'command',
-          command: `WORKSHOP_API_URL=${WORKSHOP_API_URL} WORKSHOP_SESSION_ID=${sessionId} ${hookScript}`,
+          command: `WORKSHOP_API_URL=${WORKSHOP_API_URL} WORKSHOP_SESSION_ID=${sessionId} ${sessionEndScript}`,
         },
       ],
     },
@@ -68,29 +62,27 @@ export function writeHookSettings(
   // --- Permission hooks (background/hooked sessions only) ---
 
   if (options?.includePermissionHooks) {
+    const permissionScript = path.join(scriptsDir, 'permission-hook.sh');
     hooks.PreToolUse = [
       {
         matcher: 'Bash|Edit|Write|NotebookEdit|mcp__.*',
         hooks: [
           {
-            type: 'http',
-            url: `${WORKSHOP_API_URL}/api/hooks/permission`,
-            headers: buildHookHeaders(sessionId),
+            type: 'command',
+            command: `WORKSHOP_API_URL=${WORKSHOP_API_URL} WORKSHOP_SESSION_ID=${sessionId} ${permissionScript}`,
           },
         ],
       },
     ];
 
     if (options.executionTicketId) {
+      const agentProgressScript = path.join(scriptsDir, 'agent-progress-hook.sh');
       hooks.SubagentStop = [
         {
           hooks: [
             {
-              type: 'http',
-              url: `${WORKSHOP_API_URL}/api/hooks/agent-progress`,
-              headers: buildHookHeaders(sessionId, {
-                'X-Workshop-Ticket': options.executionTicketId,
-              }),
+              type: 'command',
+              command: `WORKSHOP_API_URL=${WORKSHOP_API_URL} WORKSHOP_SESSION_ID=${sessionId} WORKSHOP_TICKET_ID=${options.executionTicketId} ${agentProgressScript}`,
             },
           ],
         },
