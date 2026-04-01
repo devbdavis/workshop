@@ -646,7 +646,18 @@ export function createApiRouter(deps: ApiRouterDeps = {}): Router {
 
   router.get('/tracks/:id/sessions', (req, res) => {
     const trackSessions = sessions.findByTrack(req.params.id as TrackId);
-    res.json(trackSessions);
+    const pendingSessionIds = new Set(
+      permissions.findAllPending().map((p) => p.sessionId),
+    );
+    const enriched = trackSessions.map(s => ({
+      ...s,
+      lastActivityAt: terminal.getLastActivityAt(s.id),
+      dying: terminal.isDying(s.id),
+      activityStatus: pendingSessionIds.has(s.id)
+        ? 'awaiting-permission'
+        : terminal.getActivityStatus(s.id),
+    }));
+    res.json(enriched);
   });
 
   router.post('/tracks/:id/sessions', async (req, res) => {

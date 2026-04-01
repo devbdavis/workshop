@@ -149,37 +149,29 @@ function LeafPane({ node, trackId, sessions, onSplit, onClose, onCreateSession, 
             onDoubleClick={startEditing}
             title="Double-click to rename"
           >
-            {session && <span className={`w-1.5 h-1.5 rounded-full ${providerColor} shrink-0`} title={providerLabel} />}
+            {session && (
+              <span
+                className={`w-1.5 h-1.5 rounded-full shrink-0 ${
+                  session.activityStatus === 'awaiting-permission'
+                    ? 'bg-red-500'
+                    : session.activityStatus === 'idle'
+                      ? 'bg-yellow-500'
+                      : session.activityStatus === 'working'
+                        ? 'bg-green-500'
+                        : providerColor
+                }`}
+                title={`${providerLabel} · ${
+                  session.activityStatus === 'awaiting-permission' ? 'Needs permission' :
+                  session.activityStatus === 'idle' ? 'Idle' :
+                  session.activityStatus === 'working' ? 'Working' :
+                  session.state
+                }`}
+              />
+            )}
             {displayName}
           </span>
         )}
         <div className="flex items-center gap-1">
-          {session && (
-            <span
-              className={`w-2 h-2 rounded-full ${
-                session.activityStatus === 'awaiting-permission'
-                  ? 'bg-red-500'
-                  : session.activityStatus === 'idle'
-                    ? 'bg-yellow-500'
-                    : session.activityStatus === 'working'
-                      ? 'bg-green-500'
-                      : session.state === 'active'
-                        ? 'bg-green-500'
-                        : session.state === 'detached'
-                          ? 'bg-yellow-500'
-                          : 'bg-red-500'
-              }`}
-              title={
-                session.activityStatus === 'awaiting-permission'
-                  ? 'Needs permission'
-                  : session.activityStatus === 'idle'
-                    ? 'Idle'
-                    : session.activityStatus === 'working'
-                      ? 'Working'
-                      : session.state
-              }
-            />
-          )}
           {session && (session.worktreeRoot ?? defaultOpenPath) && (() => {
             const openPath = session.worktreeRoot ?? defaultOpenPath!;
             return (
