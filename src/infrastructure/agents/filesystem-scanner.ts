@@ -106,6 +106,106 @@ function parseAgentFile(filePath: string, source: AgentSource): Agent | null {
   }
 }
 
+// --- Write operations for global agents ---
+
+interface AgentWriteData {
+  name: string;
+  description: string;
+  model?: string;
+  color?: string;
+  systemPrompt: string;
+  allowedTools?: string[];
+  maxTurns?: number;
+  provider?: string;
+}
+
+export function writeGlobalAgent(data: AgentWriteData): Agent {
+  const globalDir = path.join(os.homedir(), '.claude', 'agents');
+  fs.mkdirSync(globalDir, { recursive: true });
+
+  const slug = slugify(data.name);
+  let filename = `${slug}.md`;
+  let filePath = path.join(globalDir, filename);
+  let counter = 1;
+  while (fs.existsSync(filePath)) {
+    filename = `${slug}-${counter}.md`;
+    filePath = path.join(globalDir, filename);
+    counter++;
+  }
+
+  fs.writeFileSync(filePath, formatAgentFile(data), 'utf-8');
+  const now = new Date().toISOString();
+  const basename = path.basename(filePath, '.md');
+
+  return {
+    id: `global:${basename}` as AgentId,
+    name: data.name,
+    description: data.description,
+    model: data.model,
+    color: data.color,
+    systemPrompt: data.systemPrompt,
+    source: 'global',
+    filePath,
+    allowedTools: data.allowedTools,
+    maxTurns: data.maxTurns,
+    provider: data.provider as SessionProvider | undefined,
+    createdAt: now,
+    updatedAt: now,
+  };
+}
+
+export function updateGlobalAgent(id: AgentId, data: AgentWriteData): Agent | null {
+  const basename = id.replace(/^global:/, '');
+  const filePath = path.join(os.homedir(), '.claude', 'agents', `${basename}.md`);
+  if (!fs.existsSync(filePath)) return null;
+
+  fs.writeFileSync(filePath, formatAgentFile(data), 'utf-8');
+  const stat = fs.statSync(filePath);
+
+  return {
+    id,
+    name: data.name,
+    description: data.description,
+    model: data.model,
+    color: data.color,
+    systemPrompt: data.systemPrompt,
+    source: 'global',
+    filePath,
+    allowedTools: data.allowedTools,
+    maxTurns: data.maxTurns,
+    provider: data.provider as SessionProvider | undefined,
+    createdAt: stat.ctime.toISOString(),
+    updatedAt: stat.mtime.toISOString(),
+  };
+}
+
+export function deleteGlobalAgent(id: AgentId): boolean {
+  const basename = id.replace(/^global:/, '');
+  const filePath = path.join(os.homedir(), '.claude', 'agents', `${basename}.md`);
+  if (!fs.existsSync(filePath)) return false;
+  fs.unlinkSync(filePath);
+  return true;
+}
+
+function slugify(name: string): string {
+  return name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'agent';
+}
+
+function formatAgentFile(data: AgentWriteData): string {
+  const lines = ['---'];
+  lines.push(`name: ${data.name}`);
+  lines.push(`description: ${data.description}`);
+  if (data.model) lines.push(`model: ${data.model}`);
+  if (data.color) lines.push(`color: ${data.color}`);
+  if (data.provider) lines.push(`provider: ${data.provider}`);
+  if (data.allowedTools?.length) lines.push(`tools: ${data.allowedTools.join(', ')}`);
+  if (data.maxTurns) lines.push(`maxTurns: ${data.maxTurns}`);
+  lines.push('---');
+  lines.push('');
+  lines.push(data.systemPrompt);
+  return lines.join('\n');
+}
+
 interface ParsedFile {
   frontmatter: Record<string, string>;
   body: string;

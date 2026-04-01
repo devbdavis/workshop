@@ -5,6 +5,7 @@ interface Props {
   agent: Agent;
   onEdit: () => void;
   onDelete: () => void;
+  onImprove: () => void;
 }
 
 const SOURCE_STYLES = {
@@ -19,9 +20,9 @@ const SOURCE_LABELS = {
   workshop: 'Workshop',
 };
 
-export function AgentCard({ agent, onEdit, onDelete }: Props) {
+export function AgentCard({ agent, onEdit, onDelete, onImprove }: Props) {
   const [expanded, setExpanded] = useState(false);
-  const isEditable = agent.source === 'workshop';
+  const isEditable = agent.source === 'global' || agent.source === 'workshop';
 
   // Truncate system prompt for preview
   const promptPreview =
@@ -73,6 +74,9 @@ export function AgentCard({ agent, onEdit, onDelete }: Props) {
           </button>
           {isEditable && (
             <>
+              <button onClick={onImprove} className="text-xs text-gray-400 hover:text-blue-300">
+                Improve
+              </button>
               <button onClick={onEdit} className="text-xs text-blue-400 hover:text-blue-300">
                 Edit
               </button>
