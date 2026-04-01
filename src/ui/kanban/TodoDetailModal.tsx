@@ -194,6 +194,10 @@ export function TodoDetailModal({ todo, tracks, onClose, onSave, onDelete, onDis
                 {showDispatch && (
                   <DispatchDropdown
                     agents={agents}
+                    defaultAgent={(() => {
+                      const track = tracks.find((t) => t.id === todo.trackId);
+                      return track?.defaultAgentId ? agents.find((a) => a.id === track.defaultAgentId) : undefined;
+                    })()}
                     popUp
                     onSelect={(opts) => {
                       setShowDispatch(false);
