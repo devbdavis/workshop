@@ -3,7 +3,7 @@ import { execSync } from 'child_process';
 import { homedir } from 'os';
 import path from 'path';
 import { Router } from 'express';
-import type { TrackId, SessionId, SessionProvider, RepoId, PathId, AutomationRuleId, TemplateId, TerminalLayout, WorkflowTicket } from '@foundation/types';
+import type { TrackId, SessionId, SessionProvider, RepoId, PathId, AgentId, AutomationRuleId, TemplateId, TerminalLayout, WorkflowTicket } from '@foundation/types';
 import { VAULT_ROOT } from '@foundation/config.js';
 import { createTrackRepository } from '@infrastructure/persistence/track-repository.js';
 import { createSessionRepository } from '@infrastructure/persistence/session-repository.js';
@@ -507,8 +507,8 @@ export function createApiRouter(deps: ApiRouterDeps = {}): Router {
   });
 
   router.put('/tracks/:id', (req, res) => {
-    const { name, description, context, label, matrixRoomId, status, worktreeMode } = req.body;
-    const track = tracks.update(req.params.id as TrackId, { name, description, context, label, matrixRoomId, status, worktreeMode });
+    const { name, description, context, label, matrixRoomId, status, worktreeMode, defaultAgentId } = req.body;
+    const track = tracks.update(req.params.id as TrackId, { name, description, context, label, matrixRoomId, status, worktreeMode, defaultAgentId });
     if (!track) {
       res.status(404).json({ error: 'Track not found' });
       return;
@@ -1016,6 +1016,36 @@ export function createApiRouter(deps: ApiRouterDeps = {}): Router {
       return;
     }
     res.json({ templateId: newTemplateId });
+  });
+
+  router.put('/tracks/:id/agent', (req, res) => {
+    const { agentId } = req.body;
+    const trackId = req.params.id as TrackId;
+    const track = tracks.findById(trackId);
+    if (!track) {
+      res.status(404).json({ error: 'Track not found' });
+      return;
+    }
+
+    // Allow null to unset the default agent
+    const newAgentId = agentId ? (agentId as AgentId) : null;
+
+    // Verify the agent exists if setting one
+    if (newAgentId) {
+      const agent = agents.findById(newAgentId) ?? filesystemScanner.findById(newAgentId, projectRoot);
+      if (!agent) {
+        res.status(404).json({ error: 'Agent not found' });
+        return;
+      }
+    }
+
+    const updated = tracks.setDefaultAgent(trackId, newAgentId);
+    if (!updated) {
+      res.status(500).json({ error: 'Failed to update track agent' });
+      return;
+    }
+    broadcast('track:updated', trackId);
+    res.json({ agentId: newAgentId });
   });
 
   // --- Soul ---

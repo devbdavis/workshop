@@ -166,6 +166,7 @@ export function TodoPanel({ track, todos, sessions, onUpdate }: Props) {
                         {dispatchingTodoId === todo.id && (
                           <DispatchDropdown
                             agents={agents}
+                            defaultAgent={agents.find((a) => a.id === track.defaultAgentId)}
                             onSelect={(opts) => dispatchTodo(todo.id, opts)}
                             onClose={() => setDispatchingTodoId(null)}
                           />
