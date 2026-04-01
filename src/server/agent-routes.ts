@@ -45,6 +45,32 @@ export function createAgentRouter(deps: AgentRouterDeps): Router {
     res.status(404).json({ error: 'Agent not found' });
   });
 
+  // --- Migrate workshop (DB) agents to global filesystem ---
+
+  router.post('/agents/migrate-workshop', (req, res) => {
+    const workshopAgents = agents.findAll();
+    let migrated = 0;
+    for (const agent of workshopAgents) {
+      try {
+        writeGlobalAgent({
+          name: agent.name,
+          description: agent.description,
+          model: agent.model,
+          color: agent.color,
+          systemPrompt: agent.systemPrompt,
+          allowedTools: agent.allowedTools,
+          maxTurns: agent.maxTurns,
+          provider: agent.provider,
+        });
+        agents.delete(agent.id);
+        migrated++;
+      } catch (err) {
+        console.error(`Failed to migrate agent ${agent.id}:`, err);
+      }
+    }
+    res.json({ migrated });
+  });
+
   // --- Generate agent definition via Claude ---
 
   router.post('/agents/generate', async (req, res) => {
@@ -133,6 +159,59 @@ export function createAgentRouter(deps: AgentRouterDeps): Router {
     const updated = agents.update(id, { name, description, model, color, systemPrompt, allowedTools, maxTurns, provider });
     if (!updated) { res.status(404).json({ error: 'Agent not found' }); return; }
     res.json(updated);
+  });
+
+  // --- Improve agent with Claude feedback ---
+
+  router.post('/agents/:id/improve', async (req, res) => {
+    const id = req.params.id as AgentId;
+    const { feedback } = req.body;
+    if (!feedback || typeof feedback !== 'string') {
+      res.status(400).json({ error: 'feedback is required' });
+      return;
+    }
+
+    // Resolve the agent from filesystem or DB
+    const agent = filesystemScanner.findById(id, projectRoot) ?? agents.findById(id);
+    if (!agent) { res.status(404).json({ error: 'Agent not found' }); return; }
+
+    try {
+      const client = new Anthropic();
+      const message = await client.messages.create({
+        model: 'claude-opus-4-6',
+        max_tokens: 4096,
+        messages: [{
+          role: 'user',
+          content: `You are improving a Claude Code agent definition based on user feedback.
+
+Current agent:
+Name: ${agent.name}
+Description: ${agent.description}
+System Prompt:
+${agent.systemPrompt}
+
+User feedback:
+${feedback}
+
+Return a JSON object with these fields (only include fields that should change):
+- name: updated name if needed
+- description: updated description if needed
+- systemPrompt: the improved system prompt (always include this)
+- allowedTools: updated tools array if needed
+
+Return ONLY the JSON object, no other text or markdown.`,
+        }],
+      });
+
+      const content = message.content[0];
+      if (content.type !== 'text') { res.status(500).json({ error: 'Unexpected response' }); return; }
+      const jsonMatch = content.text.match(/\{[\s\S]*\}/);
+      if (!jsonMatch) { res.status(500).json({ error: 'Could not parse response' }); return; }
+      res.json(JSON.parse(jsonMatch[0]));
+    } catch (err) {
+      console.error('Agent improvement failed:', err);
+      res.status(500).json({ error: 'Agent improvement failed' });
+    }
   });
 
   // --- Delete agent (global: filesystem, workshop: DB, project: read-only) ---
