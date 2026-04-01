@@ -33,6 +33,40 @@ export function AgentForm({ initial, onSave, onCancel }: Props) {
   const [allowedTools, setAllowedTools] = useState(initial?.allowedTools?.join(', ') ?? '');
   const [maxTurns, setMaxTurns] = useState(initial?.maxTurns?.toString() ?? '');
 
+  const [generateInput, setGenerateInput] = useState('');
+  const [generating, setGenerating] = useState(false);
+  const [generateError, setGenerateError] = useState('');
+
+  async function handleGenerate() {
+    if (!generateInput.trim()) return;
+    setGenerating(true);
+    setGenerateError('');
+    try {
+      const res = await fetch('/api/agents/generate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ description: generateInput }),
+      });
+      if (!res.ok) {
+        setGenerateError('Generation failed. Check that ANTHROPIC_API_KEY is set.');
+        return;
+      }
+      const data = await res.json();
+      if (data.name) setName(data.name);
+      if (data.description) setDescription(data.description);
+      if (data.systemPrompt) setSystemPrompt(data.systemPrompt);
+      if (data.model) setModel(data.model);
+      if (data.color) setColor(data.color);
+      if (data.allowedTools) {
+        setAllowedTools(Array.isArray(data.allowedTools) ? data.allowedTools.join(', ') : data.allowedTools);
+      }
+    } catch (err) {
+      setGenerateError('Generation failed. Check server logs.');
+    } finally {
+      setGenerating(false);
+    }
+  }
+
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (!name.trim() || !description.trim() || !systemPrompt.trim()) return;
@@ -57,6 +91,32 @@ export function AgentForm({ initial, onSave, onCancel }: Props) {
 
   return (
     <form onSubmit={handleSubmit} className="bg-gray-800 border border-gray-700 rounded-lg p-4 space-y-3">
+      {/* Generate with Claude — only shown for new agents */}
+      {!initial && (
+        <div className="border border-purple-800/50 bg-purple-950/30 rounded-lg p-3 space-y-2">
+          <label className="block text-xs font-medium text-purple-300">Generate with Claude</label>
+          <p className="text-[11px] text-gray-400">Describe what you want this agent to do and Claude will draft the full definition.</p>
+          <div className="flex gap-2">
+            <input
+              value={generateInput}
+              onChange={(e) => setGenerateInput(e.target.value)}
+              onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); handleGenerate(); } }}
+              placeholder="e.g. A senior code reviewer focused on security and performance"
+              className="flex-1 px-3 py-1.5 bg-gray-900 border border-gray-600 rounded text-sm text-gray-100 placeholder-gray-500 focus:outline-none focus:border-purple-500"
+            />
+            <button
+              type="button"
+              onClick={handleGenerate}
+              disabled={!generateInput.trim() || generating}
+              className="px-3 py-1.5 text-sm bg-purple-700 hover:bg-purple-600 disabled:opacity-50 rounded-lg transition-colors whitespace-nowrap"
+            >
+              {generating ? 'Generating…' : 'Generate'}
+            </button>
+          </div>
+          {generateError && <p className="text-xs text-red-400">{generateError}</p>}
+        </div>
+      )}
+
       <div className="grid grid-cols-2 gap-3">
         <div>
           <label className="block text-xs text-gray-400 mb-1">Name *</label>
@@ -64,7 +124,7 @@ export function AgentForm({ initial, onSave, onCancel }: Props) {
             value={name}
             onChange={(e) => setName(e.target.value)}
             className="block w-full px-3 py-1.5 bg-gray-900 border border-gray-700 rounded text-sm text-gray-100 focus:outline-none focus:border-blue-500"
-            autoFocus
+            autoFocus={!!initial}
             required
           />
         </div>
@@ -74,7 +134,7 @@ export function AgentForm({ initial, onSave, onCancel }: Props) {
             value={model}
             onChange={(e) => setModel(e.target.value)}
             className="block w-full px-3 py-1.5 bg-gray-900 border border-gray-700 rounded text-sm text-gray-100 focus:outline-none focus:border-blue-500"
-            placeholder="e.g. claude-opus-4-5-20251101"
+            placeholder="e.g. claude-opus-4-6"
           />
         </div>
       </div>

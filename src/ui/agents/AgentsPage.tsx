@@ -1,8 +1,18 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import type { Agent, AgentSource } from '@foundation/types';
+import type { Agent } from '@foundation/types';
 import { AgentCard } from './AgentCard';
 import { AgentForm } from './AgentForm';
+
+interface AgentFormData {
+  name: string;
+  description: string;
+  model?: string;
+  color?: string;
+  systemPrompt: string;
+  allowedTools?: string[];
+  maxTurns?: number;
+}
 
 export function AgentsPage() {
   const [agents, setAgents] = useState<Agent[]>([]);
@@ -21,9 +31,7 @@ export function AgentsPage() {
     }
   }
 
-  useEffect(() => {
-    loadAgents();
-  }, []);
+  useEffect(() => { loadAgents(); }, []);
 
   async function handleCreate(data: AgentFormData) {
     try {
@@ -32,13 +40,8 @@ export function AgentsPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(data),
       });
-      if (res.ok) {
-        setCreating(false);
-        loadAgents();
-      }
-    } catch (err) {
-      console.error('Failed to create agent:', err);
-    }
+      if (res.ok) { setCreating(false); loadAgents(); }
+    } catch (err) { console.error('Failed to create agent:', err); }
   }
 
   async function handleUpdate(id: string, data: AgentFormData) {
@@ -48,36 +51,25 @@ export function AgentsPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(data),
       });
-      if (res.ok) {
-        setEditingId(null);
-        loadAgents();
-      }
-    } catch (err) {
-      console.error('Failed to update agent:', err);
-    }
+      if (res.ok) { setEditingId(null); loadAgents(); }
+    } catch (err) { console.error('Failed to update agent:', err); }
   }
 
   async function handleDelete(id: string) {
     if (!confirm('Delete this agent?')) return;
     try {
       const res = await fetch(`/api/agents/${id}`, { method: 'DELETE' });
-      if (res.ok) {
-        if (editingId === id) setEditingId(null);
-        loadAgents();
-      }
-    } catch (err) {
-      console.error('Failed to delete agent:', err);
-    }
+      if (res.ok) { if (editingId === id) setEditingId(null); loadAgents(); }
+    } catch (err) { console.error('Failed to delete agent:', err); }
   }
 
-  // Group agents by source
-  const bySource = agents.reduce(
-    (acc, agent) => {
-      acc[agent.source].push(agent);
-      return acc;
-    },
-    { global: [], project: [], workshop: [] } as Record<AgentSource, Agent[]>,
-  );
+  // My agents: global + legacy workshop (all editable)
+  const myAgents = agents
+    .filter((a) => a.source === 'global' || a.source === 'workshop')
+    .sort((a, b) => a.name.localeCompare(b.name));
+
+  // Project agents: read-only, from .claude/agents/
+  const projectAgents = agents.filter((a) => a.source === 'project');
 
   if (loading) {
     return (
@@ -92,79 +84,78 @@ export function AgentsPage() {
   return (
     <div className="h-full overflow-y-auto">
       <div className="max-w-4xl mx-auto px-6 py-8">
-      <header className="flex items-center justify-between mb-8">
-        <div className="flex items-center gap-4">
-          <Link to="/" className="text-gray-400 hover:text-gray-200 text-sm">
-            &larr; Dashboard
-          </Link>
-          <h1 className="text-2xl font-bold">Agents</h1>
+        <header className="flex items-center justify-between mb-8">
+          <div className="flex items-center gap-4">
+            <Link to="/" className="text-gray-400 hover:text-gray-200 text-sm">
+              &larr; Dashboard
+            </Link>
+            <h1 className="text-2xl font-bold">Agents</h1>
+          </div>
+          {!creating && (
+            <button
+              onClick={() => { setCreating(true); setEditingId(null); }}
+              className="px-4 py-2 text-sm bg-blue-600 hover:bg-blue-500 rounded-lg transition-colors"
+            >
+              New Agent
+            </button>
+          )}
+        </header>
+
+        <div className="space-y-8">
+          {creating && (
+            <section className="bg-gray-900 border border-gray-800 rounded-lg p-6">
+              <h2 className="text-lg font-semibold mb-4">Create Agent</h2>
+              <AgentForm onSave={handleCreate} onCancel={() => setCreating(false)} />
+            </section>
+          )}
+
+          {/* My Agents — global (and legacy workshop) — editable */}
+          {myAgents.length > 0 && (
+            <section className="bg-gray-900 border border-gray-800 rounded-lg p-6">
+              <div className="mb-4">
+                <h2 className="text-lg font-semibold">
+                  My Agents
+                  <span className="ml-2 text-sm font-normal text-gray-500">({myAgents.length})</span>
+                </h2>
+                <p className="text-sm text-gray-400">Saved to ~/.claude/agents/ — available in all Claude sessions</p>
+              </div>
+              <div className="space-y-3">
+                {myAgents.map((agent) =>
+                  editingId === agent.id ? (
+                    <AgentForm
+                      key={agent.id}
+                      initial={agent}
+                      onSave={(data) => handleUpdate(agent.id, data)}
+                      onCancel={() => setEditingId(null)}
+                    />
+                  ) : (
+                    <AgentCard
+                      key={agent.id}
+                      agent={agent}
+                      onEdit={() => setEditingId(agent.id)}
+                      onDelete={() => handleDelete(agent.id)}
+                    />
+                  ),
+                )}
+              </div>
+            </section>
+          )}
+
+          {/* Project Agents — read-only */}
+          <AgentSection
+            title="Project Agents"
+            subtitle="From .claude/agents/ — scoped to this project"
+            agents={projectAgents}
+            editingId={editingId}
+            onEdit={setEditingId}
+            onUpdate={handleUpdate}
+            onDelete={handleDelete}
+            defaultCollapsed
+          />
         </div>
-        {!creating && (
-          <button
-            onClick={() => {
-              setCreating(true);
-              setEditingId(null);
-            }}
-            className="px-4 py-2 text-sm bg-blue-600 hover:bg-blue-500 rounded-lg transition-colors"
-          >
-            New Agent
-          </button>
-        )}
-      </header>
-
-      <div className="space-y-8">
-        {creating && (
-          <section className="bg-gray-900 border border-gray-800 rounded-lg p-6">
-            <h2 className="text-lg font-semibold mb-4">Create Agent</h2>
-            <AgentForm onSave={handleCreate} onCancel={() => setCreating(false)} />
-          </section>
-        )}
-
-        <AgentSection
-          title="Global Agents"
-          subtitle="From ~/.claude/agents/"
-          agents={bySource.global}
-          editingId={editingId}
-          onEdit={setEditingId}
-          onUpdate={handleUpdate}
-          onDelete={handleDelete}
-          defaultCollapsed
-        />
-
-        <AgentSection
-          title="Project Agents"
-          subtitle="From .claude/agents/"
-          agents={bySource.project}
-          editingId={editingId}
-          onEdit={setEditingId}
-          onUpdate={handleUpdate}
-          onDelete={handleDelete}
-          defaultCollapsed
-        />
-
-        <AgentSection
-          title="Workshop Agents"
-          subtitle="Created in Workshop"
-          agents={bySource.workshop}
-          editingId={editingId}
-          onEdit={setEditingId}
-          onUpdate={handleUpdate}
-          onDelete={handleDelete}
-        />
-      </div>
       </div>
     </div>
   );
-}
-
-interface AgentFormData {
-  name: string;
-  description: string;
-  model?: string;
-  color?: string;
-  systemPrompt: string;
-  allowedTools?: string[];
-  maxTurns?: number;
 }
 
 interface AgentSectionProps {
