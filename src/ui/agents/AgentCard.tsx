@@ -21,7 +21,7 @@ const SOURCE_LABELS = {
 
 export function AgentCard({ agent, onEdit, onDelete }: Props) {
   const [expanded, setExpanded] = useState(false);
-  const isEditable = agent.source === 'workshop';
+  const isEditable = agent.source === 'global' || agent.source === 'workshop';
 
   // Truncate system prompt for preview
   const promptPreview =
