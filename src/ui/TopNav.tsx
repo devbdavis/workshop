@@ -14,7 +14,6 @@ const navItems = [
 { to: '/scheduled-tasks', label: 'Schedules', end: false },
   { to: '/workflow', label: 'Workflow', end: false },
   { to: '/discussions', label: 'Discussions', end: false },
-  { to: '/office', label: 'Office', end: false },
   { to: '/settings', label: 'Settings', end: false },
 ];
 
