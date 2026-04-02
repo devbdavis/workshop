@@ -31,6 +31,21 @@ describe('isSessionIdle (preCapture)', () => {
     expect(isSessionIdle(session, ['Running…', '❯'])).toBe(false);
   });
 
+  it('returns false when Thinking indicator is above the 8-line tail window', () => {
+    // Simulates a 20-line capture where the indicator scrolled above line -8
+    const lines = [
+      'Thinking',
+      'line2', 'line3', 'line4', 'line5', 'line6', 'line7', 'line8',
+      'line9', 'line10', 'line11', 'line12', 'line13',
+      '❯',
+    ];
+    expect(isSessionIdle(session, lines)).toBe(false);
+  });
+
+  it('returns false when "esc to interrupt" is present despite prompt', () => {
+    expect(isSessionIdle(session, ['esc to interrupt', '❯'])).toBe(false);
+  });
+
   it('returns false when no prompt marker is present', () => {
     expect(isSessionIdle(session, ['some output', 'more output'])).toBe(false);
   });

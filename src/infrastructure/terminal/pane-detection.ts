@@ -24,10 +24,12 @@ export function capturePaneLines(tmuxSession: string, count = 20): string[] {
 export function isSessionIdle(session: Session, preCapture?: string[]): boolean {
   const lines = preCapture ?? capturePaneLines(session.tmuxSession, 8);
   if (lines.length === 0) return false;
-  const tail = lines.slice(-8).join(' ');
-  // Active work indicators — if any are present, session is NOT idle
-  if (/Running…|Thinking|thinking/.test(tail)) return false;
-  // Check if any of the recent lines is the CLI prompt indicator.
+  // Active work indicators — scan ALL captured lines, not just the tail.
+  // The TUI may render indicators above the prompt row; slicing to 8 would
+  // miss them if the capture window is larger (e.g. the 20-line sync capture).
+  const allContent = lines.join(' ');
+  if (/Running…|Thinking|thinking|esc to interrupt/i.test(allContent)) return false;
+  // Check if any of the last 8 lines contains the CLI prompt indicator.
   // The prompt line is typically just `❯` or `❯ ` (possibly with spaces).
   return lines.slice(-8).some(line => {
     const t = line.trim();
