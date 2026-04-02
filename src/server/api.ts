@@ -795,13 +795,19 @@ export function createApiRouter(deps: ApiRouterDeps = {}): Router {
 
   // Restore a session from the recycle bin.
   router.post('/tracks/:trackId/sessions/:sessionId/restore', async (req, res) => {
-    const session = sessions.restore(req.params.sessionId as SessionId);
-    if (!session) {
-      res.status(404).json({ error: 'Session not found' });
-      return;
+    try {
+      const session = await terminal.restoreSession(req.params.sessionId as SessionId);
+      broadcast('session:created', req.params.trackId as TrackId);
+      res.json(session);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      if (message.includes('Session not found')) {
+        res.status(404).json({ error: 'Session not found' });
+        return;
+      }
+      console.error('Failed to restore session:', err);
+      res.status(500).json({ error: 'Failed to restore session' });
     }
-    broadcast('session:created', req.params.trackId as TrackId);
-    res.json(session);
   });
 
   // --- Open in editor ---

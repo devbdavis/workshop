@@ -645,5 +645,54 @@ export function createTerminalManager(sessionRepo: SessionRepository, soulLoader
 
       return resumed;
     },
+
+    async restoreSession(sessionId: SessionId): Promise<Session> {
+      // Pull the deleted record (findById sees deleted rows)
+      const session = sessionRepo.findById(sessionId);
+      if (!session) {
+        throw new Error(`Session not found: ${sessionId}`);
+      }
+
+      const tmuxName = `workshop-${uuid().slice(0, 8)}`;
+      // Prefer worktreeRoot so Claude finds the conversation in the right
+      // project bucket; fall back through workingDirectory to HOME.
+      const cwd = session.worktreeRoot || session.workingDirectory || process.env.HOME || '/tmp';
+
+      const cleanEnv = { ...process.env };
+      delete cleanEnv.CLAUDECODE;
+
+      execSync(
+        `tmux new-session -d -s ${tmuxName} -x 120 -y 40 -c ${JSON.stringify(cwd)}`,
+        { stdio: 'pipe', env: cleanEnv },
+      );
+
+      // Restore the DB record first so the session is visible again
+      sessionRepo.restore(sessionId);
+      sessionRepo.updateTmuxSession(sessionId, tmuxName);
+      sessionRepo.updateState(sessionId, 'active');
+
+      const restoredSession: Session = {
+        ...session,
+        tmuxSession: tmuxName,
+        state: 'active',
+        deletedAt: undefined,
+      };
+
+      if (session.claudeResumeId && session.provider === 'claude') {
+        // Re-launch Claude picking up the prior conversation
+        launchCli(restoredSession, tmuxName, cwd, {
+          claudeResumeId: session.claudeResumeId,
+          background: session.background,
+        });
+        console.log(
+          `[restore] Session ${sessionId} → ${tmuxName} (claude --resume ${session.claudeResumeId})`,
+        );
+      } else {
+        // No resume ID — just provide a shell at the original CWD
+        console.log(`[restore] Session ${sessionId} → ${tmuxName} (bare shell, cwd: ${cwd})`);
+      }
+
+      return restoredSession;
+    },
   };
 }
