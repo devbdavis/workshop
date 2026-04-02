@@ -488,6 +488,22 @@ export function createTerminalManager(sessionRepo: SessionRepository, soulLoader
         cleaned.push({ sessionId: session.id, trackId: session.trackId });
       };
 
+      /** Retire a session: kill tmux, clean up files, soft-delete into recycle bin.
+       *  Used for idle background sessions — preserves the claudeResumeId so the
+       *  conversation can be restored later, rather than destroying it outright. */
+      const retire = (session: Session, reason: string) => {
+        console.log(
+          `Session sync: retiring ${session.id} (${session.tmuxSession}) — ${reason}`,
+        );
+        try {
+          execSync(`tmux kill-session -t ${session.tmuxSession}`, { stdio: 'pipe' });
+        } catch { /* already dead */ }
+        cleanSessionDir(session.id);
+        sessionRepo.softDelete(session.id);
+        clearSessionMaps(session.id);
+        cleaned.push({ sessionId: session.id, trackId: session.trackId });
+      };
+
       /** Suspend a session: keep the DB record for later --resume */
       const suspend = (session: Session, reason: string) => {
         console.log(
@@ -616,7 +632,10 @@ export function createTerminalManager(sessionRepo: SessionRepository, soulLoader
               if (linkedTodo && linkedTodo.status !== 'done') {
                 // Leave it alone — reaping will resume once the todo reaches done.
               } else {
-                reap(session, `background: idle ${Math.round(idleMinutes)}m`);
+                // Soft-delete rather than hard-delete: moves the session to the
+                // recycle bin so the claudeResumeId is preserved and the user
+                // can restore the conversation if they return to find it gone.
+                retire(session, `background: idle ${Math.round(idleMinutes)}m`);
               }
             }
           } else {
