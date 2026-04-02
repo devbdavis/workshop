@@ -189,6 +189,15 @@ export function createTerminalManager(sessionRepo: SessionRepository, soulLoader
   /** Current activity status derived from pane detection, keyed by session ID */
   const activityStatusMap = new Map<string, 'working' | 'idle' | 'needs-input'>();
 
+  /** Consecutive sync cycles each session has been observed as idle.
+   *  Prevents a single brief clean-state observation (e.g. between thinking
+   *  phases) from flipping the orb to idle — requires sustained idle signal. */
+  const consecutiveIdleObs = new Map<string, number>();
+
+  /** How many consecutive idle observations are required before we report idle.
+   *  At a 30s sync interval this means the session must look idle for ~60s. */
+  const IDLE_CONSECUTIVE_THRESHOLD = 2;
+
   /** Get how many minutes a session has been observed idle */
   function getIdleMinutes(session: Session): number {
     const firstSeen = idleFirstSeen.get(session.id);
@@ -206,6 +215,7 @@ export function createTerminalManager(sessionRepo: SessionRepository, soulLoader
     lastActivityAt.delete(sessionId);
     dyingSince.delete(sessionId);
     activityStatusMap.delete(sessionId);
+    consecutiveIdleObs.delete(sessionId);
   }
 
   function getSessionDir(sessionId: string): string {
@@ -471,10 +481,30 @@ export function createTerminalManager(sessionRepo: SessionRepository, soulLoader
         // --- Activity status tracking (all alive sessions) ---
         // needs-input takes priority: check before idle to catch question prompts
         if (isSessionNeedsInput(session, capturedLines)) {
+          consecutiveIdleObs.delete(session.id);
           activityStatusMap.set(session.id, 'needs-input');
         } else if (isSessionIdle(session, capturedLines)) {
-          activityStatusMap.set(session.id, 'idle');
+          // Require IDLE_CONSECUTIVE_THRESHOLD consecutive idle observations
+          // before reporting idle. This prevents brief clean-state windows
+          // (e.g. the moment between a thinking phase and the next tool call)
+          // from flipping the orb to yellow for a full sync interval.
+          const count = (consecutiveIdleObs.get(session.id) ?? 0) + 1;
+          consecutiveIdleObs.set(session.id, count);
+          if (count >= IDLE_CONSECUTIVE_THRESHOLD) {
+            activityStatusMap.set(session.id, 'idle');
+          }
+          // If below threshold, leave the current status in place (working or
+          // undefined) — it will transition once the signal is sustained.
         } else {
+          // Actively working — reset debounce counter and update lastActivityAt
+          // so the office view stays awake even when pane content is unchanged
+          // (e.g. a long-running tool call with no new output lines).
+          const wasIdle = activityStatusMap.get(session.id) !== 'working';
+          if (wasIdle) {
+            lastActivityAt.set(session.id, new Date().toISOString());
+            activityChangedSet.add(session.trackId);
+          }
+          consecutiveIdleObs.delete(session.id);
           activityStatusMap.set(session.id, 'working');
         }
 
