@@ -39,6 +39,17 @@ direnv allow   # activates the Nix dev shell automatically on entry
 
 For full setup instructions including Nix installation, see the [Setup Guide](docs/setup-guide.md).
 
+### Recommended: trust `~/.workshop` in direnv
+
+Workshop clones repos under `~/.workshop/`. If you use direnv within those repos, you'd normally need to run `direnv allow` for each one. You can skip that by whitelisting the prefix in `~/.config/direnv/direnv.toml`:
+
+```toml
+[whitelist]
+prefix = ["~/.workshop"]
+```
+
+`~` is expanded by direnv, so this works regardless of your home directory. Add it alongside any existing `prefix` entries.
+
 For Claude Code CLI installation, see [claude.ai/download](https://claude.ai/download).
 
 ## Quick Start

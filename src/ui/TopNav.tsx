@@ -108,7 +108,7 @@ export function TopNav() {
         {lastTrack && (
           <NavLink
             to={`/tracks/${lastTrack.id}`}
-            className="ml-1 px-2 py-0.5 text-[10px] font-medium text-indigo-400 bg-gray-900 hover:bg-gray-800 hover:text-indigo-300 rounded transition-colors"
+            className="ml-1 px-2 py-0.5 text-[10px] font-medium text-gray-400 bg-gray-900 hover:bg-gray-800 hover:text-gray-200 rounded transition-colors"
           >
             {lastTrack.name}
           </NavLink>
