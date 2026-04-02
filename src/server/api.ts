@@ -64,6 +64,7 @@ import { createClaudeAdapter } from '@infrastructure/mcp-tools/claude-adapter.js
 import { createCodexAdapter } from '@infrastructure/mcp-tools/codex-adapter.js';
 import { createGeminiAdapter } from '@infrastructure/mcp-tools/gemini-adapter.js';
 import { createSoulLoader } from '@infrastructure/soul/soul-loader.js';
+import { ensureDefaultTodoTemplate } from '@infrastructure/persistence/database.js';
 
 export interface ApiRouterDeps {
   automationEngine?: AutomationEngine;
@@ -83,6 +84,9 @@ export function createApiRouter(deps: ApiRouterDeps = {}): Router {
   const projectRoot = process.cwd();
   const soulLoader = createSoulLoader(projectRoot);
   const terminal = createTerminalManager(sessions, soulLoader, todos);
+
+  // Ensure the default todo template exists and is assigned to all tracks
+  ensureDefaultTodoTemplate();
 
   // Sync session states on startup and periodically (every 30s).
   // Dead tmux sessions are removed from the DB (or suspended if resumable).
@@ -475,6 +479,12 @@ export function createApiRouter(deps: ApiRouterDeps = {}): Router {
       return;
     }
     const track = tracks.create({ name, description, status: 'active' });
+
+    // Auto-assign the default todo template to newly created tracks
+    const defaultTemplate = promptTemplates.findDefault();
+    if (defaultTemplate) {
+      tracks.setDefaultPromptTemplate(track.id, defaultTemplate.id);
+    }
 
     // Auto-provision vault folder for the new track
     try {

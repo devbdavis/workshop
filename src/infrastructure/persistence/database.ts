@@ -654,6 +654,13 @@ function runMigrations(db: Database.Database): void {
     // Column already exists — safe to ignore
   }
 
+  // Migration: add is_default column to prompt_templates
+  try {
+    db.exec(`ALTER TABLE prompt_templates ADD COLUMN is_default INTEGER NOT NULL DEFAULT 0;`);
+  } catch {
+    // Column already exists — safe to ignore
+  }
+
   // Migration: drop permission_requests table (permission system removed)
   db.exec(`DROP TABLE IF EXISTS permission_requests;`);
 
@@ -738,4 +745,65 @@ Be thorough in your analysis but keep recommendations practical and prioritized.
     now,
     now,
   );
+}
+
+const DEFAULT_TODO_TEMPLATE_CONTENT = `## Repositories
+
+{{track.repos}}
+
+---
+
+## Task
+
+**{{todo.title}}**
+
+{{todo.description}}
+
+---
+
+## Background Agent Instructions
+
+You are running as a background agent dispatched from Workshop.
+
+When you have completed the task (or determined you cannot proceed):
+1. Use the workshop_update_todo MCP tool to update todo "{{todo.id}}" status to "review"
+2. Add a brief summary of what you accomplished or why you stopped to the description
+3. Use /exit to close your session
+`;
+
+/**
+ * Ensure the "Todo Prompt Template" (the system default) exists and is assigned
+ * to every track that has no template configured. Idempotent — safe to call on
+ * every startup.
+ *
+ * If the existing default template still contains the old soul-based content
+ * (identified by the Jeeves heading), it is replaced with the correct template.
+ */
+export function ensureDefaultTodoTemplate(): void {
+  const db = getDatabase();
+
+  let templateId: string;
+  const existing = db.prepare(`SELECT id, content FROM prompt_templates WHERE is_default = 1 LIMIT 1`).get() as { id: string; content: string } | undefined;
+
+  if (existing) {
+    templateId = existing.id;
+    // Replace old soul-based content that was incorrectly seeded in a previous version
+    if (existing.content.includes('Workshop Agent Soul') || existing.content.includes('You are Jeeves')) {
+      db.prepare(`UPDATE prompt_templates SET content = ?, updated_at = ? WHERE id = ?`).run(
+        DEFAULT_TODO_TEMPLATE_CONTENT, new Date().toISOString(), templateId,
+      );
+    }
+  } else {
+    templateId = uuid();
+    const now = new Date().toISOString();
+    db.prepare(
+      `INSERT INTO prompt_templates (id, name, description, content, is_default, created_at, updated_at)
+       VALUES (?, ?, ?, ?, 1, ?, ?)`,
+    ).run(templateId, 'Todo Prompt Template', 'Default system prompt for dispatched todos', DEFAULT_TODO_TEMPLATE_CONTENT, now, now);
+  }
+
+  // Back-fill all tracks that have no default template assigned
+  db.prepare(
+    `UPDATE tracks SET default_prompt_template_id = ?, updated_at = ? WHERE default_prompt_template_id IS NULL`,
+  ).run(templateId, new Date().toISOString());
 }
