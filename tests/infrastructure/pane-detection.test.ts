@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { isSessionIdle } from '@infrastructure/terminal/pane-detection';
+import { isSessionIdle, isSessionNeedsInput } from '@infrastructure/terminal/pane-detection';
 import type { Session } from '@foundation/types';
 
 /** Minimal session stub — only tmuxSession matters when preCapture is provided */
@@ -52,5 +52,33 @@ describe('isSessionIdle (preCapture)', () => {
 
   it('returns false for empty capture', () => {
     expect(isSessionIdle(session, [])).toBe(false);
+  });
+});
+
+describe('isSessionNeedsInput (preCapture)', () => {
+  const session = makeSession();
+
+  it('returns true for y/n confirmation prompt', () => {
+    expect(isSessionNeedsInput(session, ['Delete all files? [y/n]'])).toBe(true);
+  });
+
+  it('returns true for a question line without an idle prompt', () => {
+    expect(isSessionNeedsInput(session, ['Should I proceed with the rename?'])).toBe(true);
+  });
+
+  it('returns false when terminal is at an idle ❯ prompt, even if scroll history has ?', () => {
+    // User's input text visible in scroll history should not trigger needs-input
+    // when the session is already showing the idle Claude prompt.
+    const lines = [
+      '> is it still in ready state?',
+      '',
+      'PR #31 is open and in draft state.',
+      '❯',
+    ];
+    expect(isSessionNeedsInput(session, lines)).toBe(false);
+  });
+
+  it('returns false for empty capture', () => {
+    expect(isSessionNeedsInput(session, [])).toBe(false);
   });
 });
