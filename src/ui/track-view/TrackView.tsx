@@ -15,6 +15,7 @@ export function TrackView() {
   const [summary, setSummary] = useState<TrackSummary | null>(null);
   const [tickets, setTickets] = useState<ExternalTicket[]>([]);
   const [todos, setTodos] = useState<Todo[]>([]);
+  const [deletedSessions, setDeletedSessions] = useState<Session[]>([]);
   const [loading, setLoading] = useState(true);
   const [sidebarTab, setSidebarTab] = useState<'context' | 'todos' | 'config'>('context');
   const [editingName, setEditingName] = useState(false);
@@ -23,12 +24,13 @@ export function TrackView() {
   const loadTrack = useCallback(async () => {
     if (!trackId) return;
     try {
-      const [trackRes, sessionsRes, summaryRes, ticketsRes, todosRes] = await Promise.all([
+      const [trackRes, sessionsRes, summaryRes, ticketsRes, todosRes, deletedRes] = await Promise.all([
         fetch(`/api/tracks/${trackId}`),
         fetch(`/api/tracks/${trackId}/sessions`),
         fetch(`/api/tracks/${trackId}/summary`),
         fetch(`/api/tracks/${trackId}/tickets`),
         fetch(`/api/tracks/${trackId}/todos`),
+        fetch(`/api/tracks/${trackId}/sessions/deleted`),
       ]);
       if (trackRes.ok) setTrack(await trackRes.json());
       if (sessionsRes.ok) {
@@ -38,6 +40,7 @@ export function TrackView() {
       if (summaryRes.ok) setSummary(await summaryRes.json());
       if (ticketsRes.ok) setTickets(await ticketsRes.json());
       if (todosRes.ok) setTodos(await todosRes.json());
+      if (deletedRes.ok) setDeletedSessions(await deletedRes.json());
     } catch (err) {
       console.error('Failed to load track:', err);
     } finally {
@@ -109,8 +112,35 @@ export function TrackView() {
     try {
       await fetch(`/api/tracks/${trackId}/sessions/${sessionId}`, { method: 'DELETE' });
       setSessions((prev) => prev.filter((s) => s.id !== sessionId));
+      // Refresh the deleted list so the panel count updates immediately
+      const res = await fetch(`/api/tracks/${trackId}/sessions/deleted`);
+      if (res.ok) setDeletedSessions(await res.json());
     } catch (err) {
-      console.error('Failed to destroy session:', err);
+      console.error('Failed to delete session:', err);
+    }
+  }
+
+  async function restoreSession(sessionId: string) {
+    if (!trackId) return;
+    try {
+      const res = await fetch(`/api/tracks/${trackId}/sessions/${sessionId}/restore`, { method: 'POST' });
+      if (res.ok) {
+        const restored: Session = await res.json();
+        setSessions((prev) => [...prev, restored]);
+        setDeletedSessions((prev) => prev.filter((s) => s.id !== sessionId));
+      }
+    } catch (err) {
+      console.error('Failed to restore session:', err);
+    }
+  }
+
+  async function purgeSession(sessionId: string) {
+    if (!trackId) return;
+    try {
+      await fetch(`/api/tracks/${trackId}/sessions/${sessionId}/purge`, { method: 'DELETE' });
+      setDeletedSessions((prev) => prev.filter((s) => s.id !== sessionId));
+    } catch (err) {
+      console.error('Failed to purge session:', err);
     }
   }
 
@@ -237,8 +267,11 @@ export function TrackView() {
               trackId={track.id}
               trackName={track.name}
               sessions={sessions}
+              deletedSessions={deletedSessions}
               onDestroySession={destroySession}
               onRenameSession={renameSession}
+              onRestoreSession={restoreSession}
+              onPurgeSession={purgeSession}
               defaultOpenPath={track.repos?.[0]?.path}
             />
           </div>
