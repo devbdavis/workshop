@@ -166,7 +166,7 @@ export function TodoDetailModal({ todo, tracks, onClose, onSave, onDelete, onDis
             />
           </div>
 
-          {(status === 'ready' || status === 'done') && (
+          {(status === 'review' || status === 'done') && (
             <div>
               <label className="text-xs text-gray-400 block mb-1">Resolution</label>
               <textarea
