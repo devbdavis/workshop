@@ -25,13 +25,6 @@ const SESSION_DATA_DIR = path.join(
   'sessions',
 );
 
-/** Minutes a background session can sit idle at the CLI prompt before being reaped.
- *  Set to 15m to give workflow agents time to complete MCP tool calls and
- *  transition tickets before being reaped. Previous value of 5m caused a
- *  seven-verification loop where agents completed work but got reaped
- *  before they could call transition_ticket. */
-const BACKGROUND_IDLE_TIMEOUT_MINUTES = 15;
-
 /** Seconds a dead tmux session gets before being reaped/suspended */
 const DYING_GRACE_PERIOD_MS = 30_000;
 
@@ -220,9 +213,6 @@ export function createTerminalManager(sessionRepo: SessionRepository, soulLoader
     console.warn('tmux not found in PATH. Terminal sessions will not work.');
   }
 
-  /** Track when we first observe a session idle, keyed by session ID */
-  const idleFirstSeen = new Map<string, number>();
-
   /** Last hash of captured pane content, keyed by session ID */
   const lastPaneHash = new Map<string, number>();
 
@@ -244,19 +234,8 @@ export function createTerminalManager(sessionRepo: SessionRepository, soulLoader
    *  At a 30s sync interval this means the session must look idle for ~60s. */
   const IDLE_CONSECUTIVE_THRESHOLD = 2;
 
-  /** Get how many minutes a session has been observed idle */
-  function getIdleMinutes(session: Session): number {
-    const firstSeen = idleFirstSeen.get(session.id);
-    if (!firstSeen) {
-      idleFirstSeen.set(session.id, Date.now());
-      return 0;
-    }
-    return (Date.now() - firstSeen) / 60_000;
-  }
-
   /** Clean all in-memory tracking for a session */
   function clearSessionMaps(sessionId: string): void {
-    idleFirstSeen.delete(sessionId);
     lastPaneHash.delete(sessionId);
     lastActivityAt.delete(sessionId);
     dyingSince.delete(sessionId);
@@ -589,10 +568,8 @@ export function createTerminalManager(sessionRepo: SessionRepository, soulLoader
           activityStatusMap.set(session.id, 'working');
         }
 
-        // --- Background session cleanup (aggressive) ---
-        // Matrix-dedicated sessions are long-lived — skip idle reaping
-        const isMatrixSession = session.name?.startsWith('[matrix] ');
-        if (session.background && !isMatrixSession) {
+        // --- Background session cleanup ---
+        if (session.background) {
           // Background session not logged in — reap immediately
           if (isSessionLoggedOut(session, capturedLines)) {
             reap(session, 'background: Claude not logged in');
@@ -604,26 +581,8 @@ export function createTerminalManager(sessionRepo: SessionRepository, soulLoader
             reap(session, 'background: CLI exited (bare shell prompt)');
             continue;
           }
-
-          // Background idle timeout — Claude at prompt with no work
-          if (isSessionIdle(session, capturedLines)) {
-            const idleMinutes = getIdleMinutes(session);
-            if (idleMinutes >= BACKGROUND_IDLE_TIMEOUT_MINUTES) {
-              // Spare any session with a linked todo that isn't done yet.
-              // The only safe-to-reap state is 'done' — all others mean the
-              // work is still in flight or awaiting human action.
-              const linkedTodo = todoRepo?.findBySession(session.id as SessionId);
-              if (linkedTodo && linkedTodo.status !== 'done') {
-                // Leave it alone — reaping will resume once the todo reaches done.
-              } else {
-                reap(session, `background: idle ${Math.round(idleMinutes)}m`);
-              }
-            }
-          } else {
-            idleFirstSeen.delete(session.id);
-          }
         }
-        // Interactive sessions are left alone — the user manages them
+        // All sessions (background or interactive) are otherwise left alone
       }
 
       if (cleaned.length > 0) {
