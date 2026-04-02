@@ -94,21 +94,24 @@ function TrackDeskUnit({ session, selected }: DeskProps) {
         ${selected ? 'border-blue-500 ring-2 ring-blue-500/30' : 'border-gray-800 hover:border-gray-600'}
         transition-colors`}
     >
+      {/* Status dot — top-left */}
+      <span className={`absolute top-1.5 left-1.5 w-1.5 h-1.5 rounded-full ${statusColor}`} />
+
+      {/* Provider badge — top-right */}
       <span
         className={`absolute top-1.5 right-1.5 text-[8px] px-1 py-0.5 rounded text-white/90 leading-none ${providerColor(session.provider)}`}
       >
         {session.provider}
       </span>
 
-      {/* Fixed-height character area so desks stay horizontally aligned */}
-      <div className="flex items-end justify-center overflow-hidden" style={{ height: '72px' }}>
+      {/* Fixed-height character area — consistent baseline across all cards */}
+      <div className="flex items-end justify-center overflow-hidden" style={{ height: '64px' }}>
         <CharacterSvg sessionId={session.id} activityState={activityState} className="w-full" />
       </div>
 
-      {/* Fixed-height name area: 2 lines at text-[10px] leading-tight ≈ 28px */}
-      <div className="mt-1 flex items-start gap-1" style={{ height: '28px' }}>
-        <span className={`w-1.5 h-1.5 rounded-full shrink-0 mt-[3px] ${statusColor}`} />
-        <span className="text-[10px] text-gray-200 leading-tight break-words min-w-0 line-clamp-2">
+      {/* Name area — full width, 3-line clamp */}
+      <div className="mt-1 overflow-hidden" style={{ height: '42px' }}>
+        <span className="text-[10px] text-gray-200 leading-tight break-words line-clamp-3">
           {displayName}
         </span>
       </div>
