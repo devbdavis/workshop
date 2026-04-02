@@ -54,7 +54,45 @@ function worktreeBranchName(name: string | undefined, sessionId: string): string
 }
 
 /**
+ * Fetch origin and return the remote-tracking ref for its HEAD branch (e.g. "origin/main").
+ * Returns undefined if the repo has no remote or the ref cannot be determined — callers
+ * fall back to creating the worktree from the current HEAD.
+ */
+function fetchAndResolveBase(repoPath: string): string | undefined {
+  try {
+    execSync(`git -C ${JSON.stringify(repoPath)} fetch origin --quiet`, { stdio: 'pipe' });
+  } catch {
+    // No remote or network unavailable — proceed without fetch
+    return undefined;
+  }
+
+  // Prefer the symbolic ref that git sets when origin is cloned/fetched
+  try {
+    const raw = execSync(
+      `git -C ${JSON.stringify(repoPath)} symbolic-ref --short refs/remotes/origin/HEAD`,
+      { stdio: 'pipe' },
+    ).toString().trim(); // e.g. "origin/main"
+    if (raw) return raw;
+  } catch { /* not set */ }
+
+  // Fall back to probing common names
+  for (const candidate of ['origin/main', 'origin/master']) {
+    try {
+      execSync(
+        `git -C ${JSON.stringify(repoPath)} rev-parse --verify ${JSON.stringify(candidate)}`,
+        { stdio: 'pipe' },
+      );
+      return candidate;
+    } catch { /* try next */ }
+  }
+
+  return undefined;
+}
+
+/**
  * Create a workspace directory with one git worktree per repo.
+ * Fetches from origin so each worktree starts from the latest remote HEAD,
+ * even if the local default branch is behind.
  * Returns the workspace path. Throws on failure (caller should handle gracefully).
  */
 function createWorktrees(sessionId: string, repos: TrackRepo[], sessionName?: string): string {
@@ -67,8 +105,10 @@ function createWorktrees(sessionId: string, repos: TrackRepo[], sessionName?: st
     const repoName = path.basename(repo.path);
     const worktreePath = path.join(workspaceDir, repoName);
 
+    const base = fetchAndResolveBase(repo.path);
+    const startPoint = base ? ` ${JSON.stringify(base)}` : '';
     execSync(
-      `git -C ${JSON.stringify(repo.path)} worktree add ${JSON.stringify(worktreePath)} -b ${JSON.stringify(branch)}`,
+      `git -C ${JSON.stringify(repo.path)} worktree add ${JSON.stringify(worktreePath)} -b ${JSON.stringify(branch)}${startPoint}`,
       { stdio: 'pipe' },
     );
 
