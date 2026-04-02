@@ -193,8 +193,9 @@ export function createTodoRouter(deps: TodoRouterDeps): Router {
         return;
       }
 
-      // Accept optional agentId and provider from request body
-      const agentId = req.body?.agentId as AgentId | undefined;
+      // Accept optional agentId and provider from request body.
+      // If no agentId provided, fall back to the track's configured default agent.
+      const agentId = (req.body?.agentId as AgentId | undefined) ?? track.defaultAgentId;
       const provider: SessionProvider = req.body?.provider === 'codex' ? 'codex' : 'claude';
 
       // Compose system prompt: agent + track context + summary + template + todo task

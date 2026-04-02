@@ -564,6 +564,16 @@ function runMigrations(db: Database.Database): void {
     // Index already exists — safe to ignore
   }
 
+  // Migration: add default_agent_id column to tracks
+  try {
+    db.exec(`ALTER TABLE tracks ADD COLUMN default_agent_id TEXT;`);
+  } catch {
+    // Column already exists — safe to ignore
+  }
+
+  // Migration: enable worktree mode on all existing tracks
+  db.exec(`UPDATE tracks SET worktree_mode = 1 WHERE worktree_mode = 0;`);
+
   // Migration: rename workflow_templates table to workflow_playbooks
   try {
     db.exec(`ALTER TABLE workflow_templates RENAME TO workflow_playbooks;`);
