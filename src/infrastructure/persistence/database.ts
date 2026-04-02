@@ -650,6 +650,13 @@ function runMigrations(db: Database.Database): void {
   // Migration: drop permission_requests table (permission system removed)
   db.exec(`DROP TABLE IF EXISTS permission_requests;`);
 
+  // Migration: add script_path column to scheduled_tasks
+  try {
+    db.exec(`ALTER TABLE scheduled_tasks ADD COLUMN script_path TEXT;`);
+  } catch {
+    // Column already exists — safe to ignore
+  }
+
   // Seed default repo_root setting
   db.exec(`INSERT OR IGNORE INTO settings (key, value) VALUES ('repo_root', '~/Klaviyo/Repos');`);
 
