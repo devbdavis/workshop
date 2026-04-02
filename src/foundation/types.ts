@@ -28,6 +28,8 @@ export interface Track {
   terminalLayout?: TerminalLayout;
   /** If true, all background sessions on this track get per-session git worktrees */
   worktreeMode?: boolean;
+  /** Default agent to use when dispatching messages on this track */
+  defaultAgentId?: AgentId;
   createdAt: string;
   updatedAt: string;
   // Populated relations

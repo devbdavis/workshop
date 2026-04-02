@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import type { Track } from '@foundation/types';
+import type { Agent, Track } from '@foundation/types';
 
 interface GlobalRepo {
   id: string;
@@ -26,6 +26,23 @@ export function TrackConfig({ track, onUpdate }: Props) {
   const [editingName, setEditingName] = useState(false);
   const [name, setName] = useState(track.name);
   const [description, setDescription] = useState(track.description || '');
+  const [agents, setAgents] = useState<Agent[]>([]);
+
+  useEffect(() => {
+    fetch('/api/agents')
+      .then((r) => (r.ok ? r.json() : []))
+      .then(setAgents)
+      .catch(() => setAgents([]));
+  }, []);
+
+  async function setDefaultAgent(agentId: string | null) {
+    await fetch(`/api/tracks/${track.id}/agent`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ agentId }),
+    });
+    onUpdate();
+  }
 
   async function saveMeta() {
     await fetch(`/api/tracks/${track.id}`, {
@@ -186,6 +203,24 @@ export function TrackConfig({ track, onUpdate }: Props) {
 
       <section>
         <h3 className="text-sm font-semibold text-gray-300 mb-2">Agent Behaviour</h3>
+
+        <div className="mb-3">
+          <label className="block text-xs text-gray-400 mb-1">Default agent</label>
+          <select
+            value={track.defaultAgentId ?? ''}
+            onChange={(e) => setDefaultAgent(e.target.value || null)}
+            className="block w-full px-2 py-1 bg-gray-800 border border-gray-700 rounded text-xs text-gray-300"
+          >
+            <option value="">None</option>
+            {[...agents].sort((a, b) => a.name.localeCompare(b.name)).map((a) => (
+              <option key={a.id} value={a.id}>{a.name}</option>
+            ))}
+          </select>
+          <p className="text-[10px] text-gray-600 mt-1">
+            Used when dispatching todos without an explicit agent selection.
+          </p>
+        </div>
+
         <label className="flex items-center gap-2 cursor-pointer group">
           <input
             type="checkbox"
