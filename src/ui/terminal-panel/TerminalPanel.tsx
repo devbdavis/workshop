@@ -73,13 +73,18 @@ export function TerminalPanel({ trackId, sessionId, autoFocus }: Props) {
       }
     });
 
-    // Handle container resize
+    // Handle container resize.
+    // Guard with `disposed` so queued ResizeObserver callbacks that fire after
+    // cleanup don't call fitAddon.fit() on an already-disposed terminal
+    // (which crashes trying to read xterm's internal `dimensions`).
+    let disposed = false;
     const resizeObserver = new ResizeObserver(() => {
-      fitAddon.fit();
+      if (!disposed) fitAddon.fit();
     });
     resizeObserver.observe(containerRef.current);
 
     return () => {
+      disposed = true;
       resizeObserver.disconnect();
       ws.close();
       term.dispose();
