@@ -87,13 +87,24 @@ export function createMatrixRouter(deps: MatrixRouterDeps): MatrixRouter {
     }
 
     // Interpolated template
+    let templateHasRepos = false;
     if (track.defaultPromptTemplateId) {
       const template = deps.promptTemplates.findById(track.defaultPromptTemplateId);
       if (template) {
+        templateHasRepos = template.content.includes('{{track.repos}}');
         track.tickets = deps.tickets.findByTrack(track.id);
         const interpolated = interpolateTemplate(template.content, { track });
         parts.push(interpolated);
       }
+    }
+
+    // Include repos unless the template already expanded {{track.repos}}
+    const repos = deps.tracks.findReposByTrack(track.id);
+    if (repos.length > 0 && !templateHasRepos) {
+      const repoLines = repos
+        .map((r) => `- ${r.path}${r.remoteUrl ? ` (${r.remoteUrl})` : ''}`)
+        .join('\n');
+      parts.push(`## Repositories\n\n${repoLines}`);
     }
 
     return parts.join('\n\n---\n\n');

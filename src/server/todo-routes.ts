@@ -198,8 +198,9 @@ export function createTodoRouter(deps: TodoRouterDeps): Router {
       const agentId = (req.body?.agentId as AgentId | undefined) ?? track.defaultAgentId;
       const provider: SessionProvider = req.body?.provider === 'codex' ? 'codex' : 'claude';
 
-      // Compose system prompt: agent + track context + summary + template + todo task
+      // Compose system prompt: agent + track context + summary + template + repos + todo task
       const parts: string[] = [];
+      const repos = tracks.findReposByTrack(todo.trackId);
 
       // If an agent is specified, prepend its system prompt
       if (agentId) {
@@ -229,20 +230,29 @@ export function createTodoRouter(deps: TodoRouterDeps): Router {
         parts.push(`## Current Status\n\n${summary.content}`);
       }
 
+      let templateHasRepos = false;
       if (track.defaultPromptTemplateId) {
         const template = promptTemplates.findById(track.defaultPromptTemplateId);
         if (template) {
+          templateHasRepos = template.content.includes('{{track.repos}}');
           track.tickets = tickets.findByTrack(todo.trackId);
           const interpolated = interpolateTemplate(template.content, { track });
           parts.push(interpolated);
         }
       }
 
+      // Include repos unless the template already expanded {{track.repos}}
+      if (repos.length > 0 && !templateHasRepos) {
+        const repoLines = repos
+          .map((r) => `- ${r.path}${r.remoteUrl ? ` (${r.remoteUrl})` : ''}`)
+          .join('\n');
+        parts.push(`## Repositories\n\n${repoLines}`);
+      }
+
       // Add the todo task as the specific instruction
       parts.push(`## Task\n\n**${todo.title}**\n\n${todo.description || ''}`);
 
       const systemPrompt = parts.join('\n\n---\n\n');
-      const repos = tracks.findReposByTrack(todo.trackId);
 
       const taskPrompt = `Complete the following task:\n\n**${todo.title}**\n\n${todo.description || 'No additional details provided.'}`;
 

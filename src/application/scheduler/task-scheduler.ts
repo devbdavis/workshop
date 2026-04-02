@@ -150,13 +150,24 @@ export function createTaskScheduler(deps: TaskSchedulerDeps): TaskScheduler {
           parts.push(`## Current Status\n\n${summary.content}`);
         }
 
+        let templateHasRepos = false;
         if (track.defaultPromptTemplateId) {
           const template = deps.promptTemplates.findById(track.defaultPromptTemplateId);
           if (template) {
+            templateHasRepos = template.content.includes('{{track.repos}}');
             track.tickets = deps.tickets.findByTrack(task.trackId);
             const interpolated = interpolateTemplate(template.content, { track });
             parts.push(interpolated);
           }
+        }
+
+        // Include repos unless the template already expanded {{track.repos}}
+        const repos = deps.tracks.findReposByTrack(task.trackId);
+        if (repos.length > 0 && !templateHasRepos) {
+          const repoLines = repos
+            .map((r) => `- ${r.path}${r.remoteUrl ? ` (${r.remoteUrl})` : ''}`)
+            .join('\n');
+          parts.push(`## Repositories\n\n${repoLines}`);
         }
       }
     }
