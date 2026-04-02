@@ -1,3 +1,4 @@
+import { CronExpressionParser } from 'cron-parser';
 import type { ScheduleConfig, SchedulePreset } from '@foundation/types';
 
 /**
@@ -115,6 +116,20 @@ export function validateScheduleConfig(config: ScheduleConfig): string | null {
   }
 
   return null;
+}
+
+/**
+ * Return the most recent past occurrence of a cron expression before `before`.
+ * Returns null if the expression is invalid or no previous occurrence exists
+ * within a reasonable lookback window.
+ */
+export function getLastScheduledBefore(cronExpression: string, before: Date): Date | null {
+  try {
+    const expr = CronExpressionParser.parse(cronExpression, { currentDate: before });
+    return expr.prev().toDate();
+  } catch {
+    return null;
+  }
 }
 
 // --- Helpers ---

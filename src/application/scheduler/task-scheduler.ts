@@ -17,6 +17,7 @@ import type { PromptTemplateRepository } from '@domain/prompt-template/repositor
 import type { AgentRepository } from '@domain/agent/repository';
 import type { AgentScanner as FilesystemAgentScanner } from '@domain/agent/scanner.js';
 import { interpolateTemplate } from '@application/track-management/prompt-interpolation.js';
+import { getLastScheduledBefore } from './cron-utils.js';
 
 export interface TaskSchedulerDeps {
   tasks: ScheduledTaskRepository;
@@ -295,10 +296,37 @@ export function createTaskScheduler(deps: TaskSchedulerDeps): TaskScheduler {
   return {
     start(): void {
       const enabled = deps.tasks.findEnabled();
+      const now = new Date();
+
+      // Detect tasks that fired while the server was offline and schedule them
+      // to run shortly after startup. We fire at most one catch-up run per task
+      // (the most recent missed occurrence), staggered to avoid a thundering herd.
+      const STARTUP_DELAY_MS = 5_000;
+      const STAGGER_MS = 3_000;
+      let missedCount = 0;
+
       for (const task of enabled) {
         addCronJob(task);
+
+        const lastScheduled = getLastScheduledBefore(task.cronExpression, now);
+        if (!lastScheduled) continue;
+
+        // Reference point: last actual run, or task creation time if never run
+        const reference = task.lastRunAt ? new Date(task.lastRunAt) : new Date(task.createdAt);
+
+        if (lastScheduled > reference) {
+          const delay = STARTUP_DELAY_MS + missedCount * STAGGER_MS;
+          console.log(
+            `Task "${task.name}" missed scheduled run at ${lastScheduled.toISOString()} — catching up in ${delay}ms`,
+          );
+          setTimeout(() => { void executeTask(task.id); }, delay);
+          missedCount++;
+        }
       }
-      console.log(`Task scheduler started: ${enabled.length} scheduled task(s) loaded`);
+
+      console.log(
+        `Task scheduler started: ${enabled.length} task(s) loaded, ${missedCount} missed run(s) queued`,
+      );
     },
 
     stop(): void {
