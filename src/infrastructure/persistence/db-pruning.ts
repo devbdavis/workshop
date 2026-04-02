@@ -9,7 +9,6 @@ export function pruneOldRows(maxRows = 500): { pruned: Record<string, number> } 
   const pruned: Record<string, number> = {};
 
   const tables: Array<{ table: string; orderCol: string }> = [
-    { table: 'permission_requests', orderCol: 'created_at' },
     { table: 'automation_runs', orderCol: 'started_at' },
     { table: 'scheduled_task_runs', orderCol: 'started_at' },
     { table: 'workflow_transitions', orderCol: 'created_at' },

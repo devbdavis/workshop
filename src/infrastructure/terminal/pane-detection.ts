@@ -35,6 +35,28 @@ export function isSessionIdle(session: Session, preCapture?: string[]): boolean 
   });
 }
 
+/**
+ * Check if the terminal session is waiting for user input mid-task.
+ * Looks for interactive prompt patterns: y/n confirmations, question lines,
+ * "press enter" prompts. Takes priority over isSessionIdle in the status chain.
+ * When `preCapture` is provided, skip internal capturePaneLines() call.
+ */
+export function isSessionNeedsInput(session: Session, preCapture?: string[]): boolean {
+  const lines = preCapture ?? capturePaneLines(session.tmuxSession, 15);
+  if (lines.length === 0) return false;
+  return lines.slice(-15).some(line => {
+    const t = line.trimEnd();
+    // y/n confirmation prompts from subprocesses or Claude
+    if (/\[y\/n\]|\[Y\/n\]|\[y\/N\]|\(yes\/no\)|\(y\/n\)/i.test(t)) return true;
+    // "Press Enter to continue" style prompts
+    if (/press\s+enter/i.test(t)) return true;
+    // Lines ending with ? suggest Claude or a subprocess asked a question
+    // Skip bare CLI prompt lines (❯ or >) to avoid false positives
+    if (/\?\s*$/.test(t) && !/^[❯>]\s*$/.test(t)) return true;
+    return false;
+  });
+}
+
 /** Check if the session shows Claude is not logged in.
  *  When `preCapture` is provided, skip internal `capturePaneLines()` call. */
 export function isSessionLoggedOut(session: Session, preCapture?: string[]): boolean {

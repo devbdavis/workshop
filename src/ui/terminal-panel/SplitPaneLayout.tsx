@@ -152,7 +152,7 @@ function LeafPane({ node, trackId, sessions, onSplit, onClose, onCreateSession, 
             {session && (
               <span
                 className={`w-1.5 h-1.5 rounded-full shrink-0 ${
-                  session.activityStatus === 'awaiting-permission'
+                  session.activityStatus === 'needs-input'
                     ? 'bg-red-500'
                     : session.activityStatus === 'idle'
                       ? 'bg-yellow-500'
@@ -161,7 +161,7 @@ function LeafPane({ node, trackId, sessions, onSplit, onClose, onCreateSession, 
                         : providerColor
                 }`}
                 title={`${providerLabel} · ${
-                  session.activityStatus === 'awaiting-permission' ? 'Needs permission' :
+                  session.activityStatus === 'needs-input' ? 'Needs input' :
                   session.activityStatus === 'idle' ? 'Idle' :
                   session.activityStatus === 'working' ? 'Working' :
                   session.state

@@ -175,7 +175,7 @@ export function createDiscussionRouter(deps: DiscussionRouterDeps): Router {
     }
   });
 
-  // Get agent sessions linked to a discussion (used for permission polling)
+  // Get agent sessions linked to a discussion
   router.get('/discussions/:id/sessions', (req, res) => {
     const discussionId = req.params.id as DiscussionId;
     const sessions = discussionSessions.findByDiscussion(discussionId);
