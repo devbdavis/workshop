@@ -46,6 +46,10 @@ export interface SyncResult {
 export interface TerminalManager {
   createSession(trackId: TrackId, options?: CreateSessionOptions): Promise<Session>;
   destroySession(sessionId: SessionId): Promise<void>;
+  /** Move session to recycle bin: kills tmux, marks deleted_at, preserves worktree. */
+  softDeleteSession(sessionId: SessionId): Promise<void>;
+  /** Hard-delete any sessions whose deleted_at is older than retentionDays (default 7). */
+  purgeExpiredSessions(retentionDays?: number): number;
   isSessionAlive(session: Session): boolean;
   syncSessionStates(): SyncResult;
   /** Resume all sessions marked 'suspended' that have a Claude resume ID. */

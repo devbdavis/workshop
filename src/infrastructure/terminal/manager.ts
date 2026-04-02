@@ -365,6 +365,41 @@ export function createTerminalManager(sessionRepo: SessionRepository, soulLoader
       clearSessionMaps(sessionId);
     },
 
+    async softDeleteSession(sessionId: SessionId): Promise<void> {
+      const session = sessionRepo.findById(sessionId);
+      if (!session) return;
+
+      // Kill the tmux process — the worktree and session dir are preserved for recovery.
+      try {
+        execSync(`tmux kill-session -t ${session.tmuxSession}`, { stdio: 'pipe' });
+      } catch {
+        // Already dead — fine
+      }
+
+      sessionRepo.softDelete(sessionId);
+      clearSessionMaps(sessionId);
+    },
+
+    purgeExpiredSessions(retentionDays = 7): number {
+      const cutoff = new Date(Date.now() - retentionDays * 24 * 60 * 60 * 1000).toISOString();
+      const expired = sessionRepo.findAllDeleted().filter((s) => s.deletedAt && s.deletedAt < cutoff);
+
+      for (const session of expired) {
+        if (session.worktreeRoot) {
+          cleanupWorktrees(session.worktreeRoot);
+        }
+        cleanSessionDir(session.id);
+        sessionRepo.delete(session.id);
+        clearSessionMaps(session.id);
+      }
+
+      if (expired.length > 0) {
+        console.log(`[recycle-bin] Purged ${expired.length} expired session(s)`);
+      }
+
+      return expired.length;
+    },
+
     isSessionAlive(session: Session): boolean {
       try {
         execSync(`tmux has-session -t ${session.tmuxSession}`, { stdio: 'pipe' });

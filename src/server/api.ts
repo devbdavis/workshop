@@ -147,9 +147,14 @@ export function createApiRouter(deps: ApiRouterDeps = {}): Router {
   }, 3_000);
 
   const syncInterval = setInterval(runSessionSync, 7_500);
-  // Clean up interval when the router's parent process exits
-  process.on('SIGINT', () => clearInterval(syncInterval));
-  process.on('SIGTERM', () => clearInterval(syncInterval));
+
+  // Purge recycle-bin sessions older than 7 days, on startup and every hour.
+  terminal.purgeExpiredSessions();
+  const purgeInterval = setInterval(() => terminal.purgeExpiredSessions(), 60 * 60 * 1_000);
+
+  // Clean up intervals when the router's parent process exits
+  process.on('SIGINT', () => { clearInterval(syncInterval); clearInterval(purgeInterval); });
+  process.on('SIGTERM', () => { clearInterval(syncInterval); clearInterval(purgeInterval); });
 
   const gitAdapter = createGitAdapter();
   const vaultReader = createVaultReader(VAULT_ROOT);
@@ -748,15 +753,45 @@ export function createApiRouter(deps: ApiRouterDeps = {}): Router {
     res.json(session);
   });
 
+  // Soft-delete: moves the session to the recycle bin (worktree preserved for 7 days).
   router.delete('/tracks/:trackId/sessions/:sessionId', async (req, res) => {
+    try {
+      await terminal.softDeleteSession(req.params.sessionId as SessionId);
+      broadcast('session:deleted', req.params.trackId as TrackId);
+      res.status(204).send();
+    } catch (err) {
+      console.error('Failed to soft-delete session:', err);
+      res.status(500).json({ error: 'Failed to delete session' });
+    }
+  });
+
+  // Permanently destroy a session from the recycle bin (worktree cleaned up).
+  router.delete('/tracks/:trackId/sessions/:sessionId/purge', async (req, res) => {
     try {
       await terminal.destroySession(req.params.sessionId as SessionId);
       broadcast('session:deleted', req.params.trackId as TrackId);
       res.status(204).send();
     } catch (err) {
-      console.error('Failed to destroy session:', err);
-      res.status(500).json({ error: 'Failed to destroy session' });
+      console.error('Failed to purge session:', err);
+      res.status(500).json({ error: 'Failed to purge session' });
     }
+  });
+
+  // List soft-deleted sessions for a track.
+  router.get('/tracks/:trackId/sessions/deleted', (req, res) => {
+    const deleted = sessions.findDeletedByTrack(req.params.trackId as TrackId);
+    res.json(deleted);
+  });
+
+  // Restore a session from the recycle bin.
+  router.post('/tracks/:trackId/sessions/:sessionId/restore', async (req, res) => {
+    const session = sessions.restore(req.params.sessionId as SessionId);
+    if (!session) {
+      res.status(404).json({ error: 'Session not found' });
+      return;
+    }
+    broadcast('session:created', req.params.trackId as TrackId);
+    res.json(session);
   });
 
   // --- Open in editor ---

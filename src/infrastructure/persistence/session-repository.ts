@@ -8,9 +8,11 @@ export function createSessionRepository(): SessionRepository {
 
   // Prepare statements once
   const findByIdStmt = db.prepare('SELECT * FROM sessions WHERE id = ?');
-  const findByTrackStmt = db.prepare('SELECT * FROM sessions WHERE track_id = ? ORDER BY created_at DESC');
+  const findByTrackStmt = db.prepare('SELECT * FROM sessions WHERE track_id = ? AND deleted_at IS NULL ORDER BY created_at DESC');
+  const findDeletedByTrackStmt = db.prepare('SELECT * FROM sessions WHERE track_id = ? AND deleted_at IS NOT NULL ORDER BY deleted_at DESC');
+  const findAllDeletedStmt = db.prepare('SELECT * FROM sessions WHERE deleted_at IS NOT NULL ORDER BY deleted_at ASC');
   const findByTmuxSessionStmt = db.prepare('SELECT * FROM sessions WHERE tmux_session = ?');
-  const findAllStmt = db.prepare('SELECT * FROM sessions ORDER BY created_at DESC');
+  const findAllStmt = db.prepare('SELECT * FROM sessions WHERE deleted_at IS NULL ORDER BY created_at DESC');
   const insertStmt = db.prepare(
     'INSERT INTO sessions (id, track_id, name, tmux_session, claude_resume_id, system_prompt, state, provider, background, worktree_root, working_directory, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
   );
@@ -19,6 +21,8 @@ export function createSessionRepository(): SessionRepository {
   const updateClaudeResumeIdStmt = db.prepare('UPDATE sessions SET claude_resume_id = ?, updated_at = ? WHERE id = ?');
   const updateTmuxSessionStmt = db.prepare('UPDATE sessions SET tmux_session = ?, updated_at = ? WHERE id = ?');
   const updateWorktreeRootStmt = db.prepare('UPDATE sessions SET worktree_root = ?, updated_at = ? WHERE id = ?');
+  const softDeleteStmt = db.prepare('UPDATE sessions SET deleted_at = ?, state = ?, updated_at = ? WHERE id = ?');
+  const restoreStmt = db.prepare('UPDATE sessions SET deleted_at = NULL, state = ?, updated_at = ? WHERE id = ?');
   const deleteStmt = db.prepare('DELETE FROM sessions WHERE id = ?');
 
   return {
@@ -29,6 +33,16 @@ export function createSessionRepository(): SessionRepository {
 
     findByTrack(trackId: TrackId): Session[] {
       const rows = findByTrackStmt.all(trackId) as SessionRow[];
+      return rows.map(rowToSession);
+    },
+
+    findDeletedByTrack(trackId: TrackId): Session[] {
+      const rows = findDeletedByTrackStmt.all(trackId) as SessionRow[];
+      return rows.map(rowToSession);
+    },
+
+    findAllDeleted(): Session[] {
+      const rows = findAllDeletedStmt.all() as SessionRow[];
       return rows.map(rowToSession);
     },
 
@@ -99,6 +113,24 @@ export function createSessionRepository(): SessionRepository {
       return this.findById(id);
     },
 
+    softDelete(id: SessionId): Session | null {
+      const now = new Date().toISOString();
+      const result = softDeleteStmt.run(now, 'dead', now, id);
+      if (result.changes === 0) return null;
+      return this.findById(id);
+    },
+
+    restore(id: SessionId): Session | null {
+      const session = this.findById(id);
+      if (!session) return null;
+      const now = new Date().toISOString();
+      // Use 'suspended' so the sync loop doesn't immediately reap it;
+      // resumeSuspendedSessions will auto-resume if a claudeResumeId is present.
+      const result = restoreStmt.run('suspended', now, id);
+      if (result.changes === 0) return null;
+      return this.findById(id);
+    },
+
     delete(id: SessionId): boolean {
       const result = deleteStmt.run(id);
       return result.changes > 0;
@@ -118,6 +150,7 @@ interface SessionRow {
   background: number;
   worktree_root: string | null;
   working_directory: string | null;
+  deleted_at: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -135,6 +168,7 @@ function rowToSession(row: SessionRow): Session {
     background: row.background === 1,
     worktreeRoot: row.worktree_root || undefined,
     workingDirectory: row.working_directory || undefined,
+    deletedAt: row.deleted_at || undefined,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
