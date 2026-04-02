@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { isSessionIdle } from '@infrastructure/terminal/pane-detection';
+import { isSessionIdle, isSessionNeedsInput } from '@infrastructure/terminal/pane-detection';
 import type { Session } from '@foundation/types';
 
 /** Minimal session stub — only tmuxSession matters when preCapture is provided */
@@ -31,11 +31,62 @@ describe('isSessionIdle (preCapture)', () => {
     expect(isSessionIdle(session, ['Running…', '❯'])).toBe(false);
   });
 
+  it('returns false when Thinking indicator is above the 8-line tail window', () => {
+    // Simulates a 20-line capture where the indicator scrolled above line -8
+    const lines = [
+      'Thinking',
+      'line2', 'line3', 'line4', 'line5', 'line6', 'line7', 'line8',
+      'line9', 'line10', 'line11', 'line12', 'line13',
+      '❯',
+    ];
+    expect(isSessionIdle(session, lines)).toBe(false);
+  });
+
+  it('returns false when "esc to interrupt" is present despite prompt', () => {
+    expect(isSessionIdle(session, ['esc to interrupt', '❯'])).toBe(false);
+  });
+
   it('returns false when no prompt marker is present', () => {
     expect(isSessionIdle(session, ['some output', 'more output'])).toBe(false);
   });
 
   it('returns false for empty capture', () => {
     expect(isSessionIdle(session, [])).toBe(false);
+  });
+});
+
+describe('isSessionNeedsInput (preCapture)', () => {
+  const session = makeSession();
+
+  it('returns true for y/n confirmation prompt', () => {
+    expect(isSessionNeedsInput(session, ['Delete all files? [y/n]'])).toBe(true);
+  });
+
+  it('returns true for a question line without an idle prompt', () => {
+    expect(isSessionNeedsInput(session, ['Should I proceed with the rename?'])).toBe(true);
+  });
+
+  it('returns true when Claude prompt has typed but unsubmitted text', () => {
+    expect(isSessionNeedsInput(session, ['some prior output', '❯ implement the foo feature'])).toBe(true);
+  });
+
+  it('returns false for a bare ❯ prompt with no typed text', () => {
+    expect(isSessionNeedsInput(session, ['some prior output', '❯'])).toBe(false);
+  });
+
+  it('returns false when terminal is at an idle ❯ prompt, even if scroll history has ?', () => {
+    // User's input text visible in scroll history should not trigger needs-input
+    // when the session is already showing the idle Claude prompt.
+    const lines = [
+      '> is it still in ready state?',
+      '',
+      'PR #31 is open and in draft state.',
+      '❯',
+    ];
+    expect(isSessionNeedsInput(session, lines)).toBe(false);
+  });
+
+  it('returns false for empty capture', () => {
+    expect(isSessionNeedsInput(session, [])).toBe(false);
   });
 });

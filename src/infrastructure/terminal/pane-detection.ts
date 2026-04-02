@@ -24,10 +24,12 @@ export function capturePaneLines(tmuxSession: string, count = 20): string[] {
 export function isSessionIdle(session: Session, preCapture?: string[]): boolean {
   const lines = preCapture ?? capturePaneLines(session.tmuxSession, 8);
   if (lines.length === 0) return false;
-  const tail = lines.slice(-8).join(' ');
-  // Active work indicators — if any are present, session is NOT idle
-  if (/Running…|Thinking|thinking/.test(tail)) return false;
-  // Check if any of the recent lines is the CLI prompt indicator.
+  // Active work indicators — scan ALL captured lines, not just the tail.
+  // The TUI may render indicators above the prompt row; slicing to 8 would
+  // miss them if the capture window is larger (e.g. the 20-line sync capture).
+  const allContent = lines.join(' ');
+  if (/Running…|Thinking|thinking|esc to interrupt/i.test(allContent)) return false;
+  // Check if any of the last 8 lines contains the CLI prompt indicator.
   // The prompt line is typically just `❯` or `❯ ` (possibly with spaces).
   return lines.slice(-8).some(line => {
     const t = line.trim();
@@ -44,8 +46,20 @@ export function isSessionIdle(session: Session, preCapture?: string[]): boolean 
 export function isSessionNeedsInput(session: Session, preCapture?: string[]): boolean {
   const lines = preCapture ?? capturePaneLines(session.tmuxSession, 15);
   if (lines.length === 0) return false;
+  // If the terminal is already showing an idle Claude prompt, the session is
+  // waiting for the *next* message — not asking a mid-task question. User input
+  // text visible in the scroll history (e.g. "is it ready?") would otherwise
+  // trigger the `?`-ending-line heuristic as a false positive.
+  const atIdlePrompt = lines.slice(-8).some(line => {
+    const t = line.trim();
+    return t === '❯' || t === '>' || t.endsWith('❯');
+  });
+  if (atIdlePrompt) return false;
   return lines.slice(-15).some(line => {
     const t = line.trimEnd();
+    // Claude's input prompt with typed but not-yet-submitted text.
+    // A bare ❯ is idle; ❯ followed by content means the user is composing.
+    if (/^❯\s+\S/.test(t)) return true;
     // y/n confirmation prompts from subprocesses or Claude
     if (/\[y\/n\]|\[Y\/n\]|\[y\/N\]|\(yes\/no\)|\(y\/n\)/i.test(t)) return true;
     // "Press Enter to continue" style prompts
