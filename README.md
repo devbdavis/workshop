@@ -24,20 +24,20 @@ Workshop lets you organize development work into **tracks** — each with linked
 
 ## Prerequisites
 
-- **Node.js >= 22** (see `.nvmrc`)
+- **Nix + direnv** (recommended) — provides Node.js 24 and tmux automatically; see [Setup Guide](docs/setup-guide.md)
+- **Node.js >= 24** — required if not using Nix
 - **tmux** — required for terminal session management
 - **Claude Code CLI** (`claude`) — for AI-assisted terminal sessions
 - **macOS or Linux** — node-pty requires a Unix environment
 
-### Install system dependencies
+### Quick environment setup (Nix)
 
 ```bash
-# macOS
-brew install tmux
-
-# Ubuntu/Debian
-sudo apt-get install tmux
+cd workshop
+direnv allow   # activates the Nix dev shell automatically on entry
 ```
+
+For full setup instructions including Nix installation, see the [Setup Guide](docs/setup-guide.md).
 
 For Claude Code CLI installation, see [claude.ai/download](https://claude.ai/download).
 
