@@ -28,6 +28,8 @@ export interface CreateSessionOptions {
   claudeResumeId?: string;
   /** Per-session MCP server configs to inject into the session's settings.json */
   mcpServers?: Record<string, unknown>;
+  /** If true, pass --dangerously-skip-permissions to Claude so it runs without permission prompts. */
+  dangerouslySkipPermissions?: boolean;
   /** If true, create an isolated git worktree per repo for this session. */
   worktreeMode?: boolean;
   /** Repos to create worktrees for. Required when worktreeMode is true. */
