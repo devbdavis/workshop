@@ -1,161 +1,230 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import type { Session, SessionId } from '@foundation/types';
-import { SplitPaneLayout } from './SplitPaneLayout';
-import { useTerminalLayout } from './use-terminal-layout';
+import { TerminalPanel } from './TerminalPanel';
+import { TrackOfficeStrip } from './TrackOfficeStrip';
 
 interface Props {
   trackId: string;
+  trackName: string;
   sessions: Session[];
   onDestroySession: (sessionId: string) => void;
-  onCreateSession: () => Promise<Session | null>;
   onRenameSession: (sessionId: string, name: string) => void;
-  /** Default path to open when session has no worktreeRoot (e.g. track's first repo) */
   defaultOpenPath?: string;
 }
 
-const storageKey = (trackId: string) => `workshop:minimized:${trackId}`;
+const storageKey = (trackId: string) => `workshop:selected:${trackId}`;
 
-export function TerminalArea({ trackId, sessions, onDestroySession, onCreateSession, onRenameSession, defaultOpenPath }: Props) {
-  const [minimizedIds, setMinimizedIds] = useState<Set<SessionId>>(() => {
+export function TerminalArea({ trackId, trackName, sessions, onDestroySession, onRenameSession, defaultOpenPath }: Props) {
+  const [selectedIds, setSelectedIds] = useState<SessionId[]>(() => {
     try {
       const stored = localStorage.getItem(storageKey(trackId));
       if (stored) {
         const ids = JSON.parse(stored) as SessionId[];
         const validIds = new Set(sessions.map((s) => s.id));
-        return new Set(ids.filter((id) => validIds.has(id)));
+        const valid = ids.filter((id) => validIds.has(id));
+        if (valid.length > 0) return valid;
       }
     } catch { /* ignore */ }
-    return new Set(sessions.filter((s) => s.background).map((s) => s.id));
+    const first = sessions.find((s) => !s.background) ?? sessions[0];
+    return first ? [first.id] : [];
   });
 
-  // Persist minimized state across navigation
   useEffect(() => {
     try {
-      localStorage.setItem(storageKey(trackId), JSON.stringify([...minimizedIds]));
+      localStorage.setItem(storageKey(trackId), JSON.stringify([...selectedIds]));
     } catch { /* ignore */ }
-  }, [trackId, minimizedIds]);
+  }, [trackId, selectedIds]);
 
-  // Auto-minimize newly arriving background sessions
-  const seenIdsRef = useRef<Set<SessionId>>(new Set(sessions.map((s) => s.id)));
+  // Sync selection when sessions list changes: remove dead sessions, auto-pick if empty.
+  const seenIdsRef = useRef(new Set(sessions.map((s) => s.id)));
   useEffect(() => {
-    const incoming = sessions.filter((s) => !seenIdsRef.current.has(s.id));
-    if (incoming.length > 0) {
-      const newBackground = incoming.filter((s) => s.background);
-      if (newBackground.length > 0) {
-        setMinimizedIds((prev) => {
-          const next = new Set(prev);
-          newBackground.forEach((s) => next.add(s.id));
-          return next;
-        });
-      }
-      incoming.forEach((s) => seenIdsRef.current.add(s.id));
-    }
-    // Clean up removed sessions
     const currentIds = new Set(sessions.map((s) => s.id));
-    seenIdsRef.current.forEach((id) => {
-      if (!currentIds.has(id)) seenIdsRef.current.delete(id);
+
+    const incoming = sessions.filter((s) => !seenIdsRef.current.has(s.id));
+    incoming.forEach((s) => seenIdsRef.current.add(s.id));
+    seenIdsRef.current.forEach((id) => { if (!currentIds.has(id)) seenIdsRef.current.delete(id); });
+
+    setSelectedIds((prev) => {
+      const valid = prev.filter((id) => currentIds.has(id));
+      if (valid.length > 0) return valid.length === prev.length ? prev : valid;
+      // Selection emptied — auto-pick: prefer non-background incoming, then any non-bg, then any.
+      const candidate =
+        incoming.find((s) => !s.background) ??
+        sessions.find((s) => !s.background) ??
+        sessions[0];
+      return candidate ? [candidate.id] : [];
     });
   }, [sessions]);
 
-  // Track which session was just restored so its terminal can be auto-focused.
-  // Initialised to the first non-background session so the terminal is focused
-  // immediately when the track page loads.
-  const justRestoredRef = useRef<SessionId | null>(
-    sessions.find((s) => !s.background)?.id ?? null,
-  );
-
-  const minimize = (id: SessionId) =>
-    setMinimizedIds((prev) => { const n = new Set(prev); n.add(id); return n; });
-
-  const restore = useCallback((id: SessionId) => {
-    justRestoredRef.current = id;
-    setMinimizedIds((prev) => { const n = new Set(prev); n.delete(id); return n; });
+  const handleSelect = useCallback((id: SessionId, additive: boolean) => {
+    setSelectedIds((prev) => {
+      if (!additive) {
+        return prev.length === 1 && prev[0] === id ? prev : [id];
+      }
+      if (prev.includes(id)) {
+        // Deselect; ensure at least one remains if possible.
+        const next = prev.filter((x) => x !== id);
+        return next;
+      }
+      // Add; cap at 2, evict oldest when full.
+      return prev.length >= 2 ? [prev[1], id] : [...prev, id];
+    });
   }, []);
 
-  const visibleSessions = sessions.filter((s) => !minimizedIds.has(s.id));
-  const minimizedSessions = sessions.filter((s) => minimizedIds.has(s.id));
-
-  const { layout, splitPane, closePane, resizePanes } = useTerminalLayout(trackId, visibleSessions);
+  const selectedSessions = selectedIds
+    .map((id) => sessions.find((s) => s.id === id))
+    .filter((s): s is Session => s !== undefined);
 
   return (
     <div className="h-full flex flex-col">
-      {/* Main terminal area */}
-      {!layout.root || visibleSessions.length === 0 ? (
-        <div className="flex items-center justify-center flex-1 text-gray-500">
-          <p>No active sessions. Click "New Session" to start one.</p>
-        </div>
-      ) : (
-        <div className="flex-1 min-h-0">
-          <SplitPaneLayout
-            node={layout.root}
-            trackId={trackId}
-            sessions={visibleSessions}
-            onSplit={splitPane}
-            onClose={closePane}
-            onResize={resizePanes}
-            onCreateSession={onCreateSession}
-            onDestroySession={onDestroySession}
-            onRenameSession={onRenameSession}
-            onMinimize={minimize}
-            autoFocusSessionId={justRestoredRef.current}
-            defaultOpenPath={defaultOpenPath}
-          />
-        </div>
-      )}
+      {/* Terminal pane(s) */}
+      <div className="flex-1 min-h-0 flex">
+        {sessions.length === 0 ? (
+          <div className="flex-1 flex items-center justify-center text-gray-500">
+            <p>No active sessions. Click "New Session" to start one.</p>
+          </div>
+        ) : selectedSessions.length === 0 ? (
+          <div className="flex-1 flex items-center justify-center text-gray-500">
+            <p>Click a session below to open it.</p>
+          </div>
+        ) : (
+          selectedSessions.map((session, i) => (
+            <div
+              key={session.id}
+              className={`min-h-0 min-w-0 overflow-hidden flex flex-col flex-1 ${
+                i > 0 ? 'border-l border-gray-800' : ''
+              }`}
+            >
+              <TerminalPane
+                trackId={trackId}
+                session={session}
+                onDestroy={() => onDestroySession(session.id)}
+                onRename={(name) => onRenameSession(session.id, name)}
+                defaultOpenPath={defaultOpenPath}
+                autoFocus={i === 0}
+              />
+            </div>
+          ))
+        )}
+      </div>
 
-      {/* Minimized session tray */}
-      {minimizedSessions.length > 0 && (
-        <div className="shrink-0 px-3 py-1.5 bg-gray-900/80 border-t border-gray-800 flex items-center gap-2 flex-wrap">
-          <span className="text-[10px] text-gray-600 uppercase tracking-wider mr-1">Minimized</span>
-          {minimizedSessions.map((s) => (
-            <MinimizedChip
-              key={s.id}
-              session={s}
-              onRestore={() => restore(s.id)}
-              onDestroy={() => { onDestroySession(s.id); }}
-            />
-          ))}
-        </div>
-      )}
+      {/* Embedded office strip */}
+      <TrackOfficeStrip
+        sessions={sessions}
+        selectedIds={selectedIds}
+        trackName={trackName}
+        onSelect={handleSelect}
+      />
     </div>
   );
 }
 
-function MinimizedChip({
-  session,
-  onRestore,
-  onDestroy,
-}: {
-  session: Session;
-  onRestore: () => void;
-  onDestroy: () => void;
-}) {
-  const stateColor =
-    session.activityStatus === 'needs-input' ? 'bg-red-500' :
-    session.activityStatus === 'idle' ? 'bg-yellow-500' :
-    session.activityStatus === 'working' ? 'bg-green-500' :
-    session.state === 'active' ? 'bg-green-500' :
-    session.state === 'detached' ? 'bg-yellow-500' : 'bg-red-500';
+// --- Terminal Pane ---
 
-  const displayName = session.name || session.tmuxSession.slice(-8);
+interface PaneProps {
+  trackId: string;
+  session: Session;
+  onDestroy: () => void;
+  onRename: (name: string) => void;
+  defaultOpenPath?: string;
+  autoFocus: boolean;
+}
+
+function TerminalPane({ trackId, session, onDestroy, onRename, defaultOpenPath, autoFocus }: PaneProps) {
+  const [editing, setEditing] = useState(false);
+  const [editValue, setEditValue] = useState('');
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  const displayName = session.name || `session:${session.id.slice(0, 8)}`;
+  const openPath = session.worktreeRoot ?? defaultOpenPath;
+
+  const startEditing = useCallback(() => {
+    setEditValue(session.name || '');
+    setEditing(true);
+    requestAnimationFrame(() => inputRef.current?.focus());
+  }, [session.name]);
+
+  const commitEdit = useCallback(() => {
+    onRename(editValue.trim());
+    setEditing(false);
+  }, [editValue, onRename]);
+
+  const statusColor =
+    session.activityStatus === 'needs-input' ? 'bg-red-500' :
+    session.activityStatus === 'working' ? 'bg-green-500' :
+    session.activityStatus === 'idle' ? 'bg-yellow-500' :
+    'bg-gray-600';
 
   return (
-    <div className="flex items-center gap-1.5 px-2 py-0.5 bg-gray-800 border border-gray-700 rounded text-xs group">
-      <span className={`w-1.5 h-1.5 rounded-full ${stateColor} shrink-0`} />
-      <button
-        onClick={onRestore}
-        className="text-gray-300 hover:text-white font-mono truncate max-w-[160px]"
-        title="Restore session"
-      >
-        {displayName}
-      </button>
-      <button
-        onClick={onDestroy}
-        className="text-gray-600 hover:text-red-400 opacity-0 group-hover:opacity-100 ml-0.5"
-        title="Kill session"
-      >
-        ✕
-      </button>
+    <div className="h-full flex flex-col min-h-0">
+      <div className="flex items-center justify-between px-2 py-0.5 bg-gray-900 border-b border-gray-800 shrink-0">
+        {editing ? (
+          <input
+            ref={inputRef}
+            type="text"
+            value={editValue}
+            onChange={(e) => setEditValue(e.target.value)}
+            onBlur={commitEdit}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') commitEdit();
+              if (e.key === 'Escape') setEditing(false);
+            }}
+            className="text-xs text-gray-300 font-mono bg-gray-800 border border-gray-600 rounded px-1 py-0 outline-none focus:border-blue-500 w-40"
+          />
+        ) : (
+          <span
+            className="text-xs text-gray-400 font-mono truncate cursor-pointer hover:text-gray-200 flex items-center gap-1.5"
+            onDoubleClick={startEditing}
+            title="Double-click to rename"
+          >
+            <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${statusColor}`} />
+            {displayName}
+          </span>
+        )}
+        <div className="flex items-center gap-1">
+          {openPath && (
+            <>
+              <button
+                onClick={() => fetch('/api/shell/open-in-editor', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ path: openPath }),
+                })}
+                className="flex items-center gap-0.5 text-[10px] text-gray-500 hover:text-blue-400 px-1"
+                title={`Open in Cursor: ${openPath}`}
+              >
+                <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" />
+                  <polyline points="15 3 21 3 21 9" />
+                  <line x1="10" y1="14" x2="21" y2="3" />
+                </svg>
+                <span>Cursor</span>
+              </button>
+              <button
+                onClick={() => fetch('/api/shell/open-in-editor', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ path: openPath, app: 'terminal' }),
+                })}
+                className="text-[10px] text-gray-500 hover:text-green-400 px-1 font-mono"
+                title={`Open in iTerm: ${openPath}`}
+              >
+                &gt;_
+              </button>
+            </>
+          )}
+          <button
+            onClick={onDestroy}
+            className="text-xs text-gray-500 hover:text-red-400 px-1"
+            title="Destroy session"
+          >
+            ✕
+          </button>
+        </div>
+      </div>
+      <div className="flex-1 min-h-0">
+        <TerminalPanel trackId={trackId} sessionId={session.id} autoFocus={autoFocus} />
+      </div>
     </div>
   );
 }
