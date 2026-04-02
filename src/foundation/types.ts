@@ -409,3 +409,19 @@ export interface McpInstallResult {
   success: boolean;
   message: string;
 }
+
+// Skill
+export type SkillId = string & { readonly __brand: 'SkillId' };
+export type SkillSource = 'global' | 'project';
+
+export interface Skill {
+  id: SkillId;
+  name: string;
+  description: string;
+  /** The skill body — the markdown content that Claude Code injects */
+  content: string;
+  source: SkillSource;
+  filePath?: string;
+  createdAt: string;
+  updatedAt: string;
+}

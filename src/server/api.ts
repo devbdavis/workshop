@@ -16,6 +16,7 @@ import { createAgentRepository } from '@infrastructure/persistence/agent-reposit
 import { createTerminalManager } from '@infrastructure/terminal/manager.js';
 import { createGitAdapter } from '@infrastructure/git/git-adapter.js';
 import { createFilesystemAgentScanner } from '@infrastructure/agents/filesystem-scanner.js';
+import { createFilesystemSkillScanner } from '@infrastructure/skills/filesystem-scanner.js';
 import { createVaultReader } from '@infrastructure/vault/reader.js';
 import { createVaultWriter } from '@infrastructure/vault/writer.js';
 import { createVaultProvisioner } from '@infrastructure/vault/provisioner.js';
@@ -28,6 +29,7 @@ import type { AutomationEngine } from '@application/automation-engine/engine.js'
 import { createTaskScheduler } from '@application/scheduler/task-scheduler.js';
 import { createTodoRouter } from './todo-routes.js';
 import { createAgentRouter } from './agent-routes.js';
+import { createSkillRouter } from './skill-routes.js';
 import { createVaultRouter } from './vault-routes.js';
 import { createScheduledTaskRouter } from './scheduled-task-routes.js';
 import { createWorkflowRouter } from './workflow-routes.js';
@@ -180,6 +182,11 @@ export function createApiRouter(deps: ApiRouterDeps = {}): Router {
   // Mount agent sub-router
   const agentRouter = createAgentRouter({ agents, filesystemScanner, projectRoot });
   router.use(agentRouter);
+
+  // Mount skill sub-router
+  const skillFilesystemScanner = createFilesystemSkillScanner();
+  const skillRouter = createSkillRouter({ filesystemScanner: skillFilesystemScanner, projectRoot });
+  router.use(skillRouter);
 
   // Mount vault sub-router
   const vaultRouter = createVaultRouter({ vaultReader, vaultWriter, vaultProvisioner });
