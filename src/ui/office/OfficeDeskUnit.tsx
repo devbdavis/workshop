@@ -36,13 +36,14 @@ interface Props {
   trackName: string;
   spriteUrl: string | null;
   onAttach: () => void;
+  selected?: boolean;
 }
 
 /**
  * Individual desk card in the office grid.
  * Shows character, name plate, provider badge, and state-dependent overlays.
  */
-export function OfficeDeskUnit({ session, activityState, trackName, spriteUrl, onAttach }: Props) {
+export function OfficeDeskUnit({ session, activityState, trackName, spriteUrl, onAttach, selected }: Props) {
   const [showTooltip, setShowTooltip] = useState(false);
   const displayName = session.name || `session:${session.id.slice(0, 8)}`;
   const isActive = activityState === 'working' || activityState === 'sleeping';
@@ -52,7 +53,8 @@ export function OfficeDeskUnit({ session, activityState, trackName, spriteUrl, o
 
   return (
     <div
-      className={`office-desk-unit relative bg-gray-900 border border-gray-800 rounded-lg p-3
+      className={`office-desk-unit relative bg-gray-900 border rounded-lg p-3
+        ${selected ? 'border-blue-500 ring-2 ring-blue-500/30' : 'border-gray-800'}
         ${isDying ? 'office-char-dying' : ''}
         ${clickable ? 'cursor-pointer hover:border-gray-600' : 'cursor-default'}
         transition-colors`}

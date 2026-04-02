@@ -235,9 +235,9 @@ export function TrackView() {
           <div className="flex-1 min-h-0">
             <TerminalArea
               trackId={track.id}
+              trackName={track.name}
               sessions={sessions}
               onDestroySession={destroySession}
-              onCreateSession={createSession}
               onRenameSession={renameSession}
               defaultOpenPath={track.repos?.[0]?.path}
             />
