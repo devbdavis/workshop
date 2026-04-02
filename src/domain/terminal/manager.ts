@@ -56,6 +56,12 @@ export interface TerminalManager {
   syncSessionStates(): SyncResult;
   /** Resume all sessions marked 'suspended' that have a Claude resume ID. */
   resumeSuspendedSessions(): Promise<Session[]>;
+  /**
+   * Restore a session from the recycle bin: clears deleted_at, creates a fresh tmux
+   * session, and re-launches Claude with --resume if a claudeResumeId is present,
+   * otherwise drops to a bare shell at the original CWD.
+   */
+  restoreSession(sessionId: SessionId): Promise<Session>;
   /** Get the last time activity was detected for a session (ISO string), or undefined */
   getLastActivityAt(sessionId: SessionId): string | undefined;
   /** Whether a session is in the dying grace period (tmux dead, awaiting reap/suspend) */
