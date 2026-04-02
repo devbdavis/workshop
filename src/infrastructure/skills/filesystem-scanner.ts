@@ -197,8 +197,10 @@ export function updateGlobalSkill(id: SkillId, data: SkillWriteData): Skill | nu
   }
 
   if (fs.existsSync(dirSkillPath)) {
-    // Write content verbatim — preserve the heading-based format
-    fs.writeFileSync(dirSkillPath, data.content, 'utf-8');
+    // Always write with frontmatter so name+description are never lost.
+    // The content field holds only the body (frontmatter is stored separately
+    // in name/description), so we must reconstruct the full file here.
+    fs.writeFileSync(dirSkillPath, formatSkillFile(data), 'utf-8');
     const stat = fs.statSync(dirSkillPath);
     return {
       id,
