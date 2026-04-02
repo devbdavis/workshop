@@ -1,4 +1,5 @@
 import cron from 'node-cron';
+import { spawn } from 'child_process';
 import type {
   ScheduledTask,
   ScheduledTaskId,
@@ -175,6 +176,35 @@ export function createTaskScheduler(deps: TaskSchedulerDeps): TaskScheduler {
     return parts.length > 0 ? parts.join('\n\n---\n\n') : '';
   }
 
+  /** Run a script and return its stdout. Rejects if the script exits non-zero. */
+  function runScript(scriptPath: string): Promise<string> {
+    return new Promise((resolve, reject) => {
+      const child = spawn('bash', [scriptPath], { env: { ...process.env } });
+      const out: Buffer[] = [];
+      const err: Buffer[] = [];
+
+      child.stdout.on('data', (chunk: Buffer) => out.push(chunk));
+      child.stderr.on('data', (chunk: Buffer) => err.push(chunk));
+
+      const timer = setTimeout(() => {
+        child.kill();
+        reject(new Error(`Script timed out after 60s: ${scriptPath}`));
+      }, 60_000);
+
+      child.on('close', (code) => {
+        clearTimeout(timer);
+        if (code !== 0) {
+          const errText = Buffer.concat(err).toString().trim();
+          reject(new Error(`Script exited ${code}: ${errText || scriptPath}`));
+        } else {
+          resolve(Buffer.concat(out).toString());
+        }
+      });
+
+      child.on('error', (e) => { clearTimeout(timer); reject(e); });
+    });
+  }
+
   async function executeTask(taskId: ScheduledTaskId): Promise<ScheduledTaskRun> {
     // Re-read from DB to get latest state
     const task = deps.tasks.findById(taskId);
@@ -194,6 +224,20 @@ export function createTaskScheduler(deps: TaskSchedulerDeps): TaskScheduler {
     try {
       const systemPrompt = composeSystemPrompt(task);
 
+      // Run the attached script (if any) and prepend its stdout to the task prompt
+      let effectivePrompt = task.taskPrompt;
+      if (task.scriptPath) {
+        try {
+          const scriptOutput = await runScript(task.scriptPath);
+          if (scriptOutput.trim()) {
+            effectivePrompt = `## Script Output\n\n\`\`\`\n${scriptOutput.trim()}\n\`\`\`\n\n---\n\n${task.taskPrompt}`;
+          }
+        } catch (scriptErr) {
+          // Non-fatal: log and proceed without script output
+          console.warn(`Script failed for task "${task.name}" (${task.id}):`, scriptErr);
+        }
+      }
+
       // Determine working directory and dispatch track
       let workingDirectory: string | undefined;
       let dispatchTrackId: TrackId;
@@ -211,7 +255,7 @@ export function createTaskScheduler(deps: TaskSchedulerDeps): TaskScheduler {
         systemPrompt: systemPrompt || undefined,
         workingDirectory,
         background: true,
-        initialPrompt: task.taskPrompt,
+        initialPrompt: effectivePrompt,
         provider: task.provider,
       });
 

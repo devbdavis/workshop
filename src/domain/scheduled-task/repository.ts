@@ -28,6 +28,7 @@ export interface ScheduledTaskRepository {
         | 'provider'
         | 'taskPrompt'
         | 'systemPromptOverride'
+        | 'scriptPath'
         | 'enabled'
         | 'lastRunAt'
         | 'lastRunStatus'
