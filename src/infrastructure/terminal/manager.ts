@@ -61,31 +61,36 @@ function worktreeBranchName(name: string | undefined, sessionId: string): string
 function fetchAndResolveBase(repoPath: string): string | undefined {
   try {
     execSync(`git -C ${JSON.stringify(repoPath)} fetch origin --quiet`, { stdio: 'pipe' });
-  } catch {
-    // No remote or network unavailable — proceed without fetch
-    return undefined;
+  } catch (err) {
+    // Log so the failure is visible in server output — but don't bail; we can
+    // still create the worktree from whatever remote-tracking ref exists locally.
+    console.warn(
+      `[worktree] git fetch origin failed for ${repoPath}:`,
+      err instanceof Error ? err.message.trim() : err,
+    );
   }
 
-  // Prefer the symbolic ref that git sets when origin is cloned/fetched
+  // Derive the remote ref from the local HEAD's branch name — the canonical clone
+  // always knows which branch it's on, and fetch just updated origin/<branch>.
   try {
-    const raw = execSync(
-      `git -C ${JSON.stringify(repoPath)} symbolic-ref --short refs/remotes/origin/HEAD`,
+    const localBranch = execSync(
+      `git -C ${JSON.stringify(repoPath)} rev-parse --abbrev-ref HEAD`,
       { stdio: 'pipe' },
-    ).toString().trim(); // e.g. "origin/main"
-    if (raw) return raw;
-  } catch { /* not set */ }
+    ).toString().trim(); // e.g. "main"
 
-  // Fall back to probing common names
-  for (const candidate of ['origin/main', 'origin/master']) {
-    try {
+    if (localBranch && localBranch !== 'HEAD') {
+      const remoteRef = `origin/${localBranch}`;
+      // Verify the ref actually exists before handing it to worktree add
       execSync(
-        `git -C ${JSON.stringify(repoPath)} rev-parse --verify ${JSON.stringify(candidate)}`,
+        `git -C ${JSON.stringify(repoPath)} rev-parse --verify ${JSON.stringify(remoteRef)}`,
         { stdio: 'pipe' },
       );
-      return candidate;
-    } catch { /* try next */ }
-  }
+      console.log(`[worktree] using ${remoteRef} as start point for ${repoPath}`);
+      return remoteRef;
+    }
+  } catch { /* fall through */ }
 
+  console.warn(`[worktree] Could not resolve remote base ref for ${repoPath} — worktree will start from local HEAD`);
   return undefined;
 }
 
