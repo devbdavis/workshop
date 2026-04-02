@@ -7,7 +7,7 @@ import type { Session, SessionId, TrackId, TrackRepo } from '@foundation/types';
 import type { SoulLoader } from '@infrastructure/soul/soul-loader.js';
 import type { TodoRepository } from '@domain/todo/repository.js';
 import {
-  capturePaneLines, isSessionIdle, isSessionLoggedOut, isSessionExited,
+  capturePaneLines, isSessionIdle, isSessionNeedsInput, isSessionLoggedOut, isSessionExited,
 } from './pane-detection.js';
 import {
   buildClaudeLauncher, buildGeminiLauncher, buildCodexLauncher,
@@ -187,7 +187,7 @@ export function createTerminalManager(sessionRepo: SessionRepository, soulLoader
   const dyingSince = new Map<string, number>();
 
   /** Current activity status derived from pane detection, keyed by session ID */
-  const activityStatusMap = new Map<string, 'working' | 'idle'>();
+  const activityStatusMap = new Map<string, 'working' | 'idle' | 'needs-input'>();
 
   /** Get how many minutes a session has been observed idle */
   function getIdleMinutes(session: Session): number {
@@ -372,7 +372,7 @@ export function createTerminalManager(sessionRepo: SessionRepository, soulLoader
       return dyingSince.has(sessionId);
     },
 
-    getActivityStatus(sessionId: SessionId): 'working' | 'idle' | undefined {
+    getActivityStatus(sessionId: SessionId): 'working' | 'idle' | 'needs-input' | undefined {
       return activityStatusMap.get(sessionId);
     },
 
@@ -469,7 +469,10 @@ export function createTerminalManager(sessionRepo: SessionRepository, soulLoader
         }
 
         // --- Activity status tracking (all alive sessions) ---
-        if (isSessionIdle(session, capturedLines)) {
+        // needs-input takes priority: check before idle to catch question prompts
+        if (isSessionNeedsInput(session, capturedLines)) {
+          activityStatusMap.set(session.id, 'needs-input');
+        } else if (isSessionIdle(session, capturedLines)) {
           activityStatusMap.set(session.id, 'idle');
         } else {
           activityStatusMap.set(session.id, 'working');

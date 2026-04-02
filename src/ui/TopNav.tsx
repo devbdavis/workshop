@@ -34,22 +34,17 @@ export function TopNav() {
 
   const loadCount = useCallback(async () => {
     try {
-      const [permRes, wfRes] = await Promise.all([
-        fetch('/api/permissions/pending'),
-        fetch('/api/workflow/tickets'),
-      ]);
-      let count = 0;
-      if (permRes.ok) count += (await permRes.json()).length;
+      const wfRes = await fetch('/api/workflow/tickets');
       if (wfRes.ok) {
         const tickets = await wfRes.json();
         // Dynamic: use template-enriched stateData, fallback to legacy state names
         const legacyHumanStates = new Set(['spec-review', 'plan-review', 'final-review', 'needs-input', 'code-review']);
-        count += tickets.filter((t: { state: string; stateData?: Record<string, unknown> }) => {
+        const count = tickets.filter((t: { state: string; stateData?: Record<string, unknown> }) => {
           if (t.stateData?.currentStateHumanGate === true) return true;
           return legacyHumanStates.has(t.state);
         }).length;
+        setPendingCount(count);
       }
-      setPendingCount(count);
     } catch { /* ignore */ }
   }, []);
 
@@ -79,7 +74,7 @@ export function TopNav() {
     ws.onmessage = (evt) => {
       try {
         const event = JSON.parse(evt.data);
-        if (event.type?.startsWith('permission:') || event.type?.startsWith('workflow:')) loadCount();
+        if (event.type?.startsWith('workflow:')) loadCount();
       } catch { /* ignore */ }
     };
     return () => ws.close();

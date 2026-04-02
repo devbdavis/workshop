@@ -8,7 +8,6 @@ export type RepoId = string & { readonly __brand: 'RepoId' };
 export type PathId = string & { readonly __brand: 'PathId' };
 export type TemplateId = string & { readonly __brand: 'TemplateId' };
 export type TodoId = string & { readonly __brand: 'TodoId' };
-export type PermissionRequestId = string & { readonly __brand: 'PermissionRequestId' };
 export type AgentId = string & { readonly __brand: 'AgentId' };
 export type ScheduledTaskId = string & { readonly __brand: 'ScheduledTaskId' };
 export type WorkflowTicketId = string & { readonly __brand: 'WorkflowTicketId' };
@@ -84,7 +83,7 @@ export interface Session {
   /** NOT persisted — enriched at runtime from in-memory activity tracking */
   lastActivityAt?: string;
   /** NOT persisted — enriched at runtime: current agent activity state */
-  activityStatus?: 'working' | 'idle' | 'awaiting-permission';
+  activityStatus?: 'working' | 'idle' | 'needs-input';
 }
 
 // External ticket
@@ -156,21 +155,6 @@ export interface Todo {
   sortOrder: number;
   createdAt: string;
   updatedAt: string;
-}
-
-// Permission request (for background agent tool approvals)
-export type PermissionDecision = 'pending' | 'approved' | 'denied';
-
-export interface PermissionRequest {
-  id: PermissionRequestId;
-  sessionId: SessionId;
-  toolName: string;
-  toolInput: Record<string, unknown>;
-  decision: PermissionDecision;
-  decisionReason?: string;
-  userComment?: string;
-  createdAt: string;
-  resolvedAt?: string;
 }
 
 // Terminal layout (recursive split tree)

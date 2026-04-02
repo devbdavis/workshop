@@ -12,22 +12,18 @@ export interface CreateSessionOptions {
   provider?: SessionProvider;
   /** If true, do not start the AI CLI in the tmux session. Defaults to false. */
   skipClaude?: boolean;
-  /** If true, the session runs in the background with permission hooks. Defaults to false. */
+  /** If true, the session runs as a background agent. Defaults to false. */
   background?: boolean;
   /** Todo ID if dispatched from a todo (used in system prompt extension). */
   todoId?: string;
   /** Initial prompt to send to the AI CLI (the task to work on). */
   initialPrompt?: string;
-  /** If true, skip permission hooks and run with --dangerously-skip-permissions. */
-  dangerouslySkipPermissions?: boolean;
   /** Display name for the session (shown in the terminal pane header). */
   name?: string;
   /** Workflow ticket ID — if set, adds SubagentStop + SessionEnd hooks for execution tracking */
   executionTicketId?: string;
   /** Tool patterns to pre-approve (passed as --allowedTools to claude CLI). */
   allowedTools?: string[];
-  /** Route tool permissions through Workshop UI even for interactive (non-background) sessions. */
-  usePermissionHooks?: boolean;
   /** Claude session ID to resume (passed as --resume to claude CLI). */
   claudeResumeId?: string;
   /** Per-session MCP server configs to inject into the session's settings.json */
@@ -56,6 +52,6 @@ export interface TerminalManager {
   getLastActivityAt(sessionId: SessionId): string | undefined;
   /** Whether a session is in the dying grace period (tmux dead, awaiting reap/suspend) */
   isDying(sessionId: SessionId): boolean;
-  /** Get the current activity status of a session based on pane detection (working/idle/undefined) */
-  getActivityStatus(sessionId: SessionId): 'working' | 'idle' | undefined;
+  /** Get the current activity status of a session based on pane detection */
+  getActivityStatus(sessionId: SessionId): 'working' | 'idle' | 'needs-input' | undefined;
 }

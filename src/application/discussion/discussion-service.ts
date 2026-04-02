@@ -45,7 +45,6 @@ export interface DiscussionServiceDeps {
         background?: boolean;
         initialPrompt?: string;
         provider?: SessionProvider;
-        usePermissionHooks?: boolean;
       },
     ) => Promise<{ id: SessionId; trackId: TrackId; tmuxSession: string; state: string }>;
     destroySession: (sessionId: SessionId) => Promise<void>;
@@ -236,7 +235,6 @@ export function createDiscussionService(deps: DiscussionServiceDeps): Discussion
             systemPrompt,
             provider,
             background: false,
-            usePermissionHooks: true,
             initialPrompt: `A new discussion "${data.title}" has been opened. Use workshop_discussion_read to review the proposal and share your perspective.`,
           });
 
@@ -425,7 +423,6 @@ export function createDiscussionService(deps: DiscussionServiceDeps): Discussion
             systemPrompt,
             provider,
             background: false,
-            usePermissionHooks: true,
             initialPrompt: `The discussion "${discussion.title}" is in progress. Use workshop_discussion_read to review the full thread and share your perspective.`,
           });
 
@@ -493,7 +490,6 @@ export function createDiscussionService(deps: DiscussionServiceDeps): Discussion
         systemPrompt,
         workingDirectory: workingDir,
         background: true,
-        usePermissionHooks: true,
         initialPrompt,
       });
 

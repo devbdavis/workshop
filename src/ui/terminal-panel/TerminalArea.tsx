@@ -131,7 +131,7 @@ function MinimizedChip({
   onDestroy: () => void;
 }) {
   const stateColor =
-    session.activityStatus === 'awaiting-permission' ? 'bg-red-500' :
+    session.activityStatus === 'needs-input' ? 'bg-red-500' :
     session.activityStatus === 'idle' ? 'bg-yellow-500' :
     session.activityStatus === 'working' ? 'bg-green-500' :
     session.state === 'active' ? 'bg-green-500' :
