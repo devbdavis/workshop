@@ -1,6 +1,7 @@
 import Database from 'better-sqlite3';
 import { v4 as uuid } from 'uuid';
 import path from 'path';
+import fs from 'fs';
 
 function resolveDbPath(): string {
   return process.env.WORKSHOP_DB_PATH || path.join(process.env.HOME || '/tmp', '.workshop', 'workshop.db');
@@ -11,6 +12,7 @@ let db: Database.Database | null = null;
 export function getDatabase(): Database.Database {
   if (!db) {
     const dbPath = resolveDbPath();
+    fs.mkdirSync(path.dirname(dbPath), { recursive: true });
     db = new Database(dbPath);
     db.pragma('journal_mode = WAL');
     db.pragma('foreign_keys = ON');
