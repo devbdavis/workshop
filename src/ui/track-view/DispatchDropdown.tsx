@@ -4,6 +4,7 @@ import type { Agent, SessionProvider } from '@foundation/types';
 export interface DispatchOptions {
   agentId?: string;
   provider?: SessionProvider;
+  dangerouslySkipPermissions?: boolean;
 }
 
 const PROVIDER_OPTIONS: { value: SessionProvider; label: string; color: string }[] = [
@@ -23,11 +24,13 @@ interface Props {
 
 export function DispatchDropdown({ agents, onSelect, onClose, popUp, defaultAgent }: Props) {
   const [provider, setProvider] = useState<SessionProvider>('claude');
+  const [dangerouslySkipPermissions, setDangerouslySkipPermissions] = useState(false);
 
   function handleSelect(agentId?: string) {
     onSelect({
       agentId,
       provider,
+      dangerouslySkipPermissions,
     });
   }
 
@@ -52,6 +55,20 @@ export function DispatchDropdown({ agents, onSelect, onClose, popUp, defaultAgen
             {p.label}
           </button>
         ))}
+      </div>
+
+      {/* Dangerous mode toggle */}
+      <div className="flex items-center gap-2 px-3 py-2 border-b border-gray-700">
+        <input
+          type="checkbox"
+          id="dispatch-dangerous"
+          checked={dangerouslySkipPermissions}
+          onChange={(e) => setDangerouslySkipPermissions(e.target.checked)}
+          className="rounded border-gray-600 bg-gray-800"
+        />
+        <label htmlFor="dispatch-dangerous" className="text-[10px] text-gray-400 cursor-pointer select-none">
+          Dangerous mode (skip permission prompts)
+        </label>
       </div>
 
       {/* Default option — shows track default agent if configured */}

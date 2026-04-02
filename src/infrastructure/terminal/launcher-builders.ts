@@ -146,8 +146,8 @@ export function buildClaudeLauncher(
     claudeArgs.push('--system-prompt-file', JSON.stringify(promptFile));
   }
 
-  // Background sessions always run without interactive permission prompts.
-  if (options?.background) {
+  // Only skip permission prompts when explicitly opted in by the caller.
+  if (options?.background && options?.dangerouslySkipPermissions) {
     claudeArgs.push('--dangerously-skip-permissions');
   }
 
