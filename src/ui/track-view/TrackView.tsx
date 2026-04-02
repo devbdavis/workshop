@@ -298,7 +298,7 @@ function NewSessionButton({ onCreateSession }: { onCreateSession: (provider: Ses
   return (
     <div ref={ref} className="relative inline-flex">
       <button
-        onClick={() => onCreateSession('claude', false)}
+        onClick={() => onCreateSession('claude', true)}
         className="px-3 py-1.5 text-sm bg-blue-600 hover:bg-blue-500 rounded-l-lg transition-colors"
       >
         New Session
@@ -314,18 +314,18 @@ function NewSessionButton({ onCreateSession }: { onCreateSession: (provider: Ses
       {open && (
         <div className="absolute right-0 top-full mt-1 bg-gray-800 border border-gray-700 rounded-lg shadow-lg py-1 z-50 min-w-[160px]">
           <button
-            onClick={() => { onCreateSession('claude', false); setOpen(false); }}
-            className="w-full text-left px-3 py-1.5 text-sm hover:bg-gray-700 flex items-center gap-2"
-          >
-            <span className="w-2 h-2 rounded-full bg-orange-400" />
-            Claude
-          </button>
-          <button
             onClick={() => { onCreateSession('claude', true); setOpen(false); }}
             className="w-full text-left px-3 py-1.5 text-sm hover:bg-gray-700 flex items-center gap-2"
           >
             <span className="w-2 h-2 rounded-full bg-orange-400" />
             <span>Claude <span className="text-[10px] text-gray-500 ml-0.5">(worktree)</span></span>
+          </button>
+          <button
+            onClick={() => { onCreateSession('claude', false); setOpen(false); }}
+            className="w-full text-left px-3 py-1.5 text-sm hover:bg-gray-700 flex items-center gap-2"
+          >
+            <span className="w-2 h-2 rounded-full bg-orange-400" />
+            Claude
           </button>
           <button
             onClick={() => { onCreateSession('codex'); setOpen(false); }}
