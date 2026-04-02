@@ -674,13 +674,24 @@ export function createApiRouter(deps: ApiRouterDeps = {}): Router {
         }
 
         // 4. Interpolated prompt template
+        let templateHasRepos = false;
         if (track.defaultPromptTemplateId) {
           const template = promptTemplates.findById(track.defaultPromptTemplateId);
           if (template) {
+            templateHasRepos = template.content.includes('{{track.repos}}');
             track.tickets = tickets.findByTrack(trackId);
             const interpolated = interpolateTemplate(template.content, { track });
             parts.push(interpolated);
           }
+        }
+
+        // 5. Repositories — unless the template already expanded {{track.repos}}
+        const reposForPrompt = tracks.findReposByTrack(trackId);
+        if (reposForPrompt.length > 0 && !templateHasRepos) {
+          const repoLines = reposForPrompt
+            .map((r) => `- ${r.path}${r.remoteUrl ? ` (${r.remoteUrl})` : ''}`)
+            .join('\n');
+          parts.push(`## Repositories\n\n${repoLines}`);
         }
 
         if (parts.length > 0) {
