@@ -8,6 +8,13 @@ export function getActivityState(session: Session & { dying?: boolean }): Activi
   if (session.state === 'dead') return 'empty';
   if (session.state === 'suspended') return 'floor-sleeping';
 
+  // Trust the real-time activity status when available — avoids the office
+  // showing 'sleeping' while the orb is green (e.g. long tool calls where
+  // pane content is stable and lastActivityAt goes stale).
+  if (session.activityStatus === 'working' || session.activityStatus === 'needs-input') return 'working';
+  if (session.activityStatus === 'idle') return 'sleeping';
+
+  // Fallback for sessions not yet through a sync cycle
   if (!session.lastActivityAt) return 'working';
   const idleMs = Date.now() - new Date(session.lastActivityAt).getTime();
   return idleMs > 60_000 ? 'sleeping' : 'working';
