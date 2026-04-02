@@ -144,7 +144,7 @@ export function createApiRouter(deps: ApiRouterDeps = {}): Router {
     }
   }, 3_000);
 
-  const syncInterval = setInterval(runSessionSync, 30_000);
+  const syncInterval = setInterval(runSessionSync, 7_500);
   // Clean up interval when the router's parent process exits
   process.on('SIGINT', () => clearInterval(syncInterval));
   process.on('SIGTERM', () => clearInterval(syncInterval));
