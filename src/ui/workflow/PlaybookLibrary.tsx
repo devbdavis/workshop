@@ -5,6 +5,25 @@
 import { useEffect, useState, useMemo } from 'react';
 import { StateDiagram } from './StateDiagram';
 
+// Agent role prompt block
+interface PromptBlock {
+  preamble: string;
+  toolAccessTier: string;
+  constraints: string[];
+  completionInstructions: string;
+}
+
+// Agent role from /api/workflow/agent-roles
+interface AgentRole {
+  id: string;
+  name: string;
+  description: string;
+  promptBlock: PromptBlock;
+  capabilityTier: string;
+  reusable: boolean;
+  usageCount: number;
+}
+
 // Stage definition (mirrors domain type)
 interface StageDefinition {
   state: string;
@@ -245,8 +264,26 @@ function PlaybookDetailPanel({
 }) {
   const typeColor =
     playbook.ticketType === 'epic'
-      ? 'bg-purple-900/50 text-purple-300 border-purple-800'
-      : 'bg-cyan-900/50 text-cyan-300 border-cyan-800';
+      ? 'bg-sky-900/50 text-sky-300 border-sky-800'
+      : 'bg-teal-900/50 text-teal-300 border-teal-800';
+
+  // Fetch agent roles from the API
+  const [agentRoleMap, setAgentRoleMap] = useState<Map<string, AgentRole>>(new Map());
+  const [expandedRoleId, setExpandedRoleId] = useState<string | null>(null);
+
+  useEffect(() => {
+    async function loadRoles() {
+      try {
+        const res = await fetch('/api/workflow/agent-roles');
+        if (!res.ok) return;
+        const data: AgentRole[] = await res.json();
+        setAgentRoleMap(new Map(data.map((r) => [r.id, r])));
+      } catch {
+        // Non-fatal — role details simply won't appear
+      }
+    }
+    loadRoles();
+  }, []);
 
   // Collect unique semantic roles used in this playbook
   const usedRoles = useMemo(() => {
@@ -257,15 +294,17 @@ function PlaybookDetailPanel({
     return [...roles];
   }, [playbook.stageDefinitions]);
 
-  // Collect unique agent roles referenced
+  // Collect unique agent role IDs with all stages they appear in
   const agentRoles = useMemo(() => {
-    const roles: Array<{ state: string; roleId: string }> = [];
+    const map = new Map<string, string[]>();
     for (const stage of playbook.stageDefinitions) {
       if (stage.agentRoleId) {
-        roles.push({ state: stage.state, roleId: stage.agentRoleId });
+        const existing = map.get(stage.agentRoleId) ?? [];
+        existing.push(stage.state);
+        map.set(stage.agentRoleId, existing);
       }
     }
-    return roles;
+    return [...map.entries()].map(([roleId, states]) => ({ roleId, states }));
   }, [playbook.stageDefinitions]);
 
   return (
@@ -347,17 +386,90 @@ function PlaybookDetailPanel({
         {/* Agent roles */}
         {agentRoles.length > 0 && (
           <div>
-            <h4 className="text-gray-400 font-medium mb-1">Agent Roles</h4>
-            <div className="flex flex-wrap gap-2">
-              {agentRoles.map(({ state, roleId }) => (
-                <span
-                  key={state}
-                  className="px-2 py-1 bg-blue-900/30 text-blue-300 border border-blue-800/50 rounded font-mono"
-                >
-                  {roleId}
-                  <span className="text-blue-500 ml-1.5">&rarr; {state}</span>
-                </span>
-              ))}
+            <h4 className="text-gray-400 font-medium mb-2">Agent Roles</h4>
+            <div className="space-y-2">
+              {agentRoles.map(({ roleId, states }) => {
+                const role = agentRoleMap.get(roleId);
+                const isExpanded = expandedRoleId === roleId;
+                return (
+                  <div
+                    key={roleId}
+                    className="border border-gray-800 rounded overflow-hidden"
+                  >
+                    {/* Role header — always visible, clickable */}
+                    <button
+                      onClick={() => setExpandedRoleId(isExpanded ? null : roleId)}
+                      className="w-full flex items-center justify-between px-3 py-2 bg-gray-800/40 hover:bg-gray-800/70 transition-colors text-left"
+                    >
+                      <div className="flex items-center gap-3 min-w-0">
+                        <span className="text-blue-300 font-mono text-[11px] shrink-0">{roleId}</span>
+                        <div className="flex gap-1 flex-wrap">
+                          {states.map((s) => (
+                            <span key={s} className="text-[10px] px-1.5 py-0.5 bg-blue-900/30 text-blue-400 border border-blue-800/40 rounded">
+                              {s}
+                            </span>
+                          ))}
+                        </div>
+                      </div>
+                      <span className="text-gray-500 text-[10px] shrink-0 ml-2">
+                        {role ? (isExpanded ? '▲ hide' : '▼ details') : '—'}
+                      </span>
+                    </button>
+
+                    {/* Expanded prompt block */}
+                    {isExpanded && role && (
+                      <div className="px-3 py-3 space-y-3 bg-gray-950/60 border-t border-gray-800">
+                        {/* Description */}
+                        {role.description && (
+                          <p className="text-[11px] text-gray-400 leading-relaxed">{role.description}</p>
+                        )}
+                        {/* Capability tier */}
+                        <div className="flex items-center gap-2">
+                          <span className="text-[10px] text-gray-500">Capability tier:</span>
+                          <span className="text-[10px] px-1.5 py-0.5 bg-gray-800 text-gray-300 rounded font-mono">
+                            {role.capabilityTier}
+                          </span>
+                        </div>
+
+                        {/* Preamble */}
+                        {role.promptBlock.preamble && (
+                          <div>
+                            <div className="text-[10px] text-gray-500 mb-1 font-medium uppercase tracking-wide">Preamble</div>
+                            <pre className="text-[11px] text-gray-300 whitespace-pre-wrap font-sans leading-relaxed bg-gray-900/50 rounded px-2 py-2 border border-gray-800/50">
+                              {role.promptBlock.preamble}
+                            </pre>
+                          </div>
+                        )}
+
+                        {/* Constraints */}
+                        {role.promptBlock.constraints.length > 0 && (
+                          <div>
+                            <div className="text-[10px] text-gray-500 mb-1 font-medium uppercase tracking-wide">Constraints</div>
+                            <ul className="space-y-1">
+                              {role.promptBlock.constraints.map((c, i) => (
+                                <li key={i} className="flex gap-2 text-[11px] text-gray-300">
+                                  <span className="text-gray-600 shrink-0">·</span>
+                                  <span>{c}</span>
+                                </li>
+                              ))}
+                            </ul>
+                          </div>
+                        )}
+
+                        {/* Completion instructions */}
+                        {role.promptBlock.completionInstructions && (
+                          <div>
+                            <div className="text-[10px] text-gray-500 mb-1 font-medium uppercase tracking-wide">Completion Instructions</div>
+                            <pre className="text-[11px] text-gray-300 whitespace-pre-wrap font-sans leading-relaxed bg-gray-900/50 rounded px-2 py-2 border border-gray-800/50">
+                              {role.promptBlock.completionInstructions}
+                            </pre>
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
             </div>
           </div>
         )}
