@@ -88,8 +88,6 @@ function TrackDeskUnit({ session, selected }: DeskProps) {
     session.activityStatus === 'idle' ? 'bg-yellow-500' :
     'bg-gray-600';
 
-  const providerLabel = session.provider === 'claude' ? 'AI' : session.provider.slice(0, 2).toUpperCase();
-
   return (
     <div
       className={`relative bg-gray-900 border rounded-lg p-2 h-full flex flex-col
@@ -99,15 +97,16 @@ function TrackDeskUnit({ session, selected }: DeskProps) {
       <span
         className={`absolute top-1.5 right-1.5 text-[8px] px-1 py-0.5 rounded text-white/90 leading-none ${providerColor(session.provider)}`}
       >
-        {providerLabel}
+        {session.provider}
       </span>
 
-      <div className="flex-1 flex items-end justify-center min-h-0 overflow-hidden">
+      {/* Fixed-height character area so desks stay horizontally aligned */}
+      <div className="flex items-end justify-center overflow-hidden" style={{ height: '72px' }}>
         <CharacterSvg sessionId={session.id} activityState={activityState} className="w-full" />
       </div>
 
-      {/* Name shown directly — no tooltip, 2-line wrap */}
-      <div className="shrink-0 mt-1 flex items-start gap-1">
+      {/* Fixed-height name area: 2 lines at text-[10px] leading-tight ≈ 28px */}
+      <div className="mt-1 flex items-start gap-1" style={{ height: '28px' }}>
         <span className={`w-1.5 h-1.5 rounded-full shrink-0 mt-[3px] ${statusColor}`} />
         <span className="text-[10px] text-gray-200 leading-tight break-words min-w-0 line-clamp-2">
           {displayName}
