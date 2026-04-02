@@ -44,24 +44,25 @@ interface WorktreeMeta {
 
 /**
  * Slugify a session name into a git-safe branch name component.
- * Output: `workshop/{slug}-{shortId}` — at most ~50 chars total.
+ * Output: `workshop/{slug}-{shortId}[-{issueKey}]` — at most ~60 chars total.
  */
-function worktreeBranchName(name: string | undefined, sessionId: string): string {
+function worktreeBranchName(name: string | undefined, sessionId: string, issueKey?: string): string {
   const slug = name
     ? name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 40)
     : 'task';
-  return `workshop/${slug}-${sessionId.slice(0, 6)}`;
+  const base = `workshop/${slug}-${sessionId.slice(0, 6)}`;
+  return issueKey ? `${base}-${issueKey}` : base;
 }
 
 /**
  * Create a workspace directory with one git worktree per repo.
  * Returns the workspace path. Throws on failure (caller should handle gracefully).
  */
-function createWorktrees(sessionId: string, repos: TrackRepo[], sessionName?: string): string {
+function createWorktrees(sessionId: string, repos: TrackRepo[], sessionName?: string, issueKey?: string): string {
   const workspaceDir = path.join(SESSION_DATA_DIR, sessionId, 'workspace');
   mkdirSync(workspaceDir, { recursive: true });
 
-  const branch = worktreeBranchName(sessionName, sessionId);
+  const branch = worktreeBranchName(sessionName, sessionId, issueKey);
 
   for (const repo of repos) {
     const repoName = path.basename(repo.path);
@@ -304,7 +305,7 @@ export function createTerminalManager(sessionRepo: SessionRepository, soulLoader
       let initialPrompt = options?.initialPrompt;
       if (options?.worktreeMode && options.repos?.length) {
         try {
-          const worktreeRoot = createWorktrees(session.id, options.repos, options.name);
+          const worktreeRoot = createWorktrees(session.id, options.repos, options.name, options.issueKey);
           sessionRepo.updateWorktreeRoot(session.id, worktreeRoot);
           session.worktreeRoot = worktreeRoot;
           cwd = worktreeRoot;

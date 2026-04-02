@@ -27,7 +27,7 @@ export interface TodoRouterDeps {
   terminal: {
     createSession: (
       trackId: TrackId,
-      opts?: { systemPrompt?: string; workingDirectory?: string; background?: boolean; todoId?: string; initialPrompt?: string; provider?: SessionProvider; name?: string; worktreeMode?: boolean; repos?: TrackRepo[]; dangerouslySkipPermissions?: boolean; skipBackgroundInstructions?: boolean },
+      opts?: { systemPrompt?: string; workingDirectory?: string; background?: boolean; todoId?: string; initialPrompt?: string; provider?: SessionProvider; name?: string; worktreeMode?: boolean; repos?: TrackRepo[]; issueKey?: string; dangerouslySkipPermissions?: boolean; skipBackgroundInstructions?: boolean },
     ) => Promise<{ id: SessionId; trackId: TrackId; tmuxSession: string; state: string }>;
     destroySession: (sessionId: SessionId) => Promise<void>;
   };
@@ -119,7 +119,7 @@ export function createTodoRouter(deps: TodoRouterDeps): Router {
   // --- Update todo ---
 
   router.put('/todos/:todoId', async (req, res) => {
-    const { title, description, status, priority, refined, sessionId, sortOrder } = req.body;
+    const { title, description, resolution, issueKey, status, priority, refined, sessionId, sortOrder } = req.body;
 
     // If transitioning to done, check for an active session to clean up
     const existing = todos.findById(req.params.todoId as TodoId);
@@ -138,6 +138,8 @@ export function createTodoRouter(deps: TodoRouterDeps): Router {
     const todo = todos.update(req.params.todoId as TodoId, {
       title,
       description,
+      resolution,
+      issueKey,
       status,
       priority,
       refined,
@@ -241,6 +243,24 @@ export function createTodoRouter(deps: TodoRouterDeps): Router {
           templateHasTask = template.content.includes('{{todo.title}}');
           templateHasBackgroundInstructions = template.content.includes('{{todo.id}}');
           track.tickets = tickets.findByTrack(todo.trackId);
+          // Merge the todo's ticket key into the track ticket list so it's
+          // available via {{track.tickets}} in template interpolation.
+          if (todo.issueKey) {
+            const alreadyPresent = track.tickets.some((t) => t.externalId === todo.issueKey);
+            if (!alreadyPresent) {
+              track.tickets = [
+                ...track.tickets,
+                {
+                  id: `todo-ticket-${todo.id}` as import('@foundation/types').TicketId,
+                  trackId: todo.trackId,
+                  source: 'linear' as const,
+                  externalId: todo.issueKey,
+                  relationship: 'primary' as const,
+                  createdAt: new Date().toISOString(),
+                },
+              ];
+            }
+          }
           const interpolated = interpolateTemplate(template.content, {
             track,
             todo: { id: todo.id, title: todo.title, description: todo.description ?? '' },
@@ -276,6 +296,7 @@ export function createTodoRouter(deps: TodoRouterDeps): Router {
         name: todo.title,
         worktreeMode: track.worktreeMode && repos.length > 0,
         repos: track.worktreeMode ? repos : undefined,
+        issueKey: todo.issueKey,
         dangerouslySkipPermissions,
         skipBackgroundInstructions: templateHasBackgroundInstructions,
       });

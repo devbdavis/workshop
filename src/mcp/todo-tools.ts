@@ -46,11 +46,13 @@ export function registerTodoTools(server: McpServer, api: (path: string, options
 
   server.tool(
     'workshop_update_todo',
-    'Update a todo\'s title, description, status, priority, or refined flag',
+    'Update a todo\'s title, description, resolution, status, priority, or refined flag',
     {
       todoId: z.string().describe('The todo ID'),
       title: z.string().optional().describe('New title'),
       description: z.string().optional().describe('New description'),
+      resolution: z.string().optional().describe('Resolution notes — what happened or why the todo was completed/stopped. Only meaningful for ready/done status.'),
+      issueKey: z.string().optional().describe('Linear or Jira ticket key to associate with this todo (e.g. "ASY-1402"). Appended to the worktree branch name when dispatched.'),
       status: z.enum(['backlog', 'ready', 'in-progress', 'review', 'done']).optional().describe('New status'),
       priority: z.enum(['low', 'medium', 'high']).optional().describe('New priority'),
       refined: z.boolean().optional().describe('Whether the todo is refined for agent dispatch'),

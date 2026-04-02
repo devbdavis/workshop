@@ -28,6 +28,8 @@ const PRIORITIES: { value: TodoPriority; label: string }[] = [
 export function TodoDetailModal({ todo, tracks, onClose, onSave, onDelete, onDispatch }: Props) {
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
+  const [resolution, setResolution] = useState('');
+  const [issueKey, setTicketKey] = useState('');
   const [status, setStatus] = useState<TodoStatus>('backlog');
   const [priority, setPriority] = useState<TodoPriority>('medium');
   const [refined, setRefined] = useState(false);
@@ -39,6 +41,8 @@ export function TodoDetailModal({ todo, tracks, onClose, onSave, onDelete, onDis
     if (todo) {
       setTitle(todo.title);
       setDescription(todo.description || '');
+      setResolution(todo.resolution || '');
+      setTicketKey(todo.issueKey || '');
       setStatus(todo.status);
       setPriority(todo.priority);
       setRefined(todo.refined);
@@ -70,7 +74,7 @@ export function TodoDetailModal({ todo, tracks, onClose, onSave, onDelete, onDis
   const canDispatch = refined && (status === 'ready' || status === 'backlog');
 
   function handleSave() {
-    onSave(todo!.id, { title, description: description || undefined, status, priority, refined });
+    onSave(todo!.id, { title, description: description || undefined, resolution: resolution || undefined, issueKey: issueKey || undefined, status, priority, refined });
   }
 
   return (
@@ -147,6 +151,33 @@ export function TodoDetailModal({ todo, tracks, onClose, onSave, onDelete, onDis
               Refined (ready for agent dispatch)
             </label>
           </div>
+
+          <div>
+            <label className="text-xs text-gray-400 block mb-1">Issue</label>
+            <input
+              value={issueKey}
+              onChange={(e) => {
+              const raw = e.target.value;
+              const linearMatch = raw.match(/\/issue\/([A-Z0-9]+-\d+)/i);
+              setTicketKey(linearMatch ? linearMatch[1].toUpperCase() : raw.toUpperCase());
+            }}
+              placeholder="e.g. ASY-1402"
+              className="w-full px-3 py-2 bg-gray-800 border border-gray-700 rounded-lg text-sm text-gray-200 font-mono placeholder:text-gray-600"
+            />
+          </div>
+
+          {(status === 'review' || status === 'done') && (
+            <div>
+              <label className="text-xs text-gray-400 block mb-1">Resolution</label>
+              <textarea
+                value={resolution}
+                onChange={(e) => setResolution(e.target.value)}
+                rows={4}
+                placeholder="What happened, what was decided, or why this was completed…"
+                className="w-full px-3 py-2 bg-gray-800 border border-gray-700 rounded-lg text-sm text-gray-200 font-mono placeholder:text-gray-600"
+              />
+            </div>
+          )}
 
           {todo.sessionId && (
             <div className="text-xs text-emerald-400 flex items-center gap-1.5">
