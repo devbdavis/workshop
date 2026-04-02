@@ -4,7 +4,6 @@ import type { Agent, SessionProvider } from '@foundation/types';
 export interface DispatchOptions {
   agentId?: string;
   provider?: SessionProvider;
-  dangerouslySkipPermissions?: boolean;
 }
 
 const PROVIDER_OPTIONS: { value: SessionProvider; label: string; color: string }[] = [
@@ -24,13 +23,11 @@ interface Props {
 
 export function DispatchDropdown({ agents, onSelect, onClose, popUp, defaultAgent }: Props) {
   const [provider, setProvider] = useState<SessionProvider>('claude');
-  const [skipPermissions, setSkipPermissions] = useState(false);
 
   function handleSelect(agentId?: string) {
     onSelect({
       agentId,
       provider,
-      dangerouslySkipPermissions: skipPermissions || undefined,
     });
   }
 
@@ -56,22 +53,6 @@ export function DispatchDropdown({ agents, onSelect, onClose, popUp, defaultAgen
           </button>
         ))}
       </div>
-
-      {/* Skip permissions toggle */}
-      <label className="flex items-center gap-2 px-3 py-1.5 border-b border-gray-700 cursor-pointer hover:bg-gray-700/50">
-        <input
-          type="checkbox"
-          checked={skipPermissions}
-          onChange={(e) => setSkipPermissions(e.target.checked)}
-          className="rounded border-gray-600 bg-gray-800 w-3 h-3"
-        />
-        <span className={`text-[10px] flex items-center gap-1 ${skipPermissions ? 'text-red-400' : 'text-gray-500'}`}>
-          <svg className="w-3 h-3 text-red-500 shrink-0" viewBox="0 0 20 20" fill="currentColor">
-            <path fillRule="evenodd" d="M8.485 2.495c.673-1.167 2.357-1.167 3.03 0l6.28 10.875c.673 1.167-.168 2.625-1.516 2.625H3.72c-1.347 0-2.189-1.458-1.515-2.625L8.485 2.495zM10 5a.75.75 0 01.75.75v3.5a.75.75 0 01-1.5 0v-3.5A.75.75 0 0110 5zm0 9a1 1 0 100-2 1 1 0 000 2z" clipRule="evenodd" />
-          </svg>
-          Skip permissions
-        </span>
-      </label>
 
       {/* Default option — shows track default agent if configured */}
       <button

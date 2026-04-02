@@ -15,8 +15,8 @@ const WORKSHOP_API_URL = process.env.WORKSHOP_API_URL || `http://localhost:${pro
  * Write a Claude Code settings file with hooks.
  *
  * ALL sessions get SessionStart + SessionEnd hooks so we can track Claude's
- * session ID for --resume support. Permission hooks (PreToolUse, SubagentStop)
- * are only added for background/hooked sessions.
+ * session ID for --resume support. SubagentStop is added when an
+ * executionTicketId is present (workflow progress tracking).
  *
  * All hooks use type: 'command' (curl scripts) — Claude Code does not support
  * type: 'http' hooks and silently ignores them.
@@ -24,7 +24,7 @@ const WORKSHOP_API_URL = process.env.WORKSHOP_API_URL || `http://localhost:${pro
 export function writeHookSettings(
   sessionDir: string,
   sessionId: string,
-  options?: { includePermissionHooks?: boolean; executionTicketId?: string; mcpServers?: Record<string, unknown> },
+  options?: { executionTicketId?: string; mcpServers?: Record<string, unknown> },
 ): string {
   const settingsFile = path.join(sessionDir, 'settings.json');
   const hooks: Record<string, unknown[]> = {};
@@ -59,35 +59,20 @@ export function writeHookSettings(
     },
   ];
 
-  // --- Permission hooks (background/hooked sessions only) ---
+  // --- SubagentStop: workflow progress tracking ---
 
-  if (options?.includePermissionHooks) {
-    const permissionScript = path.join(scriptsDir, 'permission-hook.sh');
-    hooks.PreToolUse = [
+  if (options?.executionTicketId) {
+    const agentProgressScript = path.join(scriptsDir, 'agent-progress-hook.sh');
+    hooks.SubagentStop = [
       {
-        matcher: 'Bash|Edit|Write|NotebookEdit|mcp__.*',
         hooks: [
           {
             type: 'command',
-            command: `WORKSHOP_API_URL=${WORKSHOP_API_URL} WORKSHOP_SESSION_ID=${sessionId} ${permissionScript}`,
+            command: `WORKSHOP_API_URL=${WORKSHOP_API_URL} WORKSHOP_SESSION_ID=${sessionId} WORKSHOP_TICKET_ID=${options.executionTicketId} ${agentProgressScript}`,
           },
         ],
       },
     ];
-
-    if (options.executionTicketId) {
-      const agentProgressScript = path.join(scriptsDir, 'agent-progress-hook.sh');
-      hooks.SubagentStop = [
-        {
-          hooks: [
-            {
-              type: 'command',
-              command: `WORKSHOP_API_URL=${WORKSHOP_API_URL} WORKSHOP_SESSION_ID=${sessionId} WORKSHOP_TICKET_ID=${options.executionTicketId} ${agentProgressScript}`,
-            },
-          ],
-        },
-      ];
-    }
   }
 
   const settings: Record<string, unknown> = { hooks };
@@ -107,9 +92,6 @@ export function appendBackgroundInstructions(prompt: string, todoId?: string): s
     '## Background Agent Instructions',
     '',
     'You are running as a background agent dispatched from Workshop.',
-    'A human will review and approve/deny your tool calls — they see each',
-    'request in the Workshop UI. Keep working through denials by adjusting',
-    'your approach.',
     '',
   ];
 
@@ -164,22 +146,18 @@ export function buildClaudeLauncher(
     claudeArgs.push('--system-prompt-file', JSON.stringify(promptFile));
   }
 
-  // Route permissions through Workshop UI for background or hook-enabled sessions
-  const needsPermissionHooks = options?.background || options?.usePermissionHooks;
-  if (needsPermissionHooks && options?.dangerouslySkipPermissions) {
+  // Background sessions always run without interactive permission prompts.
+  if (options?.background) {
     claudeArgs.push('--dangerously-skip-permissions');
   }
 
-  // Always write a settings file (SessionStart + SessionEnd hooks for resume tracking).
-  // Permission hooks added only for background/hooked sessions.
-  if (!options?.dangerouslySkipPermissions) {
-    const settingsFile = writeHookSettings(sessionDir, sessionId, {
-      includePermissionHooks: needsPermissionHooks && !options?.dangerouslySkipPermissions,
-      executionTicketId: options?.executionTicketId,
-      mcpServers: options?.mcpServers,
-    });
-    claudeArgs.push('--settings', JSON.stringify(settingsFile));
-  }
+  // Always write a settings file (SessionStart + SessionEnd hooks for resume tracking,
+  // SubagentStop for workflow progress if executionTicketId is present).
+  const settingsFile = writeHookSettings(sessionDir, sessionId, {
+    executionTicketId: options?.executionTicketId,
+    mcpServers: options?.mcpServers,
+  });
+  claudeArgs.push('--settings', JSON.stringify(settingsFile));
 
   // Pre-approve tool patterns so interactive sessions don't block on permission prompts
   if (options?.allowedTools && options.allowedTools.length > 0) {
