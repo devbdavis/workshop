@@ -142,12 +142,19 @@ export function createExecutionHookRouter(deps: ExecutionHookRouterDeps): Router
         }
       }
 
-      // 2. General cleanup: destroy the session (tmux + DB + session dir)
-      try {
-        await terminal.destroySession(sessionId as SessionId);
-        broadcast('session:deleted', sessionId);
-      } catch (destroyErr) {
-        console.error(`Failed to destroy session ${sessionId}:`, destroyErr);
+      // 2. General cleanup: destroy the session (tmux + DB + session dir).
+      // Skip hard-delete if the session was manually soft-deleted by the user —
+      // it belongs in the recycle bin and will be purged after the retention period.
+      const session = sessions.findById(sessionId as SessionId);
+      if (session?.deletedAt) {
+        console.log(`Session ${sessionId} is in the recycle bin — skipping hard-delete`);
+      } else {
+        try {
+          await terminal.destroySession(sessionId as SessionId);
+          broadcast('session:deleted', sessionId);
+        } catch (destroyErr) {
+          console.error(`Failed to destroy session ${sessionId}:`, destroyErr);
+        }
       }
 
       res.json({ ok: true });
