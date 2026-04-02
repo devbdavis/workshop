@@ -559,6 +559,13 @@ function runMigrations(db: Database.Database): void {
     // Column already exists — safe to ignore
   }
 
+  // Migration: add deleted_at column for soft-delete / recycle bin (7-day retention).
+  try {
+    db.exec(`ALTER TABLE sessions ADD COLUMN deleted_at TEXT;`);
+  } catch {
+    // Column already exists — safe to ignore
+  }
+
   // Migration: create unique index on matrix_room_id (partial — only non-null values)
   try {
     db.exec(`CREATE UNIQUE INDEX idx_tracks_matrix_room ON tracks(matrix_room_id) WHERE matrix_room_id IS NOT NULL;`);

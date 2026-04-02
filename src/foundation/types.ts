@@ -82,6 +82,8 @@ export interface Session {
   workingDirectory?: string;
   createdAt: string;
   updatedAt: string;
+  /** Set when session is moved to the recycle bin; null/undefined = not deleted */
+  deletedAt?: string;
   /** NOT persisted — enriched at runtime from in-memory activity tracking */
   lastActivityAt?: string;
   /** NOT persisted — enriched at runtime: current agent activity state */
