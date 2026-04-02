@@ -151,6 +151,9 @@ export interface Todo {
   trackId: TrackId;
   title: string;
   description?: string;
+  resolution?: string;
+  /** Linear or Jira issue key (e.g. "ASY-1402"). Appended to worktree branch names. */
+  issueKey?: string;
   status: TodoStatus;
   priority: TodoPriority;
   refined: boolean;

@@ -1,6 +1,6 @@
 import type { Todo, TodoId, TodoStatus, TrackId, SessionId } from '@foundation/types';
 
-export type TodoUpdateData = Partial<Pick<Todo, 'title' | 'description' | 'status' | 'priority' | 'refined' | 'sortOrder'>> & {
+export type TodoUpdateData = Partial<Pick<Todo, 'title' | 'description' | 'resolution' | 'issueKey' | 'status' | 'priority' | 'refined' | 'sortOrder'>> & {
   /** Pass null to explicitly clear the session assignment. */
   sessionId?: Todo['sessionId'] | null;
   /** Pass null to explicitly clear the agent assignment. */

@@ -36,6 +36,8 @@ export interface CreateSessionOptions {
   worktreeMode?: boolean;
   /** Repos to create worktrees for. Required when worktreeMode is true. */
   repos?: TrackRepo[];
+  /** Issue key to append to the worktree branch name (e.g. "ASY-1402"). */
+  issueKey?: string;
 }
 
 export interface SyncResult {
