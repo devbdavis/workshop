@@ -5,6 +5,31 @@ import { providerColor, getIdleDuration } from './activity';
 import { CharacterSvg } from './CharacterSvg';
 import { SpeechBubble } from './SpeechBubble';
 
+type ActivityStatus = Session['activityStatus'];
+
+function statusDotColor(status: ActivityStatus): string {
+  if (status === 'needs-input') return 'bg-red-500';
+  if (status === 'working') return 'bg-green-500';
+  if (status === 'idle') return 'bg-yellow-500';
+  return 'bg-gray-600';
+}
+
+function statusLabel(status: ActivityStatus): string {
+  if (status === 'needs-input') return 'Waiting for input';
+  if (status === 'working') return 'Working';
+  if (status === 'idle') return 'Idle';
+  return 'Unknown';
+}
+
+function StatusDot({ activityStatus }: { activityStatus: ActivityStatus }) {
+  return (
+    <span
+      className={`w-1.5 h-1.5 rounded-full shrink-0 ${statusDotColor(activityStatus)}`}
+      title={statusLabel(activityStatus)}
+    />
+  );
+}
+
 interface Props {
   session: Session & { dying?: boolean };
   activityState: ActivityState;
@@ -78,21 +103,24 @@ export function OfficeDeskUnit({ session, activityState, trackName, spriteUrl, o
 
       {/* Name plate */}
       <div className="text-center truncate">
-        <div className="text-xs text-gray-200 font-medium truncate">{displayName}</div>
+        <div className="flex items-center justify-center gap-1.5 mb-0.5">
+          <StatusDot activityStatus={session.activityStatus} />
+          <span className="text-xs text-gray-200 font-medium truncate">{displayName}</span>
+        </div>
         <div className="text-[10px] text-gray-500 truncate">{trackName}</div>
       </div>
 
       {/* Hover tooltip */}
       {showTooltip && !isDying && (
         <div
-          className="absolute z-20 left-1/2 -translate-x-1/2 bottom-full mb-2
+          className="absolute z-50 left-1/2 -translate-x-1/2 top-full mt-2
                      bg-gray-800 border border-gray-700 rounded-lg px-3 py-2
                      text-[11px] text-gray-300 whitespace-nowrap shadow-lg"
         >
           <div className="font-medium text-gray-100 mb-1">{displayName}</div>
           <div>Track: {trackName}</div>
           <div>Provider: {session.provider}</div>
-          <div>State: {session.state}{session.background ? ' (background)' : ''}</div>
+          <div>Status: {statusLabel(session.activityStatus)}{session.background ? ' (background)' : ''}</div>
           {session.lastActivityAt && (
             <div>Last active: {new Date(session.lastActivityAt).toLocaleTimeString()}</div>
           )}
