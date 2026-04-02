@@ -1,4 +1,4 @@
-import { Routes, Route } from 'react-router-dom';
+import { Routes, Route, Navigate } from 'react-router-dom';
 import { useEffect } from 'react';
 import { AuthGate } from './auth/AuthGate';
 import { applyTheme, type ThemeId } from './hooks/useTheme';
@@ -29,7 +29,8 @@ export function App() {
             <Route path="/" element={<Dashboard />} />
             <Route path="/tracks/:trackId" element={<TrackView />} />
             <Route path="/discussions" element={<DiscussionsPage />} />
-            <Route path="/settings" element={<Settings />} />
+            <Route path="/settings" element={<Navigate to="/settings/general" replace />} />
+            <Route path="/settings/:tab" element={<Settings />} />
             <Route path="/kanban" element={<KanbanBoard />} />
             <Route path="/scheduled-tasks" element={<ScheduledTasksPage />} />
             <Route path="/workflow" element={<WorkflowPage />} />
