@@ -148,21 +148,21 @@ export interface SkillWriteData {
 
 export function writeGlobalSkill(data: SkillWriteData): Skill {
   const globalDir = path.join(os.homedir(), '.claude', 'skills');
-  fs.mkdirSync(globalDir, { recursive: true });
 
   const slug = slugify(data.name);
-  let filename = `${slug}.md`;
-  let filePath = path.join(globalDir, filename);
+  let basename = slug;
+  let skillDir = path.join(globalDir, basename);
   let counter = 1;
-  while (fs.existsSync(filePath)) {
-    filename = `${slug}-${counter}.md`;
-    filePath = path.join(globalDir, filename);
+  while (fs.existsSync(skillDir)) {
+    basename = `${slug}-${counter}`;
+    skillDir = path.join(globalDir, basename);
     counter++;
   }
 
+  fs.mkdirSync(skillDir, { recursive: true });
+  const filePath = path.join(skillDir, 'SKILL.md');
   fs.writeFileSync(filePath, formatSkillFile(data), 'utf-8');
   const now = new Date().toISOString();
-  const basename = path.basename(filePath, '.md');
 
   return {
     id: `global:${basename}` as SkillId,
