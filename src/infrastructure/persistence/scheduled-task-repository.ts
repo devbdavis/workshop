@@ -28,15 +28,15 @@ export function createScheduledTaskRepository(): ScheduledTaskRepository {
   const insertStmt = db.prepare(
     `INSERT INTO scheduled_tasks
      (id, name, description, schedule_config, cron_expression, schedule_description,
-      track_id, agent_id, provider, task_prompt, system_prompt_override, enabled,
-      run_count, created_at, updated_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?)`,
+      track_id, agent_id, provider, task_prompt, system_prompt_override, script_path,
+      enabled, run_count, created_at, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?)`,
   );
   const updateStmt = db.prepare(
     `UPDATE scheduled_tasks SET
        name = ?, description = ?, schedule_config = ?, cron_expression = ?,
        schedule_description = ?, track_id = ?, agent_id = ?, provider = ?,
-       task_prompt = ?, system_prompt_override = ?, enabled = ?,
+       task_prompt = ?, system_prompt_override = ?, script_path = ?, enabled = ?,
        last_run_at = ?, last_run_status = ?, last_session_id = ?,
        run_count = ?, updated_at = ?
      WHERE id = ?`,
@@ -80,6 +80,7 @@ export function createScheduledTaskRepository(): ScheduledTaskRepository {
         data.provider || 'claude',
         data.taskPrompt,
         data.systemPromptOverride || null,
+        data.scriptPath || null,
         data.enabled ? 1 : 0,
         now,
         now,
@@ -97,6 +98,7 @@ export function createScheduledTaskRepository(): ScheduledTaskRepository {
         provider: data.provider || 'claude',
         taskPrompt: data.taskPrompt,
         systemPromptOverride: data.systemPromptOverride,
+        scriptPath: data.scriptPath,
         enabled: data.enabled,
         runCount: 0,
         createdAt: now,
@@ -122,6 +124,7 @@ export function createScheduledTaskRepository(): ScheduledTaskRepository {
         systemPromptOverride: data.systemPromptOverride !== undefined
           ? data.systemPromptOverride
           : existing.systemPromptOverride,
+        scriptPath: data.scriptPath !== undefined ? data.scriptPath : existing.scriptPath,
         enabled: data.enabled !== undefined ? data.enabled : existing.enabled,
         lastRunAt: data.lastRunAt !== undefined ? data.lastRunAt : existing.lastRunAt,
         lastRunStatus: data.lastRunStatus !== undefined ? data.lastRunStatus : existing.lastRunStatus,
@@ -140,6 +143,7 @@ export function createScheduledTaskRepository(): ScheduledTaskRepository {
         merged.provider,
         merged.taskPrompt,
         merged.systemPromptOverride || null,
+        merged.scriptPath || null,
         merged.enabled ? 1 : 0,
         merged.lastRunAt || null,
         merged.lastRunStatus || null,
@@ -224,6 +228,7 @@ interface TaskRow {
   provider: string;
   task_prompt: string;
   system_prompt_override: string | null;
+  script_path: string | null;
   enabled: number;
   last_run_at: string | null;
   last_run_status: string | null;
@@ -256,6 +261,7 @@ function rowToTask(row: TaskRow): ScheduledTask {
     provider: (row.provider as SessionProvider) || 'claude',
     taskPrompt: row.task_prompt,
     systemPromptOverride: row.system_prompt_override || undefined,
+    scriptPath: row.script_path || undefined,
     enabled: row.enabled === 1,
     lastRunAt: row.last_run_at || undefined,
     lastRunStatus: row.last_run_status as ScheduledTask['lastRunStatus'],

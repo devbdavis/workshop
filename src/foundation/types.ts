@@ -240,6 +240,8 @@ export interface ScheduledTask {
   taskPrompt: string;
   /** If set, used instead of auto-composed prompt */
   systemPromptOverride?: string;
+  /** Optional path to a shell script run before the agent; stdout is prepended to the task prompt as context */
+  scriptPath?: string;
   // State
   enabled: boolean;
   lastRunAt?: string;

@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import type { ScheduledTask, Track, Agent, ScheduleConfig, SchedulePreset } from '@foundation/types';
 
 interface Props {
@@ -29,6 +29,16 @@ export function ScheduledTaskForm({ task, tracks, agents, onSave, onClose }: Pro
   const [systemPromptOverride, setSystemPromptOverride] = useState(task?.systemPromptOverride ?? '');
   const [showAdvanced, setShowAdvanced] = useState(!!task?.systemPromptOverride);
 
+  // Script state
+  const [scriptContent, setScriptContent] = useState('');
+  const [scriptPath, setScriptPath] = useState(task?.scriptPath ?? '');
+
+  // Generate state (new tasks only)
+  const [generateDesc, setGenerateDesc] = useState('');
+  const [isGenerating, setIsGenerating] = useState(false);
+  const [generateError, setGenerateError] = useState('');
+  const [suggestedScript, setSuggestedScript] = useState('');
+
   // Schedule state
   const [preset, setPreset] = useState<SchedulePreset>(task?.scheduleConfig?.preset ?? 'daily');
   const [intervalMinutes, setIntervalMinutes] = useState(task?.scheduleConfig?.intervalMinutes ?? 30);
@@ -43,6 +53,67 @@ export function ScheduledTaskForm({ task, tracks, agents, onSave, onClose }: Pro
   const [dayOfMonth, setDayOfMonth] = useState(task?.scheduleConfig?.dayOfMonth ?? 1);
   const [weekOfMonth, setWeekOfMonth] = useState(task?.scheduleConfig?.weekOfMonth ?? -1);
   const [cronExpression, setCronExpression] = useState(task?.scheduleConfig?.cronExpression ?? '0 9 * * *');
+
+  // Fetch existing script content when editing
+  useEffect(() => {
+    if (!task?.id || !task.scriptPath) return;
+    fetch(`/api/scheduled-tasks/${task.id}/script`)
+      .then((r) => r.json())
+      .then((data: { content: string | null }) => {
+        if (data.content) setScriptContent(data.content);
+      })
+      .catch(() => { /* non-fatal */ });
+  }, [task?.id, task?.scriptPath]);
+
+  async function handleGenerate() {
+    if (!generateDesc.trim() || isGenerating) return;
+    setIsGenerating(true);
+    setGenerateError('');
+    setSuggestedScript('');
+
+    try {
+      const res = await fetch('/api/scheduled-tasks/generate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ description: generateDesc }),
+      });
+      if (!res.ok) {
+        const err = await res.json() as { error?: string };
+        throw new Error(err.error ?? `HTTP ${res.status}`);
+      }
+      const data = await res.json() as {
+        name?: string;
+        description?: string;
+        scheduleConfig?: ScheduleConfig;
+        taskPrompt?: string;
+        suggestedScriptContent?: string | null;
+      };
+
+      if (data.name) setName(data.name);
+      if (data.description) setDescription(data.description);
+      if (data.taskPrompt) setTaskPrompt(data.taskPrompt);
+      if (data.suggestedScriptContent) {
+        setSuggestedScript(data.suggestedScriptContent);
+        setScriptContent(data.suggestedScriptContent);
+      }
+      if (data.scheduleConfig) {
+        const sc = data.scheduleConfig;
+        setPreset(sc.preset);
+        if (sc.time) setTime(sc.time);
+        if (sc.daysOfWeek) setDaysOfWeek(sc.daysOfWeek);
+        if (sc.dayOfWeek !== undefined) setDayOfWeek(sc.dayOfWeek);
+        if (sc.monthRule) setMonthRule(sc.monthRule);
+        if (sc.dayOfMonth !== undefined) setDayOfMonth(sc.dayOfMonth);
+        if (sc.weekOfMonth !== undefined) setWeekOfMonth(sc.weekOfMonth);
+        if (sc.intervalMinutes !== undefined) setIntervalMinutes(sc.intervalMinutes);
+        if (sc.cronExpression) setCronExpression(sc.cronExpression);
+      }
+    } catch (err) {
+      setGenerateError(err instanceof Error ? err.message : 'Generation failed');
+    } finally {
+      setIsGenerating(false);
+    }
+  }
 
   function buildScheduleConfig(): ScheduleConfig {
     const config: ScheduleConfig = { preset };
@@ -120,6 +191,7 @@ export function ScheduledTaskForm({ task, tracks, agents, onSave, onClose }: Pro
       agentId: agentId || undefined,
       provider,
       systemPromptOverride: systemPromptOverride.trim() || undefined,
+      scriptContent: scriptContent.trim() || '',
       enabled: task?.enabled ?? true,
     };
     onSave(data);
@@ -133,7 +205,7 @@ export function ScheduledTaskForm({ task, tracks, agents, onSave, onClose }: Pro
 
   return (
     <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4">
-      <div className="bg-gray-900 border border-gray-700 rounded-lg w-[80vw] h-[80vh] resize overflow-hidden flex flex-col">
+      <div className="bg-gray-900 border border-gray-700 rounded-lg w-[80vw] h-[85vh] resize overflow-hidden flex flex-col">
         <div className="flex items-center justify-between px-5 py-3 border-b border-gray-800 shrink-0">
           <h2 className="text-sm font-semibold">
             {task ? 'Edit Scheduled Task' : 'New Scheduled Task'}
@@ -144,6 +216,38 @@ export function ScheduledTaskForm({ task, tracks, agents, onSave, onClose }: Pro
         </div>
 
         <div className="p-5 space-y-4 flex-1 overflow-y-auto">
+
+          {/* Generate section (new tasks only) */}
+          {!task && (
+            <div className="border border-gray-700 bg-gray-800/60 rounded-lg p-3 space-y-2">
+              <p className="text-xs text-gray-400">Describe what you want to schedule and Claude will draft the full definition.</p>
+              <textarea
+                value={generateDesc}
+                onChange={(e) => setGenerateDesc(e.target.value)}
+                onKeyDown={(e) => { if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) void handleGenerate(); }}
+                placeholder="e.g. A daily report of pending action items from yesterday. Use Glean to search my Slack history and check for any open Linear tickets."
+                className="w-full px-3 py-2 bg-gray-900 border border-gray-700 rounded text-sm text-gray-100 placeholder-gray-500 focus:outline-none focus:border-blue-500 resize-y"
+                rows={3}
+              />
+              <div className="flex items-center gap-3">
+                <button
+                  onClick={() => void handleGenerate()}
+                  disabled={isGenerating || !generateDesc.trim()}
+                  className="px-3 py-1.5 text-xs bg-blue-600 hover:bg-blue-500 disabled:bg-gray-700 disabled:text-gray-500 text-white rounded transition-colors"
+                >
+                  {isGenerating ? 'Generating…' : 'Generate'}
+                </button>
+                <span className="text-[10px] text-gray-500">⌘↵ to generate</span>
+                {suggestedScript && !isGenerating && (
+                  <span className="text-xs text-gray-400">Script pre-filled ↓</span>
+                )}
+                {generateError && (
+                  <span className="text-xs text-red-400">{generateError}</span>
+                )}
+              </div>
+            </div>
+          )}
+
           {/* Name */}
           <Field label="Name">
             <input
@@ -151,7 +255,7 @@ export function ScheduledTaskForm({ task, tracks, agents, onSave, onClose }: Pro
               onChange={(e) => setName(e.target.value)}
               placeholder="e.g. Daily standup summary"
               className="w-full px-3 py-1.5 bg-gray-800 border border-gray-700 rounded text-sm"
-              autoFocus
+              autoFocus={!!task}
             />
           </Field>
 
@@ -367,8 +471,27 @@ export function ScheduledTaskForm({ task, tracks, agents, onSave, onClose }: Pro
               onChange={(e) => setTaskPrompt(e.target.value)}
               placeholder="The instruction/task to send to the agent each time this runs..."
               className="w-full px-3 py-1.5 bg-gray-800 border border-gray-700 rounded text-sm font-mono"
-              rows={4}
+              rows={6}
             />
+          </Field>
+
+          {/* Script */}
+          <Field label="Script" optional>
+            <textarea
+              value={scriptContent}
+              onChange={(e) => setScriptContent(e.target.value)}
+              placeholder={'#!/bin/bash\n# Runs before the agent. stdout is prepended to the task prompt as context.\n\n# Example: summarise recent git activity\ngit -C ~/my-repo log --oneline --since="yesterday"'}
+              className="w-full px-3 py-1.5 bg-gray-800 border border-gray-700 rounded text-sm font-mono"
+              rows={6}
+              spellCheck={false}
+            />
+            <p className="text-[10px] text-gray-600 mt-0.5">
+              Bash script executed before the agent. stdout is prepended to the task prompt as context.
+              {scriptPath
+                ? <> Saved at <span className="font-mono text-gray-500">{scriptPath}</span></>
+                : <> Stored in <span className="font-mono text-gray-500">~/.workshop/schedule/scripts/</span></>
+              }
+            </p>
           </Field>
 
           {/* Track binding */}
