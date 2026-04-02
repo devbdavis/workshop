@@ -43,11 +43,18 @@ const CURSOR_MAP: Record<ResizeDirection, string> = {
 };
 
 export function TerminalModal({ trackId, sessionId, title, onClose }: Props) {
-  const [size, setSize] = useState<Size>({ width: 800, height: 500 });
-  const [position, setPosition] = useState<Position>(() => ({
-    x: Math.max(0, (window.innerWidth - 800) / 2),
-    y: Math.max(0, (window.innerHeight - 500) / 2),
+  const [size, setSize] = useState<Size>(() => ({
+    width: Math.round(window.innerWidth * 0.8),
+    height: Math.round(window.innerHeight * 0.8),
   }));
+  const [position, setPosition] = useState<Position>(() => {
+    const w = Math.round(window.innerWidth * 0.8);
+    const h = Math.round(window.innerHeight * 0.8);
+    return {
+      x: Math.max(0, (window.innerWidth - w) / 2),
+      y: Math.max(0, (window.innerHeight - h) / 2),
+    };
+  });
   const [isDragging, setIsDragging] = useState(false);
   const [resizeDir, setResizeDir] = useState<ResizeDirection | null>(null);
   const dragStartRef = useRef({ mouseX: 0, mouseY: 0, posX: 0, posY: 0 });
@@ -201,13 +208,15 @@ export function TerminalModal({ trackId, sessionId, title, onClose }: Props) {
             <TerminalIcon className="w-4 h-4 text-emerald-400 shrink-0" />
             <span className="text-sm text-gray-200 truncate">{title}</span>
           </div>
-          <button
-            onClick={onClose}
-            className="text-gray-500 hover:text-gray-300 text-lg leading-none px-1"
-            onMouseDown={(e) => e.stopPropagation()}
-          >
-            &times;
-          </button>
+          <div className="flex items-center gap-3 shrink-0" onMouseDown={(e) => e.stopPropagation()}>
+            <kbd className="text-xs text-gray-600 font-mono">esc</kbd>
+            <button
+              onClick={onClose}
+              className="text-gray-500 hover:text-gray-300 text-lg leading-none px-1"
+            >
+              &times;
+            </button>
+          </div>
         </div>
 
         {/* Terminal content */}
