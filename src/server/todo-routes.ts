@@ -27,7 +27,7 @@ export interface TodoRouterDeps {
   terminal: {
     createSession: (
       trackId: TrackId,
-      opts?: { systemPrompt?: string; workingDirectory?: string; background?: boolean; todoId?: string; initialPrompt?: string; provider?: SessionProvider; name?: string; worktreeMode?: boolean; repos?: TrackRepo[]; dangerouslySkipPermissions?: boolean },
+      opts?: { systemPrompt?: string; workingDirectory?: string; background?: boolean; todoId?: string; initialPrompt?: string; provider?: SessionProvider; name?: string; worktreeMode?: boolean; repos?: TrackRepo[]; dangerouslySkipPermissions?: boolean; skipBackgroundInstructions?: boolean },
     ) => Promise<{ id: SessionId; trackId: TrackId; tmuxSession: string; state: string }>;
     destroySession: (sessionId: SessionId) => Promise<void>;
   };
@@ -232,17 +232,24 @@ export function createTodoRouter(deps: TodoRouterDeps): Router {
       }
 
       let templateHasRepos = false;
+      let templateHasTask = false;
+      let templateHasBackgroundInstructions = false;
       if (track.defaultPromptTemplateId) {
         const template = promptTemplates.findById(track.defaultPromptTemplateId);
         if (template) {
-          templateHasRepos = template.content.includes('{{track.repos}}');
+          templateHasRepos = template.content.includes('{{track.repos');
+          templateHasTask = template.content.includes('{{todo.title}}');
+          templateHasBackgroundInstructions = template.content.includes('{{todo.id}}');
           track.tickets = tickets.findByTrack(todo.trackId);
-          const interpolated = interpolateTemplate(template.content, { track });
+          const interpolated = interpolateTemplate(template.content, {
+            track,
+            todo: { id: todo.id, title: todo.title, description: todo.description ?? '' },
+          });
           parts.push(interpolated);
         }
       }
 
-      // Include repos unless the template already expanded {{track.repos}}
+      // Include repos unless the template already expanded them
       if (repos.length > 0 && !templateHasRepos) {
         const repoLines = repos
           .map((r) => `- ${r.path}${r.remoteUrl ? ` (${r.remoteUrl})` : ''}`)
@@ -250,8 +257,10 @@ export function createTodoRouter(deps: TodoRouterDeps): Router {
         parts.push(`## Repositories\n\n${repoLines}`);
       }
 
-      // Add the todo task as the specific instruction
-      parts.push(`## Task\n\n**${todo.title}**\n\n${todo.description || ''}`);
+      // Add the todo task unless the template already includes it
+      if (!templateHasTask) {
+        parts.push(`## Task\n\n**${todo.title}**\n\n${todo.description || ''}`);
+      }
 
       const systemPrompt = parts.join('\n\n---\n\n');
 
@@ -268,6 +277,7 @@ export function createTodoRouter(deps: TodoRouterDeps): Router {
         worktreeMode: track.worktreeMode && repos.length > 0,
         repos: track.worktreeMode ? repos : undefined,
         dangerouslySkipPermissions,
+        skipBackgroundInstructions: templateHasBackgroundInstructions,
       });
 
       // Update todo status, link session, and store agent reference
