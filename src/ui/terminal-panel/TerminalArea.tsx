@@ -2,19 +2,23 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import type { Session, SessionId } from '@foundation/types';
 import { TerminalPanel } from './TerminalPanel';
 import { TrackOfficeStrip } from './TrackOfficeStrip';
+import { RecentlyDeletedPanel } from './RecentlyDeletedPanel';
 
 interface Props {
   trackId: string;
   trackName: string;
   sessions: Session[];
+  deletedSessions: Session[];
   onDestroySession: (sessionId: string) => void;
   onRenameSession: (sessionId: string, name: string) => void;
+  onRestoreSession: (sessionId: string) => void;
+  onPurgeSession: (sessionId: string) => void;
   defaultOpenPath?: string;
 }
 
 const storageKey = (trackId: string) => `workshop:selected:${trackId}`;
 
-export function TerminalArea({ trackId, trackName, sessions, onDestroySession, onRenameSession, defaultOpenPath }: Props) {
+export function TerminalArea({ trackId, trackName, sessions, deletedSessions, onDestroySession, onRenameSession, onRestoreSession, onPurgeSession, defaultOpenPath }: Props) {
   const [selectedIds, setSelectedIds] = useState<SessionId[]>(() => {
     try {
       const stored = localStorage.getItem(storageKey(trackId));
@@ -56,6 +60,8 @@ export function TerminalArea({ trackId, trackName, sessions, onDestroySession, o
     });
   }, [sessions]);
 
+  const [showRecentlyDeleted, setShowRecentlyDeleted] = useState(false);
+
   const handleSelect = useCallback((id: SessionId, additive: boolean) => {
     setSelectedIds((prev) => {
       if (!additive) {
@@ -77,6 +83,15 @@ export function TerminalArea({ trackId, trackName, sessions, onDestroySession, o
 
   return (
     <div className="h-full flex flex-col">
+      {showRecentlyDeleted && (
+        <RecentlyDeletedPanel
+          sessions={deletedSessions}
+          onRestore={(id) => { onRestoreSession(id); setShowRecentlyDeleted(false); }}
+          onPurge={(id) => { onPurgeSession(id); }}
+          onClose={() => setShowRecentlyDeleted(false)}
+        />
+      )}
+
       {/* Terminal pane(s) */}
       <div className="flex-1 min-h-0 flex">
         {sessions.length === 0 ? (
@@ -114,6 +129,8 @@ export function TerminalArea({ trackId, trackName, sessions, onDestroySession, o
         selectedIds={selectedIds}
         trackName={trackName}
         onSelect={handleSelect}
+        deletedCount={deletedSessions.length}
+        onShowRecentlyDeleted={() => setShowRecentlyDeleted(true)}
       />
     </div>
   );

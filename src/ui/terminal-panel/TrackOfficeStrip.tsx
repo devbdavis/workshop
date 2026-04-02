@@ -10,6 +10,8 @@ interface Props {
   selectedIds: SessionId[];
   trackName: string;
   onSelect: (id: SessionId, additive: boolean) => void;
+  deletedCount: number;
+  onShowRecentlyDeleted: () => void;
 }
 
 /**
@@ -17,7 +19,7 @@ interface Props {
  * Click to select a session; ⌘-click to add a second for side-by-side view.
  * Collapse button in the header reclaims vertical space when not needed.
  */
-export function TrackOfficeStrip({ sessions, selectedIds, onSelect }: Props) {
+export function TrackOfficeStrip({ sessions, selectedIds, onSelect, deletedCount, onShowRecentlyDeleted }: Props) {
   const [collapsed, setCollapsed] = useState(() => {
     try { return localStorage.getItem(COLLAPSED_KEY) === 'true'; } catch { return false; }
   });
@@ -51,6 +53,16 @@ export function TrackOfficeStrip({ sessions, selectedIds, onSelect }: Props) {
         {!collapsed && (
           <span className="text-[10px] text-gray-700">· click to focus · ⌘-click for split</span>
         )}
+        <button
+          onClick={onShowRecentlyDeleted}
+          className="ml-auto flex items-center gap-1 text-[10px] text-gray-600 hover:text-gray-400 transition-colors"
+          title="View recently deleted sessions"
+        >
+          Recently Deleted
+          {deletedCount > 0 && (
+            <span className="bg-gray-800 text-gray-400 rounded px-1">{deletedCount}</span>
+          )}
+        </button>
       </div>
 
       {!collapsed && sessions.length > 0 && (
