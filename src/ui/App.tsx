@@ -7,7 +7,6 @@ import { TrackView } from './track-view/TrackView';
 import { Settings } from './settings/Settings';
 import { KanbanBoard } from './kanban/KanbanBoard';
 import { AgentsPage } from './agents/AgentsPage';
-import { SessionsPage } from './sessions/SessionsPage';
 import { ScheduledTasksPage } from './scheduled-tasks/ScheduledTasksPage';
 import { WorkflowPage } from './workflow/WorkflowPage';
 import { EpicDetail } from './workflow/EpicDetail';
@@ -35,7 +34,6 @@ export function App() {
             <Route path="/settings" element={<Settings />} />
             <Route path="/kanban" element={<KanbanBoard />} />
             <Route path="/agents" element={<AgentsPage />} />
-            <Route path="/sessions" element={<SessionsPage />} />
             <Route path="/scheduled-tasks" element={<ScheduledTasksPage />} />
             <Route path="/workflow" element={<WorkflowPage />} />
             <Route path="/workflow/:id" element={<EpicDetail />} />
