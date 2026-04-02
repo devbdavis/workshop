@@ -46,6 +46,15 @@ export function isSessionIdle(session: Session, preCapture?: string[]): boolean 
 export function isSessionNeedsInput(session: Session, preCapture?: string[]): boolean {
   const lines = preCapture ?? capturePaneLines(session.tmuxSession, 15);
   if (lines.length === 0) return false;
+  // If the terminal is already showing an idle Claude prompt, the session is
+  // waiting for the *next* message — not asking a mid-task question. User input
+  // text visible in the scroll history (e.g. "is it ready?") would otherwise
+  // trigger the `?`-ending-line heuristic as a false positive.
+  const atIdlePrompt = lines.slice(-8).some(line => {
+    const t = line.trim();
+    return t === '❯' || t === '>' || t.endsWith('❯');
+  });
+  if (atIdlePrompt) return false;
   return lines.slice(-15).some(line => {
     const t = line.trimEnd();
     // y/n confirmation prompts from subprocesses or Claude
