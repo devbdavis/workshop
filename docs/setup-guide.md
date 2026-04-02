@@ -4,35 +4,58 @@ Everything you need to get Workshop running, including the external tools it rel
 
 ## 1. System Dependencies
 
-### Node.js (>= 22)
+### Nix + direnv (recommended)
 
-Workshop uses ESM, modern TypeScript, and features that require Node 22+.
+The repo ships with a `flake.nix` that provides Node.js 24 and tmux. With [Nix](https://nixos.org/) and [direnv](https://direnv.net/) installed, entering the repo directory is all it takes to get a complete, reproducible dev environment.
+
+**Install Nix** (if not already installed):
 
 ```bash
-# Using nvm (recommended)
-nvm install 22
-nvm use 22
-
-# Or using brew
-brew install node@22
+# macOS / Linux — Determinate Systems installer (recommended)
+curl --proto '=https' --tlsv1.2 -sSf -L https://install.determinate.systems/nix | sh -s -- install
 ```
 
-The repo includes an `.nvmrc` file, so `nvm use` will pick up the right version automatically.
+**Install direnv** and hook it into your shell:
+
+```bash
+# macOS
+brew install direnv
+
+# Ubuntu/Debian
+sudo apt-get install direnv
+```
+
+Then add the hook to your shell profile (`~/.zshrc`, `~/.bashrc`, etc.):
+
+```bash
+eval "$(direnv hook zsh)"   # or bash / fish
+```
+
+**Enter the dev environment:**
+
+```bash
+cd workshop
+direnv allow   # one-time: permits the .envrc in this repo
+```
+
+From that point on, `node`, `npm`, and `tmux` are all available whenever you're inside the repo directory — no manual activation needed.
+
+### Manual installation (without Nix)
+
+If you prefer not to use Nix, install the dependencies directly:
+
+```bash
+# Node.js 24 via brew
+brew install node@24
+
+# tmux
+brew install tmux             # macOS
+sudo apt-get install tmux     # Ubuntu/Debian
+```
 
 ### tmux
 
 Terminal sessions in Workshop are backed by tmux. Without it, you can still use the web UI, workflow tickets, and MCP tools — but terminal sessions won't work.
-
-```bash
-# macOS
-brew install tmux
-
-# Ubuntu/Debian
-sudo apt-get install tmux
-
-# Verify
-tmux -V
-```
 
 If you've never used tmux: don't worry, Workshop manages the sessions for you. You never need to run tmux commands directly.
 
@@ -214,7 +237,7 @@ Run through this checklist:
 
 ```bash
 # 1. Prerequisites
-node -v                        # Should be >= 22
+node -v                        # Should be >= 24
 tmux -V                        # Should output a version
 claude --version               # Should output a version (if using Claude)
 
