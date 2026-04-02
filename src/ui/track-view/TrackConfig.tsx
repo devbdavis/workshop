@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import type { Agent, Track } from '@foundation/types';
+import type { Agent, PromptTemplate, Track } from '@foundation/types';
 
 interface GlobalRepo {
   id: string;
@@ -27,13 +27,27 @@ export function TrackConfig({ track, onUpdate }: Props) {
   const [name, setName] = useState(track.name);
   const [description, setDescription] = useState(track.description || '');
   const [agents, setAgents] = useState<Agent[]>([]);
+  const [templates, setTemplates] = useState<PromptTemplate[]>([]);
 
   useEffect(() => {
     fetch('/api/agents')
       .then((r) => (r.ok ? r.json() : []))
       .then(setAgents)
       .catch(() => setAgents([]));
+    fetch('/api/templates')
+      .then((r) => (r.ok ? r.json() : []))
+      .then(setTemplates)
+      .catch(() => setTemplates([]));
   }, []);
+
+  async function setDefaultTemplate(templateId: string | null) {
+    await fetch(`/api/tracks/${track.id}/prompt`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ templateId }),
+    });
+    onUpdate();
+  }
 
   async function setDefaultAgent(agentId: string | null) {
     await fetch(`/api/tracks/${track.id}/agent`, {
@@ -218,6 +232,22 @@ export function TrackConfig({ track, onUpdate }: Props) {
           </select>
           <p className="text-[10px] text-gray-600 mt-1">
             Used when dispatching todos without an explicit agent selection.
+          </p>
+        </div>
+
+        <div className="mb-3">
+          <label className="block text-xs text-gray-400 mb-1">Prompt template</label>
+          <select
+            value={track.defaultPromptTemplateId ?? ''}
+            onChange={(e) => setDefaultTemplate(e.target.value || null)}
+            className="block w-full px-2 py-1 bg-gray-800 border border-gray-700 rounded text-xs text-gray-300"
+          >
+            {[...templates].sort((a, b) => a.name.localeCompare(b.name)).map((t) => (
+              <option key={t.id} value={t.id}>{t.name}</option>
+            ))}
+          </select>
+          <p className="text-[10px] text-gray-600 mt-1">
+            Injected into the system prompt when dispatching todos. Manage templates in Settings → Prompt Templates.
           </p>
         </div>
 

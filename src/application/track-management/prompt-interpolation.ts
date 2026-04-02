@@ -1,15 +1,23 @@
 import type { Track } from '@foundation/types';
 
-/**
- * Context object used for template variable interpolation.
- * The track must have repos and tickets populated.
- */
-export interface TrackContext {
-  track: Track;
+export interface TodoContext {
+  id: string;
+  title: string;
+  description: string;
 }
 
 /**
- * Interpolates a template string with track context variables.
+ * Context object used for template variable interpolation.
+ * The track must have repos and tickets populated.
+ * The todo is optional — only available when dispatching a todo.
+ */
+export interface TrackContext {
+  track: Track;
+  todo?: TodoContext;
+}
+
+/**
+ * Interpolates a template string with track and optional todo context variables.
  *
  * Supported variables:
  *   {{track.id}}              - Track ID
@@ -20,11 +28,14 @@ export interface TrackContext {
  *   {{track.repos[N].path}}   - Path of the Nth repo (0-indexed)
  *   {{track.repos[N].branch}} - Branch of the Nth repo (0-indexed)
  *   {{track.tickets}}         - Comma-separated list of ticket external IDs
+ *   {{todo.id}}               - Todo UUID (only when dispatching a todo)
+ *   {{todo.title}}            - Todo title (only when dispatching a todo)
+ *   {{todo.description}}      - Todo description (only when dispatching a todo)
  *
  * Unresolved variables are left as-is in the output.
  */
 export function interpolateTemplate(template: string, ctx: TrackContext): string {
-  const { track } = ctx;
+  const { track, todo } = ctx;
   const repos = track.repos ?? [];
   const tickets = track.tickets ?? [];
 
@@ -39,6 +50,10 @@ export function interpolateTemplate(template: string, ctx: TrackContext): string
     if (key === 'track.repos') {
       return repos.map((r) => r.path).join(', ');
     }
+
+    if (key === 'todo.id') return todo?.id ?? _match;
+    if (key === 'todo.title') return todo?.title ?? _match;
+    if (key === 'todo.description') return todo?.description ?? _match;
 
     if (key === 'track.tickets') {
       return tickets.map((t) => t.externalId).join(', ');

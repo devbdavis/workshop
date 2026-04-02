@@ -7,10 +7,11 @@ export function createPromptTemplateRepository(): PromptTemplateRepository {
   const db = getDatabase();
 
   // Prepare statements once
-  const findAllStmt = db.prepare('SELECT * FROM prompt_templates ORDER BY created_at ASC');
+  const findAllStmt = db.prepare('SELECT * FROM prompt_templates ORDER BY is_default DESC, created_at ASC');
   const findByIdStmt = db.prepare('SELECT * FROM prompt_templates WHERE id = ?');
+  const findDefaultStmt = db.prepare('SELECT * FROM prompt_templates WHERE is_default = 1 LIMIT 1');
   const insertStmt = db.prepare(
-    'INSERT INTO prompt_templates (id, name, description, content, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)',
+    'INSERT INTO prompt_templates (id, name, description, content, is_default, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)',
   );
   const updateStmt = db.prepare(
     'UPDATE prompt_templates SET name = ?, description = ?, content = ?, updated_at = ? WHERE id = ?',
@@ -28,15 +29,21 @@ export function createPromptTemplateRepository(): PromptTemplateRepository {
       return row ? rowToTemplate(row) : null;
     },
 
+    findDefault(): PromptTemplate | null {
+      const row = findDefaultStmt.get() as TemplateRow | undefined;
+      return row ? rowToTemplate(row) : null;
+    },
+
     create(data): PromptTemplate {
       const id = uuid() as TemplateId;
       const now = new Date().toISOString();
-      insertStmt.run(id, data.name, data.description || null, data.content, now, now);
+      insertStmt.run(id, data.name, data.description || null, data.content, 0, now, now);
       return {
         id,
         name: data.name,
         description: data.description,
         content: data.content,
+        isDefault: false,
         createdAt: now,
         updatedAt: now,
       };
@@ -65,6 +72,7 @@ interface TemplateRow {
   name: string;
   description: string | null;
   content: string;
+  is_default: number;
   created_at: string;
   updated_at: string;
 }
@@ -75,6 +83,7 @@ function rowToTemplate(row: TemplateRow): PromptTemplate {
     name: row.name,
     description: row.description || undefined,
     content: row.content,
+    isDefault: row.is_default === 1,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
