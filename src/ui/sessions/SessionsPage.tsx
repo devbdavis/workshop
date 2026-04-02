@@ -166,7 +166,7 @@ function SessionRow({
       {/* State indicator */}
       <span
         className={`w-2 h-2 rounded-full shrink-0 ${
-          session.activityStatus === 'awaiting-permission'
+          session.activityStatus === 'needs-input'
             ? 'bg-red-500'
             : session.activityStatus === 'idle'
               ? 'bg-yellow-500'
@@ -179,8 +179,8 @@ function SessionRow({
                     : 'bg-red-500'
         }`}
         title={
-          session.activityStatus === 'awaiting-permission'
-            ? 'Needs permission'
+          session.activityStatus === 'needs-input'
+            ? 'Needs input'
             : session.activityStatus === 'idle'
               ? 'Idle'
               : session.activityStatus === 'working'

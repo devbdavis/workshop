@@ -12,7 +12,6 @@ import { createTicketRepository } from '@infrastructure/persistence/ticket-repos
 import { createAutomationRuleRepository } from '@infrastructure/persistence/automation-repository.js';
 import { createPromptTemplateRepository } from '@infrastructure/persistence/prompt-template-repository.js';
 import { createTodoRepository } from '@infrastructure/persistence/todo-repository.js';
-import { createPermissionRequestRepository } from '@infrastructure/persistence/permission-repository.js';
 import { createAgentRepository } from '@infrastructure/persistence/agent-repository.js';
 import { createTerminalManager } from '@infrastructure/terminal/manager.js';
 import { createGitAdapter } from '@infrastructure/git/git-adapter.js';
@@ -28,7 +27,6 @@ import { composeVaultContext } from '@application/vault/compose-vault-context.js
 import type { AutomationEngine } from '@application/automation-engine/engine.js';
 import { createTaskScheduler } from '@application/scheduler/task-scheduler.js';
 import { createTodoRouter } from './todo-routes.js';
-import { createPermissionRouter } from './permission-routes.js';
 import { createAgentRouter } from './agent-routes.js';
 import { createVaultRouter } from './vault-routes.js';
 import { createScheduledTaskRouter } from './scheduled-task-routes.js';
@@ -78,7 +76,6 @@ export function createApiRouter(deps: ApiRouterDeps = {}): Router {
   const automationRules = createAutomationRuleRepository();
   const promptTemplates = createPromptTemplateRepository();
   const todos = createTodoRepository();
-  const permissions = createPermissionRequestRepository();
   const agents = createAgentRepository();
   const filesystemScanner = createFilesystemAgentScanner();
   const projectRoot = process.cwd();
@@ -179,10 +176,6 @@ export function createApiRouter(deps: ApiRouterDeps = {}): Router {
     vaultReader,
   });
   router.use(todoRouter);
-
-  // Mount permission sub-router
-  const permissionRouter = createPermissionRouter({ permissions });
-  router.use(permissionRouter);
 
   // Mount agent sub-router
   const agentRouter = createAgentRouter({ agents, filesystemScanner, projectRoot });
@@ -628,34 +621,22 @@ export function createApiRouter(deps: ApiRouterDeps = {}): Router {
 
   router.get('/sessions', (_req, res) => {
     const allSessions = sessions.findAll();
-    // Build a set of session IDs with pending permission requests so the UI
-    // can show the "awaiting-permission" indicator without a separate fetch.
-    const pendingSessionIds = new Set(
-      permissions.findAllPending().map((p) => p.sessionId),
-    );
     const enriched = allSessions.map(s => ({
       ...s,
       lastActivityAt: terminal.getLastActivityAt(s.id),
       dying: terminal.isDying(s.id),
-      activityStatus: pendingSessionIds.has(s.id)
-        ? 'awaiting-permission'
-        : terminal.getActivityStatus(s.id),
+      activityStatus: terminal.getActivityStatus(s.id),
     }));
     res.json(enriched);
   });
 
   router.get('/tracks/:id/sessions', (req, res) => {
     const trackSessions = sessions.findByTrack(req.params.id as TrackId);
-    const pendingSessionIds = new Set(
-      permissions.findAllPending().map((p) => p.sessionId),
-    );
     const enriched = trackSessions.map(s => ({
       ...s,
       lastActivityAt: terminal.getLastActivityAt(s.id),
       dying: terminal.isDying(s.id),
-      activityStatus: pendingSessionIds.has(s.id)
-        ? 'awaiting-permission'
-        : terminal.getActivityStatus(s.id),
+      activityStatus: terminal.getActivityStatus(s.id),
     }));
     res.json(enriched);
   });
