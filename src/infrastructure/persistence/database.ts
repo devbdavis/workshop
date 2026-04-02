@@ -189,6 +189,27 @@ function runMigrations(db: Database.Database): void {
     // Column already exists — safe to ignore
   }
 
+  // Migration: add resolution column to todos
+  try {
+    db.exec(`ALTER TABLE todos ADD COLUMN resolution TEXT;`);
+  } catch {
+    // Column already exists — safe to ignore
+  }
+
+  // Migration: add issue_key column to todos
+  try {
+    db.exec(`ALTER TABLE todos ADD COLUMN issue_key TEXT;`);
+  } catch {
+    // Column already exists — safe to ignore
+  }
+
+  // Migration: rename ticket_key to issue_key (if old column exists)
+  try {
+    db.exec(`ALTER TABLE todos RENAME COLUMN ticket_key TO issue_key;`);
+  } catch {
+    // Column doesn't exist or already renamed — safe to ignore
+  }
+
   // Migration: add name column to sessions
   try {
     db.exec(`ALTER TABLE sessions ADD COLUMN name TEXT;`);

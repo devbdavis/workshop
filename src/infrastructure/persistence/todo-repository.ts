@@ -13,12 +13,12 @@ export function createTodoRepository(): TodoRepository {
   const findByStatusStmt = db.prepare('SELECT * FROM todos WHERE status = ? ORDER BY sort_order ASC, created_at DESC');
   const findBySessionStmt = db.prepare('SELECT * FROM todos WHERE session_id = ?');
   const insertStmt = db.prepare(
-    `INSERT INTO todos (id, track_id, title, description, status, priority, refined, session_id, agent_id, sort_order, created_at, updated_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    `INSERT INTO todos (id, track_id, title, description, resolution, issue_key, status, priority, refined, session_id, agent_id, sort_order, created_at, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
   );
   const updateStmt = db.prepare(
     `UPDATE todos
-     SET title = ?, description = ?, status = ?, priority = ?, refined = ?, session_id = ?, agent_id = ?, sort_order = ?, updated_at = ?
+     SET title = ?, description = ?, resolution = ?, issue_key = ?, status = ?, priority = ?, refined = ?, session_id = ?, agent_id = ?, sort_order = ?, updated_at = ?
      WHERE id = ?`,
   );
   const deleteStmt = db.prepare('DELETE FROM todos WHERE id = ?');
@@ -58,6 +58,8 @@ export function createTodoRepository(): TodoRepository {
         data.trackId,
         data.title,
         data.description || null,
+        data.resolution || null,
+        data.issueKey || null,
         data.status,
         data.priority,
         data.refined ? 1 : 0,
@@ -73,6 +75,8 @@ export function createTodoRepository(): TodoRepository {
         trackId: data.trackId,
         title: data.title,
         description: data.description,
+        resolution: data.resolution,
+        issueKey: data.issueKey,
         status: data.status,
         priority: data.priority,
         refined: data.refined,
@@ -91,6 +95,8 @@ export function createTodoRepository(): TodoRepository {
       const now = new Date().toISOString();
       const title = data.title ?? existing.title;
       const description = data.description !== undefined ? data.description : existing.description;
+      const resolution = data.resolution !== undefined ? data.resolution : existing.resolution;
+      const issueKey = data.issueKey !== undefined ? data.issueKey : existing.issueKey;
       const status = data.status ?? existing.status;
       const priority = data.priority ?? existing.priority;
       const refined = data.refined !== undefined ? data.refined : existing.refined;
@@ -102,6 +108,8 @@ export function createTodoRepository(): TodoRepository {
       updateStmt.run(
         title,
         description || null,
+        resolution || null,
+        issueKey || null,
         status,
         priority,
         refined ? 1 : 0,
@@ -116,6 +124,8 @@ export function createTodoRepository(): TodoRepository {
         ...existing,
         title,
         description,
+        resolution,
+        issueKey,
         status,
         priority,
         refined,
@@ -140,6 +150,8 @@ interface TodoRow {
   track_id: string;
   title: string;
   description: string | null;
+  resolution: string | null;
+  issue_key: string | null;
   status: string;
   priority: string;
   refined: number;
@@ -156,6 +168,8 @@ function rowToTodo(row: TodoRow): Todo {
     trackId: row.track_id as TrackId,
     title: row.title,
     description: row.description || undefined,
+    resolution: row.resolution || undefined,
+    issueKey: row.issue_key || undefined,
     status: row.status as TodoStatus,
     priority: row.priority as Todo['priority'],
     refined: row.refined === 1,
