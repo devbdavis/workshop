@@ -12,6 +12,7 @@ export function OfficeVisualization() {
   const [tracks, setTracks] = useState<Track[]>([]);
   const [loading, setLoading] = useState(true);
   const [attachedSession, setAttachedSession] = useState<EnrichedSession | null>(null);
+  const [filterTrackId, setFilterTrackId] = useState<string | null>(null);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const trackNames = Object.fromEntries(tracks.map((t) => [t.id, t.name]));
@@ -64,11 +65,20 @@ export function OfficeVisualization() {
   }, [loadSessions]);
 
   // Filter out dead sessions unless they are in the dying phase
-  const visibleSessions = sessions.filter(
+  const aliveSessions = sessions.filter(
     (s) => s.state !== 'dead' || s.dying,
   );
 
-  const activeCount = visibleSessions.filter(
+  // Collect only the tracks that have at least one visible session
+  const tracksWithSessions = tracks.filter((t) =>
+    aliveSessions.some((s) => s.trackId === t.id),
+  );
+
+  const visibleSessions = filterTrackId
+    ? aliveSessions.filter((s) => s.trackId === filterTrackId)
+    : aliveSessions;
+
+  const activeCount = aliveSessions.filter(
     (s) => s.state === 'active' && !s.dying,
   ).length;
 
@@ -78,9 +88,36 @@ export function OfficeVisualization() {
 
   return (
     <div className="h-full flex flex-col">
-      <header className="flex items-center gap-4 px-6 py-2 border-b border-gray-800 shrink-0">
+      <header className="flex items-center gap-3 px-6 py-2 border-b border-gray-800 shrink-0 flex-wrap">
         <h1 className="text-lg font-semibold">Office</h1>
         <span className="text-xs text-gray-500">{activeCount} active</span>
+        {tracksWithSessions.length > 0 && (
+          <div className="flex items-center gap-1.5 ml-2 flex-wrap">
+            <button
+              onClick={() => setFilterTrackId(null)}
+              className={`px-2.5 py-0.5 rounded text-xs transition-colors ${
+                filterTrackId === null
+                  ? 'bg-gray-600 text-gray-100'
+                  : 'text-gray-400 hover:text-gray-200 hover:bg-gray-800'
+              }`}
+            >
+              All
+            </button>
+            {tracksWithSessions.map((t) => (
+              <button
+                key={t.id}
+                onClick={() => setFilterTrackId(filterTrackId === t.id ? null : t.id)}
+                className={`px-2.5 py-0.5 rounded text-xs transition-colors ${
+                  filterTrackId === t.id
+                    ? 'bg-indigo-600 text-white'
+                    : 'text-gray-400 hover:text-gray-200 hover:bg-gray-800'
+                }`}
+              >
+                {t.name}
+              </button>
+            ))}
+          </div>
+        )}
       </header>
 
       <div className="flex-1 overflow-y-auto p-6">
