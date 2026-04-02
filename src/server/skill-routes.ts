@@ -93,6 +93,43 @@ export function createSkillRouter(deps: SkillRouterDeps): Router {
     }
   });
 
+  // --- Improve skill with Claude feedback ---
+
+  router.post('/skills/:id/improve', async (req, res) => {
+    const id = req.params.id as SkillId;
+    const { feedback } = req.body;
+    if (!feedback || typeof feedback !== 'string') { res.status(400).json({ error: 'feedback is required' }); return; }
+
+    const skill = filesystemScanner.findById(id, projectRoot);
+    if (!skill) { res.status(404).json({ error: 'Skill not found' }); return; }
+
+    const prompt = `You are improving a Claude Code skill definition based on user feedback.
+
+Current skill:
+Name: ${skill.name}
+Description: ${skill.description}
+Content:
+${skill.content}
+
+User feedback:
+${feedback}
+
+Return a JSON object with these fields (only include fields that should change):
+- name: updated name if needed
+- description: updated description if needed
+- content: the improved skill content (always include this)
+
+Return ONLY the JSON object, no other text or markdown.`;
+
+    try {
+      const output = await callClaude(prompt);
+      res.json(extractJson(output));
+    } catch (err) {
+      console.error('Skill improvement failed:', err);
+      res.status(500).json({ error: 'Skill improvement failed' });
+    }
+  });
+
   // --- Update skill ---
 
   router.put('/skills/:id', (req, res) => {

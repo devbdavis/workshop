@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import type { Skill } from '@foundation/types';
 import { SkillCard } from '../skills/SkillCard.js';
 import { SkillFormModal, type SkillFormData } from '../skills/SkillFormModal.js';
+import { ImproveSkillModal } from '../skills/ImproveSkillModal.js';
 
 export function SkillsSettings() {
   const [skills, setSkills] = useState<Skill[]>([]);
@@ -10,6 +11,7 @@ export function SkillsSettings() {
   // Modal state
   const [creating, setCreating] = useState(false);
   const [editingSkill, setEditingSkill] = useState<Skill | null>(null);
+  const [improvingSkill, setImprovingSkill] = useState<Skill | null>(null);
 
   async function loadSkills() {
     try {
@@ -46,6 +48,17 @@ export function SkillsSettings() {
       });
       if (res.ok) { setEditingSkill(null); loadSkills(); }
     } catch (err) { console.error('Failed to update skill:', err); }
+  }
+
+  async function handleApplyImprovement(id: string, data: { name?: string; description?: string; content: string }) {
+    const skill = skills.find((s) => s.id === id);
+    if (!skill) return;
+    await handleUpdate(id, {
+      name: data.name ?? skill.name,
+      description: data.description ?? skill.description,
+      content: data.content,
+    });
+    setImprovingSkill(null);
   }
 
   async function handleDelete(id: string) {
@@ -92,6 +105,7 @@ export function SkillsSettings() {
                 skill={skill}
                 onEdit={() => setEditingSkill(skill)}
                 onDelete={() => handleDelete(skill.id)}
+                onImprove={() => setImprovingSkill(skill)}
               />
             ))}
           </div>
@@ -109,6 +123,14 @@ export function SkillsSettings() {
           initial={editingSkill}
           onSave={(data) => handleUpdate(editingSkill.id, data)}
           onClose={() => setEditingSkill(null)}
+        />
+      )}
+
+      {improvingSkill && (
+        <ImproveSkillModal
+          skill={improvingSkill}
+          onApply={(data) => handleApplyImprovement(improvingSkill.id, data)}
+          onClose={() => setImprovingSkill(null)}
         />
       )}
     </>
