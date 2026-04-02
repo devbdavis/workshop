@@ -5,7 +5,7 @@
   "private": true,
   "description": "A local-first project command center for managing parallel work tracks with AI-assisted terminal sessions",
   "engines": {
-    "node": ">=22.0.0"
+    "node": ">=24.0.0"
   },
   "scripts": {
     "dev": "concurrently -n server,client -c blue,green \"tsx watch src/server/index.ts\" \"vite\"",
@@ -41,7 +41,7 @@
     "@tailwindcss/vite": "^4.0.0",
     "@types/better-sqlite3": "^7.6.0",
     "@types/express": "^5.0.0",
-    "@types/node": "^22.0.0",
+    "@types/node": "^24.0.0",
     "@types/node-cron": "^3.0.0",
     "@types/react": "^19.0.0",
     "@types/react-dom": "^19.0.0",
