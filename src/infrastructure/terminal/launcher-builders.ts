@@ -138,7 +138,7 @@ export function buildClaudeLauncher(
 
   if (options?.systemPrompt && !options?.claudeResumeId) {
     let prompt = options.systemPrompt;
-    if (options.background) {
+    if (options.background && !options.skipBackgroundInstructions) {
       prompt = appendBackgroundInstructions(prompt, options.todoId);
     }
     const promptFile = path.join(sessionDir, 'system-prompt.md');
@@ -237,7 +237,9 @@ export function buildCodexLauncher(
     let fullPrompt = '';
     if (options?.systemPrompt) {
       let prompt = options.systemPrompt;
-      prompt = appendBackgroundInstructions(prompt, options.todoId);
+      if (!options.skipBackgroundInstructions) {
+        prompt = appendBackgroundInstructions(prompt, options.todoId);
+      }
       fullPrompt += prompt + '\n\n---\n\n';
     }
     if (options?.initialPrompt) {
