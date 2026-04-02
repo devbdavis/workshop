@@ -283,6 +283,7 @@ export function TrackView() {
 
 function NewSessionButton({ onCreateSession }: { onCreateSession: (provider: SessionProvider, worktreeMode?: boolean) => Promise<Session | null> }) {
   const [open, setOpen] = useState(false);
+  const [creating, setCreating] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
 
   // Close dropdown when clicking outside
@@ -295,17 +296,35 @@ function NewSessionButton({ onCreateSession }: { onCreateSession: (provider: Ses
     return () => document.removeEventListener('mousedown', handleClick);
   }, [open]);
 
+  async function create(provider: SessionProvider, worktreeMode?: boolean): Promise<void> {
+    if (creating) return;
+    setCreating(true);
+    setOpen(false);
+    try {
+      await onCreateSession(provider, worktreeMode);
+    } finally {
+      setCreating(false);
+    }
+  }
+
   return (
     <div ref={ref} className="relative inline-flex">
       <button
-        onClick={() => onCreateSession('claude', true)}
-        className="px-3 py-1.5 text-sm bg-blue-600 hover:bg-blue-500 rounded-l-lg transition-colors"
+        onClick={() => create('claude', true)}
+        disabled={creating}
+        className="px-3 py-1.5 text-sm bg-blue-600 hover:bg-blue-500 disabled:opacity-70 disabled:cursor-not-allowed rounded-l-lg transition-colors flex items-center gap-1.5"
       >
-        New Session
+        {creating && (
+          <svg className="w-3 h-3 animate-spin" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="2">
+            <path d="M6 1v2M6 9v2M1 6h2M9 6h2" strokeLinecap="round" />
+          </svg>
+        )}
+        {creating ? 'Starting…' : 'New Session'}
       </button>
       <button
         onClick={() => setOpen(!open)}
-        className="px-1.5 py-1.5 text-sm bg-blue-600 hover:bg-blue-500 rounded-r-lg border-l border-blue-500 transition-colors"
+        disabled={creating}
+        className="px-1.5 py-1.5 text-sm bg-blue-600 hover:bg-blue-500 disabled:opacity-70 disabled:cursor-not-allowed rounded-r-lg border-l border-blue-500 transition-colors"
       >
         <svg className="w-3 h-3" viewBox="0 0 12 12" fill="currentColor">
           <path d="M3 5l3 3 3-3H3z" />
@@ -314,21 +333,21 @@ function NewSessionButton({ onCreateSession }: { onCreateSession: (provider: Ses
       {open && (
         <div className="absolute right-0 top-full mt-1 bg-gray-800 border border-gray-700 rounded-lg shadow-lg py-1 z-50 min-w-[160px]">
           <button
-            onClick={() => { onCreateSession('claude', true); setOpen(false); }}
+            onClick={() => create('claude', true)}
             className="w-full text-left px-3 py-1.5 text-sm hover:bg-gray-700 flex items-center gap-2"
           >
             <span className="w-2 h-2 rounded-full bg-orange-400" />
             <span>Claude <span className="text-[10px] text-gray-500 ml-0.5">(worktree)</span></span>
           </button>
           <button
-            onClick={() => { onCreateSession('claude', false); setOpen(false); }}
+            onClick={() => create('claude', false)}
             className="w-full text-left px-3 py-1.5 text-sm hover:bg-gray-700 flex items-center gap-2"
           >
             <span className="w-2 h-2 rounded-full bg-orange-400" />
             Claude
           </button>
           <button
-            onClick={() => { onCreateSession('codex'); setOpen(false); }}
+            onClick={() => create('codex')}
             className="w-full text-left px-3 py-1.5 text-sm hover:bg-gray-700 flex items-center gap-2"
           >
             <span className="w-2 h-2 rounded-full bg-emerald-400" />

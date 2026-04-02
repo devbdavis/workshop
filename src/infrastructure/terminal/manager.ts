@@ -55,7 +55,50 @@ function worktreeBranchName(name: string | undefined, sessionId: string, issueKe
 }
 
 /**
+ * Fetch origin and return the remote-tracking ref for its HEAD branch (e.g. "origin/main").
+ * Returns undefined if the repo has no remote or the ref cannot be determined — callers
+ * fall back to creating the worktree from the current HEAD.
+ */
+function fetchAndResolveBase(repoPath: string): string | undefined {
+  try {
+    execSync(`git -C ${JSON.stringify(repoPath)} fetch origin --quiet`, { stdio: 'pipe' });
+  } catch (err) {
+    // Log so the failure is visible in server output — but don't bail; we can
+    // still create the worktree from whatever remote-tracking ref exists locally.
+    console.warn(
+      `[worktree] git fetch origin failed for ${repoPath}:`,
+      err instanceof Error ? err.message.trim() : err,
+    );
+  }
+
+  // Derive the remote ref from the local HEAD's branch name — the canonical clone
+  // always knows which branch it's on, and fetch just updated origin/<branch>.
+  try {
+    const localBranch = execSync(
+      `git -C ${JSON.stringify(repoPath)} rev-parse --abbrev-ref HEAD`,
+      { stdio: 'pipe' },
+    ).toString().trim(); // e.g. "main"
+
+    if (localBranch && localBranch !== 'HEAD') {
+      const remoteRef = `origin/${localBranch}`;
+      // Verify the ref actually exists before handing it to worktree add
+      execSync(
+        `git -C ${JSON.stringify(repoPath)} rev-parse --verify ${JSON.stringify(remoteRef)}`,
+        { stdio: 'pipe' },
+      );
+      console.log(`[worktree] using ${remoteRef} as start point for ${repoPath}`);
+      return remoteRef;
+    }
+  } catch { /* fall through */ }
+
+  console.warn(`[worktree] Could not resolve remote base ref for ${repoPath} — worktree will start from local HEAD`);
+  return undefined;
+}
+
+/**
  * Create a workspace directory with one git worktree per repo.
+ * Fetches from origin so each worktree starts from the latest remote HEAD,
+ * even if the local default branch is behind.
  * Returns the workspace path. Throws on failure (caller should handle gracefully).
  */
 function createWorktrees(sessionId: string, repos: TrackRepo[], sessionName?: string, issueKey?: string): string {
@@ -68,8 +111,10 @@ function createWorktrees(sessionId: string, repos: TrackRepo[], sessionName?: st
     const repoName = path.basename(repo.path);
     const worktreePath = path.join(workspaceDir, repoName);
 
+    const base = fetchAndResolveBase(repo.path);
+    const startPoint = base ? ` ${JSON.stringify(base)}` : '';
     execSync(
-      `git -C ${JSON.stringify(repo.path)} worktree add ${JSON.stringify(worktreePath)} -b ${JSON.stringify(branch)}`,
+      `git -C ${JSON.stringify(repo.path)} worktree add ${JSON.stringify(worktreePath)} -b ${JSON.stringify(branch)}${startPoint}`,
       { stdio: 'pipe' },
     );
 
