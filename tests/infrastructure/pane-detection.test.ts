@@ -66,6 +66,14 @@ describe('isSessionNeedsInput (preCapture)', () => {
     expect(isSessionNeedsInput(session, ['Should I proceed with the rename?'])).toBe(true);
   });
 
+  it('returns true when Claude prompt has typed but unsubmitted text', () => {
+    expect(isSessionNeedsInput(session, ['some prior output', '❯ implement the foo feature'])).toBe(true);
+  });
+
+  it('returns false for a bare ❯ prompt with no typed text', () => {
+    expect(isSessionNeedsInput(session, ['some prior output', '❯'])).toBe(false);
+  });
+
   it('returns false when terminal is at an idle ❯ prompt, even if scroll history has ?', () => {
     // User's input text visible in scroll history should not trigger needs-input
     // when the session is already showing the idle Claude prompt.

@@ -57,6 +57,9 @@ export function isSessionNeedsInput(session: Session, preCapture?: string[]): bo
   if (atIdlePrompt) return false;
   return lines.slice(-15).some(line => {
     const t = line.trimEnd();
+    // Claude's input prompt with typed but not-yet-submitted text.
+    // A bare ❯ is idle; ❯ followed by content means the user is composing.
+    if (/^❯\s+\S/.test(t)) return true;
     // y/n confirmation prompts from subprocesses or Claude
     if (/\[y\/n\]|\[Y\/n\]|\[y\/N\]|\(yes\/no\)|\(y\/n\)/i.test(t)) return true;
     // "Press Enter to continue" style prompts
