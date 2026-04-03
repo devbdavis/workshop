@@ -1,7 +1,14 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState, useCallback } from 'react';
 import { Link } from 'react-router-dom';
 import type { Track } from '@foundation/types';
 import { CreateTrackModal } from './CreateTrackModal';
+
+interface TrackActivity {
+  working: number;
+  idle: number;
+  needsInput: number;
+  total: number;
+}
 
 type SortOption = 'activity' | 'alphabetical';
 
@@ -38,6 +45,7 @@ function sortTracks(tracks: Track[], sort: SortOption): Track[] {
 
 export function Dashboard() {
   const [tracks, setTracks] = useState<Track[]>([]);
+  const [activity, setActivity] = useState<Record<string, TrackActivity>>({});
   const [loading, setLoading] = useState(true);
   const [showCreate, setShowCreate] = useState(false);
   const [sort, setSort] = useState<SortOption>(loadSavedSort);
@@ -54,9 +62,34 @@ export function Dashboard() {
     try { localStorage.setItem(SHOW_SYSTEM_STORAGE_KEY, String(next)); } catch { /* ignore */ }
   }
 
+  const loadActivity = useCallback(async () => {
+    try {
+      const res = await fetch('/api/tracks/activity');
+      if (res.ok) setActivity(await res.json());
+    } catch {
+      // non-fatal — activity badges just stay empty
+    }
+  }, []);
+
   useEffect(() => {
     loadTracks();
   }, []);
+
+  useEffect(() => {
+    loadActivity();
+
+    // Refresh activity counts whenever any session state changes
+    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+    const ws = new WebSocket(`${protocol}//${window.location.host}/ws/events`);
+    ws.onopen = () => { loadActivity(); };
+    ws.onmessage = (evt) => {
+      try {
+        const event = JSON.parse(evt.data) as { type: string };
+        if (event.type.startsWith('session:')) loadActivity();
+      } catch { /* ignore */ }
+    };
+    return () => ws.close();
+  }, [loadActivity]);
 
   async function loadTracks() {
     try {
@@ -149,6 +182,7 @@ export function Dashboard() {
               )}
               <div className="flex items-center gap-3 text-xs text-gray-500">
                 <span>{track.status}</span>
+                <TrackActivityBadges activity={activity[track.id]} />
               </div>
             </Link>
           ))}
@@ -165,5 +199,32 @@ export function Dashboard() {
         />
       )}
     </div>
+  );
+}
+
+function TrackActivityBadges({ activity }: { activity: TrackActivity | undefined }) {
+  if (!activity || activity.total === 0) return null;
+
+  return (
+    <span className="flex items-center gap-1.5 ml-auto">
+      {activity.needsInput > 0 && (
+        <span className="flex items-center gap-0.5 text-red-400" title={`${activity.needsInput} waiting for input`}>
+          <span className="w-1.5 h-1.5 rounded-full bg-red-500 inline-block" />
+          {activity.needsInput}
+        </span>
+      )}
+      {activity.working > 0 && (
+        <span className="flex items-center gap-0.5 text-green-400" title={`${activity.working} working`}>
+          <span className="w-1.5 h-1.5 rounded-full bg-green-500 inline-block" />
+          {activity.working}
+        </span>
+      )}
+      {activity.idle > 0 && (
+        <span className="flex items-center gap-0.5 text-yellow-500" title={`${activity.idle} idle`}>
+          <span className="w-1.5 h-1.5 rounded-full bg-yellow-500 inline-block" />
+          {activity.idle}
+        </span>
+      )}
+    </span>
   );
 }

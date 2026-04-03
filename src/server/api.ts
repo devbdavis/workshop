@@ -107,6 +107,12 @@ export function createApiRouter(deps: ApiRouterDeps = {}): Router {
     for (const trackId of result.activityChanged) {
       broadcast('session:updated', trackId);
     }
+    for (const alert of result.idleAlerts) {
+      broadcast('session:idle-alert', alert.trackId, {
+        sessionId: alert.sessionId,
+        sessionName: alert.sessionName,
+      });
+    }
     if (result.suspended.length > 0) {
       try {
         const resumed = await terminal.resumeSuspendedSessions();
@@ -470,6 +476,27 @@ export function createApiRouter(deps: ApiRouterDeps = {}): Router {
 
   router.get('/tracks', (_req, res) => {
     res.json(tracks.findAll());
+  });
+
+  /**
+   * Returns per-track session activity counts derived from in-memory pane state.
+   * Shape: Record<trackId, { working, idle, needsInput, total }>
+   */
+  router.get('/tracks/activity', (_req, res) => {
+    const allSessions = sessions.findAll();
+    const result: Record<string, { working: number; idle: number; needsInput: number; total: number }> = {};
+    for (const session of allSessions) {
+      const status = terminal.getActivityStatus(session.id);
+      if (!result[session.trackId]) {
+        result[session.trackId] = { working: 0, idle: 0, needsInput: 0, total: 0 };
+      }
+      const counts = result[session.trackId];
+      counts.total += 1;
+      if (status === 'working') counts.working += 1;
+      else if (status === 'idle') counts.idle += 1;
+      else if (status === 'needs-input') counts.needsInput += 1;
+    }
+    res.json(result);
   });
 
   router.post('/tracks', (req, res) => {
