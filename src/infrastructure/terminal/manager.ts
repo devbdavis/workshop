@@ -234,6 +234,22 @@ export function createTerminalManager(sessionRepo: SessionRepository, soulLoader
    *  At a 30s sync interval this means the session must look idle for ~60s. */
   const IDLE_CONSECUTIVE_THRESHOLD = 2;
 
+  /**
+   * Wall-clock timestamp (ms) when a session first reached confirmed idle
+   * after having been working. Cleared when the session goes back to working.
+   */
+  const firstIdledAt = new Map<string, number>();
+
+  /**
+   * Sessions that have already been notified for the current idle stretch.
+   * Cleared when the session transitions back to working.
+   */
+  const notifiedIdle = new Set<string>();
+
+  /** How long (ms) a session must stay idle after the working→idle transition
+   *  before we emit an idle alert. */
+  const IDLE_NOTIFY_DELAY_MS = 30_000;
+
   /** Clean all in-memory tracking for a session */
   function clearSessionMaps(sessionId: string): void {
     lastPaneHash.delete(sessionId);
@@ -241,6 +257,8 @@ export function createTerminalManager(sessionRepo: SessionRepository, soulLoader
     dyingSince.delete(sessionId);
     activityStatusMap.delete(sessionId);
     consecutiveIdleObs.delete(sessionId);
+    firstIdledAt.delete(sessionId);
+    notifiedIdle.delete(sessionId);
   }
 
   function getSessionDir(sessionId: string): string {
@@ -452,6 +470,7 @@ export function createTerminalManager(sessionRepo: SessionRepository, soulLoader
       const suspended: SyncResult['suspended'] = [];
       const dying: SyncResult['dying'] = [];
       const activityChangedSet = new Set<TrackId>();
+      const idleAlerts: SyncResult['idleAlerts'] = [];
 
       /** Reap a session: kill tmux, clean up files, remove from DB */
       const reap = (session: Session, reason: string) => {
@@ -540,8 +559,11 @@ export function createTerminalManager(sessionRepo: SessionRepository, soulLoader
 
         // --- Activity status tracking (all alive sessions) ---
         // needs-input takes priority: check before idle to catch question prompts
+        const prevStatus = activityStatusMap.get(session.id);
         if (isSessionNeedsInput(session, capturedLines)) {
           consecutiveIdleObs.delete(session.id);
+          firstIdledAt.delete(session.id);
+          notifiedIdle.delete(session.id);
           activityStatusMap.set(session.id, 'needs-input');
         } else if (isSessionIdle(session, capturedLines)) {
           // Require IDLE_CONSECUTIVE_THRESHOLD consecutive idle observations
@@ -552,6 +574,21 @@ export function createTerminalManager(sessionRepo: SessionRepository, soulLoader
           consecutiveIdleObs.set(session.id, count);
           if (count >= IDLE_CONSECUTIVE_THRESHOLD) {
             activityStatusMap.set(session.id, 'idle');
+            // Record when this working→idle transition first became confirmed idle.
+            // Only set on the first confirmation after being in working state.
+            if (prevStatus === 'working' && !firstIdledAt.has(session.id)) {
+              firstIdledAt.set(session.id, Date.now());
+            }
+            // Emit alert once the session has been idle long enough.
+            const idledAt = firstIdledAt.get(session.id);
+            if (idledAt !== undefined && Date.now() - idledAt >= IDLE_NOTIFY_DELAY_MS && !notifiedIdle.has(session.id)) {
+              notifiedIdle.add(session.id);
+              idleAlerts.push({
+                sessionId: session.id,
+                trackId: session.trackId,
+                sessionName: session.name ?? undefined,
+              });
+            }
           }
           // If below threshold, leave the current status in place (working or
           // undefined) — it will transition once the signal is sustained.
@@ -565,6 +602,8 @@ export function createTerminalManager(sessionRepo: SessionRepository, soulLoader
             activityChangedSet.add(session.trackId);
           }
           consecutiveIdleObs.delete(session.id);
+          firstIdledAt.delete(session.id);
+          notifiedIdle.delete(session.id);
           activityStatusMap.set(session.id, 'working');
         }
 
@@ -591,7 +630,12 @@ export function createTerminalManager(sessionRepo: SessionRepository, soulLoader
       if (suspended.length > 0) {
         console.log(`Session sync: suspended ${suspended.length} resumable session(s)`);
       }
-      return { cleaned, suspended, dying, activityChanged: [...activityChangedSet] };
+      if (idleAlerts.length > 0) {
+        for (const alert of idleAlerts) {
+          console.log(`[idle-alert] Session ${alert.sessionId} (${alert.sessionName ?? 'unnamed'}) has been idle for ${IDLE_NOTIFY_DELAY_MS / 1000}s`);
+        }
+      }
+      return { cleaned, suspended, dying, activityChanged: [...activityChangedSet], idleAlerts };
     },
 
     async resumeSuspendedSessions(): Promise<Session[]> {

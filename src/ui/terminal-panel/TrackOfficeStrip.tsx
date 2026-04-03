@@ -50,6 +50,7 @@ export function TrackOfficeStrip({ sessions, selectedIds, onSelect, deletedCount
           <span className="uppercase tracking-wider">Sessions</span>
           <span className="text-gray-700 ml-0.5">({sessions.length})</span>
         </button>
+        <SessionStatusBadges sessions={sessions} />
         {!collapsed && (
           <span className="text-[10px] text-gray-700">· click to focus · ⌘-click for split</span>
         )}
@@ -79,6 +80,39 @@ export function TrackOfficeStrip({ sessions, selectedIds, onSelect, deletedCount
         </div>
       )}
     </div>
+  );
+}
+
+// --- Status summary badges ---
+
+function SessionStatusBadges({ sessions }: { sessions: Session[] }) {
+  const needsInput = sessions.filter((s) => s.activityStatus === 'needs-input').length;
+  const working = sessions.filter((s) => s.activityStatus === 'working').length;
+  const idle = sessions.filter((s) => s.activityStatus === 'idle').length;
+
+  if (needsInput === 0 && working === 0 && idle === 0) return null;
+
+  return (
+    <span className="flex items-center gap-1">
+      {needsInput > 0 && (
+        <span className="flex items-center gap-0.5 text-[10px] text-red-400" title={`${needsInput} waiting for input`}>
+          <span className="w-1.5 h-1.5 rounded-full bg-red-500 inline-block" />
+          {needsInput}
+        </span>
+      )}
+      {working > 0 && (
+        <span className="flex items-center gap-0.5 text-[10px] text-green-400" title={`${working} working`}>
+          <span className="w-1.5 h-1.5 rounded-full bg-green-500 inline-block" />
+          {working}
+        </span>
+      )}
+      {idle > 0 && (
+        <span className="flex items-center gap-0.5 text-[10px] text-yellow-500" title={`${idle} idle`}>
+          <span className="w-1.5 h-1.5 rounded-full bg-yellow-500 inline-block" />
+          {idle}
+        </span>
+      )}
+    </span>
   );
 }
 
