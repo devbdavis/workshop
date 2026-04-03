@@ -45,6 +45,8 @@ export interface SyncResult {
   suspended: { sessionId: SessionId; trackId: TrackId }[];
   dying: { sessionId: SessionId; trackId: TrackId }[];
   activityChanged: TrackId[];
+  /** Sessions that transitioned working→idle and have stayed idle for the notify threshold. */
+  idleAlerts: { sessionId: SessionId; trackId: TrackId; sessionName: string | undefined }[];
 }
 
 export interface TerminalManager {

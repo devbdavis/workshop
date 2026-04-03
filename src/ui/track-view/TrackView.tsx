@@ -8,6 +8,13 @@ import { TodoPanel } from './TodoPanel';
 import { TrackConfig } from './TrackConfig';
 import { TerminalArea } from '../terminal-panel/TerminalArea';
 
+interface IdleAlert {
+  id: string;
+  sessionId: string;
+  sessionName: string | undefined;
+  timestamp: string;
+}
+
 export function TrackView() {
   const { trackId } = useParams<{ trackId: string }>();
   const [track, setTrack] = useState<Track | null>(null);
@@ -20,6 +27,7 @@ export function TrackView() {
   const [sidebarTab, setSidebarTab] = useState<'context' | 'todos' | 'config'>('context');
   const [editingName, setEditingName] = useState(false);
   const [nameValue, setNameValue] = useState('');
+  const [idleAlerts, setIdleAlerts] = useState<IdleAlert[]>([]);
 
   const loadTrack = useCallback(async () => {
     if (!trackId) return;
@@ -67,8 +75,21 @@ export function TrackView() {
       ws.onopen = () => { loadTrack(); };
       ws.onmessage = (evt) => {
         try {
-          const event = JSON.parse(evt.data);
-          if (event.trackId === trackId) {
+          const event = JSON.parse(evt.data) as { type: string; trackId: string; sessionId?: string; sessionName?: string; timestamp?: string };
+          if (event.trackId !== trackId) return;
+          if (event.type === 'session:idle-alert') {
+            const alert: IdleAlert = {
+              id: `${event.sessionId}-${Date.now()}`,
+              sessionId: event.sessionId ?? '',
+              sessionName: event.sessionName,
+              timestamp: event.timestamp ?? new Date().toISOString(),
+            };
+            setIdleAlerts((prev) => [...prev, alert]);
+            // Auto-dismiss after 30s
+            setTimeout(() => {
+              setIdleAlerts((prev) => prev.filter((a) => a.id !== alert.id));
+            }, 30_000);
+          } else {
             loadTrack();
           }
         } catch {
@@ -277,6 +298,35 @@ export function TrackView() {
           </div>
         </main>
       </div>
+
+      {/* Idle alert toasts — bottom-right, auto-dismiss */}
+      {idleAlerts.length > 0 && (
+        <div className="fixed bottom-4 right-4 flex flex-col gap-2 z-50 max-w-xs">
+          {idleAlerts.map((alert) => (
+            <div
+              key={alert.id}
+              className="flex items-start gap-2 bg-gray-800 border border-yellow-600/50 rounded-lg px-3 py-2 shadow-lg text-sm"
+            >
+              <span className="mt-0.5 w-2 h-2 rounded-full bg-yellow-500 shrink-0" />
+              <div className="flex-1 min-w-0">
+                <p className="text-gray-200 font-medium truncate">
+                  {alert.sessionName ?? `Session ${alert.sessionId.slice(0, 8)}`}
+                </p>
+                <p className="text-gray-400 text-xs">Idle — waiting for input</p>
+              </div>
+              <button
+                onClick={() => setIdleAlerts((prev) => prev.filter((a) => a.id !== alert.id))}
+                className="text-gray-600 hover:text-gray-300 transition-colors shrink-0 mt-0.5"
+                aria-label="Dismiss"
+              >
+                <svg className="w-3 h-3" viewBox="0 0 12 12" fill="currentColor">
+                  <path d="M2 2l8 8M10 2l-8 8" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+                </svg>
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
