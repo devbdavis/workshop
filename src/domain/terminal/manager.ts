@@ -38,6 +38,8 @@ export interface CreateSessionOptions {
   repos?: TrackRepo[];
   /** Issue key to append to the worktree branch name (e.g. "ASY-1402"). */
   issueKey?: string;
+  /** Additional directories to pre-trust via --add-dir (e.g. track filesystem paths). */
+  additionalDirs?: string[];
 }
 
 export interface SyncResult {

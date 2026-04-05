@@ -772,6 +772,7 @@ export function createApiRouter(deps: ApiRouterDeps = {}): Router {
         : (track.worktreeMode ?? false);
 
       const repos = tracks.findReposByTrack(trackId);
+      const trackPaths = tracks.findPathsByTrack(trackId);
 
       const session = await terminal.createSession(trackId, {
         systemPrompt,
@@ -779,6 +780,7 @@ export function createApiRouter(deps: ApiRouterDeps = {}): Router {
         workingDirectory: repos[0]?.path,
         worktreeMode: worktreeMode && repos.length > 0,
         repos: worktreeMode ? repos : undefined,
+        additionalDirs: trackPaths.length > 0 ? trackPaths.map((p) => p.path) : undefined,
       });
       broadcast('session:created', trackId);
       res.status(201).json(session);
