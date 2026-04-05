@@ -166,9 +166,9 @@ export function buildClaudeLauncher(
     }
   }
 
-  // Auto-approve workspace trust prompt. Claude Code's TUI shows a "trust this
-  // folder" dialog on first use in a directory. A background process polls the
-  // tmux pane and sends Enter when detected — harmless if the prompt never appears.
+  // Auto-approve the workspace trust dialog. Claude Code prompts "trust this folder"
+  // on first use in a directory — this polls the tmux pane and presses Enter when
+  // detected. Harmless if the prompt never appears (e.g. already trusted).
   const logFile = path.join(sessionDir, 'trust-approve.log');
   lines.push(`# Auto-approve workspace trust prompt if it appears`);
   lines.push(`(`);
