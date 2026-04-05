@@ -151,9 +151,8 @@ export function buildClaudeLauncher(
     claudeArgs.push('--dangerously-skip-permissions');
   }
 
-  // Pre-trust the working directory and any additional track paths so Claude Code
-  // skips the "trust this folder" prompt without disabling permissions entirely.
-  claudeArgs.push('--add-dir', JSON.stringify(cwd));
+  // Grant tool access to any additional track paths beyond the CWD.
+  // (The CWD itself is already accessible to Claude by default.)
   for (const dir of options?.additionalDirs ?? []) {
     claudeArgs.push('--add-dir', JSON.stringify(dir));
   }
@@ -173,6 +172,21 @@ export function buildClaudeLauncher(
     }
   }
 
+
+  // Auto-approve the workspace trust dialog if it appears.
+  // Claude Code shows "Yes, I trust this folder" as the default selection;
+  // pressing Enter confirms it. We poll the pane every 0.5s for up to 30s.
+  // This runs as a background process that outlives the shell (exec replaces it).
+  lines.push('(');
+  lines.push('  for _i in $(seq 1 60); do');
+  lines.push(`    if tmux capture-pane -t ${tmuxName} -p 2>/dev/null | grep -q "trust this folder"; then`);
+  lines.push(`      tmux send-keys -t ${tmuxName} "" Enter`);
+  lines.push('      exit 0');
+  lines.push('    fi');
+  lines.push('    sleep 0.5');
+  lines.push('  done');
+  lines.push(') &');
+  lines.push('');
 
   // Pass the initial prompt as a positional argument to claude so it's sent
   // as the first message. This is reliable — no tmux paste race conditions.
