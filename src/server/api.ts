@@ -839,10 +839,10 @@ export function createApiRouter(deps: ApiRouterDeps = {}): Router {
     try {
       if (app === 'terminal') {
         if (IS_WSL) {
-          // wt.exe is on the Windows PATH and accessible from WSL via interop.
-          // wslpath converts the Linux path to a Windows UNC path (\\wsl$\...).
-          const winPath = execSync(`wslpath -w ${JSON.stringify(targetPath)}`, { stdio: 'pipe' }).toString().trim();
-          execSync(`wt.exe -d ${JSON.stringify(winPath)}`, { stdio: 'pipe' });
+          // wt.exe -d with a UNC path (\\wsl.localhost\...) silently falls back to ~.
+          // Instead, open a new tab running wsl.exe --cd with the Linux path directly —
+          // wsl.exe --cd is designed for this and handles the path reliably.
+          execSync(`wt.exe nt -- wsl.exe --cd ${JSON.stringify(targetPath)}`, { stdio: 'pipe' });
         } else {
           execSync(`open -a iTerm ${JSON.stringify(targetPath)}`, { stdio: 'pipe' });
         }
