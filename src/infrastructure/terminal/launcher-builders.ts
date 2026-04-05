@@ -151,10 +151,12 @@ export function buildClaudeLauncher(
     claudeArgs.push('--dangerously-skip-permissions');
   }
 
-  // Pre-trust the working directory so Claude Code skips the "trust this folder"
-  // prompt without disabling permissions entirely. --add-dir tells Claude Code
-  // to treat the directory as trusted for this session.
+  // Pre-trust the working directory and any additional track paths so Claude Code
+  // skips the "trust this folder" prompt without disabling permissions entirely.
   claudeArgs.push('--add-dir', JSON.stringify(cwd));
+  for (const dir of options?.additionalDirs ?? []) {
+    claudeArgs.push('--add-dir', JSON.stringify(dir));
+  }
 
   // Always write a settings file (SessionStart + SessionEnd hooks for resume tracking,
   // SubagentStop for workflow progress if executionTicketId is present).
