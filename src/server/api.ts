@@ -839,10 +839,13 @@ export function createApiRouter(deps: ApiRouterDeps = {}): Router {
     try {
       if (app === 'terminal') {
         if (IS_WSL) {
-          // wt.exe -d with a UNC path (\\wsl.localhost\...) silently falls back to ~.
-          // Instead, open a new tab running wsl.exe --cd with the Linux path directly —
-          // wsl.exe --cd is designed for this and handles the path reliably.
-          execSync(`wt.exe nt -- wsl.exe --cd ${JSON.stringify(targetPath)}`, { stdio: 'pipe' });
+          // -w 0 targets the most recently used WT window (creates one if none exist).
+          // --profile uses the current distro name so WT opens the right WSL profile
+          // rather than defaulting to PowerShell or cmd.
+          // WSL_DISTRO_NAME is set by WSL itself (e.g. "Ubuntu", "Ubuntu-22.04").
+          const distro = process.env['WSL_DISTRO_NAME'];
+          const profileArgs = distro ? `--profile ${JSON.stringify(distro)} ` : '';
+          execSync(`wt.exe -w 0 nt ${profileArgs}wsl.exe --cd ${JSON.stringify(targetPath)}`, { stdio: 'pipe' });
         } else {
           execSync(`open -a iTerm ${JSON.stringify(targetPath)}`, { stdio: 'pipe' });
         }
