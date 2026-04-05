@@ -1,4 +1,4 @@
-import { existsSync } from 'fs';
+import { existsSync, readFileSync } from 'fs';
 import { execSync } from 'child_process';
 import { homedir } from 'os';
 import path from 'path';
@@ -69,6 +69,15 @@ import { ensureDefaultTodoTemplate } from '@infrastructure/persistence/database.
 export interface ApiRouterDeps {
   automationEngine?: AutomationEngine;
 }
+
+// Detected once at startup — /proc/version contains "microsoft" or "WSL" on WSL2
+const IS_WSL: boolean = (() => {
+  try {
+    return /microsoft|wsl/i.test(readFileSync('/proc/version', 'utf8'));
+  } catch {
+    return false;
+  }
+})();
 
 export function createApiRouter(deps: ApiRouterDeps = {}): Router {
   const router = Router();
@@ -856,13 +865,28 @@ export function createApiRouter(deps: ApiRouterDeps = {}): Router {
     }
     try {
       if (app === 'terminal') {
-        execSync(`open -a iTerm ${JSON.stringify(targetPath)}`, { stdio: 'pipe' });
+        if (IS_WSL) {
+          // -w 0 targets the most recently used WT window (creates one if none exist).
+          // --profile uses the current distro name so WT opens the right WSL profile
+          // rather than defaulting to PowerShell or cmd.
+          // WSL_DISTRO_NAME is set by WSL itself (e.g. "Ubuntu", "Ubuntu-22.04").
+          const distro = process.env['WSL_DISTRO_NAME'];
+          const profileArgs = distro ? `--profile ${JSON.stringify(distro)} ` : '';
+          execSync(`wt.exe -w 0 nt ${profileArgs}wsl.exe --cd ${JSON.stringify(targetPath)}`, { stdio: 'pipe' });
+        } else {
+          execSync(`open -a iTerm ${JSON.stringify(targetPath)}`, { stdio: 'pipe' });
+        }
       } else {
-        // Default: Cursor. Try CLI first, fall back to open -a.
-        try {
-          execSync(`cursor ${JSON.stringify(targetPath)}`, { stdio: 'pipe' });
-        } catch {
-          execSync(`open -a Cursor ${JSON.stringify(targetPath)}`, { stdio: 'pipe' });
+        if (IS_WSL) {
+          // VSCode Remote WSL installs the `code` CLI shim into the WSL PATH.
+          execSync(`code ${JSON.stringify(targetPath)}`, { stdio: 'pipe' });
+        } else {
+          // Default: Cursor. Try CLI first, fall back to open -a.
+          try {
+            execSync(`cursor ${JSON.stringify(targetPath)}`, { stdio: 'pipe' });
+          } catch {
+            execSync(`open -a Cursor ${JSON.stringify(targetPath)}`, { stdio: 'pipe' });
+          }
         }
       }
       res.json({ ok: true });
