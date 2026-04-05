@@ -304,6 +304,33 @@ export function createTerminalManager(sessionRepo: SessionRepository, soulLoader
       { stdio: 'pipe' },
     );
 
+    // Auto-approve the Claude workspace trust dialog from the server process.
+    // Running tmux commands here (rather than inside the launcher script's
+    // subprocess) avoids WSL socket-access issues where child processes of the
+    // tmux pane cannot reach the tmux server.
+    if (provider === 'claude') {
+      const deadline = Date.now() + 30_000;
+      const trustTimer = setInterval(() => {
+        if (Date.now() > deadline) {
+          clearInterval(trustTimer);
+          return;
+        }
+        try {
+          const pane = execSync(`tmux capture-pane -t ${tmuxName} -p`, {
+            stdio: 'pipe',
+            encoding: 'utf-8',
+            timeout: 2000,
+          });
+          if (/trust this folder/i.test(pane)) {
+            execSync(`tmux send-keys -t ${tmuxName} Enter`, { stdio: 'pipe' });
+            clearInterval(trustTimer);
+          }
+        } catch {
+          // tmux session not ready yet or already gone — keep trying until deadline
+        }
+      }, 500);
+    }
+
     // For non-Claude providers, use the tmux paste helper to deliver the
     // initial prompt after the TUI is ready. Claude handles this via
     // positional argument in the launch script (no race condition).

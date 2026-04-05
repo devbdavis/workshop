@@ -151,9 +151,8 @@ export function buildClaudeLauncher(
     claudeArgs.push('--dangerously-skip-permissions');
   }
 
-  // Pre-trust the working directory and any additional track paths so Claude Code
-  // skips the "trust this folder" prompt without disabling permissions entirely.
-  claudeArgs.push('--add-dir', JSON.stringify(cwd));
+  // Grant tool access to any additional track paths beyond the CWD.
+  // (The CWD itself is already accessible to Claude by default.)
   for (const dir of options?.additionalDirs ?? []) {
     claudeArgs.push('--add-dir', JSON.stringify(dir));
   }
@@ -172,6 +171,7 @@ export function buildClaudeLauncher(
       claudeArgs.push('--allowedTools', JSON.stringify(tool));
     }
   }
+
 
 
   // Pass the initial prompt as a positional argument to claude so it's sent
