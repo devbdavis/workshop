@@ -151,6 +151,11 @@ export function buildClaudeLauncher(
     claudeArgs.push('--dangerously-skip-permissions');
   }
 
+  // Pre-trust the working directory so Claude Code skips the "trust this folder"
+  // prompt without disabling permissions entirely. --add-dir tells Claude Code
+  // to treat the directory as trusted for this session.
+  claudeArgs.push('--add-dir', JSON.stringify(cwd));
+
   // Always write a settings file (SessionStart + SessionEnd hooks for resume tracking,
   // SubagentStop for workflow progress if executionTicketId is present).
   const settingsFile = writeHookSettings(sessionDir, sessionId, {
@@ -166,23 +171,6 @@ export function buildClaudeLauncher(
     }
   }
 
-  // Auto-approve the workspace trust dialog. Claude Code prompts "trust this folder"
-  // on first use in a directory — this polls the tmux pane and presses Enter when
-  // detected. Harmless if the prompt never appears (e.g. already trusted).
-  const logFile = path.join(sessionDir, 'trust-approve.log');
-  lines.push(`# Auto-approve workspace trust prompt if it appears`);
-  lines.push(`(`);
-  lines.push(`  for _i in $(seq 1 15); do`);
-  lines.push(`    if tmux capture-pane -t ${tmuxName} -p 2>/dev/null | grep -q "trust this folder"; then`);
-  lines.push(`      sleep 0.5`);
-  lines.push(`      tmux send-keys -t ${tmuxName} Enter`);
-  lines.push(`      echo "[$(date)] Auto-approved workspace trust" >> ${JSON.stringify(logFile)}`);
-  lines.push(`      exit 0`);
-  lines.push(`    fi`);
-  lines.push(`    sleep 1`);
-  lines.push(`  done`);
-  lines.push(`) &`);
-  lines.push('');
 
   // Pass the initial prompt as a positional argument to claude so it's sent
   // as the first message. This is reliable — no tmux paste race conditions.
