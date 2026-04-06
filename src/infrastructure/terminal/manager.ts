@@ -513,6 +513,19 @@ export function createTerminalManager(sessionRepo: SessionRepository, soulLoader
         cleaned.push({ sessionId: session.id, trackId: session.trackId });
       };
 
+      /** Retire a session: kill tmux, soft-delete into recycle bin (session dir preserved) */
+      const retire = (session: Session, reason: string) => {
+        console.log(
+          `Session sync: retiring ${session.id} (${session.tmuxSession}) — ${reason}`,
+        );
+        try {
+          execSync(`tmux kill-session -t ${session.tmuxSession}`, { stdio: 'pipe' });
+        } catch { /* already dead */ }
+        sessionRepo.softDelete(session.id);
+        clearSessionMaps(session.id);
+        cleaned.push({ sessionId: session.id, trackId: session.trackId });
+      };
+
       /** Suspend a session: keep the DB record for later --resume */
       const suspend = (session: Session, reason: string) => {
         console.log(
@@ -547,11 +560,11 @@ export function createTerminalManager(sessionRepo: SessionRepository, soulLoader
             continue;
           }
 
-          // Grace period expired — reap or suspend
+          // Grace period expired — suspend (resumable) or retire to recycle bin
           if (session.claudeResumeId && session.provider === 'claude') {
             suspend(session, 'tmux session dead (resumable)');
           } else {
-            reap(session, 'tmux session dead');
+            retire(session, 'tmux session dead');
           }
           continue;
         }
@@ -636,15 +649,15 @@ export function createTerminalManager(sessionRepo: SessionRepository, soulLoader
 
         // --- Background session cleanup ---
         if (session.background) {
-          // Background session not logged in — reap immediately
+          // Background session not logged in — retire to recycle bin
           if (isSessionLoggedOut(session, capturedLines)) {
-            reap(session, 'background: Claude not logged in');
+            retire(session, 'background: Claude not logged in');
             continue;
           }
 
-          // Background CLI exited (bare shell prompt) — reap immediately
+          // Background CLI exited (bare shell prompt) — retire to recycle bin
           if (isSessionExited(session, capturedLines)) {
-            reap(session, 'background: CLI exited (bare shell prompt)');
+            retire(session, 'background: CLI exited (bare shell prompt)');
             continue;
           }
         }
