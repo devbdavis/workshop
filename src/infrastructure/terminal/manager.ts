@@ -1,5 +1,8 @@
-import { execSync } from 'child_process';
+import { execSync, exec } from 'child_process';
+import { promisify } from 'util';
 import { writeFileSync, readFileSync, mkdirSync, rmSync, existsSync, chmodSync, symlinkSync } from 'fs';
+
+const execAsync = promisify(exec);
 import path from 'path';
 import { v4 as uuid } from 'uuid';
 import type { SessionRepository } from '@domain/session/repository';
@@ -51,10 +54,12 @@ function worktreeBranchName(name: string | undefined, sessionId: string, issueKe
  * Fetch origin and return the remote-tracking ref for its HEAD branch (e.g. "origin/main").
  * Returns undefined if the repo has no remote or the ref cannot be determined — callers
  * fall back to creating the worktree from the current HEAD.
+ *
+ * Runs git commands via execAsync so the Node event loop stays free during network I/O.
  */
-function fetchAndResolveBase(repoPath: string): string | undefined {
+async function fetchAndResolveBase(repoPath: string): Promise<string | undefined> {
   try {
-    execSync(`git -C ${JSON.stringify(repoPath)} fetch origin --quiet`, { stdio: 'pipe' });
+    await execAsync(`git -C ${JSON.stringify(repoPath)} fetch origin --quiet`);
   } catch (err) {
     // Log so the failure is visible in server output — but don't bail; we can
     // still create the worktree from whatever remote-tracking ref exists locally.
@@ -67,17 +72,16 @@ function fetchAndResolveBase(repoPath: string): string | undefined {
   // Derive the remote ref from the local HEAD's branch name — the canonical clone
   // always knows which branch it's on, and fetch just updated origin/<branch>.
   try {
-    const localBranch = execSync(
+    const { stdout } = await execAsync(
       `git -C ${JSON.stringify(repoPath)} rev-parse --abbrev-ref HEAD`,
-      { stdio: 'pipe' },
-    ).toString().trim(); // e.g. "main"
+    );
+    const localBranch = stdout.trim(); // e.g. "main"
 
     if (localBranch && localBranch !== 'HEAD') {
       const remoteRef = `origin/${localBranch}`;
       // Verify the ref actually exists before handing it to worktree add
-      execSync(
+      await execAsync(
         `git -C ${JSON.stringify(repoPath)} rev-parse --verify ${JSON.stringify(remoteRef)}`,
-        { stdio: 'pipe' },
       );
       console.log(`[worktree] using ${remoteRef} as start point for ${repoPath}`);
       return remoteRef;
@@ -92,23 +96,23 @@ function fetchAndResolveBase(repoPath: string): string | undefined {
  * Create a workspace directory with one git worktree per repo.
  * Fetches from origin so each worktree starts from the latest remote HEAD,
  * even if the local default branch is behind.
+ * All repos are processed in parallel — significant speedup for multi-repo tracks.
  * Returns the workspace path. Throws on failure (caller should handle gracefully).
  */
-function createWorktrees(sessionId: string, repos: TrackRepo[], sessionName?: string, issueKey?: string): string {
+async function createWorktrees(sessionId: string, repos: TrackRepo[], sessionName?: string, issueKey?: string): Promise<string> {
   const workspaceDir = path.join(SESSION_DATA_DIR, sessionId, 'workspace');
   mkdirSync(workspaceDir, { recursive: true });
 
   const branch = worktreeBranchName(sessionName, sessionId, issueKey);
 
-  for (const repo of repos) {
+  await Promise.all(repos.map(async (repo) => {
     const repoName = path.basename(repo.path);
     const worktreePath = path.join(workspaceDir, repoName);
 
-    const base = fetchAndResolveBase(repo.path);
+    const base = await fetchAndResolveBase(repo.path);
     const startPoint = base ? ` ${JSON.stringify(base)}` : '';
-    execSync(
+    await execAsync(
       `git -C ${JSON.stringify(repo.path)} worktree add ${JSON.stringify(worktreePath)} -b ${JSON.stringify(branch)}${startPoint}`,
-      { stdio: 'pipe' },
     );
 
     const symlinksMade: string[] = [];
@@ -143,7 +147,7 @@ function createWorktrees(sessionId: string, repos: TrackRepo[], sessionName?: st
         // Non-fatal — cosmetic only
       }
     }
-  }
+  }));
 
   // Write metadata so cleanup can locate the original repo paths
   const meta: WorktreeMeta = {
@@ -356,8 +360,8 @@ export function createTerminalManager(sessionRepo: SessionRepository, soulLoader
       }
 
       // Create DB record first — we need session.id for the worktree path.
-      // workingDirectory is recorded now (before worktree override below) so we
-      // have the pre-worktree fallback; it will be overwritten after worktree creation.
+      // This is the only synchronous work; everything else runs in the background
+      // so the HTTP response is not held hostage by git fetch / worktree checkout.
       const session = sessionRepo.create({
         trackId,
         tmuxSession: tmuxName,
@@ -369,48 +373,62 @@ export function createTerminalManager(sessionRepo: SessionRepository, soulLoader
         workingDirectory: options?.workingDirectory || process.env.HOME || '/tmp',
       });
 
-      // Create worktrees if requested
-      let cwd = options?.workingDirectory || process.env.HOME || '/tmp';
-      let initialPrompt = options?.initialPrompt;
-      if (options?.worktreeMode && options.repos?.length) {
-        try {
-          const worktreeRoot = createWorktrees(session.id, options.repos, options.name, options.issueKey);
-          sessionRepo.updateWorktreeRoot(session.id, worktreeRoot);
-          session.worktreeRoot = worktreeRoot;
-          cwd = worktreeRoot;
+      // Background init — worktree creation (slow), tmux, CLI launch. Not awaited.
+      // The caller receives the session record immediately and can respond to the
+      // HTTP client; the terminal becomes usable once this resolves.
+      const initPromise = (async () => {
+        let cwd = options?.workingDirectory || process.env.HOME || '/tmp';
+        let resolvedSystemPrompt = systemPrompt;
+        let initialPrompt = options?.initialPrompt;
 
-          // Rewrite any original repo paths in prompts to point at the worktree
-          // so agents don't wander back to the canonical clone.
-          if (systemPrompt) {
-            systemPrompt = rewritePathsForWorktree(systemPrompt, options.repos, worktreeRoot);
+        if (options?.worktreeMode && options.repos?.length) {
+          try {
+            const worktreeRoot = await createWorktrees(
+              session.id, options.repos, options.name, options.issueKey,
+            );
+            sessionRepo.updateWorktreeRoot(session.id, worktreeRoot);
+            session.worktreeRoot = worktreeRoot;
+            cwd = worktreeRoot;
+
+            // Rewrite any original repo paths in prompts to point at the worktree
+            // so agents don't wander back to the canonical clone.
+            if (resolvedSystemPrompt) {
+              resolvedSystemPrompt = rewritePathsForWorktree(resolvedSystemPrompt, options.repos, worktreeRoot);
+            }
+            if (initialPrompt) {
+              initialPrompt = rewritePathsForWorktree(initialPrompt, options.repos, worktreeRoot);
+            }
+          } catch (err) {
+            console.warn(`[worktree] Failed to create worktrees for session ${session.id}:`, err);
+            // Fall back to standard workingDirectory
           }
-          if (initialPrompt) {
-            initialPrompt = rewritePathsForWorktree(initialPrompt, options.repos, worktreeRoot);
-          }
-        } catch (err) {
-          console.warn(`[worktree] Failed to create worktrees for session ${session.id}:`, err);
-          // Fall back to standard workingDirectory
         }
-      }
 
-      // Create modified options with soul-prepended system prompt (and rewritten paths if worktree)
-      const effectiveOptions: CreateSessionOptions | undefined = options
-        ? { ...options, systemPrompt: systemPrompt || undefined, initialPrompt }
-        : systemPrompt
-          ? { systemPrompt }
-          : undefined;
+        const effectiveOptions: CreateSessionOptions | undefined = options
+          ? { ...options, systemPrompt: resolvedSystemPrompt || undefined, initialPrompt }
+          : resolvedSystemPrompt
+            ? { systemPrompt: resolvedSystemPrompt }
+            : undefined;
 
-      const cleanEnv = { ...process.env };
-      delete cleanEnv.CLAUDECODE;
+        const cleanEnv = { ...process.env };
+        delete cleanEnv.CLAUDECODE;
 
-      execSync(
-        `tmux new-session -d -s ${tmuxName} -x 120 -y 40 -c ${JSON.stringify(cwd)}`,
-        { stdio: 'pipe', env: cleanEnv },
-      );
+        execSync(
+          `tmux new-session -d -s ${tmuxName} -x 120 -y 40 -c ${JSON.stringify(cwd)}`,
+          { stdio: 'pipe', env: cleanEnv },
+        );
 
-      if (!options?.skipClaude) {
-        launchCli(session, tmuxName, cwd, effectiveOptions);
-      }
+        if (!options?.skipClaude) {
+          launchCli(session, tmuxName, cwd, effectiveOptions);
+        }
+
+        options?.onReady?.(session);
+      })();
+
+      initPromise.catch((err) => {
+        console.error(`[session] Background init failed for ${session.id}:`, err);
+        try { options?.onReady?.(session); } catch { /* ignore */ }
+      });
 
       return session;
     },

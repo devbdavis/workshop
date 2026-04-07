@@ -9,6 +9,7 @@ interface Props {
   trackName: string;
   sessions: Session[];
   deletedSessions: Session[];
+  startingSessions?: Set<string>;
   onDestroySession: (sessionId: string) => void;
   onRenameSession: (sessionId: string, name: string) => void;
   onRestoreSession: (sessionId: string) => void;
@@ -18,7 +19,7 @@ interface Props {
 
 const storageKey = (trackId: string) => `workshop:selected:${trackId}`;
 
-export function TerminalArea({ trackId, trackName, sessions, deletedSessions, onDestroySession, onRenameSession, onRestoreSession, onPurgeSession, defaultOpenPath }: Props) {
+export function TerminalArea({ trackId, trackName, sessions, deletedSessions, startingSessions, onDestroySession, onRenameSession, onRestoreSession, onPurgeSession, defaultOpenPath }: Props) {
   const [selectedIds, setSelectedIds] = useState<SessionId[]>(() => {
     try {
       const stored = localStorage.getItem(storageKey(trackId));
@@ -131,6 +132,7 @@ export function TerminalArea({ trackId, trackName, sessions, deletedSessions, on
         onSelect={handleSelect}
         deletedCount={deletedSessions.length}
         onShowRecentlyDeleted={() => setShowRecentlyDeleted(true)}
+        startingSessions={startingSessions}
       />
     </div>
   );

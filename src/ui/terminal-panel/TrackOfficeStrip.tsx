@@ -12,6 +12,7 @@ interface Props {
   onSelect: (id: SessionId, additive: boolean) => void;
   deletedCount: number;
   onShowRecentlyDeleted: () => void;
+  startingSessions?: Set<string>;
 }
 
 /**
@@ -19,7 +20,7 @@ interface Props {
  * Click to select a session; ⌘-click to add a second for side-by-side view.
  * Collapse button in the header reclaims vertical space when not needed.
  */
-export function TrackOfficeStrip({ sessions, selectedIds, onSelect, deletedCount, onShowRecentlyDeleted }: Props) {
+export function TrackOfficeStrip({ sessions, selectedIds, onSelect, deletedCount, onShowRecentlyDeleted, startingSessions }: Props) {
   const [collapsed, setCollapsed] = useState(() => {
     try { return localStorage.getItem(COLLAPSED_KEY) === 'true'; } catch { return false; }
   });
@@ -74,7 +75,7 @@ export function TrackOfficeStrip({ sessions, selectedIds, onSelect, deletedCount
               className="shrink-0 w-[90px] h-full cursor-pointer"
               onClick={(e) => onSelect(session.id, e.metaKey)}
             >
-              <TrackDeskUnit session={session} selected={selectedIds.includes(session.id)} />
+              <TrackDeskUnit session={session} selected={selectedIds.includes(session.id)} starting={startingSessions?.has(session.id) ?? false} />
             </div>
           ))}
         </div>
@@ -122,9 +123,10 @@ function SessionStatusBadges({ sessions }: { sessions: Session[] }) {
 interface DeskProps {
   session: Session;
   selected: boolean;
+  starting: boolean;
 }
 
-function TrackDeskUnit({ session, selected }: DeskProps) {
+function TrackDeskUnit({ session, selected, starting }: DeskProps) {
   const activityState = getActivityState(session);
   const displayName = session.name || `session:${session.id.slice(0, 8)}`;
 
@@ -161,6 +163,21 @@ function TrackDeskUnit({ session, selected }: DeskProps) {
           {displayName}
         </span>
       </div>
+
+      {/* Starting overlay — same spinner as the New Session button */}
+      {starting && (
+        <div className="absolute inset-0 flex items-center justify-center rounded-lg bg-gray-900/70">
+          <svg
+            className="w-4 h-4 animate-spin text-white/60"
+            viewBox="0 0 12 12"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+          >
+            <path d="M6 1v2M6 9v2M1 6h2M9 6h2" strokeLinecap="round" />
+          </svg>
+        </div>
+      )}
     </div>
   );
 }
