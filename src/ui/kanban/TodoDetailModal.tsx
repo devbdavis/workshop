@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import type { Todo, TodoStatus, TodoPriority, Track, Agent } from '@foundation/types';
+import type { Todo, TodoStatus, TodoPriority, Track, Agent, PullRequest } from '@foundation/types';
 import { DispatchDropdown, type DispatchOptions } from '../track-view/DispatchDropdown';
 
 interface Props {
@@ -30,6 +30,9 @@ export function TodoDetailModal({ todo, tracks, onClose, onSave, onDelete, onDis
   const [description, setDescription] = useState('');
   const [resolution, setResolution] = useState('');
   const [issueKey, setTicketKey] = useState('');
+  const [pullRequests, setPullRequests] = useState<PullRequest[]>([]);
+  const [prDraft, setPrDraft] = useState<{ url: string; title: string } | null>(null);
+  const [editingPrIndex, setEditingPrIndex] = useState<number | null>(null);
   const [status, setStatus] = useState<TodoStatus>('backlog');
   const [priority, setPriority] = useState<TodoPriority>('medium');
   const [refined, setRefined] = useState(false);
@@ -43,6 +46,9 @@ export function TodoDetailModal({ todo, tracks, onClose, onSave, onDelete, onDis
       setDescription(todo.description || '');
       setResolution(todo.resolution || '');
       setTicketKey(todo.issueKey || '');
+      setPullRequests(todo.pullRequests ?? []);
+      setPrDraft(null);
+      setEditingPrIndex(null);
       setStatus(todo.status);
       setPriority(todo.priority);
       setRefined(todo.refined);
@@ -74,7 +80,42 @@ export function TodoDetailModal({ todo, tracks, onClose, onSave, onDelete, onDis
   const canDispatch = refined && (status === 'ready' || status === 'backlog');
 
   function handleSave() {
-    onSave(todo!.id, { title, description: description || undefined, resolution: resolution || undefined, issueKey: issueKey || undefined, status, priority, refined });
+    onSave(todo!.id, {
+      title,
+      description: description || undefined,
+      resolution: resolution || undefined,
+      issueKey: issueKey || undefined,
+      pullRequests: pullRequests.length > 0 ? pullRequests : undefined,
+      status,
+      priority,
+      refined,
+    });
+  }
+
+  function commitPrDraft() {
+    if (!prDraft || !prDraft.url.trim()) return;
+    const entry: PullRequest = { url: prDraft.url.trim(), title: prDraft.title.trim() || undefined };
+    if (editingPrIndex !== null) {
+      setPullRequests((prev) => prev.map((pr, i) => (i === editingPrIndex ? entry : pr)));
+      setEditingPrIndex(null);
+    } else {
+      setPullRequests((prev) => [...prev, entry]);
+    }
+    setPrDraft(null);
+  }
+
+  function startEditPr(index: number) {
+    const pr = pullRequests[index];
+    setEditingPrIndex(index);
+    setPrDraft({ url: pr.url, title: pr.title ?? '' });
+  }
+
+  function removePr(index: number) {
+    setPullRequests((prev) => prev.filter((_, i) => i !== index));
+    if (editingPrIndex === index) {
+      setEditingPrIndex(null);
+      setPrDraft(null);
+    }
   }
 
   return (
@@ -164,6 +205,84 @@ export function TodoDetailModal({ todo, tracks, onClose, onSave, onDelete, onDis
               placeholder="e.g. ASY-1402"
               className="w-full px-3 py-2 bg-gray-800 border border-gray-700 rounded-lg text-sm text-gray-200 font-mono placeholder:text-gray-600"
             />
+          </div>
+
+          <div>
+            <label className="text-xs text-gray-400 block mb-1">Pull Requests</label>
+            <div className="space-y-1.5">
+              {pullRequests.map((pr, i) => (
+                <div key={i} className="flex items-center gap-2 group">
+                  {editingPrIndex === i ? null : (
+                    <>
+                      <a
+                        href={pr.url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="flex-1 truncate text-xs text-blue-400 hover:text-blue-300 hover:underline font-mono"
+                        title={pr.url}
+                      >
+                        {pr.title || pr.url}
+                      </a>
+                      <button
+                        onClick={() => startEditPr(i)}
+                        className="opacity-0 group-hover:opacity-100 text-gray-500 hover:text-gray-300 text-xs px-1 transition-opacity"
+                        title="Edit"
+                      >
+                        ✎
+                      </button>
+                      <button
+                        onClick={() => removePr(i)}
+                        className="opacity-0 group-hover:opacity-100 text-gray-500 hover:text-red-400 text-xs px-1 transition-opacity"
+                        title="Remove"
+                      >
+                        ×
+                      </button>
+                    </>
+                  )}
+                </div>
+              ))}
+
+              {prDraft !== null ? (
+                <div className="space-y-1.5 pt-1">
+                  <input
+                    autoFocus
+                    value={prDraft.url}
+                    onChange={(e) => setPrDraft((d) => d && { ...d, url: e.target.value })}
+                    onKeyDown={(e) => { if (e.key === 'Enter') commitPrDraft(); if (e.key === 'Escape') { setPrDraft(null); setEditingPrIndex(null); } }}
+                    placeholder="PR URL"
+                    className="w-full px-3 py-1.5 bg-gray-800 border border-gray-600 rounded text-xs text-gray-200 font-mono placeholder:text-gray-600"
+                  />
+                  <input
+                    value={prDraft.title}
+                    onChange={(e) => setPrDraft((d) => d && { ...d, title: e.target.value })}
+                    onKeyDown={(e) => { if (e.key === 'Enter') commitPrDraft(); if (e.key === 'Escape') { setPrDraft(null); setEditingPrIndex(null); } }}
+                    placeholder="Label (optional)"
+                    className="w-full px-3 py-1.5 bg-gray-800 border border-gray-600 rounded text-xs text-gray-200 placeholder:text-gray-600"
+                  />
+                  <div className="flex gap-2">
+                    <button
+                      onClick={commitPrDraft}
+                      className="px-2 py-1 text-xs bg-blue-700 hover:bg-blue-600 text-white rounded transition-colors"
+                    >
+                      {editingPrIndex !== null ? 'Update' : 'Add'}
+                    </button>
+                    <button
+                      onClick={() => { setPrDraft(null); setEditingPrIndex(null); }}
+                      className="px-2 py-1 text-xs bg-gray-700 hover:bg-gray-600 text-gray-300 rounded transition-colors"
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <button
+                  onClick={() => setPrDraft({ url: '', title: '' })}
+                  className="text-xs text-gray-500 hover:text-gray-300 transition-colors"
+                >
+                  + Add PR
+                </button>
+              )}
+            </div>
           </div>
 
           {(status === 'review' || status === 'done') && (
