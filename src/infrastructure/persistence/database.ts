@@ -692,6 +692,13 @@ function runMigrations(db: Database.Database): void {
     // Column already exists — safe to ignore
   }
 
+  // Migration: add pull_requests column to todos (JSON array of {url, title?})
+  try {
+    db.exec(`ALTER TABLE todos ADD COLUMN pull_requests TEXT;`);
+  } catch {
+    // Column already exists — safe to ignore
+  }
+
   // Seed default repo_root setting
   db.exec(`INSERT OR IGNORE INTO settings (key, value) VALUES ('repo_root', '~/Klaviyo/Repos');`);
 
