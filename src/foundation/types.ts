@@ -146,6 +146,11 @@ export interface AutomationRun {
 export type TodoStatus = 'backlog' | 'ready' | 'in-progress' | 'review' | 'done';
 export type TodoPriority = 'low' | 'medium' | 'high';
 
+export interface PullRequest {
+  url: string;
+  title?: string;
+}
+
 export interface Todo {
   id: TodoId;
   trackId: TrackId;
@@ -154,6 +159,8 @@ export interface Todo {
   resolution?: string;
   /** Linear or Jira issue key (e.g. "ASY-1402"). Appended to worktree branch names. */
   issueKey?: string;
+  /** Pull requests associated with this todo. */
+  pullRequests?: PullRequest[];
   status: TodoStatus;
   priority: TodoPriority;
   refined: boolean;
