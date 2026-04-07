@@ -119,7 +119,7 @@ export function createTodoRouter(deps: TodoRouterDeps): Router {
   // --- Update todo ---
 
   router.put('/todos/:todoId', async (req, res) => {
-    const { title, description, resolution, issueKey, status, priority, refined, sessionId, sortOrder } = req.body;
+    const { title, description, resolution, issueKey, pullRequests, status, priority, refined, sessionId, sortOrder } = req.body;
 
     // If transitioning to done, check for an active session to clean up
     const existing = todos.findById(req.params.todoId as TodoId);
@@ -140,6 +140,7 @@ export function createTodoRouter(deps: TodoRouterDeps): Router {
       description,
       resolution,
       issueKey,
+      pullRequests,
       status,
       priority,
       refined,

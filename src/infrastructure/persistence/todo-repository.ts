@@ -1,7 +1,7 @@
 import { v4 as uuid } from 'uuid';
 import { getDatabase } from './database.js';
 import type { TodoRepository, TodoUpdateData } from '@domain/todo/repository';
-import type { Todo, TodoId, TodoStatus, TrackId, SessionId, AgentId } from '@foundation/types';
+import type { Todo, TodoId, TodoStatus, TrackId, SessionId, AgentId, PullRequest } from '@foundation/types';
 
 export function createTodoRepository(): TodoRepository {
   const db = getDatabase();
@@ -13,12 +13,12 @@ export function createTodoRepository(): TodoRepository {
   const findByStatusStmt = db.prepare('SELECT * FROM todos WHERE status = ? ORDER BY sort_order ASC, created_at DESC');
   const findBySessionStmt = db.prepare('SELECT * FROM todos WHERE session_id = ?');
   const insertStmt = db.prepare(
-    `INSERT INTO todos (id, track_id, title, description, resolution, issue_key, status, priority, refined, session_id, agent_id, sort_order, created_at, updated_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    `INSERT INTO todos (id, track_id, title, description, resolution, issue_key, pull_requests, status, priority, refined, session_id, agent_id, sort_order, created_at, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
   );
   const updateStmt = db.prepare(
     `UPDATE todos
-     SET title = ?, description = ?, resolution = ?, issue_key = ?, status = ?, priority = ?, refined = ?, session_id = ?, agent_id = ?, sort_order = ?, updated_at = ?
+     SET title = ?, description = ?, resolution = ?, issue_key = ?, pull_requests = ?, status = ?, priority = ?, refined = ?, session_id = ?, agent_id = ?, sort_order = ?, updated_at = ?
      WHERE id = ?`,
   );
   const deleteStmt = db.prepare('DELETE FROM todos WHERE id = ?');
@@ -60,6 +60,7 @@ export function createTodoRepository(): TodoRepository {
         data.description || null,
         data.resolution || null,
         data.issueKey || null,
+        data.pullRequests?.length ? JSON.stringify(data.pullRequests) : null,
         data.status,
         data.priority,
         data.refined ? 1 : 0,
@@ -77,6 +78,7 @@ export function createTodoRepository(): TodoRepository {
         description: data.description,
         resolution: data.resolution,
         issueKey: data.issueKey,
+        pullRequests: data.pullRequests,
         status: data.status,
         priority: data.priority,
         refined: data.refined,
@@ -97,6 +99,7 @@ export function createTodoRepository(): TodoRepository {
       const description = data.description !== undefined ? data.description : existing.description;
       const resolution = data.resolution !== undefined ? data.resolution : existing.resolution;
       const issueKey = data.issueKey !== undefined ? data.issueKey : existing.issueKey;
+      const pullRequests = data.pullRequests !== undefined ? data.pullRequests : existing.pullRequests;
       const status = data.status ?? existing.status;
       const priority = data.priority ?? existing.priority;
       const refined = data.refined !== undefined ? data.refined : existing.refined;
@@ -110,6 +113,7 @@ export function createTodoRepository(): TodoRepository {
         description || null,
         resolution || null,
         issueKey || null,
+        pullRequests?.length ? JSON.stringify(pullRequests) : null,
         status,
         priority,
         refined ? 1 : 0,
@@ -126,6 +130,7 @@ export function createTodoRepository(): TodoRepository {
         description,
         resolution,
         issueKey,
+        pullRequests,
         status,
         priority,
         refined,
@@ -152,6 +157,7 @@ interface TodoRow {
   description: string | null;
   resolution: string | null;
   issue_key: string | null;
+  pull_requests: string | null;
   status: string;
   priority: string;
   refined: number;
@@ -163,6 +169,15 @@ interface TodoRow {
 }
 
 function rowToTodo(row: TodoRow): Todo {
+  let pullRequests: PullRequest[] | undefined;
+  if (row.pull_requests) {
+    try {
+      pullRequests = JSON.parse(row.pull_requests) as PullRequest[];
+    } catch {
+      pullRequests = undefined;
+    }
+  }
+
   return {
     id: row.id as TodoId,
     trackId: row.track_id as TrackId,
@@ -170,6 +185,7 @@ function rowToTodo(row: TodoRow): Todo {
     description: row.description || undefined,
     resolution: row.resolution || undefined,
     issueKey: row.issue_key || undefined,
+    pullRequests,
     status: row.status as TodoStatus,
     priority: row.priority as Todo['priority'],
     refined: row.refined === 1,
