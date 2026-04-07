@@ -781,8 +781,9 @@ export function createApiRouter(deps: ApiRouterDeps = {}): Router {
         worktreeMode: worktreeMode && repos.length > 0,
         repos: worktreeMode ? repos : undefined,
         additionalDirs: trackPaths.length > 0 ? trackPaths.map((p) => p.path) : undefined,
+        onReady: (s) => broadcast('session:ready', trackId, { sessionId: s.id }),
       });
-      broadcast('session:created', trackId);
+      broadcast('session:created', trackId, { sessionId: session.id });
       res.status(201).json(session);
     } catch (err) {
       console.error('Failed to create session:', err);

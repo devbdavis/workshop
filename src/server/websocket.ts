@@ -66,7 +66,30 @@ export function setupWebSocket(server: HttpServer): void {
     });
   });
 
-  function handleTerminalConnection(ws: WebSocket, sessionId: SessionId): void {
+  /**
+   * Poll for the tmux session to exist, returning true when ready or false on timeout.
+   * Used to handle the window between session record creation and background tmux init.
+   */
+  function waitForTmux(tmuxSession: string, maxWaitMs = 30_000, intervalMs = 500): Promise<boolean> {
+    return new Promise((resolve) => {
+      const start = Date.now();
+      const check = () => {
+        try {
+          execSync(`tmux has-session -t ${tmuxSession}`, { stdio: 'pipe' });
+          resolve(true);
+          return;
+        } catch { /* not ready yet */ }
+        if (Date.now() - start >= maxWaitMs) {
+          resolve(false);
+          return;
+        }
+        setTimeout(check, intervalMs);
+      };
+      check();
+    });
+  }
+
+  async function handleTerminalConnection(ws: WebSocket, sessionId: SessionId): Promise<void> {
     const session = sessions.findById(sessionId);
     if (!session) {
       ws.close(1008, 'Session not found');
@@ -88,10 +111,10 @@ export function setupWebSocket(server: HttpServer): void {
       activePtys.delete(sessionId);
     }
 
-    // Verify the tmux session exists before attempting to attach
-    try {
-      execSync(`tmux has-session -t ${session.tmuxSession}`, { stdio: 'pipe' });
-    } catch {
+    // Wait for the tmux session to appear — it may still be initialising in the
+    // background (worktree creation, git fetch, etc.). Poll up to 30s.
+    const tmuxReady = await waitForTmux(session.tmuxSession);
+    if (!tmuxReady) {
       ws.close(1008, 'tmux session not found');
       return;
     }
