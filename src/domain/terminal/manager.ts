@@ -40,6 +40,12 @@ export interface CreateSessionOptions {
   issueKey?: string;
   /** Additional directories to pre-trust via --add-dir (e.g. track filesystem paths). */
   additionalDirs?: string[];
+  /**
+   * Called when the session is fully initialised (tmux running, CLI launched).
+   * Fires asynchronously — the createSession promise resolves before this is called.
+   * Use to broadcast readiness without blocking the HTTP response.
+   */
+  onReady?: (session: Session) => void;
 }
 
 export interface SyncResult {

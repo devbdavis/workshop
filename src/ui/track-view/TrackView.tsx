@@ -28,6 +28,9 @@ export function TrackView() {
   const [editingName, setEditingName] = useState(false);
   const [nameValue, setNameValue] = useState('');
   const [idleAlerts, setIdleAlerts] = useState<IdleAlert[]>([]);
+  // Session IDs that have been created but whose tmux/CLI init is still in progress.
+  // Cleared when session:ready arrives for that session.
+  const [startingSessions, setStartingSessions] = useState<Set<string>>(new Set());
 
   const loadTrack = useCallback(async () => {
     if (!trackId) return;
@@ -89,6 +92,16 @@ export function TrackView() {
             setTimeout(() => {
               setIdleAlerts((prev) => prev.filter((a) => a.id !== alert.id));
             }, 30_000);
+          } else if (event.type === 'session:created' && event.sessionId) {
+            setStartingSessions((prev) => new Set([...prev, event.sessionId!]));
+            loadTrack();
+          } else if (event.type === 'session:ready' && event.sessionId) {
+            setStartingSessions((prev) => {
+              const next = new Set(prev);
+              next.delete(event.sessionId!);
+              return next;
+            });
+            loadTrack();
           } else {
             loadTrack();
           }
@@ -120,6 +133,8 @@ export function TrackView() {
       if (res.ok) {
         const session: Session = await res.json();
         setSessions((prev) => [...prev, session]);
+        // Mark as starting immediately — cleared when session:ready arrives.
+        setStartingSessions((prev) => new Set([...prev, session.id]));
         return session;
       }
     } catch (err) {
@@ -289,6 +304,7 @@ export function TrackView() {
               trackName={track.name}
               sessions={sessions}
               deletedSessions={deletedSessions}
+              startingSessions={startingSessions}
               onDestroySession={destroySession}
               onRenameSession={renameSession}
               onRestoreSession={restoreSession}

@@ -27,7 +27,7 @@ export interface TodoRouterDeps {
   terminal: {
     createSession: (
       trackId: TrackId,
-      opts?: { systemPrompt?: string; workingDirectory?: string; background?: boolean; todoId?: string; initialPrompt?: string; provider?: SessionProvider; name?: string; worktreeMode?: boolean; repos?: TrackRepo[]; issueKey?: string; dangerouslySkipPermissions?: boolean; skipBackgroundInstructions?: boolean },
+      opts?: { systemPrompt?: string; workingDirectory?: string; background?: boolean; todoId?: string; initialPrompt?: string; provider?: SessionProvider; name?: string; worktreeMode?: boolean; repos?: TrackRepo[]; issueKey?: string; dangerouslySkipPermissions?: boolean; skipBackgroundInstructions?: boolean; onReady?: (session: { id: SessionId }) => void },
     ) => Promise<{ id: SessionId; trackId: TrackId; tmuxSession: string; state: string }>;
     destroySession: (sessionId: SessionId) => Promise<void>;
   };
@@ -300,6 +300,7 @@ export function createTodoRouter(deps: TodoRouterDeps): Router {
         issueKey: todo.issueKey,
         dangerouslySkipPermissions,
         skipBackgroundInstructions: templateHasBackgroundInstructions,
+        onReady: (s) => broadcast('session:ready', todo.trackId, { sessionId: s.id }),
       });
 
       // Update todo status, link session, and store agent reference
@@ -310,7 +311,7 @@ export function createTodoRouter(deps: TodoRouterDeps): Router {
       });
 
       broadcast('todo:dispatched', todo.trackId);
-      broadcast('session:created', todo.trackId);
+      broadcast('session:created', todo.trackId, { sessionId: session.id });
       res.status(201).json({ todo: updated, session });
     } catch (err) {
       console.error('Failed to dispatch todo:', err);
