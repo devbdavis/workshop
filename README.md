@@ -30,6 +30,20 @@ Workshop lets you organize development work into **tracks** — each with linked
 - **Claude Code CLI** (`claude`) — for AI-assisted terminal sessions
 - **macOS or Linux** — node-pty requires a Unix environment
 
+### Claude Code: allow-edits mode
+
+Workshop dispatches background agents that need to read and write files without prompting. Set `defaultMode` to `acceptEdits` in `~/.claude/settings.json` so Claude never pauses to ask permission mid-task:
+
+```json
+{
+  "permissions": {
+    "defaultMode": "acceptEdits"
+  }
+}
+```
+
+If `~/.claude/settings.json` doesn't exist yet, create it with just that content. Existing entries are merged — adding `defaultMode` won't affect your `allow`/`deny` lists or hooks.
+
 ### Quick environment setup (Nix)
 
 ```bash
