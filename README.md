@@ -147,6 +147,27 @@ Workshop exposes its API as an MCP server, allowing Claude Code to interact with
 
 2. Add the MCP server to your Claude Code config (`~/.claude/mcp.json`):
 
+**If using Nix** (recommended — ensures Node 24 without a system-level install):
+
+```json
+{
+  "mcpServers": {
+    "workshop": {
+      "command": "nix",
+      "args": ["develop", "--command", "npx", "tsx", "src/mcp/server.ts"],
+      "cwd": "/path/to/workshop",
+      "env": {
+        "WORKSHOP_API_URL": "http://localhost:3002"
+      }
+    }
+  }
+}
+```
+
+> **Note**: The `flake.nix` shellHook must write to stderr (`>&2`), not stdout. MCP uses stdout for JSON-RPC — any extra output there before the server starts will corrupt the framing and prevent the connection.
+
+**If using system Node 24+**:
+
 ```json
 {
   "mcpServers": {
