@@ -18,7 +18,7 @@
           ];
 
           shellHook = ''
-            echo "Workshop dev environment — Node $(node --version)"
+            echo "Workshop dev environment — Node $(node --version)" >&2
           '';
         };
       });
