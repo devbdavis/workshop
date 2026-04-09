@@ -281,7 +281,7 @@ function slugify(name: string): string {
 
 function formatSkillFile(data: SkillWriteData): string {
   const lines = ['---'];
-  lines.push(`name: ${data.name}`);
+  lines.push(`name: ${slugify(data.name)}`);
   lines.push(`description: ${data.description}`);
   lines.push('---');
   lines.push('');
