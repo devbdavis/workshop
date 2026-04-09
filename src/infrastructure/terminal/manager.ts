@@ -76,8 +76,14 @@ const NIX_DEVSHELL_VARS = [
   'DIRENV_WATCHES',
 ] as const;
 
-/** tmux `-e VAR=` flags that clear nix devshell contamination for new sessions */
-const NIX_CLEAN_TMUX_FLAGS = NIX_DEVSHELL_VARS.map((v) => `-e ${v}=`).join(' ');
+/** tmux `-e VAR=` flags that clear nix devshell contamination for new sessions.
+ *  Only emitted for vars that are actually present — avoids spuriously setting
+ *  empty vars on machines that don't have nix/direnv, which can trigger direnv
+ *  hooks and introduce shell startup latency that causes send-keys races. */
+const NIX_CLEAN_TMUX_FLAGS = NIX_DEVSHELL_VARS
+  .filter((v) => v in process.env)
+  .map((v) => `-e ${v}=`)
+  .join(' ');
 
 /** Seconds a dead tmux session gets before being reaped/suspended */
 const DYING_GRACE_PERIOD_MS = 30_000;
