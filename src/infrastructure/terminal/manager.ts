@@ -35,6 +35,15 @@ interface WorktreeMeta {
   repos: Array<{ path: string; name: string }>;
 }
 
+/** Subset of .claude/settings.json we read and merge across repos */
+interface ClaudeProjectSettings {
+  permissions?: {
+    allow?: string[];
+    deny?: string[];
+  };
+  env?: Record<string, string>;
+}
+
 /**
  * Slugify a session name into a git-safe branch name component.
  * Output: `workshop/{slug}-{shortId}[-{issueKey}]` — at most ~60 chars total.
@@ -151,6 +160,13 @@ function createWorktrees(sessionId: string, repos: TrackRepo[], sessionName?: st
   };
   writeFileSync(path.join(workspaceDir, '.worktree-meta.json'), JSON.stringify(meta), 'utf-8');
 
+  // Write merged .claude/settings.json and workspace.code-workspace
+  try {
+    writeWorkspaceArtifacts(workspaceDir, repos);
+  } catch (err) {
+    console.warn('[worktree] Failed to write workspace artifacts:', err);
+  }
+
   return workspaceDir;
 }
 
@@ -168,6 +184,73 @@ function rewritePathsForWorktree(prompt: string, repos: TrackRepo[], worktreeRoo
     result = result.split(repo.path).join(worktreePath);
   }
   return result;
+}
+
+/** Read a repo's .claude/settings.json, returning null if absent or unparseable. */
+function readProjectSettings(repoPath: string): ClaudeProjectSettings | null {
+  const settingsPath = path.join(repoPath, '.claude', 'settings.json');
+  if (!existsSync(settingsPath)) return null;
+  try {
+    return JSON.parse(readFileSync(settingsPath, 'utf-8')) as ClaudeProjectSettings;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Write two workspace-level files after all worktrees are created:
+ *
+ * 1. .claude/settings.json  — merged permissions and env from all source repos,
+ *    so Claude picks up project-level settings even when CWD is the workspace root.
+ *
+ * 2. workspace.code-workspace — Cursor/VS Code multi-root workspace file,
+ *    so editors open each repo as a named root rather than a flat directory.
+ *
+ * Reads from source repos (repo.path), not worktrees, so the merge always
+ * reflects the latest committed project settings.
+ * Best-effort — failures are logged but do not block session creation.
+ */
+function writeWorkspaceArtifacts(workspaceDir: string, repos: TrackRepo[]): void {
+  const allowSet = new Set<string>();
+  const denySet = new Set<string>();
+  const mergedEnv: Record<string, string> = {};
+
+  for (const repo of repos) {
+    const settings = readProjectSettings(repo.path);
+    if (!settings) continue;
+    for (const entry of settings.permissions?.allow ?? []) allowSet.add(entry);
+    for (const entry of settings.permissions?.deny ?? []) denySet.add(entry);
+    if (settings.env) Object.assign(mergedEnv, settings.env);
+  }
+
+  if (allowSet.size > 0 || denySet.size > 0 || Object.keys(mergedEnv).length > 0) {
+    const merged: ClaudeProjectSettings = {};
+    if (allowSet.size > 0 || denySet.size > 0) {
+      merged.permissions = {};
+      if (allowSet.size > 0) merged.permissions.allow = [...allowSet].sort();
+      if (denySet.size > 0) merged.permissions.deny = [...denySet].sort();
+    }
+    if (Object.keys(mergedEnv).length > 0) merged.env = mergedEnv;
+
+    const claudeDir = path.join(workspaceDir, '.claude');
+    mkdirSync(claudeDir, { recursive: true });
+    writeFileSync(
+      path.join(claudeDir, 'settings.json'),
+      JSON.stringify(merged, null, 2) + '\n',
+      'utf-8',
+    );
+    console.log(
+      `[worktree] workspace settings: ${allowSet.size} allows, ${denySet.size} denies, ${Object.keys(mergedEnv).length} env vars`,
+    );
+  }
+
+  const folders = repos.map((r) => ({ path: path.basename(r.path), name: path.basename(r.path) }));
+  writeFileSync(
+    path.join(workspaceDir, 'workspace.code-workspace'),
+    JSON.stringify({ folders, settings: {} }, null, 2) + '\n',
+    'utf-8',
+  );
+  console.log(`[worktree] workspace.code-workspace: ${repos.length} folder(s)`);
 }
 
 /**
