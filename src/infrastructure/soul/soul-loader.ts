@@ -1,4 +1,4 @@
-import { readFileSync, writeFileSync, existsSync, mkdirSync, unlinkSync } from 'node:fs';
+import { readFileSync, writeFileSync, existsSync, mkdirSync, unlinkSync, statSync } from 'node:fs';
 import path from 'node:path';
 
 export interface SoulLoader {
@@ -46,6 +46,9 @@ export function createSoulLoader(projectRoot: string): SoulLoader {
       mkdirSync(dir, { recursive: true });
     }
     writeFileSync(userPath, content, 'utf-8');
+    // Mirror to repo file so it shows as dirty in git and can be committed for cross-machine sync.
+    // The user override (~/.workshop/soul.md) remains the active source at runtime.
+    writeFileSync(defaultPath, content, 'utf-8');
   }
 
   function getInfo(): { content: string; source: 'user' | 'default' | 'none'; userPath: string; defaultPath: string } {
@@ -80,6 +83,21 @@ export function createSoulLoader(projectRoot: string): SoulLoader {
       } catch {
         // Ignore errors
       }
+    }
+  }
+
+  // On startup: if the repo soul.md was updated (e.g. via git pull) more recently
+  // than the user override, sync the override so the pulled version takes effect.
+  if (existsSync(defaultPath) && existsSync(userPath)) {
+    try {
+      const defaultMtime = statSync(defaultPath).mtimeMs;
+      const userMtime = statSync(userPath).mtimeMs;
+      if (defaultMtime > userMtime) {
+        writeFileSync(userPath, readFileSync(defaultPath, 'utf-8'), 'utf-8');
+        console.log('[soul] Synced user override from repo (repo file is newer)');
+      }
+    } catch {
+      // Non-fatal — continue with whichever file is readable
     }
   }
 
