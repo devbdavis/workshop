@@ -27,6 +27,7 @@ import { interpolateTemplate } from '@application/track-management/prompt-interp
 import { composeVaultContext } from '@application/vault/compose-vault-context.js';
 import type { AutomationEngine } from '@application/automation-engine/engine.js';
 import { createTaskScheduler } from '@application/scheduler/task-scheduler.js';
+import { importBundledSchedules } from '@application/scheduler/schedule-importer.js';
 import { createTodoRouter } from './todo-routes.js';
 import { createAgentRouter } from './agent-routes.js';
 import { createSkillRouter } from './skill-routes.js';
@@ -224,6 +225,8 @@ export function createApiRouter(deps: ApiRouterDeps = {}): Router {
   // Mount scheduled task sub-router
   const scheduledTasks = createScheduledTaskRepository();
   const scheduledTaskRuns = createScheduledTaskRunRepository();
+  // Seed any bundled schedule definitions from schedules/*.json that aren't yet in the DB
+  importBundledSchedules(projectRoot, scheduledTasks);
   const taskScheduler = createTaskScheduler({
     tasks: scheduledTasks,
     runs: scheduledTaskRuns,
@@ -889,11 +892,14 @@ export function createApiRouter(deps: ApiRouterDeps = {}): Router {
           // VSCode Remote WSL installs the `code` CLI shim into the WSL PATH.
           execSync(`code ${JSON.stringify(targetPath)}`, { stdio: 'pipe' });
         } else {
-          // Default: Cursor. Try CLI first, fall back to open -a.
+          // Prefer workspace.code-workspace if present — gives Cursor proper
+          // multi-root support with per-repo panels instead of a flat directory.
+          const workspaceFile = path.join(targetPath, 'workspace.code-workspace');
+          const editorTarget = existsSync(workspaceFile) ? workspaceFile : targetPath;
           try {
-            execSync(`cursor ${JSON.stringify(targetPath)}`, { stdio: 'pipe' });
+            execSync(`cursor ${JSON.stringify(editorTarget)}`, { stdio: 'pipe' });
           } catch {
-            execSync(`open -a Cursor ${JSON.stringify(targetPath)}`, { stdio: 'pipe' });
+            execSync(`open -a Cursor ${JSON.stringify(editorTarget)}`, { stdio: 'pipe' });
           }
         }
       }
