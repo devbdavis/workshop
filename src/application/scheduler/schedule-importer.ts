@@ -77,7 +77,7 @@ export function importBundledSchedules(
         scheduleDescription: describeSchedule(def.scheduleConfig),
         taskPrompt: def.taskPrompt,
         scriptPath,
-        enabled: def.enabled ?? true,
+        enabled: false, // Always import disabled — user opts in explicitly
         provider: 'claude',
       });
 
