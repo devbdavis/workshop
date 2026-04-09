@@ -6,6 +6,7 @@ interface Props {
   onEdit: () => void;
   onDelete: () => void;
   onImprove: () => void;
+  onRename: () => void;
 }
 
 const SOURCE_STYLES: Record<Skill['source'], string> = {
@@ -18,7 +19,7 @@ const SOURCE_LABELS: Record<Skill['source'], string> = {
   project: 'Project',
 };
 
-export function SkillCard({ skill, onEdit, onDelete, onImprove }: Props) {
+export function SkillCard({ skill, onEdit, onDelete, onImprove, onRename }: Props) {
   const [expanded, setExpanded] = useState(false);
   const isEditable = skill.source === 'global';
 
@@ -53,6 +54,9 @@ export function SkillCard({ skill, onEdit, onDelete, onImprove }: Props) {
             <>
               <button onClick={onImprove} className="text-xs text-gray-400 hover:text-blue-300">
                 Improve
+              </button>
+              <button onClick={onRename} className="text-xs text-gray-400 hover:text-yellow-300">
+                Rename
               </button>
               <button onClick={onEdit} className="text-xs text-blue-400 hover:text-blue-300">
                 Edit
