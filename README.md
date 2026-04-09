@@ -217,13 +217,23 @@ See `src/mcp/server.ts` for the complete list.
 
 ## Claude Code Skills
 
-Workshop includes [Claude Code skills](https://docs.anthropic.com/en/docs/claude-code/skills) for AI-assisted server management and MCP interaction. To install them:
+Workshop includes [Claude Code skills](https://docs.anthropic.com/en/docs/claude-code/skills) for server management, MCP interaction, and workflow execution. Symlink the whole set:
 
 ```bash
-# Symlink skills into your Claude Code skills directory
-ln -s "$(pwd)/skills/workshop-server" ~/.claude/skills/workshop-server
-ln -s "$(pwd)/skills/workshop-mcp" ~/.claude/skills/workshop-mcp
+ln -s "$(pwd)/skills/workshop-server"   ~/.claude/skills/workshop-server
+ln -s "$(pwd)/skills/workshop-mcp"      ~/.claude/skills/workshop-mcp
+ln -s "$(pwd)/skills/workshop-executor" ~/.claude/skills/workshop-executor
+ln -s "$(pwd)/skills/workflow-select"   ~/.claude/skills/workflow-select
+ln -s "$(pwd)/skills/workflow-review"   ~/.claude/skills/workflow-review
 ```
+
+| Skill | Purpose |
+|---|---|
+| `workshop-server` | Start, stop, restart, and check the Workshop production server |
+| `workshop-mcp` | Interact with Workshop MCP tools (tracks, todos, sessions) from Claude Code |
+| `workshop-executor` | Execute an approved implementation plan — delegates to team agents and reports back |
+| `workflow-select` | Select or design a playbook for a new workflow epic |
+| `workflow-review` | Post-implementation review: evaluates outcome and feeds learnings back into the playbook |
 
 After symlinking, Claude Code will automatically discover and use these skills when relevant.
 
