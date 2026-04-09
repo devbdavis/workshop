@@ -7,10 +7,16 @@ interface Props {
   onClose: () => void;
 }
 
+function slugify(name: string): string {
+  return name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'skill';
+}
+
 export function RenameSkillModal({ skill, onRename, onClose }: Props) {
   const [name, setName] = useState(skill.name);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
+
+  const slug = slugify(name);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
@@ -60,7 +66,8 @@ export function RenameSkillModal({ skill, onRename, onClose }: Props) {
               autoComplete="off"
             />
             <p className="text-[10px] text-gray-500 mt-1">
-              The skill folder will be renamed to match — all files inside are preserved.
+              Command: <span className="font-mono text-gray-400">/{slug}</span>
+              {' · '}Folder: <span className="font-mono text-gray-400">~/.claude/skills/{slug}/</span>
             </p>
           </div>
 

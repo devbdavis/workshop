@@ -231,7 +231,7 @@ export function renameGlobalSkill(id: SkillId, newName: string): Skill | null {
     if (fs.existsSync(newFlatPath)) throw new Error(`A skill named '${newSlug}' already exists`);
     fs.renameSync(flatPath, newFlatPath);
     const raw = fs.readFileSync(newFlatPath, 'utf-8');
-    fs.writeFileSync(newFlatPath, patchNameInFrontmatter(raw, newName), 'utf-8');
+    fs.writeFileSync(newFlatPath, patchNameInFrontmatter(raw, newSlug), 'utf-8');
     return parseSkillFile(newFlatPath, newSlug, 'global');
   }
 
@@ -241,7 +241,7 @@ export function renameGlobalSkill(id: SkillId, newName: string): Skill | null {
     const skillMdPath = path.join(newDirPath, 'SKILL.md');
     if (fs.existsSync(skillMdPath)) {
       const raw = fs.readFileSync(skillMdPath, 'utf-8');
-      fs.writeFileSync(skillMdPath, patchNameInFrontmatter(raw, newName), 'utf-8');
+      fs.writeFileSync(skillMdPath, patchNameInFrontmatter(raw, newSlug), 'utf-8');
     }
     return parseSkillFile(path.join(newDirPath, 'SKILL.md'), newSlug, 'global');
   }
