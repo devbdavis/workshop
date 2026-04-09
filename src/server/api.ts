@@ -888,11 +888,14 @@ export function createApiRouter(deps: ApiRouterDeps = {}): Router {
           // VSCode Remote WSL installs the `code` CLI shim into the WSL PATH.
           execSync(`code ${JSON.stringify(targetPath)}`, { stdio: 'pipe' });
         } else {
-          // Default: Cursor. Try CLI first, fall back to open -a.
+          // Prefer workspace.code-workspace if present — gives Cursor proper
+          // multi-root support with per-repo panels instead of a flat directory.
+          const workspaceFile = path.join(targetPath, 'workspace.code-workspace');
+          const editorTarget = existsSync(workspaceFile) ? workspaceFile : targetPath;
           try {
-            execSync(`cursor ${JSON.stringify(targetPath)}`, { stdio: 'pipe' });
+            execSync(`cursor ${JSON.stringify(editorTarget)}`, { stdio: 'pipe' });
           } catch {
-            execSync(`open -a Cursor ${JSON.stringify(targetPath)}`, { stdio: 'pipe' });
+            execSync(`open -a Cursor ${JSON.stringify(editorTarget)}`, { stdio: 'pipe' });
           }
         }
       }
