@@ -6,6 +6,7 @@ import {
   writeGlobalSkill,
   updateGlobalSkill,
   deleteGlobalSkill,
+  renameGlobalSkill,
 } from '@infrastructure/skills/filesystem-scanner.js';
 
 export interface SkillRouterDeps {
@@ -127,6 +128,25 @@ Return ONLY the JSON object, no other text or markdown.`;
     } catch (err) {
       console.error('Skill improvement failed:', err);
       res.status(500).json({ error: 'Skill improvement failed' });
+    }
+  });
+
+  // --- Rename skill (moves folder, updates frontmatter) ---
+
+  router.post('/skills/:id/rename', (req, res) => {
+    const id = req.params.id as SkillId;
+    const { name } = req.body;
+
+    if (id.startsWith('project:')) { res.status(403).json({ error: 'Cannot rename project skills' }); return; }
+    if (!name || typeof name !== 'string') { res.status(400).json({ error: 'name is required' }); return; }
+
+    try {
+      const renamed = renameGlobalSkill(id, name);
+      if (!renamed) { res.status(404).json({ error: 'Skill not found' }); return; }
+      res.json(renamed);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Failed to rename skill';
+      res.status(409).json({ error: message });
     }
   });
 

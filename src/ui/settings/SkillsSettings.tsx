@@ -3,6 +3,7 @@ import type { Skill } from '@foundation/types';
 import { SkillCard } from '../skills/SkillCard.js';
 import { SkillFormModal, type SkillFormData } from '../skills/SkillFormModal.js';
 import { ImproveSkillModal } from '../skills/ImproveSkillModal.js';
+import { RenameSkillModal } from '../skills/RenameSkillModal.js';
 
 export function SkillsSettings() {
   const [skills, setSkills] = useState<Skill[]>([]);
@@ -12,6 +13,7 @@ export function SkillsSettings() {
   const [creating, setCreating] = useState(false);
   const [editingSkill, setEditingSkill] = useState<Skill | null>(null);
   const [improvingSkill, setImprovingSkill] = useState<Skill | null>(null);
+  const [renamingSkill, setRenamingSkill] = useState<Skill | null>(null);
 
   async function loadSkills() {
     try {
@@ -61,6 +63,20 @@ export function SkillsSettings() {
     setImprovingSkill(null);
   }
 
+  async function handleRename(id: string, newName: string) {
+    const res = await fetch(`/api/skills/${encodeURIComponent(id)}/rename`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name: newName }),
+    });
+    if (!res.ok) {
+      const body = await res.json().catch(() => ({})) as { error?: string };
+      throw new Error(body.error ?? 'Rename failed');
+    }
+    setRenamingSkill(null);
+    loadSkills();
+  }
+
   async function handleDelete(id: string) {
     if (!confirm('Delete this skill?')) return;
     try {
@@ -106,6 +122,7 @@ export function SkillsSettings() {
                 onEdit={() => setEditingSkill(skill)}
                 onDelete={() => handleDelete(skill.id)}
                 onImprove={() => setImprovingSkill(skill)}
+                onRename={() => setRenamingSkill(skill)}
               />
             ))}
           </div>
@@ -131,6 +148,14 @@ export function SkillsSettings() {
           skill={improvingSkill}
           onApply={(data) => handleApplyImprovement(improvingSkill.id, data)}
           onClose={() => setImprovingSkill(null)}
+        />
+      )}
+
+      {renamingSkill && (
+        <RenameSkillModal
+          skill={renamingSkill}
+          onRename={(newName) => handleRename(renamingSkill.id, newName)}
+          onClose={() => setRenamingSkill(null)}
         />
       )}
     </>

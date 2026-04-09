@@ -217,6 +217,46 @@ export function updateGlobalSkill(id: SkillId, data: SkillWriteData): Skill | nu
   return null;
 }
 
+export function renameGlobalSkill(id: SkillId, newName: string): Skill | null {
+  const basename = id.replace(/^global:/, '');
+  const globalDir = path.join(os.homedir(), '.claude', 'skills');
+  const flatPath = path.join(globalDir, `${basename}.md`);
+  const dirPath = path.join(globalDir, basename);
+
+  const newSlug = slugify(newName);
+  const newFlatPath = path.join(globalDir, `${newSlug}.md`);
+  const newDirPath = path.join(globalDir, newSlug);
+
+  if (fs.existsSync(flatPath) && fs.statSync(flatPath).isFile()) {
+    if (fs.existsSync(newFlatPath)) throw new Error(`A skill named '${newSlug}' already exists`);
+    fs.renameSync(flatPath, newFlatPath);
+    const raw = fs.readFileSync(newFlatPath, 'utf-8');
+    fs.writeFileSync(newFlatPath, patchNameInFrontmatter(raw, newName), 'utf-8');
+    return parseSkillFile(newFlatPath, newSlug, 'global');
+  }
+
+  if (fs.existsSync(dirPath) && fs.statSync(dirPath).isDirectory()) {
+    if (fs.existsSync(newDirPath)) throw new Error(`A skill named '${newSlug}' already exists`);
+    fs.renameSync(dirPath, newDirPath);
+    const skillMdPath = path.join(newDirPath, 'SKILL.md');
+    if (fs.existsSync(skillMdPath)) {
+      const raw = fs.readFileSync(skillMdPath, 'utf-8');
+      fs.writeFileSync(skillMdPath, patchNameInFrontmatter(raw, newName), 'utf-8');
+    }
+    return parseSkillFile(path.join(newDirPath, 'SKILL.md'), newSlug, 'global');
+  }
+
+  return null;
+}
+
+function patchNameInFrontmatter(content: string, newName: string): string {
+  if (/^name:/m.test(content)) {
+    return content.replace(/^name:.*$/m, `name: ${newName}`);
+  }
+  // No name field — insert one after the opening fence
+  return content.replace(/^---\n/, `---\nname: ${newName}\n`);
+}
+
 export function deleteGlobalSkill(id: SkillId): boolean {
   const basename = id.replace(/^global:/, '');
   const flatPath = path.join(os.homedir(), '.claude', 'skills', `${basename}.md`);
