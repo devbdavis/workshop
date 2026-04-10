@@ -278,6 +278,15 @@ export function createTodoRouter(deps: TodoRouterDeps): Router {
         parts.push(`## Repositories\n\n${repoLines}`);
       }
 
+      // Track Paths
+      const paths = tracks.findPathsByTrack(todo.trackId);
+      if (paths.length > 0) {
+        const pathLines = paths
+          .map((p) => `- ${p.path}${p.label ? ` (${p.label})` : ''}`)
+          .join('\n');
+        parts.push(`## Track Paths\n\n${pathLines}`);
+      }
+
       // Add the todo task unless the template already includes it
       if (!templateHasTask) {
         parts.push(`## Task\n\n**${todo.title}**\n\n${todo.description || ''}`);

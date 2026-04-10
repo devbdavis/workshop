@@ -8,9 +8,10 @@ interface Props {
   trackId: string;
   sessionId: string;
   autoFocus?: boolean;
+  focusTrigger?: number;
 }
 
-export function TerminalPanel({ trackId, sessionId, autoFocus }: Props) {
+export function TerminalPanel({ trackId, sessionId, autoFocus, focusTrigger }: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
   const termRef = useRef<Terminal | null>(null);
   const wsRef = useRef<WebSocket | null>(null);
@@ -90,6 +91,12 @@ export function TerminalPanel({ trackId, sessionId, autoFocus }: Props) {
       term.dispose();
     };
   }, [trackId, sessionId]);
+
+  // Separate effect so focus pulses don't recreate the terminal.
+  useEffect(() => {
+    if (!focusTrigger) return;
+    termRef.current?.focus();
+  }, [focusTrigger]);
 
   return <div ref={containerRef} className="h-full w-full" onClick={() => termRef.current?.focus()} />;
 }

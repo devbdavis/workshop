@@ -130,6 +130,7 @@ export function PromptTemplates() {
           <p>{'{{track.repos}}'} &mdash; Comma-separated repo paths</p>
           <p>{'{{track.repos[0].path}}'} &mdash; First repo path</p>
           <p>{'{{track.repos[0].branch}}'} &mdash; First repo branch</p>
+          <p>{'{{track.paths}}'} &mdash; Comma-separated track paths (with labels)</p>
           <p>{'{{track.tickets}}'} &mdash; Comma-separated ticket IDs</p>
           <p>{'{{todo.id}}'} &mdash; Todo ID (dispatch only)</p>
           <p>{'{{todo.title}}'} &mdash; Todo title (dispatch only)</p>

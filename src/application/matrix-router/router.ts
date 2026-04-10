@@ -107,6 +107,15 @@ export function createMatrixRouter(deps: MatrixRouterDeps): MatrixRouter {
       parts.push(`## Repositories\n\n${repoLines}`);
     }
 
+    // Track Paths
+    const trackPaths = deps.tracks.findPathsByTrack(track.id);
+    if (trackPaths.length > 0) {
+      const pathLines = trackPaths
+        .map((p) => `- ${p.path}${p.label ? ` (${p.label})` : ''}`)
+        .join('\n');
+      parts.push(`## Track Paths\n\n${pathLines}`);
+    }
+
     return parts.join('\n\n---\n\n');
   }
 
