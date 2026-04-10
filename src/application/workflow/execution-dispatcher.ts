@@ -253,6 +253,18 @@ function composeExecutionPrompt(
         );
       }
 
+      const trackPaths = tracks.findPathsByTrack(ticket.trackId);
+      if (trackPaths.length > 0) {
+        parts.push(
+          '',
+          '## Track Paths',
+          '',
+          ...trackPaths.map(
+            (p) => `- ${p.path}${p.label ? ` (${p.label})` : ''}`,
+          ),
+        );
+      }
+
       const summary = summaries.findLatest(ticket.trackId);
       if (summary) {
         parts.push('', '## Current Project Status', '', summary.content);

@@ -760,6 +760,15 @@ export function createApiRouter(deps: ApiRouterDeps = {}): Router {
           parts.push(`## Repositories\n\n${repoLines}`);
         }
 
+        // 6. Track Paths
+        const pathsForPrompt = tracks.findPathsByTrack(trackId);
+        if (pathsForPrompt.length > 0) {
+          const pathLines = pathsForPrompt
+            .map((p) => `- ${p.path}${p.label ? ` (${p.label})` : ''}`)
+            .join('\n');
+          parts.push(`## Track Paths\n\n${pathLines}`);
+        }
+
         if (parts.length > 0) {
           systemPrompt = parts.join('\n\n---\n\n');
         }
