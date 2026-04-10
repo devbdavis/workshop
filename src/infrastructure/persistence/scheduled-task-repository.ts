@@ -170,7 +170,6 @@ export function createScheduledTaskRunRepository(): ScheduledTaskRunRepository {
 
   // Prepare statements once
   const findByTaskStmt = db.prepare('SELECT * FROM scheduled_task_runs WHERE task_id = ? ORDER BY started_at DESC LIMIT ?');
-  const findBySessionIdStmt = db.prepare('SELECT * FROM scheduled_task_runs WHERE session_id = ? LIMIT 1');
   const insertStmt = db.prepare(
     `INSERT INTO scheduled_task_runs (id, task_id, session_id, status, error, started_at, completed_at)
      VALUES (?, ?, ?, ?, ?, ?, ?)`,
@@ -178,20 +177,12 @@ export function createScheduledTaskRunRepository(): ScheduledTaskRunRepository {
   const completeStmt = db.prepare(
     'UPDATE scheduled_task_runs SET status = ?, error = ?, completed_at = ? WHERE id = ?',
   );
-  const saveOutputStmt = db.prepare(
-    'UPDATE scheduled_task_runs SET output = ? WHERE id = ?',
-  );
   const findRunByIdStmt = db.prepare('SELECT * FROM scheduled_task_runs WHERE id = ?');
 
   return {
     findByTask(taskId: ScheduledTaskId, limit = 50): ScheduledTaskRun[] {
       const rows = findByTaskStmt.all(taskId, limit) as RunRow[];
       return rows.map(rowToRun);
-    },
-
-    findBySessionId(sessionId: string): ScheduledTaskRun | null {
-      const row = findBySessionIdStmt.get(sessionId) as RunRow | undefined;
-      return row ? rowToRun(row) : null;
     },
 
     create(data): ScheduledTaskRun {
@@ -219,10 +210,6 @@ export function createScheduledTaskRunRepository(): ScheduledTaskRunRepository {
 
       const row = findRunByIdStmt.get(id) as RunRow | undefined;
       return row ? rowToRun(row) : null;
-    },
-
-    saveOutput(id: string, output: string): void {
-      saveOutputStmt.run(output, id);
     },
   };
 }
@@ -257,7 +244,6 @@ interface RunRow {
   session_id: string | null;
   status: string;
   error: string | null;
-  output: string | null;
   started_at: string;
   completed_at: string | null;
 }
@@ -293,7 +279,6 @@ function rowToRun(row: RunRow): ScheduledTaskRun {
     sessionId: (row.session_id as SessionId) || undefined,
     status: row.status as ScheduledTaskRun['status'],
     error: row.error || undefined,
-    output: row.output || undefined,
     startedAt: row.started_at,
     completedAt: row.completed_at || undefined,
   };

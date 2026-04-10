@@ -211,10 +211,37 @@ export function ScheduledTaskCard({
 
 function RunRow({ run }: { run: ScheduledTaskRun }) {
   const [showOutput, setShowOutput] = useState(false);
+  const [output, setOutput] = useState<string | null>(null);
+  const [outputLoading, setOutputLoading] = useState(false);
   const [showError, setShowError] = useState(false);
   const duration = run.completedAt
     ? formatDuration(new Date(run.startedAt), new Date(run.completedAt))
     : null;
+
+  async function toggleOutput() {
+    if (showOutput) {
+      setShowOutput(false);
+      return;
+    }
+    if (output !== null) {
+      setShowOutput(true);
+      return;
+    }
+    if (!run.sessionId) return;
+    setOutputLoading(true);
+    try {
+      const res = await fetch(`/api/sessions/${run.sessionId}/output`);
+      if (res.ok) {
+        const data = await res.json() as { output: string | null };
+        setOutput(data.output);
+      }
+    } catch {
+      // ignore
+    } finally {
+      setOutputLoading(false);
+      setShowOutput(true);
+    }
+  }
 
   return (
     <div className="text-[10px] bg-gray-950/50 rounded px-2 py-1.5">
@@ -224,12 +251,13 @@ function RunRow({ run }: { run: ScheduledTaskRun }) {
         </span>
         <span className="text-gray-500">{formatRelativeTime(run.startedAt)}</span>
         {duration && <span className="text-gray-600">{duration}</span>}
-        {run.output && (
+        {run.sessionId && (
           <button
-            onClick={() => setShowOutput((v) => !v)}
+            onClick={toggleOutput}
             className="text-gray-400 hover:text-gray-200"
+            disabled={outputLoading}
           >
-            {showOutput ? '▾ output' : '▸ output'}
+            {outputLoading ? 'loading…' : showOutput ? '▾ output' : '▸ output'}
           </button>
         )}
         {run.error && (
@@ -241,10 +269,16 @@ function RunRow({ run }: { run: ScheduledTaskRun }) {
           </button>
         )}
       </div>
-      {showOutput && run.output && (
-        <pre className="mt-1.5 text-gray-400 whitespace-pre-wrap break-all font-mono text-[9px] leading-relaxed max-h-64 overflow-y-auto bg-black/30 rounded p-1.5">
-          {run.output}
-        </pre>
+      {showOutput && (
+        output
+          ? (
+            <pre className="mt-1.5 text-gray-400 whitespace-pre-wrap break-all font-mono text-[9px] leading-relaxed max-h-64 overflow-y-auto bg-black/30 rounded p-1.5">
+              {output}
+            </pre>
+          )
+          : (
+            <p className="mt-1 text-gray-600 italic">No output captured for this run.</p>
+          )
       )}
       {showError && run.error && (
         <pre className="mt-1.5 text-red-400/80 whitespace-pre-wrap break-all font-mono leading-relaxed">
