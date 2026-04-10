@@ -355,6 +355,7 @@ export function createApiRouter(deps: ApiRouterDeps = {}): Router {
     tickets: workflowTickets,
     terminal,
     sessions,
+    taskRuns: scheduledTaskRuns,
   });
   router.use(executionHookRouter);
 
@@ -694,6 +695,22 @@ export function createApiRouter(deps: ApiRouterDeps = {}): Router {
       activityStatus: terminal.getActivityStatus(s.id),
     }));
     res.json(enriched);
+  });
+
+  // Terminal output captured at session end (written to session dir, auto-purged after 7 days)
+  router.get('/sessions/:sessionId/output', (req, res) => {
+    const outputPath = path.join(
+      homedir(), '.workshop', 'sessions', req.params.sessionId, 'output.txt',
+    );
+    if (!existsSync(outputPath)) {
+      res.json({ output: null });
+      return;
+    }
+    try {
+      res.json({ output: readFileSync(outputPath, 'utf-8') });
+    } catch {
+      res.json({ output: null });
+    }
   });
 
   router.get('/tracks/:id/sessions', (req, res) => {
