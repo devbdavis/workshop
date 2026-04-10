@@ -15,6 +15,7 @@ export interface SessionRepository {
   updateClaudeResumeId(id: SessionId, claudeResumeId: string): Session | null;
   updateTmuxSession(id: SessionId, tmuxSession: string): Session | null;
   updateWorktreeRoot(id: SessionId, worktreeRoot: string): Session | null;
+  updateWorkingDirectory(id: SessionId, workingDirectory: string): Session | null;
   /** Move a session to the recycle bin (sets deleted_at, state → 'dead'). */
   softDelete(id: SessionId): Session | null;
   /** Restore a session from the recycle bin (clears deleted_at, state → 'suspended'). */

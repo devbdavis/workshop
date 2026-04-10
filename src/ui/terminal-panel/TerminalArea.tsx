@@ -155,7 +155,8 @@ function TerminalPane({ trackId, session, onDestroy, onRename, defaultOpenPath, 
   const inputRef = useRef<HTMLInputElement>(null);
 
   const displayName = session.name || `session:${session.id.slice(0, 8)}`;
-  const openPath = session.worktreeRoot ?? defaultOpenPath;
+  const editorPath = session.worktreeRoot ?? defaultOpenPath;
+  const terminalPath = session.workingDirectory ?? editorPath;
 
   const startEditing = useCallback(() => {
     setEditValue(session.name || '');
@@ -201,16 +202,16 @@ function TerminalPane({ trackId, session, onDestroy, onRename, defaultOpenPath, 
           </span>
         )}
         <div className="flex items-center gap-1">
-          {openPath && (
+          {editorPath && (
             <>
               <button
                 onClick={() => fetch('/api/shell/open-in-editor', {
                   method: 'POST',
                   headers: { 'Content-Type': 'application/json' },
-                  body: JSON.stringify({ path: openPath, sessionId: session.id }),
+                  body: JSON.stringify({ path: editorPath, sessionId: session.id }),
                 })}
                 className="flex items-center gap-0.5 text-[10px] text-gray-500 hover:text-blue-400 px-1"
-                title={`Open in Cursor: ${openPath}`}
+                title={`Open in Cursor: ${editorPath}`}
               >
                 <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                   <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" />
@@ -223,10 +224,10 @@ function TerminalPane({ trackId, session, onDestroy, onRename, defaultOpenPath, 
                 onClick={() => fetch('/api/shell/open-in-editor', {
                   method: 'POST',
                   headers: { 'Content-Type': 'application/json' },
-                  body: JSON.stringify({ path: openPath, app: 'terminal' }),
+                  body: JSON.stringify({ path: terminalPath, app: 'terminal' }),
                 })}
                 className="text-[10px] text-gray-500 hover:text-green-400 px-1 font-mono"
-                title={`Open in iTerm: ${openPath}`}
+                title={`Open in iTerm: ${terminalPath}`}
               >
                 &gt;_
               </button>
