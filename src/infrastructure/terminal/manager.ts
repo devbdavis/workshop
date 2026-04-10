@@ -599,6 +599,8 @@ export function createTerminalManager(sessionRepo: SessionRepository, soulLoader
             cwd = options.repos.length === 1
               ? path.join(worktreeRoot, path.basename(options.repos[0].path))
               : worktreeRoot;
+            sessionRepo.updateWorkingDirectory(session.id, cwd);
+            session.workingDirectory = cwd;
 
             // Rewrite any original repo paths in prompts to point at the worktree
             // so agents don't wander back to the canonical clone.
