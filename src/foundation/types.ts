@@ -259,6 +259,8 @@ export interface ScheduledTask {
   lastRunStatus?: 'running' | 'completed' | 'failed';
   lastSessionId?: SessionId;
   runCount: number;
+  /** Next scheduled occurrence — computed server-side, not persisted */
+  nextRunAt?: string;
   createdAt: string;
   updatedAt: string;
 }

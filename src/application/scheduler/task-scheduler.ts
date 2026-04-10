@@ -1,5 +1,7 @@
 import cron from 'node-cron';
 import { spawn } from 'child_process';
+import os from 'os';
+import path from 'path';
 import type {
   ScheduledTask,
   ScheduledTaskId,
@@ -261,6 +263,12 @@ export function createTaskScheduler(deps: TaskSchedulerDeps): TaskScheduler {
         dispatchTrackId = getOrCreateScheduledTrack();
       }
 
+      // Default CWD to ~/.workshop/sessions so Claude Code doesn't trigger home-dir
+      // workspace trust prompts — it already trusts the Workshop-managed directory.
+      if (!workingDirectory) {
+        workingDirectory = path.join(os.homedir(), '.workshop', 'sessions');
+      }
+
       const session = await deps.terminal.createSession(dispatchTrackId, {
         systemPrompt: systemPrompt || undefined,
         workingDirectory,
@@ -269,10 +277,12 @@ export function createTaskScheduler(deps: TaskSchedulerDeps): TaskScheduler {
         provider: task.provider,
       });
 
-      // Update task state
+      // Update task state — 'completed' means the session was successfully dispatched.
+      // There is no lifecycle callback when the agent finishes, so 'running' would
+      // never transition and would permanently show as running in the UI.
       deps.tasks.update(task.id, {
         lastRunAt: now,
-        lastRunStatus: 'running',
+        lastRunStatus: 'completed',
         lastSessionId: session.id as SessionId,
         runCount: task.runCount + 1,
       });
