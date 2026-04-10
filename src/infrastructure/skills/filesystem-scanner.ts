@@ -326,8 +326,24 @@ function parseFrontmatter(content: string): ParsedFile {
       const colonIdx = line.indexOf(':');
       if (colonIdx > 0) {
         const key = line.slice(0, colonIdx).trim();
-        const value = line.slice(colonIdx + 1).trim();
-        frontmatter[key] = value;
+        const rawValue = line.slice(colonIdx + 1).trim();
+
+        // Handle YAML block scalars: > (folded) and | (literal), with optional chomping modifiers
+        if (/^[>|][+-]?$/.test(rawValue)) {
+          const isFolded = rawValue.startsWith('>');
+          const blockLines: string[] = [];
+          while (i + 1 < lines.length) {
+            const nextLine = lines[i + 1];
+            if (nextLine.trim() === '---' || (nextLine.length > 0 && !/^\s/.test(nextLine))) {
+              break;
+            }
+            i++;
+            blockLines.push(lines[i].trim());
+          }
+          frontmatter[key] = isFolded ? blockLines.join(' ').trim() : blockLines.join('\n').trim();
+        } else {
+          frontmatter[key] = rawValue;
+        }
       }
     }
   }
