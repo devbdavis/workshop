@@ -207,7 +207,7 @@ function TerminalPane({ trackId, session, onDestroy, onRename, defaultOpenPath, 
                 onClick={() => fetch('/api/shell/open-in-editor', {
                   method: 'POST',
                   headers: { 'Content-Type': 'application/json' },
-                  body: JSON.stringify({ path: openPath }),
+                  body: JSON.stringify({ path: openPath, sessionId: session.id }),
                 })}
                 className="flex items-center gap-0.5 text-[10px] text-gray-500 hover:text-blue-400 px-1"
                 title={`Open in Cursor: ${openPath}`}
