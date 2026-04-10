@@ -100,13 +100,6 @@ export function appendBackgroundInstructions(prompt: string, todoId?: string): s
       'When you have completed the task (or determined you cannot proceed):',
       `1. Use the workshop_update_todo MCP tool to update todo "${todoId}" status to "review"`,
       '2. Add a brief summary of what you accomplished or why you stopped to the description',
-      '3. Use /exit to close your session',
-      '',
-    );
-  } else {
-    instructions.push(
-      'When you have completed your task (or determined you cannot proceed),',
-      'use /exit to close your session so resources are freed.',
       '',
     );
   }
@@ -172,18 +165,17 @@ export function buildClaudeLauncher(
     }
   }
 
-  // Pass the initial prompt as a positional argument to claude so it's sent
-  // as the first message. This is reliable — no tmux paste race conditions.
-  // We write it to a file and use $(cat ...) to avoid shell quoting issues.
-  // (Not used for resumed sessions — they already have conversation context.)
-  //
-  // Background sessions do NOT use `exec` so that the bash process remains
-  // alive after Claude exits. This keeps the tmux session open long enough
-  // for the SessionEnd hook to capture pane output before the sync loop
-  // retires the session. Interactive sessions still use `exec` for clean
-  // exit-code propagation.
+  // Background sessions use --print mode so claude exits automatically when done.
+  // This avoids the interactive TUI and prevents Claude from misinterpreting the
+  // "use /exit" instruction as a Skill("exit") call. Bash stays alive (no exec)
+  // to keep the tmux pane open long enough for the SessionEnd hook to capture
+  // pane output. Interactive sessions still use exec for clean exit propagation.
   const useExec = !options?.background;
   const cmdPrefix = useExec ? 'exec ' : '';
+
+  if (options?.background) {
+    claudeArgs.push('--print');
+  }
 
   if (options?.initialPrompt && !options?.claudeResumeId) {
     const promptMsgFile = path.join(sessionDir, 'initial-prompt.txt');
