@@ -699,6 +699,13 @@ function runMigrations(db: Database.Database): void {
     // Column already exists — safe to ignore
   }
 
+  // Migration: add output column to scheduled_task_runs (captured terminal output)
+  try {
+    db.exec(`ALTER TABLE scheduled_task_runs ADD COLUMN output TEXT;`);
+  } catch {
+    // Column already exists — safe to ignore
+  }
+
   // Seed default repo_root setting
   db.exec(`INSERT OR IGNORE INTO settings (key, value) VALUES ('repo_root', '~/Klaviyo/Repos');`);
 
