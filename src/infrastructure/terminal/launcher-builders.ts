@@ -172,8 +172,6 @@ export function buildClaudeLauncher(
     }
   }
 
-
-
   // Pass the initial prompt as a positional argument to claude so it's sent
   // as the first message. This is reliable — no tmux paste race conditions.
   // We write it to a file and use $(cat ...) to avoid shell quoting issues.

@@ -25,7 +25,11 @@ fi
 SESSION_ID="${WORKSHOP_SESSION_ID:-}"
 
 if [ -z "$SESSION_ID" ]; then
-  INPUT=$(cat)
+  INPUT=''
+  while IFS= read -r -t 2 line; do
+    INPUT="${INPUT}${line}"
+  done
+  [ -z "$INPUT" ] && INPUT='{}'
   SESSION_ID=$(echo "$INPUT" | python3 -c "import sys,json; print(json.load(sys.stdin).get('session_id',''))" 2>/dev/null || echo "")
 fi
 
