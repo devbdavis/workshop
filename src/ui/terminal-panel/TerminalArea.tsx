@@ -10,6 +10,7 @@ interface Props {
   sessions: Session[];
   deletedSessions: Session[];
   startingSessions?: Set<string>;
+  pendingSelectSessionId?: SessionId | null;
   onDestroySession: (sessionId: string) => void;
   onRenameSession: (sessionId: string, name: string) => void;
   onRestoreSession: (sessionId: string) => void;
@@ -19,7 +20,7 @@ interface Props {
 
 const storageKey = (trackId: string) => `workshop:selected:${trackId}`;
 
-export function TerminalArea({ trackId, trackName, sessions, deletedSessions, startingSessions, onDestroySession, onRenameSession, onRestoreSession, onPurgeSession, defaultOpenPath }: Props) {
+export function TerminalArea({ trackId, trackName, sessions, deletedSessions, startingSessions, pendingSelectSessionId, onDestroySession, onRenameSession, onRestoreSession, onPurgeSession, defaultOpenPath }: Props) {
   const [selectedIds, setSelectedIds] = useState<SessionId[]>(() => {
     try {
       const stored = localStorage.getItem(storageKey(trackId));
@@ -62,6 +63,30 @@ export function TerminalArea({ trackId, trackName, sessions, deletedSessions, st
   }, [sessions]);
 
   const [showRecentlyDeleted, setShowRecentlyDeleted] = useState(false);
+
+  // Focus management: auto-select a newly created session and focus its terminal once ready.
+  const [pendingFocusSessionId, setPendingFocusSessionId] = useState<SessionId | null>(null);
+  const [focusTrigger, setFocusTrigger] = useState(0);
+  const prevStartingRef = useRef(new Set<string>());
+
+  // When a new session is signalled, jump selection to it.
+  useEffect(() => {
+    if (!pendingSelectSessionId) return;
+    if (!sessions.some((s) => s.id === pendingSelectSessionId)) return;
+    setSelectedIds([pendingSelectSessionId]);
+    setPendingFocusSessionId(pendingSelectSessionId);
+  }, [pendingSelectSessionId, sessions]);
+
+  // When the pending session exits startingSessions (tmux ready), fire a focus pulse.
+  useEffect(() => {
+    const prev = prevStartingRef.current;
+    const curr = startingSessions ?? new Set<string>();
+    prevStartingRef.current = curr;
+    if (pendingFocusSessionId && prev.has(pendingFocusSessionId) && !curr.has(pendingFocusSessionId)) {
+      setFocusTrigger((t) => t + 1);
+      setPendingFocusSessionId(null);
+    }
+  }, [startingSessions, pendingFocusSessionId]);
 
   const handleSelect = useCallback((id: SessionId, additive: boolean) => {
     setSelectedIds((prev) => {
@@ -118,6 +143,7 @@ export function TerminalArea({ trackId, trackName, sessions, deletedSessions, st
                 onRename={(name) => onRenameSession(session.id, name)}
                 defaultOpenPath={defaultOpenPath}
                 autoFocus={i === 0}
+                focusTrigger={i === 0 ? focusTrigger : undefined}
               />
             </div>
           ))
@@ -147,9 +173,10 @@ interface PaneProps {
   onRename: (name: string) => void;
   defaultOpenPath?: string;
   autoFocus: boolean;
+  focusTrigger?: number;
 }
 
-function TerminalPane({ trackId, session, onDestroy, onRename, defaultOpenPath, autoFocus }: PaneProps) {
+function TerminalPane({ trackId, session, onDestroy, onRename, defaultOpenPath, autoFocus, focusTrigger }: PaneProps) {
   const [editing, setEditing] = useState(false);
   const [editValue, setEditValue] = useState('');
   const inputRef = useRef<HTMLInputElement>(null);
@@ -242,7 +269,7 @@ function TerminalPane({ trackId, session, onDestroy, onRename, defaultOpenPath, 
         </div>
       </div>
       <div className="flex-1 min-h-0">
-        <TerminalPanel trackId={trackId} sessionId={session.id} autoFocus={autoFocus} />
+        <TerminalPanel trackId={trackId} sessionId={session.id} autoFocus={autoFocus} focusTrigger={focusTrigger} />
       </div>
     </div>
   );

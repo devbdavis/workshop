@@ -54,7 +54,7 @@ export function interpolateTemplate(template: string, ctx: TrackContext): string
     }
 
     if (key === 'track.paths') {
-      return paths.map((p) => p.path).join(', ');
+      return paths.map((p) => (p.label ? `${p.path} (${p.label})` : p.path)).join(', ');
     }
 
     if (key === 'todo.id') return todo?.id ?? _match;
