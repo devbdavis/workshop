@@ -85,6 +85,20 @@ const NIX_CLEAN_TMUX_FLAGS = NIX_DEVSHELL_VARS
   .map((v) => `-e ${v}=`)
   .join(' ');
 
+/**
+ * Propagate PATH from the Workshop server process into every new tmux session.
+ *
+ * tmux sessions inherit their environment from the tmux *server's* global
+ * environment (set when the server first started), not from the process that
+ * runs `tmux new-session`. On machines without a system-level Node install
+ * (e.g. WSL using nix flakes), the server-start-time PATH may not include the
+ * nix store paths where `claude` lives. Explicitly passing Workshop's own PATH
+ * ensures the session shell can reach whatever tools Workshop itself can reach.
+ */
+const TMUX_PATH_FLAG = process.env.PATH
+  ? `-e PATH=${JSON.stringify(process.env.PATH)}`
+  : '';
+
 /** Seconds a dead tmux session gets before being reaped/suspended */
 const DYING_GRACE_PERIOD_MS = 30_000;
 
@@ -490,7 +504,7 @@ export function createTerminalManager(sessionRepo: SessionRepository, soulLoader
         delete cleanEnv.CLAUDECODE;
 
         execSync(
-          `tmux new-session -d -s ${tmuxName} ${NIX_CLEAN_TMUX_FLAGS} -x 120 -y 40 -c ${JSON.stringify(cwd)}`,
+          `tmux new-session -d -s ${tmuxName} ${NIX_CLEAN_TMUX_FLAGS} ${TMUX_PATH_FLAG} -x 120 -y 40 -c ${JSON.stringify(cwd)}`,
           { stdio: 'pipe', env: cleanEnv },
         );
 
@@ -794,7 +808,7 @@ export function createTerminalManager(sessionRepo: SessionRepository, soulLoader
           delete cleanEnv.CLAUDECODE;
 
           execSync(
-            `tmux new-session -d -s ${tmuxName} ${NIX_CLEAN_TMUX_FLAGS} -x 120 -y 40 -c ${JSON.stringify(cwd)}`,
+            `tmux new-session -d -s ${tmuxName} ${NIX_CLEAN_TMUX_FLAGS} ${TMUX_PATH_FLAG} -x 120 -y 40 -c ${JSON.stringify(cwd)}`,
             { stdio: 'pipe', env: cleanEnv },
           );
 
@@ -845,7 +859,7 @@ export function createTerminalManager(sessionRepo: SessionRepository, soulLoader
       delete cleanEnv.CLAUDECODE;
 
       execSync(
-        `tmux new-session -d -s ${tmuxName} ${NIX_CLEAN_TMUX_FLAGS} -x 120 -y 40 -c ${JSON.stringify(cwd)}`,
+        `tmux new-session -d -s ${tmuxName} ${NIX_CLEAN_TMUX_FLAGS} ${TMUX_PATH_FLAG} -x 120 -y 40 -c ${JSON.stringify(cwd)}`,
         { stdio: 'pipe', env: cleanEnv },
       );
 
