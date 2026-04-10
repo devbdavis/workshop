@@ -21,6 +21,7 @@ export function createSessionRepository(): SessionRepository {
   const updateClaudeResumeIdStmt = db.prepare('UPDATE sessions SET claude_resume_id = ?, updated_at = ? WHERE id = ?');
   const updateTmuxSessionStmt = db.prepare('UPDATE sessions SET tmux_session = ?, updated_at = ? WHERE id = ?');
   const updateWorktreeRootStmt = db.prepare('UPDATE sessions SET worktree_root = ?, updated_at = ? WHERE id = ?');
+  const updateWorkingDirectoryStmt = db.prepare('UPDATE sessions SET working_directory = ?, updated_at = ? WHERE id = ?');
   const softDeleteStmt = db.prepare('UPDATE sessions SET deleted_at = ?, state = ?, updated_at = ? WHERE id = ?');
   const restoreStmt = db.prepare('UPDATE sessions SET deleted_at = NULL, state = ?, updated_at = ? WHERE id = ?');
   const deleteStmt = db.prepare('DELETE FROM sessions WHERE id = ?');
@@ -109,6 +110,13 @@ export function createSessionRepository(): SessionRepository {
     updateWorktreeRoot(id: SessionId, worktreeRoot: string): Session | null {
       const now = new Date().toISOString();
       const result = updateWorktreeRootStmt.run(worktreeRoot, now, id);
+      if (result.changes === 0) return null;
+      return this.findById(id);
+    },
+
+    updateWorkingDirectory(id: SessionId, workingDirectory: string): Session | null {
+      const now = new Date().toISOString();
+      const result = updateWorkingDirectoryStmt.run(workingDirectory, now, id);
       if (result.changes === 0) return null;
       return this.findById(id);
     },
