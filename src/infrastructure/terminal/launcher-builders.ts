@@ -176,12 +176,21 @@ export function buildClaudeLauncher(
   // as the first message. This is reliable — no tmux paste race conditions.
   // We write it to a file and use $(cat ...) to avoid shell quoting issues.
   // (Not used for resumed sessions — they already have conversation context.)
+  //
+  // Background sessions do NOT use `exec` so that the bash process remains
+  // alive after Claude exits. This keeps the tmux session open long enough
+  // for the SessionEnd hook to capture pane output before the sync loop
+  // retires the session. Interactive sessions still use `exec` for clean
+  // exit-code propagation.
+  const useExec = !options?.background;
+  const cmdPrefix = useExec ? 'exec ' : '';
+
   if (options?.initialPrompt && !options?.claudeResumeId) {
     const promptMsgFile = path.join(sessionDir, 'initial-prompt.txt');
     writeFileSync(promptMsgFile, options.initialPrompt, 'utf-8');
-    lines.push(`exec ${claudeArgs.join(' ')} "$(cat ${JSON.stringify(promptMsgFile)})"`);
+    lines.push(`${cmdPrefix}${claudeArgs.join(' ')} "$(cat ${JSON.stringify(promptMsgFile)})"`);
   } else {
-    lines.push(`exec ${claudeArgs.join(' ')}`);
+    lines.push(`${cmdPrefix}${claudeArgs.join(' ')}`);
   }
 }
 

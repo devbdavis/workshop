@@ -170,6 +170,7 @@ export function createScheduledTaskRunRepository(): ScheduledTaskRunRepository {
 
   // Prepare statements once
   const findByTaskStmt = db.prepare('SELECT * FROM scheduled_task_runs WHERE task_id = ? ORDER BY started_at DESC LIMIT ?');
+  const findBySessionIdStmt = db.prepare('SELECT * FROM scheduled_task_runs WHERE session_id = ? LIMIT 1');
   const insertStmt = db.prepare(
     `INSERT INTO scheduled_task_runs (id, task_id, session_id, status, error, started_at, completed_at)
      VALUES (?, ?, ?, ?, ?, ?, ?)`,
@@ -183,6 +184,11 @@ export function createScheduledTaskRunRepository(): ScheduledTaskRunRepository {
     findByTask(taskId: ScheduledTaskId, limit = 50): ScheduledTaskRun[] {
       const rows = findByTaskStmt.all(taskId, limit) as RunRow[];
       return rows.map(rowToRun);
+    },
+
+    findBySessionId(sessionId: string): ScheduledTaskRun | null {
+      const row = findBySessionIdStmt.get(sessionId) as RunRow | undefined;
+      return row ? rowToRun(row) : null;
     },
 
     create(data): ScheduledTaskRun {
