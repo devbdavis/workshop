@@ -171,6 +171,15 @@ export function createTaskScheduler(deps: TaskSchedulerDeps): TaskScheduler {
             .join('\n');
           parts.push(`## Repositories\n\n${repoLines}`);
         }
+
+        // Track Paths
+        const trackPaths = deps.tracks.findPathsByTrack(task.trackId);
+        if (trackPaths.length > 0) {
+          const pathLines = trackPaths
+            .map((p) => `- ${p.path}${p.label ? ` (${p.label})` : ''}`)
+            .join('\n');
+          parts.push(`## Track Paths\n\n${pathLines}`);
+        }
       }
     }
 

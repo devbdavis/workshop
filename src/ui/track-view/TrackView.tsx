@@ -1,6 +1,6 @@
 import { useEffect, useState, useCallback, useRef } from 'react';
 import { useParams, Link } from 'react-router-dom';
-import type { Track, Session, SessionProvider, TrackSummary, ExternalTicket, Todo } from '@foundation/types';
+import type { Track, Session, SessionId, SessionProvider, TrackSummary, ExternalTicket, Todo } from '@foundation/types';
 import { SummaryPanel } from './SummaryPanel';
 import { ContextPanel } from './ContextPanel';
 import { TicketPanel } from './TicketPanel';
@@ -24,10 +24,11 @@ export function TrackView() {
   const [todos, setTodos] = useState<Todo[]>([]);
   const [deletedSessions, setDeletedSessions] = useState<Session[]>([]);
   const [loading, setLoading] = useState(true);
-  const [sidebarTab, setSidebarTab] = useState<'context' | 'todos' | 'config'>('context');
+  const [sidebarTab, setSidebarTab] = useState<'context' | 'todos' | 'config'>('todos');
   const [editingName, setEditingName] = useState(false);
   const [nameValue, setNameValue] = useState('');
   const [idleAlerts, setIdleAlerts] = useState<IdleAlert[]>([]);
+  const [pendingSelectSessionId, setPendingSelectSessionId] = useState<SessionId | null>(null);
   // Session IDs that have been created but whose tmux/CLI init is still in progress.
   // Cleared when session:ready arrives for that session.
   const [startingSessions, setStartingSessions] = useState<Set<string>>(new Set());
@@ -135,6 +136,7 @@ export function TrackView() {
         setSessions((prev) => [...prev, session]);
         // Mark as starting immediately — cleared when session:ready arrives.
         setStartingSessions((prev) => new Set([...prev, session.id]));
+        setPendingSelectSessionId(session.id);
         return session;
       }
     } catch (err) {
@@ -305,6 +307,7 @@ export function TrackView() {
               sessions={sessions}
               deletedSessions={deletedSessions}
               startingSessions={startingSessions}
+              pendingSelectSessionId={pendingSelectSessionId}
               onDestroySession={destroySession}
               onRenameSession={renameSession}
               onRestoreSession={restoreSession}

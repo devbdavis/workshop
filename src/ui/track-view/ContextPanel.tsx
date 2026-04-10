@@ -56,20 +56,6 @@ export function ContextPanel({ track, onUpdate }: Props) {
         </div>
       )}
 
-      {track.paths && track.paths.length > 0 && (
-        <div>
-          <h4 className="text-xs font-medium text-gray-500 uppercase tracking-wide mb-1">Paths</h4>
-          <ul className="space-y-1">
-            {track.paths.map((p) => (
-              <li key={p.id} className="text-sm font-mono text-gray-400 text-xs">
-                {p.label && <span className="text-gray-500 mr-2">{p.label}:</span>}
-                {p.path}
-              </li>
-            ))}
-          </ul>
-        </div>
-      )}
-
       {modalOpen && (
         <ContextEditModal
           trackId={track.id}

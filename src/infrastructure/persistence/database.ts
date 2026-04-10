@@ -724,6 +724,7 @@ function seedDefaultTemplates(db: Database.Database): void {
 {{track.description}}
 
 Repositories: {{track.repos}}
+Track Paths: {{track.paths}}
 Linked tickets: {{track.tickets}}
 
 Follow best practices for code quality, testing, and documentation. Be concise and actionable in your responses.`,
@@ -740,6 +741,7 @@ Follow best practices for code quality, testing, and documentation. Be concise a
 {{track.description}}
 
 Repositories: {{track.repos}}
+Track Paths: {{track.paths}}
 
 Focus on:
 - Correctness and potential bugs
@@ -778,6 +780,10 @@ Be thorough in your analysis but keep recommendations practical and prioritized.
 const DEFAULT_TODO_TEMPLATE_CONTENT = `## Repositories
 
 {{track.repos}}
+
+## Track Paths
+
+{{track.paths}}
 
 ---
 
