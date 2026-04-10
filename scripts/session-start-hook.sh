@@ -29,12 +29,14 @@ elif [ -f "$AUTH_TOKEN_FILE" ]; then
 fi
 
 # Read stdin — Claude Code pipes session metadata as JSON (contains session_id).
-# Guard against blocking when stdin is a terminal (e.g. manual invocation).
-if [ -t 0 ]; then
-  INPUT='{}'
-else
-  INPUT=$(cat)
-fi
+# Use read -t so we don't block indefinitely if:
+#   - stdin is a terminal (manual invocation), or
+#   - Claude Code opens a pipe but doesn't close it promptly on some platforms.
+INPUT=''
+while IFS= read -r -t 2 line; do
+  INPUT="${INPUT}${line}"
+done
+[ -z "$INPUT" ] && INPUT='{}'
 
 # Fire-and-forget POST to Workshop (5s timeout)
 CURL_ARGS=(-s -m 5 -X POST "${WORKSHOP_API_URL}/api/hooks/session-start"
