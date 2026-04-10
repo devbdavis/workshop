@@ -6,7 +6,8 @@ import os from 'os';
 import type { ScheduledTaskId, TrackId, AgentId, SessionProvider } from '@foundation/types';
 import type { ScheduledTaskRepository, ScheduledTaskRunRepository } from '@domain/scheduled-task/repository';
 import type { TaskScheduler } from '@application/scheduler/task-scheduler.js';
-import { scheduleConfigToCron, describeSchedule, validateScheduleConfig } from '@application/scheduler/cron-utils.js';
+import { scheduleConfigToCron, describeSchedule, validateScheduleConfig, getNextScheduledAfter } from '@application/scheduler/cron-utils.js';
+import type { ScheduledTask } from '@foundation/types';
 import { broadcast } from './events.js';
 
 function callClaude(prompt: string): Promise<string> {
@@ -74,6 +75,13 @@ export interface ScheduledTaskRouterDeps {
   tasks: ScheduledTaskRepository;
   runs: ScheduledTaskRunRepository;
   scheduler: TaskScheduler;
+}
+
+/** Attach the next scheduled occurrence to an enabled task before sending to the client. */
+function withNextRunAt(task: ScheduledTask): ScheduledTask {
+  if (!task.enabled) return task;
+  const next = getNextScheduledAfter(task.cronExpression, new Date());
+  return next ? { ...task, nextRunAt: next.toISOString() } : task;
 }
 
 export function createScheduledTaskRouter(deps: ScheduledTaskRouterDeps): Router {
@@ -154,10 +162,10 @@ Return ONLY the JSON object, no other text or markdown.`;
   router.get('/scheduled-tasks', (req, res) => {
     const { trackId } = req.query;
     if (trackId) {
-      res.json(tasks.findByTrack(trackId as TrackId));
+      res.json(tasks.findByTrack(trackId as TrackId).map(withNextRunAt));
       return;
     }
-    res.json(tasks.findAll());
+    res.json(tasks.findAll().map(withNextRunAt));
   });
 
   // --- Get single scheduled task ---
@@ -168,7 +176,7 @@ Return ONLY the JSON object, no other text or markdown.`;
       res.status(404).json({ error: 'Scheduled task not found' });
       return;
     }
-    res.json(task);
+    res.json(withNextRunAt(task));
   });
 
   // --- Create scheduled task ---

@@ -4,12 +4,17 @@
  * - /hooks/agent-progress — SubagentStop HTTP hook: tracks which agents completed
  * - /hooks/session-end — SessionEnd command hook callback: cleans up finished sessions
  */
+import { execSync } from 'child_process';
+import { writeFileSync, mkdirSync } from 'fs';
+import path from 'path';
+import os from 'os';
 import { Router } from 'express';
 import type { SessionId, WorkflowTicketId, ExecutionData } from '@foundation/types';
 import type { SessionRepository } from '@domain/session/repository.js';
 import type { WorkflowTicketRepository } from '@domain/workflow/ticket-repository.js';
 import type { WorkflowEngine } from '@application/workflow/engine.js';
 import type { TerminalManager } from '@infrastructure/terminal/manager.js';
+import type { ScheduledTaskRunRepository } from '@domain/scheduled-task/repository.js';
 import { broadcast } from './events.js';
 
 export interface ExecutionHookRouterDeps {
@@ -17,11 +22,37 @@ export interface ExecutionHookRouterDeps {
   tickets: WorkflowTicketRepository;
   terminal: TerminalManager;
   sessions: SessionRepository;
+  taskRuns: ScheduledTaskRunRepository;
+}
+
+const SESSION_DATA_DIR = path.join(os.homedir(), '.workshop', 'sessions');
+
+/**
+ * Capture the full tmux scrollback and write it to <sessionDir>/output.txt.
+ * The session dir persists for 7 days in the recycle bin — no SQLite blobs.
+ */
+function captureOutputToFile(sessionId: string, tmuxSession: string, maxLines = 500): void {
+  try {
+    const raw = execSync(
+      `tmux capture-pane -t ${tmuxSession} -p -S -`,
+      { stdio: 'pipe', encoding: 'utf-8', timeout: 5000 },
+    );
+    if (!raw.trim()) return;
+    const lines = raw.split('\n');
+    const content = lines.length > maxLines
+      ? [`[... ${lines.length - maxLines} earlier lines omitted ...]`, ...lines.slice(-maxLines)].join('\n')
+      : raw;
+    const sessionDir = path.join(SESSION_DATA_DIR, sessionId);
+    mkdirSync(sessionDir, { recursive: true });
+    writeFileSync(path.join(sessionDir, 'output.txt'), content.trimEnd() + '\n', 'utf-8');
+  } catch {
+    // Non-fatal — tmux may already be gone or dir unwritable
+  }
 }
 
 export function createExecutionHookRouter(deps: ExecutionHookRouterDeps): Router {
   const router = Router();
-  const { engine, tickets, terminal, sessions } = deps;
+  const { engine, tickets, terminal, sessions, taskRuns } = deps;
 
   /**
    * SessionStart hook — Claude Code sends this when a session begins.
@@ -149,6 +180,22 @@ export function createExecutionHookRouter(deps: ExecutionHookRouterDeps): Router
       if (session?.deletedAt) {
         console.log(`Session ${sessionId} is already in the recycle bin — skipping`);
       } else if (session) {
+        // Capture terminal output to <sessionDir>/output.txt before killing tmux.
+        // The session dir persists for 7 days in the recycle bin — no SQLite blobs.
+        // Also complete any associated scheduled-task run with the real end timestamp
+        // (the run was left in 'running' state by the task scheduler so duration is accurate).
+        if (session.tmuxSession) {
+          captureOutputToFile(sessionId, session.tmuxSession);
+        }
+        try {
+          const run = taskRuns.findBySessionId(sessionId);
+          if (run && run.status === 'running') {
+            taskRuns.complete(run.id, 'completed');
+          }
+        } catch (runErr) {
+          console.warn(`Failed to complete scheduled task run for session ${sessionId}:`, runErr);
+        }
+
         try {
           await terminal.softDeleteSession(sessionId as SessionId);
           broadcast('session:deleted', sessionId);

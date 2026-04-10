@@ -132,6 +132,19 @@ export function getLastScheduledBefore(cronExpression: string, before: Date): Da
   }
 }
 
+/**
+ * Return the next future occurrence of a cron expression after `after`.
+ * Returns null if the expression is invalid.
+ */
+export function getNextScheduledAfter(cronExpression: string, after: Date): Date | null {
+  try {
+    const expr = CronExpressionParser.parse(cronExpression, { currentDate: after });
+    return expr.next().toDate();
+  } catch {
+    return null;
+  }
+}
+
 // --- Helpers ---
 
 function intervalToCron(minutes: number): string {
