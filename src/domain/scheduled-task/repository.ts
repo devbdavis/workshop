@@ -42,6 +42,8 @@ export interface ScheduledTaskRepository {
 
 export interface ScheduledTaskRunRepository {
   findByTask(taskId: ScheduledTaskId, limit?: number): ScheduledTaskRun[];
+  findBySessionId(sessionId: string): ScheduledTaskRun | null;
   create(run: Omit<ScheduledTaskRun, 'id'>): ScheduledTaskRun;
   complete(id: string, status: 'completed' | 'failed', error?: string): ScheduledTaskRun | null;
+  saveOutput(id: string, output: string): void;
 }

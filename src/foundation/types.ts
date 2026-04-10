@@ -271,6 +271,8 @@ export interface ScheduledTaskRun {
   sessionId?: SessionId;
   status: 'running' | 'completed' | 'failed';
   error?: string;
+  /** Terminal output captured when the session ended */
+  output?: string;
   startedAt: string;
   completedAt?: string;
 }

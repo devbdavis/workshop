@@ -4,12 +4,14 @@
  * - /hooks/agent-progress — SubagentStop HTTP hook: tracks which agents completed
  * - /hooks/session-end — SessionEnd command hook callback: cleans up finished sessions
  */
+import { execSync } from 'child_process';
 import { Router } from 'express';
 import type { SessionId, WorkflowTicketId, ExecutionData } from '@foundation/types';
 import type { SessionRepository } from '@domain/session/repository.js';
 import type { WorkflowTicketRepository } from '@domain/workflow/ticket-repository.js';
 import type { WorkflowEngine } from '@application/workflow/engine.js';
 import type { TerminalManager } from '@infrastructure/terminal/manager.js';
+import type { ScheduledTaskRunRepository } from '@domain/scheduled-task/repository.js';
 import { broadcast } from './events.js';
 
 export interface ExecutionHookRouterDeps {
@@ -17,11 +19,29 @@ export interface ExecutionHookRouterDeps {
   tickets: WorkflowTicketRepository;
   terminal: TerminalManager;
   sessions: SessionRepository;
+  taskRuns: ScheduledTaskRunRepository;
+}
+
+/** Capture the full tmux scrollback for a session, capped at maxLines. */
+function captureSessionOutput(tmuxSession: string, maxLines = 500): string {
+  try {
+    const raw = execSync(
+      `tmux capture-pane -t ${tmuxSession} -p -S -`,
+      { stdio: 'pipe', encoding: 'utf-8', timeout: 5000 },
+    );
+    const lines = raw.split('\n');
+    const trimmed = lines.length > maxLines
+      ? [`[... ${lines.length - maxLines} lines omitted ...]`, ...lines.slice(-maxLines)]
+      : lines;
+    return trimmed.join('\n').trimEnd();
+  } catch {
+    return '';
+  }
 }
 
 export function createExecutionHookRouter(deps: ExecutionHookRouterDeps): Router {
   const router = Router();
-  const { engine, tickets, terminal, sessions } = deps;
+  const { engine, tickets, terminal, sessions, taskRuns } = deps;
 
   /**
    * SessionStart hook — Claude Code sends this when a session begins.
@@ -149,6 +169,20 @@ export function createExecutionHookRouter(deps: ExecutionHookRouterDeps): Router
       if (session?.deletedAt) {
         console.log(`Session ${sessionId} is already in the recycle bin — skipping`);
       } else if (session) {
+        // Capture terminal output before killing the tmux session — last chance to get logs.
+        // Only done for sessions linked to a scheduled task run (avoids storing output for all sessions).
+        try {
+          const run = taskRuns.findBySessionId(sessionId);
+          if (run && session.tmuxSession) {
+            const output = captureSessionOutput(session.tmuxSession);
+            if (output) {
+              taskRuns.saveOutput(run.id, output);
+            }
+          }
+        } catch (captureErr) {
+          console.warn(`Failed to capture output for session ${sessionId}:`, captureErr);
+        }
+
         try {
           await terminal.softDeleteSession(sessionId as SessionId);
           broadcast('session:deleted', sessionId);

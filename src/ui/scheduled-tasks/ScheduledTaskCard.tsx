@@ -210,43 +210,46 @@ export function ScheduledTaskCard({
 }
 
 function RunRow({ run }: { run: ScheduledTaskRun }) {
-  const [expanded, setExpanded] = useState(false);
+  const [showOutput, setShowOutput] = useState(false);
+  const [showError, setShowError] = useState(false);
   const duration = run.completedAt
     ? formatDuration(new Date(run.startedAt), new Date(run.completedAt))
     : null;
 
   return (
     <div className="text-[10px] bg-gray-950/50 rounded px-2 py-1.5">
-      <div className="flex items-center gap-2">
+      <div className="flex items-center gap-2 flex-wrap">
         <span className={`px-1 py-0.5 rounded shrink-0 ${RUN_STATUS_STYLES[run.status] || ''}`}>
           {run.status}
         </span>
         <span className="text-gray-500">{formatRelativeTime(run.startedAt)}</span>
         {duration && <span className="text-gray-600">{duration}</span>}
-        {run.sessionId && (
-          <a
-            href={`/sessions/${run.sessionId}`}
-            className="text-blue-500 hover:text-blue-400 ml-auto shrink-0"
-            title="View session"
+        {run.output && (
+          <button
+            onClick={() => setShowOutput((v) => !v)}
+            className="text-gray-400 hover:text-gray-200"
           >
-            view session →
-          </a>
+            {showOutput ? '▾ output' : '▸ output'}
+          </button>
+        )}
+        {run.error && (
+          <button
+            onClick={() => setShowError((v) => !v)}
+            className="text-red-400 hover:text-red-300"
+          >
+            {showError ? '▾ error' : '▸ error'}
+          </button>
         )}
       </div>
-      {run.error && (
-        <div className="mt-1">
-          <button
-            onClick={() => setExpanded((v) => !v)}
-            className="text-red-400 hover:text-red-300 text-left"
-          >
-            {expanded ? '▾ error' : '▸ error'}
-          </button>
-          {expanded && (
-            <pre className="mt-1 text-red-400/80 whitespace-pre-wrap break-all font-mono leading-relaxed">
-              {run.error}
-            </pre>
-          )}
-        </div>
+      {showOutput && run.output && (
+        <pre className="mt-1.5 text-gray-400 whitespace-pre-wrap break-all font-mono text-[9px] leading-relaxed max-h-64 overflow-y-auto bg-black/30 rounded p-1.5">
+          {run.output}
+        </pre>
+      )}
+      {showError && run.error && (
+        <pre className="mt-1.5 text-red-400/80 whitespace-pre-wrap break-all font-mono leading-relaxed">
+          {run.error}
+        </pre>
       )}
     </div>
   );

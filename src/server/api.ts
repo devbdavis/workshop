@@ -355,6 +355,7 @@ export function createApiRouter(deps: ApiRouterDeps = {}): Router {
     tickets: workflowTickets,
     terminal,
     sessions,
+    taskRuns: scheduledTaskRuns,
   });
   router.use(executionHookRouter);
 
