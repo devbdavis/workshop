@@ -244,6 +244,11 @@ export function createTaskScheduler(deps: TaskSchedulerDeps): TaskScheduler {
         }
       }
 
+      // Append the exit instruction directly to the task prompt so Claude sees it
+      // in the initial message — the system-prompt instruction alone is not reliable
+      // because Claude returns to interactive mode after responding without re-reading it.
+      effectivePrompt = `${effectivePrompt}\n\n---\n\nWhen you have completed the above task (or determined you cannot proceed), use /exit to close this session.`;
+
       // Determine working directory and dispatch track
       let workingDirectory: string | undefined;
       let dispatchTrackId: TrackId;
