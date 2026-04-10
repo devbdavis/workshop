@@ -678,6 +678,25 @@ export function createTerminalManager(sessionRepo: SessionRepository, soulLoader
       const session = sessionRepo.findById(sessionId);
       if (!session) return;
 
+      // Capture tmux scrollback before killing — preserves output for the recycle bin viewer.
+      try {
+        const raw = execSync(`tmux capture-pane -t ${session.tmuxSession} -p -S -`, {
+          stdio: 'pipe', encoding: 'utf-8', timeout: 5000,
+        });
+        if (raw.trim()) {
+          const lines = raw.split('\n');
+          const maxLines = 500;
+          const content = lines.length > maxLines
+            ? [`[... ${lines.length - maxLines} earlier lines omitted ...]`, ...lines.slice(-maxLines)].join('\n')
+            : raw;
+          const sessionDir = path.join(SESSION_DATA_DIR, sessionId);
+          mkdirSync(sessionDir, { recursive: true });
+          writeFileSync(path.join(sessionDir, 'output.txt'), content.trimEnd() + '\n', 'utf-8');
+        }
+      } catch {
+        // Non-fatal — tmux may already be gone
+      }
+
       // Kill the tmux process — the worktree and session dir are preserved for recovery.
       try {
         execSync(`tmux kill-session -t ${session.tmuxSession}`, { stdio: 'pipe' });

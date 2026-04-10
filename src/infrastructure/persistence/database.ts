@@ -819,7 +819,6 @@ You are running as a background agent dispatched from Workshop.
 When you have completed the task (or determined you cannot proceed):
 1. Use the workshop_update_todo MCP tool to update todo "{{todo.id}}" status to "review"
 2. Add a brief summary of what you accomplished or why you stopped to the description
-3. Use /exit to close your session
 `;
 
 /**
@@ -838,8 +837,8 @@ export function ensureDefaultTodoTemplate(): void {
 
   if (existing) {
     templateId = existing.id;
-    // Replace old soul-based content that was incorrectly seeded in a previous version
-    if (existing.content.includes('Workshop Agent Soul') || existing.content.includes('You are Jeeves')) {
+    // Replace old soul-based content or templates that still include the /exit instruction
+    if (existing.content.includes('Workshop Agent Soul') || existing.content.includes('You are Jeeves') || existing.content.includes('Use /exit to close your session')) {
       db.prepare(`UPDATE prompt_templates SET content = ?, updated_at = ? WHERE id = ?`).run(
         DEFAULT_TODO_TEMPLATE_CONTENT, new Date().toISOString(), templateId,
       );

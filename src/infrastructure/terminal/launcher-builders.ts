@@ -165,15 +165,16 @@ export function buildClaudeLauncher(
     }
   }
 
-  // Background sessions use --print mode so claude exits automatically when done.
-  // This avoids the interactive TUI and prevents Claude from misinterpreting the
-  // "use /exit" instruction as a Skill("exit") call. Bash stays alive (no exec)
-  // to keep the tmux pane open long enough for the SessionEnd hook to capture
-  // pane output. Interactive sessions still use exec for clean exit propagation.
-  const useExec = !options?.background;
+  // Scheduled background sessions (no todoId) use --print so Claude auto-exits.
+  // Todo-dispatched background sessions run the interactive TUI so the user can
+  // watch progress — the server retires them when the todo is moved to "review".
+  // Bash stays alive (no exec) for scheduled sessions so the tmux pane remains
+  // open long enough for the SessionEnd hook to capture output before cleanup.
+  const isScheduled = options?.background && !options?.todoId;
+  const useExec = !options?.background || !!options?.todoId;
   const cmdPrefix = useExec ? 'exec ' : '';
 
-  if (options?.background) {
+  if (isScheduled) {
     claudeArgs.push('--print');
   }
 
