@@ -336,12 +336,12 @@ export function createTerminalManager(sessionRepo: SessionRepository, soulLoader
   }
 
   /** Launch an AI CLI inside an existing tmux session */
-  function launchCli(
+  async function launchCli(
     session: Session,
     tmuxName: string,
     cwd: string,
     effectiveOptions?: CreateSessionOptions,
-  ): void {
+  ): Promise<void> {
     const provider = session.provider;
     const sessionDir = getSessionDir(session.id);
     const launcherFile = path.join(sessionDir, 'launch.sh');
@@ -359,6 +359,25 @@ export function createTerminalManager(sessionRepo: SessionRepository, soulLoader
 
     writeFileSync(launcherFile, launcherLines.join('\n') + '\n', 'utf-8');
     chmodSync(launcherFile, 0o755);
+
+    // Wait for the shell to initialise before sending the launcher command.
+    // `tmux new-session -d` returns as soon as the session record is created,
+    // but the shell inside may not have started yet — especially on WSL where
+    // the VFS adds ~300–500 ms of startup latency. A send-keys fired too early
+    // is silently dropped. We poll the pane output (up to 5 s) until the shell
+    // has produced at least one character (the prompt).
+    const shellReadyDeadline = Date.now() + 5000;
+    while (Date.now() < shellReadyDeadline) {
+      try {
+        const pane = execSync(`tmux capture-pane -t ${tmuxName} -p`, {
+          stdio: 'pipe',
+          encoding: 'utf-8',
+          timeout: 1000,
+        });
+        if (pane.trim().length > 0) break;
+      } catch { /* session not visible yet — keep trying */ }
+      await new Promise((resolve) => setTimeout(resolve, 100));
+    }
 
     execSync(
       `tmux send-keys -t ${tmuxName} ${JSON.stringify(launcherFile)} Enter`,
@@ -476,7 +495,7 @@ export function createTerminalManager(sessionRepo: SessionRepository, soulLoader
         );
 
         if (!options?.skipClaude) {
-          launchCli(session, tmuxName, cwd, effectiveOptions);
+          await launchCli(session, tmuxName, cwd, effectiveOptions);
         }
 
         options?.onReady?.(session);
@@ -791,7 +810,7 @@ export function createTerminalManager(sessionRepo: SessionRepository, soulLoader
           };
 
           // Launch Claude with --resume
-          launchCli(updatedSession, tmuxName, cwd, {
+          await launchCli(updatedSession, tmuxName, cwd, {
             claudeResumeId: session.claudeResumeId,
             background: session.background,
           });
@@ -844,7 +863,7 @@ export function createTerminalManager(sessionRepo: SessionRepository, soulLoader
 
       if (session.claudeResumeId && session.provider === 'claude') {
         // Re-launch Claude picking up the prior conversation
-        launchCli(restoredSession, tmuxName, cwd, {
+        await launchCli(restoredSession, tmuxName, cwd, {
           claudeResumeId: session.claudeResumeId,
           background: session.background,
         });
