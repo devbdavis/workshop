@@ -30,6 +30,7 @@ export interface TodoRouterDeps {
       opts?: { systemPrompt?: string; workingDirectory?: string; background?: boolean; todoId?: string; initialPrompt?: string; provider?: SessionProvider; name?: string; worktreeMode?: boolean; repos?: TrackRepo[]; issueKey?: string; dangerouslySkipPermissions?: boolean; skipBackgroundInstructions?: boolean; onReady?: (session: { id: SessionId }) => void },
     ) => Promise<{ id: SessionId; trackId: TrackId; tmuxSession: string; state: string }>;
     destroySession: (sessionId: SessionId) => Promise<void>;
+    softDeleteSession: (sessionId: SessionId) => Promise<void>;
   };
   vaultReader: VaultReader;
 }
@@ -153,7 +154,17 @@ export function createTodoRouter(deps: TodoRouterDeps): Router {
       return;
     }
 
-    // Clean up tmux session when todo is marked done
+    // Retire session to recycle bin when todo moves to review (background agent done)
+    if (status === 'review' && existing.sessionId) {
+      try {
+        await terminal.softDeleteSession(existing.sessionId);
+        broadcast('session:deleted', todo.trackId);
+      } catch (err) {
+        console.error('Failed to retire session for reviewed todo:', err);
+      }
+    }
+
+    // Hard-destroy session when todo is marked done
     if (status === 'done' && existing.sessionId) {
       try {
         await terminal.destroySession(existing.sessionId);
