@@ -14,6 +14,7 @@ import type { SessionRepository } from '@domain/session/repository.js';
 import type { WorkflowTicketRepository } from '@domain/workflow/ticket-repository.js';
 import type { WorkflowEngine } from '@application/workflow/engine.js';
 import type { TerminalManager } from '@infrastructure/terminal/manager.js';
+import type { ScheduledTaskRunRepository } from '@domain/scheduled-task/repository.js';
 import { broadcast } from './events.js';
 
 export interface ExecutionHookRouterDeps {
@@ -21,6 +22,7 @@ export interface ExecutionHookRouterDeps {
   tickets: WorkflowTicketRepository;
   terminal: TerminalManager;
   sessions: SessionRepository;
+  taskRuns: ScheduledTaskRunRepository;
 }
 
 const SESSION_DATA_DIR = path.join(os.homedir(), '.workshop', 'sessions');
@@ -50,7 +52,7 @@ function captureOutputToFile(sessionId: string, tmuxSession: string, maxLines = 
 
 export function createExecutionHookRouter(deps: ExecutionHookRouterDeps): Router {
   const router = Router();
-  const { engine, tickets, terminal, sessions } = deps;
+  const { engine, tickets, terminal, sessions, taskRuns } = deps;
 
   /**
    * SessionStart hook — Claude Code sends this when a session begins.
@@ -180,8 +182,18 @@ export function createExecutionHookRouter(deps: ExecutionHookRouterDeps): Router
       } else if (session) {
         // Capture terminal output to <sessionDir>/output.txt before killing tmux.
         // The session dir persists for 7 days in the recycle bin — no SQLite blobs.
+        // Also complete any associated scheduled-task run with the real end timestamp
+        // (the run was left in 'running' state by the task scheduler so duration is accurate).
         if (session.tmuxSession) {
           captureOutputToFile(sessionId, session.tmuxSession);
+        }
+        try {
+          const run = taskRuns.findBySessionId(sessionId);
+          if (run && run.status === 'running') {
+            taskRuns.complete(run.id, 'completed');
+          }
+        } catch (runErr) {
+          console.warn(`Failed to complete scheduled task run for session ${sessionId}:`, runErr);
         }
 
         try {

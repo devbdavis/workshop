@@ -278,8 +278,6 @@ export function createTaskScheduler(deps: TaskSchedulerDeps): TaskScheduler {
       });
 
       // Update task state — 'completed' means the session was successfully dispatched.
-      // There is no lifecycle callback when the agent finishes, so 'running' would
-      // never transition and would permanently show as running in the UI.
       deps.tasks.update(task.id, {
         lastRunAt: now,
         lastRunStatus: 'completed',
@@ -287,15 +285,17 @@ export function createTaskScheduler(deps: TaskSchedulerDeps): TaskScheduler {
         runCount: task.runCount + 1,
       });
 
-      // Update run with session ID
-      deps.runs.complete(run.id, 'completed');
+      // Leave the run in 'running' state. The SessionEnd hook will call
+      // runs.complete() with the actual wall-clock end time, giving accurate
+      // duration in the history panel. If the hook never fires (server crash,
+      // etc.) the run record stays 'running' — acceptable for now.
 
       deps.broadcast('scheduled-task:triggered', task.id);
       if (task.trackId) {
         deps.broadcast('session:created', task.trackId);
       }
 
-      return { ...run, sessionId: session.id as SessionId, status: 'completed' };
+      return { ...run, sessionId: session.id as SessionId };
     } catch (err) {
       const errorMsg = err instanceof Error ? err.message : String(err);
       console.error(`Scheduled task "${task.name}" (${task.id}) failed:`, errorMsg);
