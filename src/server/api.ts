@@ -1,4 +1,4 @@
-import { existsSync, readFileSync } from 'fs';
+import { existsSync, readFileSync, writeFileSync } from 'fs';
 import { execSync } from 'child_process';
 import { homedir } from 'os';
 import path from 'path';
@@ -806,6 +806,22 @@ export function createApiRouter(deps: ApiRouterDeps = {}): Router {
       res.status(404).json({ error: 'Session not found' });
       return;
     }
+    // Keep the workspace file name in sync (covers both single-root and multi-root sessions).
+    const workspaceFile = path.join(
+      process.env.HOME || '/tmp', '.workshop', 'sessions', sessionId, 'workspace', 'workspace.code-workspace',
+    );
+    if (existsSync(workspaceFile)) {
+      try {
+        const ws = JSON.parse(readFileSync(workspaceFile, 'utf-8')) as Record<string, unknown>;
+        ws.name = name;
+        const settings = (ws.settings ?? {}) as Record<string, unknown>;
+        settings['window.title'] = `\${activeEditorShort}\${separator}${name}\${dirty}`;
+        ws.settings = settings;
+        writeFileSync(workspaceFile, JSON.stringify(ws, null, 2) + '\n', 'utf-8');
+      } catch {
+        // Non-fatal — workspace file is cosmetic
+      }
+    }
     broadcast('session:updated', req.params.trackId as TrackId);
     res.json(session);
   });
@@ -860,7 +876,7 @@ export function createApiRouter(deps: ApiRouterDeps = {}): Router {
   // --- Open in editor ---
 
   router.post('/shell/open-in-editor', (req, res) => {
-    const { path: targetPath, app } = req.body;
+    const { path: targetPath, app, sessionId } = req.body;
     if (!targetPath || typeof targetPath !== 'string') {
       res.status(400).json({ error: 'path is required' });
       return;
@@ -875,15 +891,22 @@ export function createApiRouter(deps: ApiRouterDeps = {}): Router {
       return;
     }
     try {
+      // Resolve session name once — used by both terminal and editor paths.
+      const sessionName = (sessionId && typeof sessionId === 'string')
+        ? (sessions.findById(sessionId as SessionId)?.name ?? undefined)
+        : undefined;
+
       if (app === 'terminal') {
         if (IS_WSL) {
           // -w 0 targets the most recently used WT window (creates one if none exist).
           // --profile uses the current distro name so WT opens the right WSL profile
           // rather than defaulting to PowerShell or cmd.
           // WSL_DISTRO_NAME is set by WSL itself (e.g. "Ubuntu", "Ubuntu-22.04").
+          // --title sets the tab title to the session name when available.
           const distro = process.env['WSL_DISTRO_NAME'];
           const profileArgs = distro ? `--profile ${JSON.stringify(distro)} ` : '';
-          execSync(`wt.exe -w 0 nt ${profileArgs}wsl.exe --cd ${JSON.stringify(targetPath)}`, { stdio: 'pipe' });
+          const titleArgs = sessionName ? `--title ${JSON.stringify(sessionName)} ` : '';
+          execSync(`wt.exe -w 0 nt ${titleArgs}${profileArgs}wsl.exe --cd ${JSON.stringify(targetPath)}`, { stdio: 'pipe' });
         } else {
           execSync(`open -a iTerm ${JSON.stringify(targetPath)}`, { stdio: 'pipe' });
         }
@@ -892,9 +915,16 @@ export function createApiRouter(deps: ApiRouterDeps = {}): Router {
           // VSCode Remote WSL installs the `code` CLI shim into the WSL PATH.
           execSync(`code ${JSON.stringify(targetPath)}`, { stdio: 'pipe' });
         } else {
-          // Prefer workspace.code-workspace if present — gives Cursor proper
-          // multi-root support with per-repo panels instead of a flat directory.
-          const workspaceFile = path.join(targetPath, 'workspace.code-workspace');
+          // Prefer a named workspace file if present:
+          // 1. Session workspace file (covers both multi-root worktrees and
+          //    single-root sessions — lives in ~/.workshop/sessions/{id}/workspace/)
+          // 2. workspace.code-workspace alongside the target path (legacy fallback)
+          const sessionWorkspaceFile = sessionId && typeof sessionId === 'string'
+            ? path.join(process.env.HOME || '/tmp', '.workshop', 'sessions', sessionId, 'workspace', 'workspace.code-workspace')
+            : null;
+          const workspaceFile = (sessionWorkspaceFile && existsSync(sessionWorkspaceFile))
+            ? sessionWorkspaceFile
+            : path.join(targetPath, 'workspace.code-workspace');
           const editorTarget = existsSync(workspaceFile) ? workspaceFile : targetPath;
           try {
             execSync(`cursor ${JSON.stringify(editorTarget)}`, { stdio: 'pipe' });
