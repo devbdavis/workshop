@@ -159,7 +159,7 @@ Workshop exposes its API as an MCP server, allowing Claude Code to interact with
 
 1. Start the Workshop server (dev or production)
 
-2. Add the MCP server to your Claude Code config (`~/.claude/mcp.json`):
+2. Add the MCP server to your Claude Code config (`~/.claude.json`):
 
 **If using Nix** (recommended — ensures Node 24 without a system-level install):
 
@@ -167,9 +167,7 @@ Workshop exposes its API as an MCP server, allowing Claude Code to interact with
 {
   "mcpServers": {
     "workshop": {
-      "command": "nix",
-      "args": ["develop", "--command", "npx", "tsx", "src/mcp/server.ts"],
-      "cwd": "/path/to/workshop",
+      "command": "/path/to/workshop/scripts/mcp-server.sh",
       "env": {
         "WORKSHOP_API_URL": "http://localhost:3002"
       }
@@ -178,7 +176,7 @@ Workshop exposes its API as an MCP server, allowing Claude Code to interact with
 }
 ```
 
-> **Note**: The `flake.nix` shellHook must write to stderr (`>&2`), not stdout. MCP uses stdout for JSON-RPC — any extra output there before the server starts will corrupt the framing and prevent the connection.
+The wrapper script resolves the repo path via `BASH_SOURCE`, so no `cwd` is needed and it works correctly regardless of where Claude Code is running.
 
 **If using system Node 24+**:
 
@@ -187,8 +185,7 @@ Workshop exposes its API as an MCP server, allowing Claude Code to interact with
   "mcpServers": {
     "workshop": {
       "command": "npx",
-      "args": ["tsx", "src/mcp/server.ts"],
-      "cwd": "/path/to/workshop",
+      "args": ["tsx", "/path/to/workshop/src/mcp/server.ts"],
       "env": {
         "WORKSHOP_API_URL": "http://localhost:3002"
       }

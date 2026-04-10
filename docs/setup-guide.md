@@ -151,15 +151,15 @@ The MCP server lets Claude Code interact with Workshop programmatically — list
 
 Add Workshop's MCP server to your Claude Code config:
 
-**Option A: Project-level** (add to `workshop/.claude/mcp.json` — only active when Claude Code runs in this repo):
+Add to `~/.claude.json` under `mcpServers` (global — available in all Claude Code sessions):
+
+**If using Nix** (recommended):
 
 ```json
 {
   "mcpServers": {
     "workshop": {
-      "command": "npx",
-      "args": ["tsx", "src/mcp/server.ts"],
-      "cwd": "/absolute/path/to/workshop",
+      "command": "/absolute/path/to/workshop/scripts/mcp-server.sh",
       "env": {
         "WORKSHOP_API_URL": "http://localhost:3002"
       }
@@ -168,9 +168,23 @@ Add Workshop's MCP server to your Claude Code config:
 }
 ```
 
-**Option B: Global** (add to `~/.claude/mcp.json` — available in all Claude Code sessions):
+The wrapper script resolves the repo root via `BASH_SOURCE`, so it works regardless of Claude Code's working directory. This is important when using Workshop — sessions run in workspace directories, not the repo root.
 
-Same config as above. Use this if you want Workshop MCP tools available everywhere.
+**If using system Node 24+**:
+
+```json
+{
+  "mcpServers": {
+    "workshop": {
+      "command": "npx",
+      "args": ["tsx", "/absolute/path/to/workshop/src/mcp/server.ts"],
+      "env": {
+        "WORKSHOP_API_URL": "http://localhost:3002"
+      }
+    }
+  }
+}
+```
 
 ### Verify
 

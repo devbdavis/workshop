@@ -28,6 +28,77 @@ const SESSION_DATA_DIR = path.join(
   'sessions',
 );
 
+/**
+ * Nix devshell environment variables that contaminate child processes when
+ * tmux is started from inside a `nix develop` shell. These are passed via
+ * tmux's global environment to every new session, which breaks `nix develop`
+ * invocations inside Workshop sessions (e.g. MCP server startup).
+ *
+ * We clear them at session-creation time using tmux's `-e VAR=` flag, which
+ * overrides the global environment for that specific session only.
+ */
+const NIX_DEVSHELL_VARS = [
+  // nix develop / nix shell markers and build env
+  'IN_NIX_SHELL',
+  'CONFIG_SHELL',
+  'HOST_PATH',
+  'CFLAGS',
+  'CPPFLAGS',
+  'LDFLAGS',
+  'NIX_CC',
+  'NIX_BINTOOLS',
+  'NIX_BUILD_CORES',
+  'NIX_CFLAGS_COMPILE',
+  'NIX_LDFLAGS',
+  'NIX_APPLE_SDK_VERSION',
+  'NIX_DONT_SET_RPATH',
+  'NIX_DONT_SET_RPATH_FOR_BUILD',
+  'NIX_ENFORCE_NO_NATIVE',
+  'NIX_HARDENING_ENABLE',
+  'NIX_IGNORE_LD_THROUGH_GCC',
+  'NIX_NO_SELF_RPATH',
+  // npm_config_* vars set by nix node packages — conflict with nvm in session shells
+  'npm_config_prefix',
+  'npm_config_global_prefix',
+  'npm_config_globalconfig',
+  'npm_config_local_prefix',
+  'npm_config_node_gyp',
+  'npm_config_noproxy',
+  'npm_config_npm_version',
+  'npm_config_user_agent',
+  'npm_config_userconfig',
+  'npm_config_cache',
+  'npm_config_init_module',
+  // direnv state vars — cause direnv to unload on every session start
+  'DIRENV_DIR',
+  'DIRENV_FILE',
+  'DIRENV_DIFF',
+  'DIRENV_WATCHES',
+] as const;
+
+/** tmux `-e VAR=` flags that clear nix devshell contamination for new sessions.
+ *  Only emitted for vars that are actually present — avoids spuriously setting
+ *  empty vars on machines that don't have nix/direnv, which can trigger direnv
+ *  hooks and introduce shell startup latency that causes send-keys races. */
+const NIX_CLEAN_TMUX_FLAGS = NIX_DEVSHELL_VARS
+  .filter((v) => v in process.env)
+  .map((v) => `-e ${v}=`)
+  .join(' ');
+
+/**
+ * Propagate PATH from the Workshop server process into every new tmux session.
+ *
+ * tmux sessions inherit their environment from the tmux *server's* global
+ * environment (set when the server first started), not from the process that
+ * runs `tmux new-session`. On machines without a system-level Node install
+ * (e.g. WSL using nix flakes), the server-start-time PATH may not include the
+ * nix store paths where `claude` lives. Explicitly passing Workshop's own PATH
+ * ensures the session shell can reach whatever tools Workshop itself can reach.
+ */
+const TMUX_PATH_FLAG = process.env.PATH
+  ? `-e PATH=${JSON.stringify(process.env.PATH)}`
+  : '';
+
 /** Seconds a dead tmux session gets before being reaped/suspended */
 const DYING_GRACE_PERIOD_MS = 30_000;
 
@@ -395,12 +466,12 @@ export function createTerminalManager(sessionRepo: SessionRepository, soulLoader
   }
 
   /** Launch an AI CLI inside an existing tmux session */
-  function launchCli(
+  async function launchCli(
     session: Session,
     tmuxName: string,
     cwd: string,
     effectiveOptions?: CreateSessionOptions,
-  ): void {
+  ): Promise<void> {
     const provider = session.provider;
     const sessionDir = getSessionDir(session.id);
     const launcherFile = path.join(sessionDir, 'launch.sh');
@@ -418,6 +489,25 @@ export function createTerminalManager(sessionRepo: SessionRepository, soulLoader
 
     writeFileSync(launcherFile, launcherLines.join('\n') + '\n', 'utf-8');
     chmodSync(launcherFile, 0o755);
+
+    // Wait for the shell to initialise before sending the launcher command.
+    // `tmux new-session -d` returns as soon as the session record is created,
+    // but the shell inside may not have started yet — especially on WSL where
+    // the VFS adds ~300–500 ms of startup latency. A send-keys fired too early
+    // is silently dropped. We poll the pane output (up to 5 s) until the shell
+    // has produced at least one character (the prompt).
+    const shellReadyDeadline = Date.now() + 5000;
+    while (Date.now() < shellReadyDeadline) {
+      try {
+        const pane = execSync(`tmux capture-pane -t ${tmuxName} -p`, {
+          stdio: 'pipe',
+          encoding: 'utf-8',
+          timeout: 1000,
+        });
+        if (pane.trim().length > 0) break;
+      } catch { /* session not visible yet — keep trying */ }
+      await new Promise((resolve) => setTimeout(resolve, 100));
+    }
 
     execSync(
       `tmux send-keys -t ${tmuxName} ${JSON.stringify(launcherFile)} Enter`,
@@ -539,12 +629,12 @@ export function createTerminalManager(sessionRepo: SessionRepository, soulLoader
         delete cleanEnv.CLAUDECODE;
 
         execSync(
-          `tmux new-session -d -s ${tmuxName} -x 120 -y 40 -c ${JSON.stringify(cwd)}`,
+          `tmux new-session -d -s ${tmuxName} ${NIX_CLEAN_TMUX_FLAGS} ${TMUX_PATH_FLAG} -x 120 -y 40 -c ${JSON.stringify(cwd)}`,
           { stdio: 'pipe', env: cleanEnv },
         );
 
         if (!options?.skipClaude) {
-          launchCli(session, tmuxName, cwd, effectiveOptions);
+          await launchCli(session, tmuxName, cwd, effectiveOptions);
         }
 
         options?.onReady?.(session);
@@ -843,7 +933,7 @@ export function createTerminalManager(sessionRepo: SessionRepository, soulLoader
           delete cleanEnv.CLAUDECODE;
 
           execSync(
-            `tmux new-session -d -s ${tmuxName} -x 120 -y 40 -c ${JSON.stringify(cwd)}`,
+            `tmux new-session -d -s ${tmuxName} ${NIX_CLEAN_TMUX_FLAGS} ${TMUX_PATH_FLAG} -x 120 -y 40 -c ${JSON.stringify(cwd)}`,
             { stdio: 'pipe', env: cleanEnv },
           );
 
@@ -859,7 +949,7 @@ export function createTerminalManager(sessionRepo: SessionRepository, soulLoader
           };
 
           // Launch Claude with --resume
-          launchCli(updatedSession, tmuxName, cwd, {
+          await launchCli(updatedSession, tmuxName, cwd, {
             claudeResumeId: session.claudeResumeId,
             background: session.background,
           });
@@ -894,7 +984,7 @@ export function createTerminalManager(sessionRepo: SessionRepository, soulLoader
       delete cleanEnv.CLAUDECODE;
 
       execSync(
-        `tmux new-session -d -s ${tmuxName} -x 120 -y 40 -c ${JSON.stringify(cwd)}`,
+        `tmux new-session -d -s ${tmuxName} ${NIX_CLEAN_TMUX_FLAGS} ${TMUX_PATH_FLAG} -x 120 -y 40 -c ${JSON.stringify(cwd)}`,
         { stdio: 'pipe', env: cleanEnv },
       );
 
@@ -912,7 +1002,7 @@ export function createTerminalManager(sessionRepo: SessionRepository, soulLoader
 
       if (session.claudeResumeId && session.provider === 'claude') {
         // Re-launch Claude picking up the prior conversation
-        launchCli(restoredSession, tmuxName, cwd, {
+        await launchCli(restoredSession, tmuxName, cwd, {
           claudeResumeId: session.claudeResumeId,
           background: session.background,
         });
