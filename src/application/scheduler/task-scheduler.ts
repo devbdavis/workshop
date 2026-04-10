@@ -39,6 +39,7 @@ export interface TaskSchedulerDeps {
         systemPrompt?: string;
         workingDirectory?: string;
         background?: boolean;
+        dangerouslySkipPermissions?: boolean;
         initialPrompt?: string;
         provider?: SessionProvider;
       },
@@ -266,6 +267,7 @@ export function createTaskScheduler(deps: TaskSchedulerDeps): TaskScheduler {
         systemPrompt: systemPrompt || undefined,
         workingDirectory,
         background: true,
+        dangerouslySkipPermissions: true,
         initialPrompt: effectivePrompt,
         provider: task.provider,
       });
