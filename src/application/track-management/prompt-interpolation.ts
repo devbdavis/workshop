@@ -27,6 +27,7 @@ export interface TrackContext {
  *   {{track.repos}}           - Comma-separated list of repo paths
  *   {{track.repos[N].path}}   - Path of the Nth repo (0-indexed)
  *   {{track.repos[N].branch}} - Branch of the Nth repo (0-indexed)
+ *   {{track.paths}}           - Comma-separated list of track paths
  *   {{track.tickets}}         - Comma-separated list of ticket external IDs
  *   {{todo.id}}               - Todo UUID (only when dispatching a todo)
  *   {{todo.title}}            - Todo title (only when dispatching a todo)
@@ -37,6 +38,7 @@ export interface TrackContext {
 export function interpolateTemplate(template: string, ctx: TrackContext): string {
   const { track, todo } = ctx;
   const repos = track.repos ?? [];
+  const paths = track.paths ?? [];
   const tickets = track.tickets ?? [];
 
   return template.replace(/\{\{([^}]+)\}\}/g, (_match, rawKey: string) => {
@@ -49,6 +51,10 @@ export function interpolateTemplate(template: string, ctx: TrackContext): string
 
     if (key === 'track.repos') {
       return repos.map((r) => r.path).join(', ');
+    }
+
+    if (key === 'track.paths') {
+      return paths.map((p) => p.path).join(', ');
     }
 
     if (key === 'todo.id') return todo?.id ?? _match;

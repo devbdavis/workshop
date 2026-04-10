@@ -24,7 +24,7 @@ export function TrackView() {
   const [todos, setTodos] = useState<Todo[]>([]);
   const [deletedSessions, setDeletedSessions] = useState<Session[]>([]);
   const [loading, setLoading] = useState(true);
-  const [sidebarTab, setSidebarTab] = useState<'context' | 'todos' | 'config'>('context');
+  const [sidebarTab, setSidebarTab] = useState<'context' | 'todos' | 'config'>('todos');
   const [editingName, setEditingName] = useState(false);
   const [nameValue, setNameValue] = useState('');
   const [idleAlerts, setIdleAlerts] = useState<IdleAlert[]>([]);
