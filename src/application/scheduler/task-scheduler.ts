@@ -226,13 +226,6 @@ export function createTaskScheduler(deps: TaskSchedulerDeps): TaskScheduler {
 
     const now = new Date().toISOString();
 
-    // Create run record
-    const run = deps.runs.create({
-      taskId: task.id,
-      status: 'running',
-      startedAt: now,
-    });
-
     try {
       const systemPrompt = composeSystemPrompt(task);
 
@@ -277,7 +270,17 @@ export function createTaskScheduler(deps: TaskSchedulerDeps): TaskScheduler {
         provider: task.provider,
       });
 
-      // Update task state — 'completed' means the session was successfully dispatched.
+      // Create the run record NOW that we have the session ID.
+      // Storing session_id here is what allows the SessionEnd hook to look up
+      // this run by session ID and record the real completion time + output.
+      const run = deps.runs.create({
+        taskId: task.id,
+        sessionId: session.id as SessionId,
+        status: 'running',
+        startedAt: now,
+      });
+
+      // Update task state
       deps.tasks.update(task.id, {
         lastRunAt: now,
         lastRunStatus: 'completed',
@@ -285,22 +288,24 @@ export function createTaskScheduler(deps: TaskSchedulerDeps): TaskScheduler {
         runCount: task.runCount + 1,
       });
 
-      // Leave the run in 'running' state. The SessionEnd hook will call
-      // runs.complete() with the actual wall-clock end time, giving accurate
-      // duration in the history panel. If the hook never fires (server crash,
-      // etc.) the run record stays 'running' — acceptable for now.
-
       deps.broadcast('scheduled-task:triggered', task.id);
       if (task.trackId) {
         deps.broadcast('session:created', task.trackId);
       }
 
-      return { ...run, sessionId: session.id as SessionId };
+      return run;
     } catch (err) {
       const errorMsg = err instanceof Error ? err.message : String(err);
       console.error(`Scheduled task "${task.name}" (${task.id}) failed:`, errorMsg);
 
-      deps.runs.complete(run.id, 'failed', errorMsg);
+      // Record the failure immediately (no session was created, so no sessionId)
+      const failedRun = deps.runs.create({
+        taskId: task.id,
+        status: 'failed',
+        error: errorMsg,
+        startedAt: now,
+        completedAt: new Date().toISOString(),
+      });
       deps.tasks.update(task.id, {
         lastRunAt: now,
         lastRunStatus: 'failed',
@@ -308,7 +313,7 @@ export function createTaskScheduler(deps: TaskSchedulerDeps): TaskScheduler {
 
       deps.broadcast('scheduled-task:failed', task.id);
 
-      return { ...run, status: 'failed', error: errorMsg };
+      return failedRun;
     }
   }
 

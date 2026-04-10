@@ -706,6 +706,16 @@ function runMigrations(db: Database.Database): void {
     // Column already exists — safe to ignore
   }
 
+  // Migration: fix stale last_run_status='running' on tasks whose session has ended.
+  // Old server code set last_run_status='running' and never updated it after dispatch.
+  // Any task that has a last_session_id is confirmed dispatched, so treat it as completed.
+  db.exec(`
+    UPDATE scheduled_tasks
+    SET last_run_status = 'completed'
+    WHERE last_run_status = 'running'
+      AND last_session_id IS NOT NULL;
+  `);
+
   // Seed default repo_root setting
   db.exec(`INSERT OR IGNORE INTO settings (key, value) VALUES ('repo_root', '~/repos');`);
 
