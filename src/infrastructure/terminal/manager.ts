@@ -166,7 +166,7 @@ async function createWorktrees(sessionId: string, repos: TrackRepo[], sessionNam
 
   // Write merged .claude/settings.json and workspace.code-workspace
   try {
-    writeWorkspaceArtifacts(workspaceDir, repos);
+    writeWorkspaceArtifacts(workspaceDir, repos, sessionName);
   } catch (err) {
     console.warn('[worktree] Failed to write workspace artifacts:', err);
   }
@@ -214,7 +214,7 @@ function readProjectSettings(repoPath: string): ClaudeProjectSettings | null {
  * reflects the latest committed project settings.
  * Best-effort — failures are logged but do not block session creation.
  */
-function writeWorkspaceArtifacts(workspaceDir: string, repos: TrackRepo[]): void {
+function writeWorkspaceArtifacts(workspaceDir: string, repos: TrackRepo[], sessionName?: string): void {
   const allowSet = new Set<string>();
   const denySet = new Set<string>();
   const mergedEnv: Record<string, string> = {};
@@ -249,12 +249,45 @@ function writeWorkspaceArtifacts(workspaceDir: string, repos: TrackRepo[]): void
   }
 
   const folders = repos.map((r) => ({ path: path.basename(r.path), name: path.basename(r.path) }));
+  const settings = sessionName
+    ? { 'window.title': `\${activeEditorShort}\${separator}${sessionName}\${dirty}` }
+    : {};
+  const workspaceJson = sessionName
+    ? { name: sessionName, folders, settings }
+    : { folders, settings };
   writeFileSync(
     path.join(workspaceDir, 'workspace.code-workspace'),
-    JSON.stringify({ folders, settings: {} }, null, 2) + '\n',
+    JSON.stringify(workspaceJson, null, 2) + '\n',
     'utf-8',
   );
   console.log(`[worktree] workspace.code-workspace: ${repos.length} folder(s)`);
+}
+
+/**
+ * Write a named .code-workspace file for a single-repo session so Cursor
+ * shows the session name in the title bar instead of the generic folder name.
+ * Uses an absolute folder path since the file lives in the session dir, not
+ * inside the repo. Best-effort — failures are logged but do not block session
+ * creation.
+ */
+function writeSingleRootWorkspace(sessionId: string, repoPath: string, sessionName?: string): void {
+  const workspaceDir = path.join(SESSION_DATA_DIR, sessionId, 'workspace');
+  mkdirSync(workspaceDir, { recursive: true });
+
+  const repoName = path.basename(repoPath);
+  const folders = [{ path: repoPath, name: repoName }];
+  const settings = sessionName
+    ? { 'window.title': `\${activeEditorShort}\${separator}${sessionName}\${dirty}` }
+    : {};
+  const workspaceJson = sessionName
+    ? { name: sessionName, folders, settings }
+    : { folders, settings };
+  writeFileSync(
+    path.join(workspaceDir, 'workspace.code-workspace'),
+    JSON.stringify(workspaceJson, null, 2) + '\n',
+    'utf-8',
+  );
+  console.log(`[workspace] single-root workspace.code-workspace: ${sessionName ?? repoName}`);
 }
 
 /**
@@ -484,6 +517,15 @@ export function createTerminalManager(sessionRepo: SessionRepository, soulLoader
           } catch (err) {
             console.warn(`[worktree] Failed to create worktrees for session ${session.id}:`, err);
             // Fall back to standard workingDirectory
+          }
+        } else if (options?.workingDirectory) {
+          // Single-repo session: write a named workspace file so Cursor shows the
+          // session name in the title bar. Does not create git worktrees or change
+          // the Claude CWD — purely for the editor open action.
+          try {
+            writeSingleRootWorkspace(session.id, options.workingDirectory, options.name);
+          } catch (err) {
+            console.warn(`[workspace] Failed to write single-root workspace for session ${session.id}:`, err);
           }
         }
 
