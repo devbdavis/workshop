@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import type { ScheduledTask, ScheduledTaskRun } from '@foundation/types';
+import { DiffModal } from '@ui/shared/DiffModal.js';
 
 interface Props {
   task: ScheduledTask;
@@ -9,6 +10,7 @@ interface Props {
   onTrigger: () => void;
   onEdit: () => void;
   onDelete: () => void;
+  onSyncFromTemplate?: () => void;
 }
 
 const STATUS_STYLES: Record<string, string> = {
@@ -25,11 +27,13 @@ export function ScheduledTaskCard({
   onTrigger,
   onEdit,
   onDelete,
+  onSyncFromTemplate,
 }: Props) {
   const [showRuns, setShowRuns] = useState(false);
   const [runs, setRuns] = useState<ScheduledTaskRun[]>([]);
   const [runsLoading, setRunsLoading] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
+  const [showDiff, setShowDiff] = useState(false);
 
   async function loadRuns() {
     if (showRuns) {
@@ -49,6 +53,7 @@ export function ScheduledTaskCard({
   }
 
   return (
+    <>
     <div
       className={`border rounded-lg transition-colors ${
         task.enabled
@@ -60,7 +65,7 @@ export function ScheduledTaskCard({
         {/* Header row */}
         <div className="flex items-start justify-between gap-3">
           <div className="flex-1 min-w-0">
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 flex-wrap">
               <button
                 onClick={onToggle}
                 className={`w-8 h-4 rounded-full relative transition-colors shrink-0 ${
@@ -75,7 +80,29 @@ export function ScheduledTaskCard({
                 />
               </button>
               <h3 className="text-sm font-medium text-gray-200 truncate">{task.name}</h3>
+              {task.isOutOfSync && (
+                <span className="text-[10px] px-1.5 py-0.5 rounded bg-amber-900/60 text-amber-300 shrink-0">
+                  out of sync
+                </span>
+              )}
             </div>
+            {task.isOutOfSync && onSyncFromTemplate && (
+              <div className="flex items-center gap-2 mt-1">
+                <button
+                  onClick={() => setShowDiff(true)}
+                  className="text-[10px] text-amber-400 hover:text-amber-300 underline"
+                >
+                  View diff
+                </button>
+                <span className="text-[10px] text-gray-600">·</span>
+                <button
+                  onClick={onSyncFromTemplate}
+                  className="text-[10px] text-amber-400 hover:text-amber-300 underline"
+                >
+                  Update to latest
+                </button>
+              </div>
+            )}
 
             {task.description && (
               <p className="text-xs text-gray-500 mt-1 line-clamp-2">{task.description}</p>
@@ -210,6 +237,18 @@ export function ScheduledTaskCard({
         )}
       </div>
     </div>
+
+    {showDiff && task.templateContent && (
+      <DiffModal
+        title={`Diff — ${task.name}`}
+        beforeLabel="Template"
+        afterLabel="Yours"
+        before={task.templateContent}
+        after={task.taskPrompt}
+        onClose={() => setShowDiff(false)}
+      />
+    )}
+    </>
   );
 }
 

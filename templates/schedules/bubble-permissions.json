@@ -1,0 +1,13 @@
+{
+  "name": "Bubble Permissions",
+  "description": "Promotes approved Claude Code permissions from project-level settings files and Workshop worktrees up to ~/.claude/settings.json. Runs daily to prevent repeated permission prompts across sessions.",
+  "scheduleConfig": {
+    "preset": "daily",
+    "time": "09:00",
+    "daysOfWeek": [1, 2, 3, 4, 5]
+  },
+  "taskPrompt": "Run the permission bubble script and report results:\n\n```\nbash ~/.claude/scripts/bubble-permissions.sh\n```\n\nReport the full output. If permissions were promoted, list them. If nothing was promoted, say so. If the script errored, report the full error output.",
+  "enabled": true,
+  "scriptFile": "scripts/schedules/bubble-permissions.sh",
+  "scriptInstallPath": "~/.claude/scripts/bubble-permissions.sh"
+}
