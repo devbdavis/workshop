@@ -34,6 +34,7 @@ export function TrackView() {
   const [nameValue, setNameValue] = useState('');
   const [idleAlerts, setIdleAlerts] = useState<IdleAlert[]>([]);
   const [pendingSelectSessionId, setPendingSelectSessionId] = useState<SessionId | null>(null);
+  const [issueBaseUrl, setIssueBaseUrl] = useState<string | undefined>(undefined);
   // Session IDs that have been created but whose tmux/CLI init is still in progress.
   // Cleared when session:ready arrives for that session.
   const [startingSessions, setStartingSessions] = useState<Set<string>>(new Set());
@@ -68,6 +69,22 @@ export function TrackView() {
   useEffect(() => {
     loadTrack();
   }, [loadTrack]);
+
+  // Fetch global issue tracker config once on mount — independent of track reloads.
+  useEffect(() => {
+    fetch('/api/settings/issue-tracker')
+      .then((r) => r.json())
+      .then(({ tracker, orgName }: { tracker: string; orgName: string }) => {
+        if (tracker === 'linear' && orgName.trim()) {
+          setIssueBaseUrl(`https://linear.app/${orgName.trim()}/issue/`);
+        } else if (tracker === 'jira' && orgName.trim()) {
+          setIssueBaseUrl(`https://${orgName.trim()}.atlassian.net/browse/`);
+        } else {
+          setIssueBaseUrl(undefined);
+        }
+      })
+      .catch(() => { /* silently skip — no issue tracker configured */ });
+  }, []);
 
   // Subscribe to WebSocket events. Auto-reconnects on disconnect (e.g. server restart)
   // and reloads on reconnect to catch any events missed while disconnected.
@@ -353,7 +370,9 @@ export function TrackView() {
               trackId={track.id}
               trackName={track.name}
               sessions={sessions}
+              todos={todos}
               deletedSessions={deletedSessions}
+              issueBaseUrl={issueBaseUrl}
               startingSessions={startingSessions}
               pendingSelectSessionId={pendingSelectSessionId}
               onDestroySession={destroySession}
