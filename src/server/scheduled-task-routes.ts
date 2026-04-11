@@ -6,7 +6,8 @@ import os from 'os';
 import type { ScheduledTaskId, TrackId, AgentId, SessionProvider } from '@foundation/types';
 import type { ScheduledTaskRepository, ScheduledTaskRunRepository } from '@domain/scheduled-task/repository';
 import type { TaskScheduler } from '@application/scheduler/task-scheduler.js';
-import { scheduleConfigToCron, describeSchedule, validateScheduleConfig } from '@application/scheduler/cron-utils.js';
+import { scheduleConfigToCron, describeSchedule, validateScheduleConfig, getNextScheduledAfter } from '@application/scheduler/cron-utils.js';
+import type { ScheduledTask } from '@foundation/types';
 import { broadcast } from './events.js';
 
 function callClaude(prompt: string): Promise<string> {
@@ -75,6 +76,13 @@ export interface ScheduledTaskRouterDeps {
   runs: ScheduledTaskRunRepository;
   scheduler: TaskScheduler;
   projectRoot: string;
+}
+
+/** Attach the next scheduled occurrence to an enabled task before sending to the client. */
+function withNextRunAt(task: ScheduledTask): ScheduledTask {
+  if (!task.enabled) return task;
+  const next = getNextScheduledAfter(task.cronExpression, new Date());
+  return next ? { ...task, nextRunAt: next.toISOString() } : task;
 }
 
 export function createScheduledTaskRouter(deps: ScheduledTaskRouterDeps): Router {
@@ -256,16 +264,17 @@ Return ONLY the JSON object, no other text or markdown.`;
     const all = trackId ? tasks.findByTrack(trackId as TrackId) : tasks.findAll();
     const schedulesDir = path.join(projectRoot, 'templates', 'schedules');
     const enriched = all.map((task) => {
-      if (!task.templateName) return task;
+      const withTime = withNextRunAt(task);
+      if (!task.templateName) return withTime;
       const filePath = path.join(schedulesDir, `${task.templateName}.json`);
       try {
         const def = JSON.parse(fs.readFileSync(filePath, 'utf-8')) as { taskPrompt?: string; scheduleConfig?: object };
         const isOutOfSync =
           task.taskPrompt !== def.taskPrompt ||
           JSON.stringify(task.scheduleConfig) !== JSON.stringify(def.scheduleConfig);
-        return isOutOfSync ? { ...task, isOutOfSync: true, templateContent: def.taskPrompt } : task;
+        return isOutOfSync ? { ...withTime, isOutOfSync: true, templateContent: def.taskPrompt } : withTime;
       } catch {
-        return task;
+        return withTime;
       }
     });
     res.json(enriched);
@@ -279,7 +288,7 @@ Return ONLY the JSON object, no other text or markdown.`;
       res.status(404).json({ error: 'Scheduled task not found' });
       return;
     }
-    res.json(task);
+    res.json(withNextRunAt(task));
   });
 
   // --- Create scheduled task ---
