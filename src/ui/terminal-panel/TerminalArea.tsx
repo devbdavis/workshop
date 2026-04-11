@@ -1,13 +1,15 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
-import type { Session, SessionId } from '@foundation/types';
+import type { Session, SessionId, Todo } from '@foundation/types';
 import { TerminalPanel } from './TerminalPanel';
 import { TrackOfficeStrip } from './TrackOfficeStrip';
 import { RecentlyDeletedPanel } from './RecentlyDeletedPanel';
+import { SessionLinkButtons } from './SessionLinkButtons';
 
 interface Props {
   trackId: string;
   trackName: string;
   sessions: Session[];
+  todos: Todo[];
   deletedSessions: Session[];
   startingSessions?: Set<string>;
   pendingSelectSessionId?: SessionId | null;
@@ -21,7 +23,7 @@ interface Props {
 
 const storageKey = (trackId: string) => `workshop:selected:${trackId}`;
 
-export function TerminalArea({ trackId, trackName, sessions, deletedSessions, startingSessions, pendingSelectSessionId, onDestroySession, onRenameSession, onRestoreSession, onPurgeSession, defaultOpenPath, onSelectionChange }: Props) {
+export function TerminalArea({ trackId, trackName, sessions, todos, deletedSessions, startingSessions, pendingSelectSessionId, onDestroySession, onRenameSession, onRestoreSession, onPurgeSession, defaultOpenPath, onSelectionChange }: Props) {
   const [selectedIds, setSelectedIds] = useState<SessionId[]>(() => {
     try {
       const stored = localStorage.getItem(storageKey(trackId));
@@ -145,6 +147,7 @@ export function TerminalArea({ trackId, trackName, sessions, deletedSessions, st
               <TerminalPane
                 trackId={trackId}
                 session={session}
+                todos={todos}
                 onDestroy={() => onDestroySession(session.id)}
                 onRename={(name) => onRenameSession(session.id, name)}
                 defaultOpenPath={defaultOpenPath}
@@ -175,6 +178,7 @@ export function TerminalArea({ trackId, trackName, sessions, deletedSessions, st
 interface PaneProps {
   trackId: string;
   session: Session;
+  todos: Todo[];
   onDestroy: () => void;
   onRename: (name: string) => void;
   defaultOpenPath?: string;
@@ -182,7 +186,7 @@ interface PaneProps {
   focusTrigger?: number;
 }
 
-function TerminalPane({ trackId, session, onDestroy, onRename, defaultOpenPath, autoFocus, focusTrigger }: PaneProps) {
+function TerminalPane({ trackId, session, todos, onDestroy, onRename, defaultOpenPath, autoFocus, focusTrigger }: PaneProps) {
   const [editing, setEditing] = useState(false);
   const [editValue, setEditValue] = useState('');
   const inputRef = useRef<HTMLInputElement>(null);
@@ -190,6 +194,7 @@ function TerminalPane({ trackId, session, onDestroy, onRename, defaultOpenPath, 
   const displayName = session.name || `session:${session.id.slice(0, 8)}`;
   const editorPath = session.worktreeRoot ?? defaultOpenPath;
   const terminalPath = session.workingDirectory ?? editorPath;
+  const linkedTodo = todos.find((t) => t.sessionId === session.id);
 
   const startEditing = useCallback(() => {
     setEditValue(session.name || '');
@@ -235,6 +240,10 @@ function TerminalPane({ trackId, session, onDestroy, onRename, defaultOpenPath, 
           </span>
         )}
         <div className="flex items-center gap-1">
+          <SessionLinkButtons
+            pullRequests={linkedTodo?.pullRequests}
+            issueKey={linkedTodo?.issueKey}
+          />
           {editorPath && (
             <>
               <button
