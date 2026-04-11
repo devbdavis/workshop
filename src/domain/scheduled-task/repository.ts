@@ -43,6 +43,8 @@ export interface ScheduledTaskRepository {
 
 export interface ScheduledTaskRunRepository {
   findByTask(taskId: ScheduledTaskId, limit?: number): ScheduledTaskRun[];
+  /** Look up the run for a given Workshop session (used by the SessionEnd hook). */
+  findBySessionId(sessionId: string): ScheduledTaskRun | null;
   create(run: Omit<ScheduledTaskRun, 'id'>): ScheduledTaskRun;
   complete(id: string, status: 'completed' | 'failed', error?: string): ScheduledTaskRun | null;
 }

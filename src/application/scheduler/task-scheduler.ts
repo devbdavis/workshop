@@ -1,5 +1,7 @@
 import cron from 'node-cron';
 import { spawn } from 'child_process';
+import os from 'os';
+import path from 'path';
 import type {
   ScheduledTask,
   ScheduledTaskId,
@@ -37,6 +39,7 @@ export interface TaskSchedulerDeps {
         systemPrompt?: string;
         workingDirectory?: string;
         background?: boolean;
+        dangerouslySkipPermissions?: boolean;
         initialPrompt?: string;
         provider?: SessionProvider;
       },
@@ -224,13 +227,6 @@ export function createTaskScheduler(deps: TaskSchedulerDeps): TaskScheduler {
 
     const now = new Date().toISOString();
 
-    // Create run record
-    const run = deps.runs.create({
-      taskId: task.id,
-      status: 'running',
-      startedAt: now,
-    });
-
     try {
       const systemPrompt = composeSystemPrompt(task);
 
@@ -248,6 +244,7 @@ export function createTaskScheduler(deps: TaskSchedulerDeps): TaskScheduler {
         }
       }
 
+
       // Determine working directory and dispatch track
       let workingDirectory: string | undefined;
       let dispatchTrackId: TrackId;
@@ -261,36 +258,57 @@ export function createTaskScheduler(deps: TaskSchedulerDeps): TaskScheduler {
         dispatchTrackId = getOrCreateScheduledTrack();
       }
 
+      // Default CWD to ~/.workshop/sessions so Claude Code doesn't trigger home-dir
+      // workspace trust prompts — it already trusts the Workshop-managed directory.
+      if (!workingDirectory) {
+        workingDirectory = path.join(os.homedir(), '.workshop', 'sessions');
+      }
+
       const session = await deps.terminal.createSession(dispatchTrackId, {
         systemPrompt: systemPrompt || undefined,
         workingDirectory,
         background: true,
+        dangerouslySkipPermissions: true,
         initialPrompt: effectivePrompt,
         provider: task.provider,
+      });
+
+      // Create the run record NOW that we have the session ID.
+      // Storing session_id here is what allows the SessionEnd hook to look up
+      // this run by session ID and record the real completion time + output.
+      const run = deps.runs.create({
+        taskId: task.id,
+        sessionId: session.id as SessionId,
+        status: 'running',
+        startedAt: now,
       });
 
       // Update task state
       deps.tasks.update(task.id, {
         lastRunAt: now,
-        lastRunStatus: 'running',
+        lastRunStatus: 'completed',
         lastSessionId: session.id as SessionId,
         runCount: task.runCount + 1,
       });
-
-      // Update run with session ID
-      deps.runs.complete(run.id, 'completed');
 
       deps.broadcast('scheduled-task:triggered', task.id);
       if (task.trackId) {
         deps.broadcast('session:created', task.trackId);
       }
 
-      return { ...run, sessionId: session.id as SessionId, status: 'completed' };
+      return run;
     } catch (err) {
       const errorMsg = err instanceof Error ? err.message : String(err);
       console.error(`Scheduled task "${task.name}" (${task.id}) failed:`, errorMsg);
 
-      deps.runs.complete(run.id, 'failed', errorMsg);
+      // Record the failure immediately (no session was created, so no sessionId)
+      const failedRun = deps.runs.create({
+        taskId: task.id,
+        status: 'failed',
+        error: errorMsg,
+        startedAt: now,
+        completedAt: new Date().toISOString(),
+      });
       deps.tasks.update(task.id, {
         lastRunAt: now,
         lastRunStatus: 'failed',
@@ -298,7 +316,7 @@ export function createTaskScheduler(deps: TaskSchedulerDeps): TaskScheduler {
 
       deps.broadcast('scheduled-task:failed', task.id);
 
-      return { ...run, status: 'failed', error: errorMsg };
+      return failedRun;
     }
   }
 

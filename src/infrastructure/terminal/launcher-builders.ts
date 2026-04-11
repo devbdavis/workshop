@@ -100,13 +100,6 @@ export function appendBackgroundInstructions(prompt: string, todoId?: string): s
       'When you have completed the task (or determined you cannot proceed):',
       `1. Use the workshop_update_todo MCP tool to update todo "${todoId}" status to "review"`,
       '2. Add a brief summary of what you accomplished or why you stopped to the description',
-      '3. Use /exit to close your session',
-      '',
-    );
-  } else {
-    instructions.push(
-      'When you have completed your task (or determined you cannot proceed),',
-      'use /exit to close your session so resources are freed.',
       '',
     );
   }
@@ -172,16 +165,25 @@ export function buildClaudeLauncher(
     }
   }
 
-  // Pass the initial prompt as a positional argument to claude so it's sent
-  // as the first message. This is reliable — no tmux paste race conditions.
-  // We write it to a file and use $(cat ...) to avoid shell quoting issues.
-  // (Not used for resumed sessions — they already have conversation context.)
+  // Scheduled background sessions (no todoId) use --print so Claude auto-exits.
+  // Todo-dispatched background sessions run the interactive TUI so the user can
+  // watch progress — the server retires them when the todo is moved to "review".
+  // Bash stays alive (no exec) for scheduled sessions so the tmux pane remains
+  // open long enough for the SessionEnd hook to capture output before cleanup.
+  const isScheduled = options?.background && !options?.todoId;
+  const useExec = !options?.background || !!options?.todoId;
+  const cmdPrefix = useExec ? 'exec ' : '';
+
+  if (isScheduled) {
+    claudeArgs.push('--print');
+  }
+
   if (options?.initialPrompt && !options?.claudeResumeId) {
     const promptMsgFile = path.join(sessionDir, 'initial-prompt.txt');
     writeFileSync(promptMsgFile, options.initialPrompt, 'utf-8');
-    lines.push(`exec ${claudeArgs.join(' ')} "$(cat ${JSON.stringify(promptMsgFile)})"`);
+    lines.push(`${cmdPrefix}${claudeArgs.join(' ')} "$(cat ${JSON.stringify(promptMsgFile)})"`);
   } else {
-    lines.push(`exec ${claudeArgs.join(' ')}`);
+    lines.push(`${cmdPrefix}${claudeArgs.join(' ')}`);
   }
 }
 
