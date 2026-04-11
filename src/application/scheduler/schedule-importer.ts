@@ -39,7 +39,8 @@ export function importBundledSchedules(
   }
   if (files.length === 0) return;
 
-  const existingNames = new Set(taskRepo.findAll().map((t) => t.name));
+  const existingTasks = taskRepo.findAll();
+  const existingByName = new Map(existingTasks.map((t) => [t.name, t]));
 
   for (const file of files) {
     try {
@@ -52,7 +53,17 @@ export function importBundledSchedules(
         continue;
       }
 
-      if (existingNames.has(def.name)) continue; // Already in DB — respect user's version
+      const slug = path.basename(file, '.json');
+      const existing = existingByName.get(def.name);
+
+      if (existing) {
+        // Backfill templateName if the task exists but isn't linked to this template yet
+        if (!existing.templateName) {
+          taskRepo.update(existing.id, { templateName: slug });
+          console.log(`[schedule-import] Linked "${def.name}" to template "${slug}"`);
+        }
+        continue; // Still respect user's content — never overwrite
+      }
 
       // Install the companion script if specified
       let scriptPath: string | undefined;
@@ -79,6 +90,7 @@ export function importBundledSchedules(
         scriptPath,
         enabled: false, // Always import disabled — user opts in explicitly
         provider: 'claude',
+        templateName: slug,
       });
 
       console.log(`[schedule-import] Imported schedule: "${def.name}"`);
