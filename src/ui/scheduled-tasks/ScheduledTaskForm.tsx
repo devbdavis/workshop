@@ -567,24 +567,20 @@ export function ScheduledTaskForm({ task, tracks, agents, onSave, onClose, onSav
 
         {/* Footer */}
         <div className="flex items-center gap-2 px-5 py-3 border-t border-gray-800 shrink-0">
-          {task && onSaveAsTemplate && (() => {
-            const hasTemplate = !!task.templateName;
-            const inSync = hasTemplate && !task.isOutOfSync;
-            return (
-              <button
-                onClick={inSync ? undefined : onSaveAsTemplate}
-                disabled={inSync}
-                title={inSync ? 'Already in sync with template' : undefined}
-                className={`mr-auto px-3 py-1.5 text-xs transition-colors ${
-                  inSync
-                    ? 'text-gray-600 cursor-default'
-                    : 'text-amber-400 hover:text-amber-300'
-                }`}
-              >
-                {hasTemplate ? 'Update Template' : 'Save as Template'}
-              </button>
-            );
-          })()}
+          {task && onSaveAsTemplate && (
+            <button
+              onClick={!!task.templateName && !task.isOutOfSync ? undefined : onSaveAsTemplate}
+              disabled={!!task.templateName && !task.isOutOfSync}
+              title={!!task.templateName && !task.isOutOfSync ? 'Already in sync with template' : undefined}
+              className={`mr-auto px-3 py-1.5 text-xs transition-colors ${
+                !!task.templateName && !task.isOutOfSync
+                  ? 'text-gray-600 cursor-default'
+                  : 'text-amber-400 hover:text-amber-300'
+              }`}
+            >
+              {task.templateName ? 'Update Template' : 'Save as Template'}
+            </button>
+          )}
           <button
             onClick={onClose}
             className="ml-auto px-4 py-1.5 text-xs text-gray-400 hover:text-gray-200 transition-colors"
