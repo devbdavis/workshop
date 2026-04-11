@@ -237,6 +237,13 @@ export interface ScheduledTask {
   id: ScheduledTaskId;
   name: string;
   description?: string;
+  // Template sync
+  /** Slug of the bundled template this task was created from (templates/schedules/<name>.json) */
+  templateName?: string;
+  /** Computed at API time: true when taskPrompt or scheduleConfig diverges from the template */
+  isOutOfSync?: boolean;
+  /** Template's taskPrompt — present when isOutOfSync is true, for diff display */
+  templateContent?: string;
   // Schedule
   scheduleConfig: ScheduleConfig;
   /** The resolved cron expression used by node-cron */
@@ -377,6 +384,12 @@ export interface Agent {
   allowedTools?: string[];
   /** Max agentic turns */
   maxTurns?: number;
+  /** Slug of the bundled template (templates/agents/<templateName>.md) */
+  templateName?: string;
+  /** Computed at API time: true when systemPrompt or description diverges from the template */
+  isOutOfSync?: boolean;
+  /** Template's systemPrompt — present when isOutOfSync is true, for diff display */
+  templateContent?: string;
   createdAt: string;
   updatedAt: string;
 }
@@ -439,6 +452,12 @@ export interface Skill {
   content: string;
   source: SkillSource;
   filePath?: string;
+  /** Slug of the bundled template (templates/skills/<templateName>/SKILL.md) */
+  templateName?: string;
+  /** Computed at API time: true when content or description diverges from the template */
+  isOutOfSync?: boolean;
+  /** Template's content — present when isOutOfSync is true, for diff display */
+  templateContent?: string;
   createdAt: string;
   updatedAt: string;
 }

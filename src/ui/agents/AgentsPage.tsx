@@ -5,8 +5,31 @@ import { AgentCard } from './AgentCard';
 import { AgentFormModal, type AgentFormData } from './AgentFormModal';
 import { ImproveAgentModal } from './ImproveAgentModal';
 
+interface AgentTemplate {
+  name: string;
+  description: string;
+  slug: string;
+  raw: string;
+}
+
+const HIDDEN_KEY = 'workshop:hidden-agent-templates';
+
+function getHidden(): Set<string> {
+  try {
+    const raw = localStorage.getItem(HIDDEN_KEY);
+    return new Set(raw ? JSON.parse(raw) as string[] : []);
+  } catch { return new Set(); }
+}
+
+function saveHidden(s: Set<string>) {
+  localStorage.setItem(HIDDEN_KEY, JSON.stringify([...s]));
+}
+
 export function AgentsPage() {
   const [agents, setAgents] = useState<Agent[]>([]);
+  const [templates, setTemplates] = useState<AgentTemplate[]>([]);
+  const [hidden, setHidden] = useState<Set<string>>(getHidden);
+  const [showTemplates, setShowTemplates] = useState(false);
   const [loading, setLoading] = useState(true);
 
   // Modal state
@@ -16,8 +39,12 @@ export function AgentsPage() {
 
   async function loadAgents() {
     try {
-      const res = await fetch('/api/agents');
-      if (res.ok) setAgents(await res.json());
+      const [agentsRes, tplRes] = await Promise.all([
+        fetch('/api/agents'),
+        fetch('/api/agents/templates'),
+      ]);
+      if (agentsRes.ok) setAgents(await agentsRes.json());
+      if (tplRes.ok) setTemplates(await tplRes.json());
     } catch (err) {
       console.error('Failed to load agents:', err);
     } finally {
@@ -83,11 +110,45 @@ export function AgentsPage() {
     setImprovingAgent(null);
   }
 
+  async function handleSyncFromTemplate(agentId: string) {
+    await fetch(`/api/agents/${agentId}/sync-from-template`, { method: 'POST' });
+    loadAgents();
+  }
+
+  async function handleSaveAsTemplate(agentId: string) {
+    const res = await fetch(`/api/agents/${agentId}/save-as-template`, { method: 'POST' });
+    if (res.ok) {
+      const updated: Agent = await res.json();
+      setEditingAgent(updated);
+    }
+    loadAgents();
+  }
+
+  async function handleInstallTemplate(template: AgentTemplate) {
+    try {
+      await fetch('/api/agents/install-template', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ slug: template.slug, raw: template.raw }),
+      });
+      loadAgents();
+    } catch (err) { console.error('Failed to install template:', err); }
+  }
+
+  function hideTemplate(slug: string) {
+    const next = new Set(hidden);
+    next.add(slug);
+    setHidden(next);
+    saveHidden(next);
+  }
+
   const myAgents = agents
     .filter((a) => a.source === 'global' || a.source === 'workshop')
     .sort((a, b) => a.name.localeCompare(b.name));
 
   const projectAgents = agents.filter((a) => a.source === 'project');
+  const visibleTemplates = templates.filter((t) => !hidden.has(t.slug));
+  const hiddenCount = templates.filter((t) => hidden.has(t.slug)).length;
 
   if (loading) {
     return (
@@ -134,6 +195,7 @@ export function AgentsPage() {
                     onEdit={() => setEditingAgent(agent)}
                     onDelete={() => handleDelete(agent.id)}
                     onImprove={() => setImprovingAgent(agent)}
+                    onSyncFromTemplate={agent.isOutOfSync ? () => handleSyncFromTemplate(agent.id) : undefined}
                   />
                 ))}
               </div>
@@ -142,6 +204,74 @@ export function AgentsPage() {
 
           {/* Project Agents — read-only */}
           <ProjectAgentSection agents={projectAgents} />
+
+          {/* Templates section — always below real items */}
+          {templates.length > 0 && (
+            <section className="bg-gray-900/50 border border-gray-800/50 rounded-lg p-6">
+              <button
+                onClick={() => setShowTemplates(!showTemplates)}
+                className="w-full flex items-center justify-between text-left group"
+              >
+                <div>
+                  <h2 className="text-base font-semibold text-gray-400 group-hover:text-gray-200 transition-colors">
+                    Templates
+                    <span className="ml-2 text-sm font-normal text-gray-600">
+                      ({visibleTemplates.length} available{hiddenCount > 0 ? `, ${hiddenCount} hidden` : ''})
+                    </span>
+                  </h2>
+                  <p className="text-sm text-gray-500">Agent definitions you can install across machines</p>
+                </div>
+                <svg
+                  className={`w-5 h-5 text-gray-600 transition-transform ${showTemplates ? 'rotate-180' : ''}`}
+                  viewBox="0 0 20 20" fill="currentColor"
+                >
+                  <path fillRule="evenodd" d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" clipRule="evenodd" />
+                </svg>
+              </button>
+
+              {showTemplates && (
+                <div className="mt-4 space-y-2">
+                  {visibleTemplates.length === 0 && (
+                    <p className="text-xs text-gray-600 italic">All templates are hidden.</p>
+                  )}
+                  {visibleTemplates.map((t) => (
+                    <div
+                      key={t.slug}
+                      className="flex items-center gap-4 px-4 py-3 rounded-lg bg-gray-800/50 border border-gray-700/50"
+                    >
+                      <div className="flex-1 min-w-0">
+                        <span className="text-sm font-medium text-gray-300">{t.name}</span>
+                        {t.description && (
+                          <p className="text-xs text-gray-500 mt-0.5">{t.description}</p>
+                        )}
+                      </div>
+                      <button
+                        onClick={() => handleInstallTemplate(t)}
+                        className="shrink-0 px-3 py-1 text-xs bg-gray-700 hover:bg-gray-600 text-gray-300 rounded transition-colors"
+                      >
+                        Install
+                      </button>
+                      <button
+                        onClick={() => hideTemplate(t.slug)}
+                        className="shrink-0 text-xs text-gray-600 hover:text-gray-400 transition-colors"
+                        title="Hide this template"
+                      >
+                        Hide
+                      </button>
+                    </div>
+                  ))}
+                  {hiddenCount > 0 && (
+                    <button
+                      onClick={() => { setHidden(new Set()); saveHidden(new Set()); }}
+                      className="text-xs text-gray-600 hover:text-gray-400 transition-colors mt-1"
+                    >
+                      Show {hiddenCount} hidden template{hiddenCount !== 1 ? 's' : ''}
+                    </button>
+                  )}
+                </div>
+              )}
+            </section>
+          )}
         </div>
       </div>
 
@@ -156,6 +286,7 @@ export function AgentsPage() {
           initial={editingAgent}
           onSave={(data) => handleUpdate(editingAgent.id, data)}
           onClose={() => setEditingAgent(null)}
+          onSaveAsTemplate={() => handleSaveAsTemplate(editingAgent.id)}
         />
       )}
 

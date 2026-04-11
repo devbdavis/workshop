@@ -692,6 +692,13 @@ function runMigrations(db: Database.Database): void {
     // Column already exists — safe to ignore
   }
 
+  // Migration: add template_name column to scheduled_tasks
+  try {
+    db.exec(`ALTER TABLE scheduled_tasks ADD COLUMN template_name TEXT;`);
+  } catch {
+    // Column already exists — safe to ignore
+  }
+
   // Migration: add pull_requests column to todos (JSON array of {url, title?})
   try {
     db.exec(`ALTER TABLE todos ADD COLUMN pull_requests TEXT;`);

@@ -75,6 +75,7 @@ export interface ScheduledTaskRouterDeps {
   tasks: ScheduledTaskRepository;
   runs: ScheduledTaskRunRepository;
   scheduler: TaskScheduler;
+  projectRoot: string;
 }
 
 /** Attach the next scheduled occurrence to an enabled task before sending to the client. */
@@ -86,7 +87,106 @@ function withNextRunAt(task: ScheduledTask): ScheduledTask {
 
 export function createScheduledTaskRouter(deps: ScheduledTaskRouterDeps): Router {
   const router = Router();
-  const { tasks, runs, scheduler } = deps;
+  const { tasks, runs, scheduler, projectRoot } = deps;
+
+  // --- Bundled schedule templates (schedules/*.json not yet in DB) ---
+
+  router.get('/scheduled-tasks/templates', (req, res) => {
+    const schedulesDir = path.join(projectRoot, 'templates', 'schedules');
+    if (!fs.existsSync(schedulesDir)) {
+      res.json([]);
+      return;
+    }
+
+    let files: string[];
+    try {
+      files = fs.readdirSync(schedulesDir).filter((f) => f.endsWith('.json'));
+    } catch {
+      res.json([]);
+      return;
+    }
+
+    const existingNames = new Set(tasks.findAll().map((t) => t.name));
+    const templates: unknown[] = [];
+
+    for (const file of files) {
+      try {
+        const def = JSON.parse(fs.readFileSync(path.join(schedulesDir, file), 'utf-8')) as {
+          name?: string;
+          description?: string;
+          scheduleConfig?: object;
+          taskPrompt?: string;
+        };
+        if (!def.name || !def.scheduleConfig || !def.taskPrompt) continue;
+        if (existingNames.has(def.name)) continue;
+        templates.push({
+          name: def.name,
+          description: def.description,
+          scheduleConfig: def.scheduleConfig,
+          scheduleDescription: describeSchedule(def.scheduleConfig as Parameters<typeof describeSchedule>[0]),
+          taskPrompt: def.taskPrompt,
+        });
+      } catch {
+        // skip malformed files
+      }
+    }
+
+    res.json(templates);
+  });
+
+  // --- Save current task as template (write/overwrite templates/schedules/<slug>.json) ---
+
+  router.post('/scheduled-tasks/:id/save-as-template', (req, res) => {
+    const task = tasks.findById(req.params.id as ScheduledTaskId);
+    if (!task) { res.status(404).json({ error: 'Scheduled task not found' }); return; }
+
+    const slug = slugify(task.name);
+    const schedulesDir = path.join(projectRoot, 'templates', 'schedules');
+    fs.mkdirSync(schedulesDir, { recursive: true });
+
+    const def = {
+      name: task.name,
+      description: task.description,
+      scheduleConfig: task.scheduleConfig,
+      taskPrompt: task.taskPrompt,
+    };
+    const filePath = path.join(schedulesDir, `${slug}.json`);
+    fs.writeFileSync(filePath, JSON.stringify(def, null, 2) + '\n', 'utf-8');
+
+    // Link the task to this template
+    const updated = tasks.update(task.id, { templateName: slug });
+    res.json(updated);
+  });
+
+  // --- Sync task from its linked template ---
+
+  router.post('/scheduled-tasks/:id/sync-from-template', (req, res) => {
+    const task = tasks.findById(req.params.id as ScheduledTaskId);
+    if (!task) { res.status(404).json({ error: 'Scheduled task not found' }); return; }
+    if (!task.templateName) { res.status(400).json({ error: 'Task has no linked template' }); return; }
+
+    const filePath = path.join(projectRoot, 'templates', 'schedules', `${task.templateName}.json`);
+    if (!fs.existsSync(filePath)) { res.status(404).json({ error: 'Template file not found' }); return; }
+
+    const def = JSON.parse(fs.readFileSync(filePath, 'utf-8')) as { taskPrompt?: string; scheduleConfig?: Parameters<typeof scheduleConfigToCron>[0]; description?: string };
+    const updated = tasks.update(task.id, {
+      ...(def.taskPrompt ? { taskPrompt: def.taskPrompt } : {}),
+      ...(def.scheduleConfig ? {
+        scheduleConfig: def.scheduleConfig,
+        cronExpression: scheduleConfigToCron(def.scheduleConfig),
+        scheduleDescription: describeSchedule(def.scheduleConfig),
+      } : {}),
+      ...(def.description !== undefined ? { description: def.description } : {}),
+    });
+
+    if (updated?.enabled) {
+      scheduler.unscheduleTask(task.id);
+      scheduler.scheduleTask(task.id);
+    }
+
+    broadcast('scheduled-task:updated', task.id);
+    res.json(updated);
+  });
 
   // --- Generate scheduled task definition via Claude CLI ---
 
@@ -161,11 +261,23 @@ Return ONLY the JSON object, no other text or markdown.`;
 
   router.get('/scheduled-tasks', (req, res) => {
     const { trackId } = req.query;
-    if (trackId) {
-      res.json(tasks.findByTrack(trackId as TrackId).map(withNextRunAt));
-      return;
-    }
-    res.json(tasks.findAll().map(withNextRunAt));
+    const all = trackId ? tasks.findByTrack(trackId as TrackId) : tasks.findAll();
+    const schedulesDir = path.join(projectRoot, 'templates', 'schedules');
+    const enriched = all.map((task) => {
+      const withTime = withNextRunAt(task);
+      if (!task.templateName) return withTime;
+      const filePath = path.join(schedulesDir, `${task.templateName}.json`);
+      try {
+        const def = JSON.parse(fs.readFileSync(filePath, 'utf-8')) as { taskPrompt?: string; scheduleConfig?: object };
+        const isOutOfSync =
+          task.taskPrompt !== def.taskPrompt ||
+          JSON.stringify(task.scheduleConfig) !== JSON.stringify(def.scheduleConfig);
+        return isOutOfSync ? { ...withTime, isOutOfSync: true, templateContent: def.taskPrompt } : withTime;
+      } catch {
+        return withTime;
+      }
+    });
+    res.json(enriched);
   });
 
   // --- Get single scheduled task ---
@@ -192,6 +304,7 @@ Return ONLY the JSON object, no other text or markdown.`;
       taskPrompt,
       systemPromptOverride,
       scriptContent,
+      templateName,
       enabled,
     } = req.body;
 
@@ -240,6 +353,7 @@ Return ONLY the JSON object, no other text or markdown.`;
       taskPrompt,
       systemPromptOverride,
       scriptPath,
+      templateName: templateName || undefined,
       enabled: enabled !== undefined ? enabled : true,
     });
 

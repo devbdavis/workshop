@@ -15,9 +15,10 @@ interface Props {
   initial?: Agent;
   onSave: (data: AgentFormData) => void;
   onClose: () => void;
+  onSaveAsTemplate?: () => void;
 }
 
-export function AgentFormModal({ initial, onSave, onClose }: Props) {
+export function AgentFormModal({ initial, onSave, onClose, onSaveAsTemplate }: Props) {
   const [name, setName] = useState(initial?.name ?? '');
   const [description, setDescription] = useState(initial?.description ?? '');
   const [model, setModel] = useState(initial?.model ?? '');
@@ -84,23 +85,27 @@ export function AgentFormModal({ initial, onSave, onClose }: Props) {
   const isValid = name.trim() && description.trim() && systemPrompt.trim();
   const inputCls = 'block w-full px-3 py-1.5 bg-gray-800 border border-gray-700 rounded text-sm text-gray-100 focus:outline-none focus:border-blue-500';
 
+  // Template button state
+  const hasTemplate = !!initial?.templateName;
+  const templateInSync = hasTemplate && !initial?.isOutOfSync;
+
   return (
     <div
       className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4"
       onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
     >
-      <div className="bg-gray-900 border border-gray-700 rounded-lg w-[700px] max-w-full max-h-[90vh] flex flex-col">
+      <div className="bg-gray-900 border border-gray-700 rounded-lg w-[85vw] h-[88vh] flex flex-col">
         {/* Header */}
         <div className="flex items-center justify-between px-5 py-4 border-b border-gray-800 shrink-0">
           <h2 className="text-lg font-semibold">{initial ? 'Edit Agent' : 'New Agent'}</h2>
           <button onClick={onClose} className="text-gray-400 hover:text-gray-200 text-2xl leading-none px-1">×</button>
         </div>
 
-        {/* Scrollable form body */}
-        <form ref={formRef} id="agent-form" onSubmit={handleSubmit} className="flex-1 overflow-y-auto p-5 space-y-4">
+        {/* Form body — flex column so system prompt grows to fill space */}
+        <form ref={formRef} id="agent-form" onSubmit={handleSubmit} className="flex-1 flex flex-col min-h-0 p-5 gap-4 overflow-y-auto">
           {/* Generate with Claude — new agents only */}
           {!initial && (
-            <div className="border border-gray-700 bg-gray-800/60 rounded-lg p-3 space-y-2">
+            <div className="border border-gray-700 bg-gray-800/60 rounded-lg p-3 space-y-2 shrink-0">
               <p className="text-xs font-medium text-blue-400">Generate with Claude</p>
               <p className="text-[11px] text-gray-400">Describe what you want the agent to do and Claude will draft the full definition.</p>
               <textarea
@@ -126,7 +131,7 @@ export function AgentFormModal({ initial, onSave, onClose }: Props) {
             </div>
           )}
 
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-2 gap-3 shrink-0">
             <div>
               <label className="block text-xs text-gray-400 mb-1">Name *</label>
               <input value={name} onChange={(e) => setName(e.target.value)} className={inputCls} required />
@@ -137,12 +142,12 @@ export function AgentFormModal({ initial, onSave, onClose }: Props) {
             </div>
           </div>
 
-          <div>
+          <div className="shrink-0">
             <label className="block text-xs text-gray-400 mb-1">Description *</label>
             <input value={description} onChange={(e) => setDescription(e.target.value)} className={inputCls} required />
           </div>
 
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-2 gap-3 shrink-0">
             <div>
               <label className="block text-xs text-gray-400 mb-1">Color</label>
               <input value={color} onChange={(e) => setColor(e.target.value)} className={inputCls} placeholder="e.g. blue, #3b82f6" />
@@ -153,26 +158,39 @@ export function AgentFormModal({ initial, onSave, onClose }: Props) {
             </div>
           </div>
 
-          <div>
+          <div className="shrink-0">
             <label className="block text-xs text-gray-400 mb-1">Allowed Tools</label>
             <input value={allowedTools} onChange={(e) => setAllowedTools(e.target.value)} className={inputCls} placeholder="Comma-separated, e.g. Read, Edit, Bash" />
           </div>
 
-          <div>
-            <label className="block text-xs text-gray-400 mb-1">System Prompt *</label>
+          {/* System Prompt — grows to fill remaining modal height */}
+          <div className="flex flex-col flex-1 min-h-0">
+            <label className="block text-xs text-gray-400 mb-1 shrink-0">System Prompt *</label>
             <textarea
               value={systemPrompt}
               onChange={(e) => setSystemPrompt(e.target.value)}
-              rows={14}
-              className="block w-full px-3 py-2 bg-gray-800 border border-gray-700 rounded text-sm text-gray-100 font-mono focus:outline-none focus:border-blue-500 resize-y"
+              className="flex-1 min-h-[200px] block w-full px-3 py-2 bg-gray-800 border border-gray-700 rounded text-sm text-gray-100 font-mono focus:outline-none focus:border-blue-500 resize-y"
               required
             />
           </div>
         </form>
 
         {/* Footer */}
-        <div className="flex items-center justify-end gap-2 px-5 py-3 border-t border-gray-800 shrink-0">
-          <button type="button" onClick={onClose} className="px-4 py-2 text-sm bg-gray-700 hover:bg-gray-600 rounded-lg transition-colors">
+        <div className="flex items-center gap-2 px-5 py-3 border-t border-gray-800 shrink-0">
+          {initial && onSaveAsTemplate && (
+            <button
+              type="button"
+              onClick={templateInSync ? undefined : onSaveAsTemplate}
+              disabled={templateInSync}
+              title={templateInSync ? 'Already in sync with template' : undefined}
+              className={`mr-auto px-3 py-2 text-sm transition-colors ${
+                templateInSync ? 'text-gray-600 cursor-default' : 'text-amber-400 hover:text-amber-300'
+              }`}
+            >
+              {hasTemplate ? 'Update Template' : 'Save as Template'}
+            </button>
+          )}
+          <button type="button" onClick={onClose} className="ml-auto px-4 py-2 text-sm bg-gray-700 hover:bg-gray-600 rounded-lg transition-colors">
             Cancel
           </button>
           <button
