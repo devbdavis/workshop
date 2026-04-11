@@ -1,11 +1,14 @@
 import { useEffect, useState, useCallback, useRef } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import type { Track, Session, SessionId, SessionProvider, TrackSummary, ExternalTicket, Todo } from '@foundation/types';
+import type { DispatchOptions } from './DispatchDropdown';
 import { SummaryPanel } from './SummaryPanel';
 import { ContextPanel } from './ContextPanel';
 import { TicketPanel } from './TicketPanel';
 import { TodoPanel } from './TodoPanel';
 import { TrackConfig } from './TrackConfig';
+import { SessionPanel } from './SessionPanel';
+import { TodoDetailModal } from '../kanban/TodoDetailModal';
 import { TerminalArea } from '../terminal-panel/TerminalArea';
 
 interface IdleAlert {
@@ -24,7 +27,8 @@ export function TrackView() {
   const [todos, setTodos] = useState<Todo[]>([]);
   const [deletedSessions, setDeletedSessions] = useState<Session[]>([]);
   const [loading, setLoading] = useState(true);
-  const [sidebarTab, setSidebarTab] = useState<'context' | 'todos' | 'config'>('todos');
+  const [sidebarTab, setSidebarTab] = useState<'session' | 'todos' | 'config'>('session');
+  const [selectedTodo, setSelectedTodo] = useState<Todo | null>(null);
   const [editingName, setEditingName] = useState(false);
   const [nameValue, setNameValue] = useState('');
   const [idleAlerts, setIdleAlerts] = useState<IdleAlert[]>([]);
@@ -199,6 +203,39 @@ export function TrackView() {
     }
   }
 
+  async function handleSaveTodo(todoId: string, data: Partial<Todo>) {
+    await fetch(`/api/todos/${todoId}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data),
+    });
+    setSelectedTodo(null);
+    loadTrack();
+  }
+
+  async function handleDeleteTodo(todoId: string) {
+    await fetch(`/api/todos/${todoId}`, { method: 'DELETE' });
+    setSelectedTodo(null);
+    loadTrack();
+  }
+
+  async function handleDispatchTodo(todoId: string, opts: DispatchOptions, formData?: Partial<Todo>) {
+    if (formData) {
+      await fetch(`/api/todos/${todoId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(formData),
+      });
+    }
+    await fetch(`/api/todos/${todoId}/dispatch`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(opts),
+    });
+    setSelectedTodo(null);
+    loadTrack();
+  }
+
   async function saveTrackName() {
     const trimmed = nameValue.trim();
     if (!trimmed || trimmed === track?.name) { setEditingName(false); return; }
@@ -263,10 +300,15 @@ export function TrackView() {
 
           <div className="flex border-b border-gray-800">
             <button
-              onClick={() => setSidebarTab('context')}
-              className={`flex-1 px-3 py-2 text-xs font-medium ${sidebarTab === 'context' ? 'text-blue-400 border-b-2 border-blue-400' : 'text-gray-500 hover:text-gray-300'}`}
+              onClick={() => setSidebarTab('session')}
+              className={`flex-1 px-3 py-2 text-xs font-medium ${sidebarTab === 'session' ? 'text-blue-400 border-b-2 border-blue-400' : 'text-gray-500 hover:text-gray-300'}`}
             >
-              Context
+              Session
+              {sessions.length > 0 && (
+                <span className="ml-1 text-[10px] bg-gray-800 text-gray-400 px-1 py-0.5 rounded">
+                  {sessions.length}
+                </span>
+              )}
             </button>
             <button
               onClick={() => setSidebarTab('todos')}
@@ -287,15 +329,16 @@ export function TrackView() {
             </button>
           </div>
 
-          {sidebarTab === 'context' ? (
-            <>
-              <TicketPanel trackId={track.id} tickets={tickets} onUpdate={loadTrack} />
-              <ContextPanel track={track} onUpdate={loadTrack} />
-            </>
+          {sidebarTab === 'session' ? (
+            <SessionPanel sessions={sessions} todos={todos} onOpenTodo={setSelectedTodo} />
           ) : sidebarTab === 'todos' ? (
             <TodoPanel track={track} todos={todos} sessions={sessions} onUpdate={loadTrack} />
           ) : (
-            <TrackConfig track={track} onUpdate={loadTrack} />
+            <>
+              <TicketPanel trackId={track.id} tickets={tickets} onUpdate={loadTrack} />
+              <ContextPanel track={track} onUpdate={loadTrack} />
+              <TrackConfig track={track} onUpdate={loadTrack} />
+            </>
           )}
         </aside>
 
@@ -317,6 +360,17 @@ export function TrackView() {
           </div>
         </main>
       </div>
+
+      {selectedTodo !== null && (
+        <TodoDetailModal
+          todo={selectedTodo}
+          tracks={[track]}
+          onClose={() => setSelectedTodo(null)}
+          onSave={handleSaveTodo}
+          onDelete={handleDeleteTodo}
+          onDispatch={handleDispatchTodo}
+        />
+      )}
 
       {/* Idle alert toasts — bottom-right, auto-dismiss */}
       {idleAlerts.length > 0 && (
