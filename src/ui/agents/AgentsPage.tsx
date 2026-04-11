@@ -116,7 +116,11 @@ export function AgentsPage() {
   }
 
   async function handleSaveAsTemplate(agentId: string) {
-    await fetch(`/api/agents/${agentId}/save-as-template`, { method: 'POST' });
+    const res = await fetch(`/api/agents/${agentId}/save-as-template`, { method: 'POST' });
+    if (res.ok) {
+      const updated: Agent = await res.json();
+      setEditingAgent(updated);
+    }
     loadAgents();
   }
 

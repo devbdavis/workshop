@@ -97,7 +97,11 @@ export function ScheduledTasksPage() {
   }
 
   async function handleSaveAsTemplate(taskId: string) {
-    await fetch(`/api/scheduled-tasks/${taskId}/save-as-template`, { method: 'POST' });
+    const res = await fetch(`/api/scheduled-tasks/${taskId}/save-as-template`, { method: 'POST' });
+    if (res.ok) {
+      const updated: ScheduledTask = await res.json();
+      setEditingTask(updated);
+    }
     loadData();
   }
 

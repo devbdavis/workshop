@@ -71,7 +71,7 @@ export function SkillFormModal({ initial, onSave, onClose, onSaveAsTemplate }: P
       className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4"
       onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
     >
-      <div className="bg-gray-900 border border-gray-700 rounded-lg w-[700px] max-w-full max-h-[90vh] flex flex-col">
+      <div className="bg-gray-900 border border-gray-700 rounded-lg w-[85vw] h-[88vh] flex flex-col">
         {/* Header */}
         <div className="flex items-center justify-between px-5 py-4 border-b border-gray-800 shrink-0">
           <h2 className="text-lg font-semibold">{initial ? 'Edit Skill' : 'New Skill'}</h2>
@@ -132,15 +132,25 @@ export function SkillFormModal({ initial, onSave, onClose, onSaveAsTemplate }: P
 
         {/* Footer */}
         <div className="flex items-center gap-2 px-5 py-3 border-t border-gray-800 shrink-0">
-          {initial && onSaveAsTemplate && (
-            <button
-              type="button"
-              onClick={onSaveAsTemplate}
-              className="mr-auto px-3 py-2 text-sm text-amber-400 hover:text-amber-300 transition-colors"
-            >
-              {initial.templateName ? 'Update Template' : 'Save as Template'}
-            </button>
-          )}
+          {initial && onSaveAsTemplate && (() => {
+            const hasTemplate = !!initial.templateName;
+            const inSync = hasTemplate && !initial.isOutOfSync;
+            return (
+              <button
+                type="button"
+                onClick={inSync ? undefined : onSaveAsTemplate}
+                disabled={inSync}
+                title={inSync ? 'Already in sync with template' : undefined}
+                className={`mr-auto px-3 py-2 text-sm transition-colors ${
+                  inSync
+                    ? 'text-gray-600 cursor-default'
+                    : 'text-amber-400 hover:text-amber-300'
+                }`}
+              >
+                {hasTemplate ? 'Update Template' : 'Save as Template'}
+              </button>
+            );
+          })()}
           <button type="button" onClick={onClose} className="ml-auto px-4 py-2 text-sm bg-gray-700 hover:bg-gray-600 rounded-lg transition-colors">
             Cancel
           </button>
