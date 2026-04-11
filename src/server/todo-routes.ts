@@ -129,12 +129,13 @@ export function createTodoRouter(deps: TodoRouterDeps): Router {
       return;
     }
 
-    // When moving away from in-progress, clear session and agent assignment.
-    // This handles dead agents whose sessions no longer exist in the DB —
-    // SQLite FK checks fire on every UPDATE, even when the value isn't changing.
-    const isLeavingInProgress = status && status !== 'in-progress' && existing.status === 'in-progress';
-    const resolvedSessionId = isLeavingInProgress ? null : sessionId;
-    const resolvedAgentId: null | undefined = isLeavingInProgress ? null : undefined;
+    // Clear session/agent assignment only when moving to 'done' — that's the only
+    // transition that also destroys the session. Moving to 'review' or back to
+    // 'backlog'/'ready' should preserve the link so the session header keeps showing
+    // the PR/ticket icons while the session is still alive.
+    const isMovingToDone = status === 'done' && existing.status === 'in-progress';
+    const resolvedSessionId = isMovingToDone ? null : sessionId;
+    const resolvedAgentId: null | undefined = isMovingToDone ? null : undefined;
 
     const todo = todos.update(req.params.todoId as TodoId, {
       title,
