@@ -176,6 +176,8 @@ export function createExecutionHookRouter(deps: ExecutionHookRouterDeps): Router
       // 2. General cleanup: soft-delete the session into the recycle bin.
       // All sessions go to Recently Deleted on exit and are purged after 7 days.
       // Skip if already soft-deleted (user manually deleted, or sync loop retired it).
+      // Exception: todo-dispatched background agents (background=true, no task run) stay
+      // alive so the user can review or continue the conversation after it finishes.
       const session = sessions.findById(sessionId as SessionId);
       if (session?.deletedAt) {
         console.log(`Session ${sessionId} is already in the recycle bin — skipping`);
@@ -184,11 +186,9 @@ export function createExecutionHookRouter(deps: ExecutionHookRouterDeps): Router
         // The session dir persists for 7 days in the recycle bin — no SQLite blobs.
         // Also complete any associated scheduled-task run with the real end timestamp
         // (the run was left in 'running' state by the task scheduler so duration is accurate).
-        if (session.tmuxSession) {
-          captureOutputToFile(sessionId, session.tmuxSession);
-        }
+        let run: ReturnType<typeof taskRuns.findBySessionId> | undefined;
         try {
-          const run = taskRuns.findBySessionId(sessionId);
+          run = taskRuns.findBySessionId(sessionId);
           if (run && run.status === 'running') {
             taskRuns.complete(run.id, 'completed');
           }
@@ -196,11 +196,24 @@ export function createExecutionHookRouter(deps: ExecutionHookRouterDeps): Router
           console.warn(`Failed to complete scheduled task run for session ${sessionId}:`, runErr);
         }
 
-        try {
-          await terminal.softDeleteSession(sessionId as SessionId);
-          broadcast('session:deleted', sessionId);
-        } catch (destroyErr) {
-          console.error(`Failed to soft-delete session ${sessionId}:`, destroyErr);
+        // Todo-dispatched background agents: stay alive so the user can review the work.
+        // Scheduled tasks (identified by a linked task run) and interactive sessions exit normally.
+        const isTodoAgent = session.background && !run;
+        if (isTodoAgent) {
+          console.log(`Session ${sessionId} is a todo-dispatched agent — keeping alive after exit`);
+          if (session.tmuxSession) {
+            captureOutputToFile(sessionId, session.tmuxSession);
+          }
+        } else {
+          if (session.tmuxSession) {
+            captureOutputToFile(sessionId, session.tmuxSession);
+          }
+          try {
+            await terminal.softDeleteSession(sessionId as SessionId);
+            broadcast('session:deleted', sessionId);
+          } catch (destroyErr) {
+            console.error(`Failed to soft-delete session ${sessionId}:`, destroyErr);
+          }
         }
       }
 
