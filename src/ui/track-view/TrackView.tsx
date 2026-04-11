@@ -353,6 +353,7 @@ export function TrackView() {
               trackId={track.id}
               trackName={track.name}
               sessions={sessions}
+              todos={todos}
               deletedSessions={deletedSessions}
               startingSessions={startingSessions}
               pendingSelectSessionId={pendingSelectSessionId}
