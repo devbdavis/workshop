@@ -16,11 +16,12 @@ interface Props {
   onRestoreSession: (sessionId: string) => void;
   onPurgeSession: (sessionId: string) => void;
   defaultOpenPath?: string;
+  onSelectionChange?: (ids: SessionId[]) => void;
 }
 
 const storageKey = (trackId: string) => `workshop:selected:${trackId}`;
 
-export function TerminalArea({ trackId, trackName, sessions, deletedSessions, startingSessions, pendingSelectSessionId, onDestroySession, onRenameSession, onRestoreSession, onPurgeSession, defaultOpenPath }: Props) {
+export function TerminalArea({ trackId, trackName, sessions, deletedSessions, startingSessions, pendingSelectSessionId, onDestroySession, onRenameSession, onRestoreSession, onPurgeSession, defaultOpenPath, onSelectionChange }: Props) {
   const [selectedIds, setSelectedIds] = useState<SessionId[]>(() => {
     try {
       const stored = localStorage.getItem(storageKey(trackId));
@@ -61,6 +62,11 @@ export function TerminalArea({ trackId, trackName, sessions, deletedSessions, st
       return candidate ? [candidate.id] : [];
     });
   }, [sessions]);
+
+  // Notify parent of selection changes so it can sync the session panel.
+  useEffect(() => {
+    onSelectionChange?.(selectedIds);
+  }, [selectedIds, onSelectionChange]);
 
   const [showRecentlyDeleted, setShowRecentlyDeleted] = useState(false);
 

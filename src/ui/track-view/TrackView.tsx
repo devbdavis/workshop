@@ -26,6 +26,7 @@ export function TrackView() {
   const [tickets, setTickets] = useState<ExternalTicket[]>([]);
   const [todos, setTodos] = useState<Todo[]>([]);
   const [deletedSessions, setDeletedSessions] = useState<Session[]>([]);
+  const [activeSessionIds, setActiveSessionIds] = useState<SessionId[]>([]);
   const [loading, setLoading] = useState(true);
   const [sidebarTab, setSidebarTab] = useState<'session' | 'todos' | 'config'>('session');
   const [selectedTodo, setSelectedTodo] = useState<Todo | null>(null);
@@ -330,7 +331,11 @@ export function TrackView() {
           </div>
 
           {sidebarTab === 'session' ? (
-            <SessionPanel sessions={sessions} todos={todos} onOpenTodo={setSelectedTodo} />
+            <SessionPanel
+              sessions={activeSessionIds.length > 0 ? sessions.filter((s) => activeSessionIds.includes(s.id)) : sessions.slice(0, 1)}
+              todos={todos}
+              onOpenTodo={setSelectedTodo}
+            />
           ) : sidebarTab === 'todos' ? (
             <TodoPanel track={track} todos={todos} sessions={sessions} onUpdate={loadTrack} />
           ) : (
@@ -356,6 +361,7 @@ export function TrackView() {
               onRestoreSession={restoreSession}
               onPurgeSession={purgeSession}
               defaultOpenPath={track.repos?.[0]?.path}
+              onSelectionChange={setActiveSessionIds}
             />
           </div>
         </main>
