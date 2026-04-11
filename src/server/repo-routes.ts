@@ -133,5 +133,26 @@ export function createRepoRouter(deps: RepoRouterDeps): Router {
     res.json({ value });
   });
 
+  // --- Get issue tracker setting ---
+
+  router.get('/settings/issue-tracker', (_req, res) => {
+    const tracker = settings.get('issue_tracker') ?? 'linear';
+    const orgName = settings.get('issue_tracker_org') ?? '';
+    res.json({ tracker, orgName });
+  });
+
+  // --- Update issue tracker setting ---
+
+  router.put('/settings/issue-tracker', (req, res) => {
+    const { tracker, orgName } = req.body as { tracker: unknown; orgName: unknown };
+    if (!tracker || !['linear', 'jira', 'none'].includes(tracker as string)) {
+      res.status(400).json({ error: 'tracker must be linear, jira, or none' });
+      return;
+    }
+    settings.set('issue_tracker', tracker as string);
+    settings.set('issue_tracker_org', typeof orgName === 'string' ? orgName : '');
+    res.json({ tracker, orgName: typeof orgName === 'string' ? orgName : '' });
+  });
+
   return router;
 }

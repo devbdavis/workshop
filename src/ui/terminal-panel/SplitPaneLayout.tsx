@@ -1,14 +1,16 @@
 import { useRef, useCallback, useState } from 'react';
-import type { LayoutNode, LayoutNodeId, SessionId } from '@foundation/types';
+import type { LayoutNode, LayoutNodeId, SessionId, Todo } from '@foundation/types';
 // SessionId is a branded type; using it directly keeps the prop contract tight.
 import type { Session } from '@foundation/types';
 import { TerminalPanel } from './TerminalPanel';
 import { SplitDivider } from './SplitDivider';
+import { SessionLinkButtons } from './SessionLinkButtons';
 
 interface Props {
   node: LayoutNode;
   trackId: string;
   sessions: Session[];
+  todos: Todo[];
   onSplit: (nodeId: LayoutNodeId, direction: 'horizontal' | 'vertical', newSessionId: SessionId) => void;
   onClose: (nodeId: LayoutNodeId) => void;
   onResize: (splitId: LayoutNodeId, newSizes: number[]) => void;
@@ -18,12 +20,14 @@ interface Props {
   onMinimize: (sessionId: SessionId) => void;
   autoFocusSessionId?: SessionId | null;
   defaultOpenPath?: string;
+  issueBaseUrl?: string;
 }
 
 export function SplitPaneLayout({
   node,
   trackId,
   sessions,
+  todos,
   onSplit,
   onClose,
   onResize,
@@ -33,6 +37,7 @@ export function SplitPaneLayout({
   onMinimize,
   autoFocusSessionId,
   defaultOpenPath,
+  issueBaseUrl,
 }: Props) {
   if (node.type === 'leaf') {
     return (
@@ -40,6 +45,7 @@ export function SplitPaneLayout({
         node={node}
         trackId={trackId}
         sessions={sessions}
+        todos={todos}
         onSplit={onSplit}
         onClose={onClose}
         onCreateSession={onCreateSession}
@@ -48,6 +54,7 @@ export function SplitPaneLayout({
         onMinimize={onMinimize}
         autoFocusSessionId={autoFocusSessionId}
         defaultOpenPath={defaultOpenPath}
+        issueBaseUrl={issueBaseUrl}
       />
     );
   }
@@ -57,6 +64,7 @@ export function SplitPaneLayout({
       node={node}
       trackId={trackId}
       sessions={sessions}
+      todos={todos}
       onSplit={onSplit}
       onClose={onClose}
       onResize={onResize}
@@ -66,6 +74,7 @@ export function SplitPaneLayout({
       onMinimize={onMinimize}
       autoFocusSessionId={autoFocusSessionId}
       defaultOpenPath={defaultOpenPath}
+      issueBaseUrl={issueBaseUrl}
     />
   );
 }
@@ -76,6 +85,7 @@ interface LeafProps {
   node: LayoutNode & { type: 'leaf' };
   trackId: string;
   sessions: Session[];
+  todos: Todo[];
   onSplit: (nodeId: LayoutNodeId, direction: 'horizontal' | 'vertical', newSessionId: SessionId) => void;
   onClose: (nodeId: LayoutNodeId) => void;
   onCreateSession: () => Promise<Session | null>;
@@ -84,10 +94,12 @@ interface LeafProps {
   onMinimize: (sessionId: SessionId) => void;
   autoFocusSessionId?: SessionId | null;
   defaultOpenPath?: string;
+  issueBaseUrl?: string;
 }
 
-function LeafPane({ node, trackId, sessions, onSplit, onClose, onCreateSession, onDestroySession, onRenameSession, onMinimize, autoFocusSessionId, defaultOpenPath }: LeafProps) {
+function LeafPane({ node, trackId, sessions, todos, onSplit, onClose, onCreateSession, onDestroySession, onRenameSession, onMinimize, autoFocusSessionId, defaultOpenPath, issueBaseUrl }: LeafProps) {
   const session = sessions.find((s) => s.id === node.sessionId);
+  const linkedTodo = session ? todos.find((t) => t.sessionId === session.id) : undefined;
   const [editing, setEditing] = useState(false);
   const [editValue, setEditValue] = useState('');
   const inputRef = useRef<HTMLInputElement>(null);
@@ -172,6 +184,11 @@ function LeafPane({ node, trackId, sessions, onSplit, onClose, onCreateSession, 
           </span>
         )}
         <div className="flex items-center gap-1">
+          <SessionLinkButtons
+            pullRequests={linkedTodo?.pullRequests}
+            issueKey={linkedTodo?.issueKey}
+            issueBaseUrl={issueBaseUrl}
+          />
           {session && (session.worktreeRoot ?? defaultOpenPath) && (() => {
             const editorPath = session.worktreeRoot ?? defaultOpenPath!;
             const terminalPath = session.workingDirectory ?? editorPath;
@@ -264,6 +281,7 @@ interface SplitProps {
   node: LayoutNode & { type: 'split' };
   trackId: string;
   sessions: Session[];
+  todos: Todo[];
   onSplit: (nodeId: LayoutNodeId, direction: 'horizontal' | 'vertical', newSessionId: SessionId) => void;
   onClose: (nodeId: LayoutNodeId) => void;
   onResize: (splitId: LayoutNodeId, newSizes: number[]) => void;
@@ -273,12 +291,14 @@ interface SplitProps {
   onMinimize: (sessionId: SessionId) => void;
   autoFocusSessionId?: SessionId | null;
   defaultOpenPath?: string;
+  issueBaseUrl?: string;
 }
 
 function SplitContainer({
   node,
   trackId,
   sessions,
+  todos,
   onSplit,
   onClose,
   onResize,
@@ -288,6 +308,7 @@ function SplitContainer({
   onMinimize,
   autoFocusSessionId,
   defaultOpenPath,
+  issueBaseUrl,
 }: SplitProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const sizesRef = useRef<number[]>(node.sizes);
@@ -352,6 +373,7 @@ function SplitContainer({
               node={child}
               trackId={trackId}
               sessions={sessions}
+              todos={todos}
               onSplit={onSplit}
               onClose={onClose}
               onResize={onResize}
@@ -361,6 +383,7 @@ function SplitContainer({
               onMinimize={onMinimize}
               autoFocusSessionId={autoFocusSessionId}
               defaultOpenPath={defaultOpenPath}
+              issueBaseUrl={issueBaseUrl}
             />
           </div>
           {i < node.children.length - 1 && (
