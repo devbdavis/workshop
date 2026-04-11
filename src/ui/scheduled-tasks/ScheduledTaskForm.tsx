@@ -7,6 +7,7 @@ interface Props {
   agents: Agent[];
   onSave: (data: Record<string, unknown>) => void;
   onClose: () => void;
+  onSaveAsTemplate?: () => void;
 }
 
 const PRESETS: { value: SchedulePreset; label: string }[] = [
@@ -19,7 +20,7 @@ const PRESETS: { value: SchedulePreset; label: string }[] = [
 
 const DAY_LABELS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 
-export function ScheduledTaskForm({ task, tracks, agents, onSave, onClose }: Props) {
+export function ScheduledTaskForm({ task, tracks, agents, onSave, onClose, onSaveAsTemplate }: Props) {
   const [name, setName] = useState(task?.name ?? '');
   const [description, setDescription] = useState(task?.description ?? '');
   const [taskPrompt, setTaskPrompt] = useState(task?.taskPrompt ?? '');
@@ -565,10 +566,24 @@ export function ScheduledTaskForm({ task, tracks, agents, onSave, onClose }: Pro
         </div>
 
         {/* Footer */}
-        <div className="flex items-center justify-end gap-2 px-5 py-3 border-t border-gray-800 shrink-0">
+        <div className="flex items-center gap-2 px-5 py-3 border-t border-gray-800 shrink-0">
+          {task && onSaveAsTemplate && (
+            <button
+              onClick={!!task.templateName && !task.isOutOfSync ? undefined : onSaveAsTemplate}
+              disabled={!!task.templateName && !task.isOutOfSync}
+              title={!!task.templateName && !task.isOutOfSync ? 'Already in sync with template' : undefined}
+              className={`mr-auto px-3 py-1.5 text-xs transition-colors ${
+                !!task.templateName && !task.isOutOfSync
+                  ? 'text-gray-600 cursor-default'
+                  : 'text-amber-400 hover:text-amber-300'
+              }`}
+            >
+              {task.templateName ? 'Update Template' : 'Save as Template'}
+            </button>
+          )}
           <button
             onClick={onClose}
-            className="px-4 py-1.5 text-xs text-gray-400 hover:text-gray-200 transition-colors"
+            className="ml-auto px-4 py-1.5 text-xs text-gray-400 hover:text-gray-200 transition-colors"
           >
             Cancel
           </button>

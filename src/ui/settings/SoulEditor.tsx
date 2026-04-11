@@ -1,10 +1,13 @@
 import { useEffect, useState, useCallback } from 'react';
+import { DiffModal } from '@ui/shared/DiffModal.js';
 
 interface SoulState {
   content: string;
   source: 'user' | 'default' | 'none';
   userPath: string;
   defaultPath: string;
+  isOutOfSync?: boolean;
+  repoContent?: string;
 }
 
 interface Message {
@@ -19,6 +22,7 @@ export function SoulEditor() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState<Message | null>(null);
+  const [showDiff, setShowDiff] = useState(false);
 
   const isDirty = content !== savedContent;
 
@@ -98,6 +102,32 @@ export function SoulEditor() {
     }
   }
 
+  async function handleUpdateFromRepo() {
+    if (!soulState?.repoContent) return;
+    setContent(soulState.repoContent);
+    setSaving(true);
+    try {
+      const res = await fetch('/api/soul', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ content: soulState.repoContent }),
+      });
+      if (res.ok) {
+        const data: SoulState = await res.json();
+        setSoulState(data);
+        setSavedContent(soulState.repoContent);
+        showMessage('success', 'Updated from repo template');
+      } else {
+        showMessage('error', 'Failed to update from repo');
+      }
+    } catch (err) {
+      console.error('Failed to update from repo:', err);
+      showMessage('error', 'Failed to update from repo');
+    } finally {
+      setSaving(false);
+    }
+  }
+
   if (loading) {
     return <p className="text-sm text-gray-500">Loading soul configuration...</p>;
   }
@@ -116,19 +146,45 @@ export function SoulEditor() {
       ? soulState?.defaultPath
       : soulState?.userPath;
 
+  const isOutOfSync = soulState?.isOutOfSync ?? false;
+
   return (
+    <>
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <div>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 flex-wrap">
             <h2 className="text-lg font-semibold">Soul</h2>
             <span className={`text-[10px] px-1.5 py-0.5 rounded ${badge.className}`}>
               {badge.label}
             </span>
+            {isOutOfSync && (
+              <span className="text-[10px] px-1.5 py-0.5 rounded bg-amber-900/60 text-amber-300">
+                out of sync with repo
+              </span>
+            )}
           </div>
           <p className="text-sm text-gray-400 mt-1">
             Defines the personality and behavior of all AI agent sessions.
           </p>
+          {isOutOfSync && (
+            <div className="flex items-center gap-2 mt-1">
+              <button
+                onClick={() => setShowDiff(true)}
+                className="text-xs text-amber-400 hover:text-amber-300 underline"
+              >
+                View diff
+              </button>
+              <span className="text-xs text-gray-600">·</span>
+              <button
+                onClick={handleUpdateFromRepo}
+                disabled={saving}
+                className="text-xs text-amber-400 hover:text-amber-300 underline disabled:opacity-50"
+              >
+                Update from repo
+              </button>
+            </div>
+          )}
         </div>
         <div className="flex gap-2">
           {currentSource === 'user' && (
@@ -198,5 +254,17 @@ export function SoulEditor() {
         </p>
       )}
     </div>
+
+    {showDiff && soulState?.repoContent && (
+      <DiffModal
+        title="Soul diff — Repo vs Yours"
+        beforeLabel="Repo template"
+        afterLabel="Your override"
+        before={soulState.repoContent}
+        after={content}
+        onClose={() => setShowDiff(false)}
+      />
+    )}
+    </>
   );
 }

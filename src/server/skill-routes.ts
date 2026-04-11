@@ -1,5 +1,7 @@
 import { Router } from 'express';
 import { spawn } from 'child_process';
+import fs from 'fs';
+import path from 'path';
 import type { SkillId } from '@foundation/types';
 import type { FilesystemSkillScanner } from '@infrastructure/skills/filesystem-scanner.js';
 import {
@@ -51,10 +53,100 @@ export function createSkillRouter(deps: SkillRouterDeps): Router {
   const router = Router();
   const { filesystemScanner, projectRoot } = deps;
 
-  // --- List all skills ---
+  // --- Skill templates (templates/skills/*/ not yet installed) ---
+
+  router.get('/skills/templates', (_req, res) => {
+    const tplDir = path.join(projectRoot, 'templates', 'skills');
+    if (!fs.existsSync(tplDir)) { res.json([]); return; }
+    const installed = new Set(filesystemScanner.scanAll(projectRoot).map((s) => s.name));
+    const templates: unknown[] = [];
+    for (const entry of fs.readdirSync(tplDir)) {
+      const skillMd = path.join(tplDir, entry, 'SKILL.md');
+      if (!fs.existsSync(skillMd)) continue;
+      try {
+        const raw = fs.readFileSync(skillMd, 'utf-8');
+        const nameMatch = raw.match(/^name:\s*(.+)$/m);
+        const descMatch = raw.match(/^description:\s*(.+)$/m);
+        const bodyStart = raw.indexOf('\n---\n', raw.indexOf('---') + 3);
+        const content = bodyStart >= 0 ? raw.slice(bodyStart + 5).trim() : raw;
+        const name = nameMatch?.[1]?.trim() ?? entry;
+        if (installed.has(name)) continue;
+        templates.push({ name, description: descMatch?.[1]?.trim() ?? '', slug: entry, content });
+      } catch { /* skip */ }
+    }
+    res.json(templates);
+  });
+
+  // --- Save current skill as template ---
+
+  router.post('/skills/:id/save-as-template', (req, res) => {
+    const id = req.params.id as SkillId;
+    const skill = filesystemScanner.findById(id, projectRoot);
+    if (!skill) { res.status(404).json({ error: 'Skill not found' }); return; }
+
+    const slug = skill.name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+    const tplDir = path.join(projectRoot, 'templates', 'skills', slug);
+    fs.mkdirSync(tplDir, { recursive: true });
+    const tplContent = `---\nname: ${skill.name}\ndescription: ${skill.description}\n---\n\n${skill.content}`;
+    fs.writeFileSync(path.join(tplDir, 'SKILL.md'), tplContent, 'utf-8');
+
+    const updated = updateGlobalSkill(id, { name: skill.name, description: skill.description, content: skill.content, templateName: slug });
+    res.json(updated);
+  });
+
+  // --- Sync skill from its linked template ---
+
+  router.post('/skills/:id/sync-from-template', (req, res) => {
+    const id = req.params.id as SkillId;
+    const skill = filesystemScanner.findById(id, projectRoot);
+    if (!skill) { res.status(404).json({ error: 'Skill not found' }); return; }
+    if (!skill.templateName) { res.status(400).json({ error: 'Skill has no linked template' }); return; }
+
+    const tplPath = path.join(projectRoot, 'templates', 'skills', skill.templateName, 'SKILL.md');
+    if (!fs.existsSync(tplPath)) { res.status(404).json({ error: 'Template file not found' }); return; }
+
+    const raw = fs.readFileSync(tplPath, 'utf-8');
+    const bodyStart = raw.indexOf('\n---\n', raw.indexOf('---') + 3);
+    const content = bodyStart >= 0 ? raw.slice(bodyStart + 5).trim() : raw;
+    const descMatch = raw.match(/^description:\s*(.+)$/m);
+    const description = descMatch?.[1]?.trim() ?? skill.description;
+
+    const updated = updateGlobalSkill(id, { name: skill.name, description, content, templateName: skill.templateName });
+    res.json(updated);
+  });
+
+  // --- Install template skill ---
+
+  router.post('/skills/install-template', (req, res) => {
+    const { name, description, content, slug } = req.body as { name: string; description: string; content: string; slug: string };
+    if (!name || !content) { res.status(400).json({ error: 'name and content are required' }); return; }
+    try {
+      const skill = writeGlobalSkill({ name, description: description ?? '', content, templateName: slug });
+      res.status(201).json(skill);
+    } catch (err) {
+      res.status(500).json({ error: 'Failed to install template skill' });
+    }
+  });
+
+  // --- List all skills (with isOutOfSync enrichment) ---
 
   router.get('/skills', (_req, res) => {
-    res.json(filesystemScanner.scanAll(projectRoot));
+    const tplDir = path.join(projectRoot, 'templates', 'skills');
+    const all = filesystemScanner.scanAll(projectRoot);
+    const enriched = all.map((skill) => {
+      if (!skill.templateName) return skill;
+      const tplPath = path.join(tplDir, skill.templateName, 'SKILL.md');
+      try {
+        const raw = fs.readFileSync(tplPath, 'utf-8');
+        const bodyStart = raw.indexOf('\n---\n', raw.indexOf('---') + 3);
+        const tplContent = bodyStart >= 0 ? raw.slice(bodyStart + 5).trim() : raw;
+        const isOutOfSync = skill.content !== tplContent;
+        return isOutOfSync ? { ...skill, isOutOfSync: true, templateContent: tplContent } : skill;
+      } catch {
+        return skill;
+      }
+    });
+    res.json(enriched);
   });
 
   // --- Generate skill definition via claude CLI ---

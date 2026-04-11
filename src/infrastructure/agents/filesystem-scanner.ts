@@ -97,6 +97,7 @@ function parseAgentFile(filePath: string, source: AgentSource): Agent | null {
       filePath,
       allowedTools,
       maxTurns,
+      templateName: parsed.frontmatter.templateName || undefined,
       createdAt: mtime,
       updatedAt: mtime,
     };
@@ -117,6 +118,7 @@ interface AgentWriteData {
   allowedTools?: string[];
   maxTurns?: number;
   provider?: string;
+  templateName?: string;
 }
 
 export function writeGlobalAgent(data: AgentWriteData): Agent {
@@ -149,6 +151,7 @@ export function writeGlobalAgent(data: AgentWriteData): Agent {
     allowedTools: data.allowedTools,
     maxTurns: data.maxTurns,
     provider: data.provider as SessionProvider | undefined,
+    templateName: data.templateName,
     createdAt: now,
     updatedAt: now,
   };
@@ -158,6 +161,14 @@ export function updateGlobalAgent(id: AgentId, data: AgentWriteData): Agent | nu
   const basename = id.replace(/^global:/, '');
   const filePath = path.join(os.homedir(), '.claude', 'agents', `${basename}.md`);
   if (!fs.existsSync(filePath)) return null;
+
+  // Preserve existing templateName if not explicitly provided
+  if (data.templateName === undefined) {
+    try {
+      const existing = parseAgentFile(filePath, 'global');
+      if (existing?.templateName) data = { ...data, templateName: existing.templateName };
+    } catch { /* ignore */ }
+  }
 
   fs.writeFileSync(filePath, formatAgentFile(data), 'utf-8');
   const stat = fs.statSync(filePath);
@@ -174,6 +185,7 @@ export function updateGlobalAgent(id: AgentId, data: AgentWriteData): Agent | nu
     allowedTools: data.allowedTools,
     maxTurns: data.maxTurns,
     provider: data.provider as SessionProvider | undefined,
+    templateName: data.templateName,
     createdAt: stat.ctime.toISOString(),
     updatedAt: stat.mtime.toISOString(),
   };
@@ -200,6 +212,7 @@ function formatAgentFile(data: AgentWriteData): string {
   if (data.provider) lines.push(`provider: ${data.provider}`);
   if (data.allowedTools?.length) lines.push(`tools: ${data.allowedTools.join(', ')}`);
   if (data.maxTurns) lines.push(`maxTurns: ${data.maxTurns}`);
+  if (data.templateName) lines.push(`templateName: ${data.templateName}`);
   lines.push('---');
   lines.push('');
   lines.push(data.systemPrompt);
@@ -240,12 +253,28 @@ function parseFrontmatter(content: string): ParsedFile {
         break;
       }
 
-      // Parse key: value
+      // Parse key: value (with YAML block scalar support)
       const colonIdx = line.indexOf(':');
       if (colonIdx > 0) {
         const key = line.slice(0, colonIdx).trim();
-        const value = line.slice(colonIdx + 1).trim();
-        frontmatter[key] = value;
+        const rawValue = line.slice(colonIdx + 1).trim();
+
+        // Handle YAML block scalars: > (folded) and | (literal), with optional chomping modifiers
+        if (/^[>|][+-]?$/.test(rawValue)) {
+          const isFolded = rawValue.startsWith('>');
+          const blockLines: string[] = [];
+          while (i + 1 < lines.length) {
+            const nextLine = lines[i + 1];
+            if (nextLine.trim() === '---' || (nextLine.length > 0 && !/^\s/.test(nextLine))) {
+              break;
+            }
+            i++;
+            blockLines.push(lines[i].trim());
+          }
+          frontmatter[key] = isFolded ? blockLines.join(' ').trim() : blockLines.join('\n').trim();
+        } else {
+          frontmatter[key] = rawValue;
+        }
       }
     }
   }

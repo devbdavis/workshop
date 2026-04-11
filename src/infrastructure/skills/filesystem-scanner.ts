@@ -84,6 +84,7 @@ function parseSkillFile(filePath: string, basename: string, source: SkillSource)
         content: parsed.body.trim(),
         source,
         filePath,
+        templateName: parsed.frontmatter.templateName || undefined,
         createdAt: mtime,
         updatedAt: mtime,
       };
@@ -144,6 +145,7 @@ export interface SkillWriteData {
   name: string;
   description: string;
   content: string;
+  templateName?: string;
 }
 
 export function writeGlobalSkill(data: SkillWriteData): Skill {
@@ -171,6 +173,7 @@ export function writeGlobalSkill(data: SkillWriteData): Skill {
     content: data.content,
     source: 'global',
     filePath,
+    templateName: data.templateName,
     createdAt: now,
     updatedAt: now,
   };
@@ -182,7 +185,9 @@ export function updateGlobalSkill(id: SkillId, data: SkillWriteData): Skill | nu
   const dirSkillPath = path.join(os.homedir(), '.claude', 'skills', basename, 'SKILL.md');
 
   if (fs.existsSync(flatPath)) {
-    fs.writeFileSync(flatPath, formatSkillFile(data), 'utf-8');
+    const existing = data.templateName === undefined ? parseSkillFile(flatPath, basename, 'global') : null;
+    const merged = { ...data, templateName: data.templateName ?? existing?.templateName };
+    fs.writeFileSync(flatPath, formatSkillFile(merged), 'utf-8');
     const stat = fs.statSync(flatPath);
     return {
       id,
@@ -191,16 +196,16 @@ export function updateGlobalSkill(id: SkillId, data: SkillWriteData): Skill | nu
       content: data.content,
       source: 'global',
       filePath: flatPath,
+      templateName: merged.templateName,
       createdAt: stat.ctime.toISOString(),
       updatedAt: stat.mtime.toISOString(),
     };
   }
 
   if (fs.existsSync(dirSkillPath)) {
-    // Always write with frontmatter so name+description are never lost.
-    // The content field holds only the body (frontmatter is stored separately
-    // in name/description), so we must reconstruct the full file here.
-    fs.writeFileSync(dirSkillPath, formatSkillFile(data), 'utf-8');
+    const existing = data.templateName === undefined ? parseSkillFile(dirSkillPath, basename, 'global') : null;
+    const merged = { ...data, templateName: data.templateName ?? existing?.templateName };
+    fs.writeFileSync(dirSkillPath, formatSkillFile(merged), 'utf-8');
     const stat = fs.statSync(dirSkillPath);
     return {
       id,
@@ -209,6 +214,7 @@ export function updateGlobalSkill(id: SkillId, data: SkillWriteData): Skill | nu
       content: data.content,
       source: 'global',
       filePath: dirSkillPath,
+      templateName: merged.templateName,
       createdAt: stat.ctime.toISOString(),
       updatedAt: stat.mtime.toISOString(),
     };
@@ -283,6 +289,7 @@ function formatSkillFile(data: SkillWriteData): string {
   const lines = ['---'];
   lines.push(`name: ${slugify(data.name)}`);
   lines.push(`description: ${data.description}`);
+  if (data.templateName) lines.push(`templateName: ${data.templateName}`);
   lines.push('---');
   lines.push('');
   lines.push(data.content);
@@ -326,8 +333,24 @@ function parseFrontmatter(content: string): ParsedFile {
       const colonIdx = line.indexOf(':');
       if (colonIdx > 0) {
         const key = line.slice(0, colonIdx).trim();
-        const value = line.slice(colonIdx + 1).trim();
-        frontmatter[key] = value;
+        const rawValue = line.slice(colonIdx + 1).trim();
+
+        // Handle YAML block scalars: > (folded) and | (literal), with optional chomping modifiers
+        if (/^[>|][+-]?$/.test(rawValue)) {
+          const isFolded = rawValue.startsWith('>');
+          const blockLines: string[] = [];
+          while (i + 1 < lines.length) {
+            const nextLine = lines[i + 1];
+            if (nextLine.trim() === '---' || (nextLine.length > 0 && !/^\s/.test(nextLine))) {
+              break;
+            }
+            i++;
+            blockLines.push(lines[i].trim());
+          }
+          frontmatter[key] = isFolded ? blockLines.join(' ').trim() : blockLines.join('\n').trim();
+        } else {
+          frontmatter[key] = rawValue;
+        }
       }
     }
   }

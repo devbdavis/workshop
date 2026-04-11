@@ -247,6 +247,7 @@ export function createApiRouter(deps: ApiRouterDeps = {}): Router {
     tasks: scheduledTasks,
     runs: scheduledTaskRuns,
     scheduler: taskScheduler,
+    projectRoot,
   });
   router.use(scheduledTaskRouter);
 

@@ -1,11 +1,13 @@
 import { useState } from 'react';
 import type { Skill } from '@foundation/types';
+import { DiffModal } from '@ui/shared/DiffModal.js';
 
 interface Props {
   skill: Skill;
   onEdit: () => void;
   onDelete: () => void;
   onImprove: () => void;
+  onSyncFromTemplate?: () => void;
 }
 
 const SOURCE_STYLES: Record<Skill['source'], string> = {
@@ -18,14 +20,16 @@ const SOURCE_LABELS: Record<Skill['source'], string> = {
   project: 'Project',
 };
 
-export function SkillCard({ skill, onEdit, onDelete, onImprove }: Props) {
+export function SkillCard({ skill, onEdit, onDelete, onImprove, onSyncFromTemplate }: Props) {
   const [expanded, setExpanded] = useState(false);
+  const [showDiff, setShowDiff] = useState(false);
   const isEditable = skill.source === 'global';
 
   const contentPreview =
     skill.content.length > 100 ? skill.content.slice(0, 100) + '...' : skill.content;
 
   return (
+    <>
     <div className="bg-gray-800 border border-gray-700 rounded-lg p-4">
       <div className="flex items-start justify-between">
         <div className="flex-1 min-w-0">
@@ -34,7 +38,29 @@ export function SkillCard({ skill, onEdit, onDelete, onImprove }: Props) {
             <span className={`text-[10px] px-1.5 py-0.5 rounded ${SOURCE_STYLES[skill.source]}`}>
               {SOURCE_LABELS[skill.source]}
             </span>
+            {skill.isOutOfSync && (
+              <span className="text-[10px] px-1.5 py-0.5 rounded bg-amber-900/60 text-amber-300">
+                out of sync
+              </span>
+            )}
           </div>
+          {skill.isOutOfSync && onSyncFromTemplate && (
+            <div className="flex items-center gap-2 mt-1">
+              <button
+                onClick={() => setShowDiff(true)}
+                className="text-[10px] text-amber-400 hover:text-amber-300 underline"
+              >
+                View diff
+              </button>
+              <span className="text-[10px] text-gray-600">·</span>
+              <button
+                onClick={onSyncFromTemplate}
+                className="text-[10px] text-amber-400 hover:text-amber-300 underline"
+              >
+                Update to latest
+              </button>
+            </div>
+          )}
           {skill.description && (
             <p className="text-xs text-gray-400 mt-1">{skill.description}</p>
           )}
@@ -73,5 +99,17 @@ export function SkillCard({ skill, onEdit, onDelete, onImprove }: Props) {
         </pre>
       )}
     </div>
+
+    {showDiff && skill.templateContent && (
+      <DiffModal
+        title={`Diff — ${skill.name}`}
+        beforeLabel="Template"
+        afterLabel="Yours"
+        before={skill.templateContent}
+        after={skill.content}
+        onClose={() => setShowDiff(false)}
+      />
+    )}
+    </>
   );
 }

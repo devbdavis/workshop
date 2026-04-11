@@ -1,11 +1,13 @@
 import { useState } from 'react';
 import type { Agent } from '@foundation/types';
+import { DiffModal } from '@ui/shared/DiffModal.js';
 
 interface Props {
   agent: Agent;
   onEdit: () => void;
   onDelete: () => void;
   onImprove: () => void;
+  onSyncFromTemplate?: () => void;
 }
 
 const SOURCE_STYLES = {
@@ -20,15 +22,16 @@ const SOURCE_LABELS = {
   workshop: 'Workshop',
 };
 
-export function AgentCard({ agent, onEdit, onDelete, onImprove }: Props) {
+export function AgentCard({ agent, onEdit, onDelete, onImprove, onSyncFromTemplate }: Props) {
   const [expanded, setExpanded] = useState(false);
+  const [showDiff, setShowDiff] = useState(false);
   const isEditable = agent.source === 'global' || agent.source === 'workshop';
 
-  // Truncate system prompt for preview
   const promptPreview =
     agent.systemPrompt.length > 100 ? agent.systemPrompt.slice(0, 100) + '...' : agent.systemPrompt;
 
   return (
+    <>
     <div className="bg-gray-800 border border-gray-700 rounded-lg p-4">
       <div className="flex items-start justify-between">
         <div className="flex-1 min-w-0">
@@ -49,7 +52,29 @@ export function AgentCard({ agent, onEdit, onDelete, onImprove }: Props) {
                 title={`Color: ${agent.color}`}
               />
             )}
+            {agent.isOutOfSync && (
+              <span className="text-[10px] px-1.5 py-0.5 rounded bg-amber-900/60 text-amber-300">
+                out of sync
+              </span>
+            )}
           </div>
+          {agent.isOutOfSync && onSyncFromTemplate && (
+            <div className="flex items-center gap-2 mt-1">
+              <button
+                onClick={() => setShowDiff(true)}
+                className="text-[10px] text-amber-400 hover:text-amber-300 underline"
+              >
+                View diff
+              </button>
+              <span className="text-[10px] text-gray-600">·</span>
+              <button
+                onClick={onSyncFromTemplate}
+                className="text-[10px] text-amber-400 hover:text-amber-300 underline"
+              >
+                Update to latest
+              </button>
+            </div>
+          )}
           {agent.description && (
             <p className="text-xs text-gray-400 mt-1">{agent.description}</p>
           )}
@@ -96,5 +121,17 @@ export function AgentCard({ agent, onEdit, onDelete, onImprove }: Props) {
         </pre>
       )}
     </div>
+
+    {showDiff && agent.templateContent && (
+      <DiffModal
+        title={`Diff — ${agent.name}`}
+        beforeLabel="Template"
+        afterLabel="Yours"
+        before={agent.templateContent}
+        after={agent.systemPrompt}
+        onClose={() => setShowDiff(false)}
+      />
+    )}
+    </>
   );
 }
