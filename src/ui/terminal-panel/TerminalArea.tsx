@@ -19,11 +19,12 @@ interface Props {
   onPurgeSession: (sessionId: string) => void;
   defaultOpenPath?: string;
   onSelectionChange?: (ids: SessionId[]) => void;
+  issueBaseUrl?: string;
 }
 
 const storageKey = (trackId: string) => `workshop:selected:${trackId}`;
 
-export function TerminalArea({ trackId, trackName, sessions, todos, deletedSessions, startingSessions, pendingSelectSessionId, onDestroySession, onRenameSession, onRestoreSession, onPurgeSession, defaultOpenPath, onSelectionChange }: Props) {
+export function TerminalArea({ trackId, trackName, sessions, todos, deletedSessions, startingSessions, pendingSelectSessionId, onDestroySession, onRenameSession, onRestoreSession, onPurgeSession, defaultOpenPath, onSelectionChange, issueBaseUrl }: Props) {
   const [selectedIds, setSelectedIds] = useState<SessionId[]>(() => {
     try {
       const stored = localStorage.getItem(storageKey(trackId));
@@ -153,6 +154,7 @@ export function TerminalArea({ trackId, trackName, sessions, todos, deletedSessi
                 defaultOpenPath={defaultOpenPath}
                 autoFocus={i === 0}
                 focusTrigger={i === 0 ? focusTrigger : undefined}
+                issueBaseUrl={issueBaseUrl}
               />
             </div>
           ))
@@ -184,9 +186,10 @@ interface PaneProps {
   defaultOpenPath?: string;
   autoFocus: boolean;
   focusTrigger?: number;
+  issueBaseUrl?: string;
 }
 
-function TerminalPane({ trackId, session, todos, onDestroy, onRename, defaultOpenPath, autoFocus, focusTrigger }: PaneProps) {
+function TerminalPane({ trackId, session, todos, onDestroy, onRename, defaultOpenPath, autoFocus, focusTrigger, issueBaseUrl }: PaneProps) {
   const [editing, setEditing] = useState(false);
   const [editValue, setEditValue] = useState('');
   const inputRef = useRef<HTMLInputElement>(null);
@@ -243,6 +246,7 @@ function TerminalPane({ trackId, session, todos, onDestroy, onRename, defaultOpe
           <SessionLinkButtons
             pullRequests={linkedTodo?.pullRequests}
             issueKey={linkedTodo?.issueKey}
+            issueBaseUrl={issueBaseUrl}
           />
           {editorPath && (
             <>
