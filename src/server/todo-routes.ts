@@ -154,16 +154,6 @@ export function createTodoRouter(deps: TodoRouterDeps): Router {
       return;
     }
 
-    // Retire session to recycle bin when todo moves to review (background agent done)
-    if (status === 'review' && existing.sessionId) {
-      try {
-        await terminal.softDeleteSession(existing.sessionId);
-        broadcast('session:deleted', todo.trackId);
-      } catch (err) {
-        console.error('Failed to retire session for reviewed todo:', err);
-      }
-    }
-
     // Hard-destroy session when todo is marked done
     if (status === 'done' && existing.sessionId) {
       try {
