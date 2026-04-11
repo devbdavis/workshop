@@ -20,6 +20,7 @@ interface Props {
   onMinimize: (sessionId: SessionId) => void;
   autoFocusSessionId?: SessionId | null;
   defaultOpenPath?: string;
+  issueBaseUrl?: string;
 }
 
 export function SplitPaneLayout({
@@ -36,6 +37,7 @@ export function SplitPaneLayout({
   onMinimize,
   autoFocusSessionId,
   defaultOpenPath,
+  issueBaseUrl,
 }: Props) {
   if (node.type === 'leaf') {
     return (
@@ -52,6 +54,7 @@ export function SplitPaneLayout({
         onMinimize={onMinimize}
         autoFocusSessionId={autoFocusSessionId}
         defaultOpenPath={defaultOpenPath}
+        issueBaseUrl={issueBaseUrl}
       />
     );
   }
@@ -71,6 +74,7 @@ export function SplitPaneLayout({
       onMinimize={onMinimize}
       autoFocusSessionId={autoFocusSessionId}
       defaultOpenPath={defaultOpenPath}
+      issueBaseUrl={issueBaseUrl}
     />
   );
 }
@@ -90,9 +94,10 @@ interface LeafProps {
   onMinimize: (sessionId: SessionId) => void;
   autoFocusSessionId?: SessionId | null;
   defaultOpenPath?: string;
+  issueBaseUrl?: string;
 }
 
-function LeafPane({ node, trackId, sessions, todos, onSplit, onClose, onCreateSession, onDestroySession, onRenameSession, onMinimize, autoFocusSessionId, defaultOpenPath }: LeafProps) {
+function LeafPane({ node, trackId, sessions, todos, onSplit, onClose, onCreateSession, onDestroySession, onRenameSession, onMinimize, autoFocusSessionId, defaultOpenPath, issueBaseUrl }: LeafProps) {
   const session = sessions.find((s) => s.id === node.sessionId);
   const linkedTodo = session ? todos.find((t) => t.sessionId === session.id) : undefined;
   const [editing, setEditing] = useState(false);
@@ -182,6 +187,7 @@ function LeafPane({ node, trackId, sessions, todos, onSplit, onClose, onCreateSe
           <SessionLinkButtons
             pullRequests={linkedTodo?.pullRequests}
             issueKey={linkedTodo?.issueKey}
+            issueBaseUrl={issueBaseUrl}
           />
           {session && (session.worktreeRoot ?? defaultOpenPath) && (() => {
             const editorPath = session.worktreeRoot ?? defaultOpenPath!;
@@ -285,6 +291,7 @@ interface SplitProps {
   onMinimize: (sessionId: SessionId) => void;
   autoFocusSessionId?: SessionId | null;
   defaultOpenPath?: string;
+  issueBaseUrl?: string;
 }
 
 function SplitContainer({
@@ -301,6 +308,7 @@ function SplitContainer({
   onMinimize,
   autoFocusSessionId,
   defaultOpenPath,
+  issueBaseUrl,
 }: SplitProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const sizesRef = useRef<number[]>(node.sizes);
@@ -375,6 +383,7 @@ function SplitContainer({
               onMinimize={onMinimize}
               autoFocusSessionId={autoFocusSessionId}
               defaultOpenPath={defaultOpenPath}
+              issueBaseUrl={issueBaseUrl}
             />
           </div>
           {i < node.children.length - 1 && (

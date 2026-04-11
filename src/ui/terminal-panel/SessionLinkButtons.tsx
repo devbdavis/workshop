@@ -4,6 +4,8 @@ import type { PullRequest } from '@foundation/types';
 interface Props {
   pullRequests?: PullRequest[];
   issueKey?: string;
+  /** Base URL for the issue tracker, e.g. "https://linear.app/klaviyo/issue/". Appended with issueKey to form the full link. */
+  issueBaseUrl?: string;
 }
 
 /** Extract "owner/repo #N" from a GitHub PR URL, falling back to the raw URL. */
@@ -44,7 +46,7 @@ function LinearIcon({ className }: { className?: string }) {
  * Renders GitHub PR and/or Linear ticket icon buttons for a session pane header.
  * Both are inserted to the left of the Cursor button.
  */
-export function SessionLinkButtons({ pullRequests, issueKey }: Props) {
+export function SessionLinkButtons({ pullRequests, issueKey, issueBaseUrl }: Props) {
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
 
@@ -66,14 +68,25 @@ export function SessionLinkButtons({ pullRequests, issueKey }: Props) {
 
   return (
     <>
-      {hasIssue && (
-        <span
-          className="flex items-center px-1 text-gray-500 cursor-default"
-          title={issueKey}
-        >
-          <LinearIcon className="w-3.5 h-3.5" />
-        </span>
-      )}
+      {hasIssue && (() => {
+        const issueUrl = issueBaseUrl ? `${issueBaseUrl}${issueKey}` : undefined;
+        const icon = <LinearIcon className="w-3.5 h-3.5" />;
+        return issueUrl ? (
+          <a
+            href={issueUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            title={issueKey}
+            className="flex items-center px-1 text-gray-500 hover:text-blue-400"
+          >
+            {icon}
+          </a>
+        ) : (
+          <span className="flex items-center px-1 text-gray-500 cursor-default" title={issueKey}>
+            {icon}
+          </span>
+        );
+      })()}
 
       {hasPrs && pullRequests!.length === 1 ? (
         <a
