@@ -100,7 +100,11 @@ export function SkillsSettings() {
   }
 
   async function handleSaveAsTemplate(skillId: string) {
-    await fetch(`/api/skills/${skillId}/save-as-template`, { method: 'POST' });
+    const res = await fetch(`/api/skills/${skillId}/save-as-template`, { method: 'POST' });
+    if (res.ok) {
+      const updated: Skill = await res.json();
+      setEditingSkill(updated);
+    }
     loadSkills();
   }
 
