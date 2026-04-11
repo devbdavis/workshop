@@ -28,7 +28,7 @@ export function importBundledSchedules(
   projectRoot: string,
   taskRepo: ScheduledTaskRepository,
 ): void {
-  const schedulesDir = path.join(projectRoot, 'schedules');
+  const schedulesDir = path.join(projectRoot, 'templates', 'schedules');
   if (!existsSync(schedulesDir)) return;
 
   let files: string[];

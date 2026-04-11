@@ -11,9 +11,10 @@ interface Props {
   initial?: Skill;
   onSave: (data: SkillFormData) => void;
   onClose: () => void;
+  onSaveAsTemplate?: () => void;
 }
 
-export function SkillFormModal({ initial, onSave, onClose }: Props) {
+export function SkillFormModal({ initial, onSave, onClose, onSaveAsTemplate }: Props) {
   const [name, setName] = useState(initial?.name ?? '');
   const [description, setDescription] = useState(initial?.description ?? '');
   const [content, setContent] = useState(initial?.content ?? '');
@@ -130,8 +131,17 @@ export function SkillFormModal({ initial, onSave, onClose }: Props) {
         </form>
 
         {/* Footer */}
-        <div className="flex items-center justify-end gap-2 px-5 py-3 border-t border-gray-800 shrink-0">
-          <button type="button" onClick={onClose} className="px-4 py-2 text-sm bg-gray-700 hover:bg-gray-600 rounded-lg transition-colors">
+        <div className="flex items-center gap-2 px-5 py-3 border-t border-gray-800 shrink-0">
+          {initial && onSaveAsTemplate && (
+            <button
+              type="button"
+              onClick={onSaveAsTemplate}
+              className="mr-auto px-3 py-2 text-sm text-amber-400 hover:text-amber-300 transition-colors"
+            >
+              {initial.templateName ? 'Update Template' : 'Save as Template'}
+            </button>
+          )}
+          <button type="button" onClick={onClose} className="ml-auto px-4 py-2 text-sm bg-gray-700 hover:bg-gray-600 rounded-lg transition-colors">
             Cancel
           </button>
           <button

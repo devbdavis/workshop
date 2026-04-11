@@ -7,7 +7,7 @@ export interface SoulLoader {
   /** Save content to the user soul path (~/.workshop/soul.md). Creates directory if needed. */
   save(content: string): void;
   /** Get metadata about current soul state */
-  getInfo(): { content: string; source: 'user' | 'default' | 'none'; userPath: string; defaultPath: string };
+  getInfo(): { content: string; source: 'user' | 'default' | 'none'; userPath: string; defaultPath: string; isOutOfSync: boolean; repoContent: string };
   /** Delete user override, falling back to default */
   reset(): void;
 }
@@ -51,7 +51,7 @@ export function createSoulLoader(projectRoot: string): SoulLoader {
     writeFileSync(defaultPath, content, 'utf-8');
   }
 
-  function getInfo(): { content: string; source: 'user' | 'default' | 'none'; userPath: string; defaultPath: string } {
+  function getInfo(): { content: string; source: 'user' | 'default' | 'none'; userPath: string; defaultPath: string; isOutOfSync: boolean; repoContent: string } {
     let content = '';
     let source: 'user' | 'default' | 'none' = 'none';
 
@@ -73,7 +73,15 @@ export function createSoulLoader(projectRoot: string): SoulLoader {
       }
     }
 
-    return { content, source, userPath, defaultPath };
+    // Read the repo default to detect divergence
+    let repoContent = '';
+    try {
+      if (existsSync(defaultPath)) repoContent = readFileSync(defaultPath, 'utf-8');
+    } catch { /* ignore */ }
+
+    const isOutOfSync = source === 'user' && repoContent !== '' && content !== repoContent;
+
+    return { content, source, userPath, defaultPath, isOutOfSync, repoContent };
   }
 
   function reset(): void {
