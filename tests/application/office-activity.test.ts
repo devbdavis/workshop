@@ -85,6 +85,10 @@ describe('providerColor', () => {
     expect(providerColor('gemini')).toBe('bg-yellow-500');
   });
 
+  it('returns bg-violet-500 for cursor', () => {
+    expect(providerColor('cursor')).toBe('bg-violet-500');
+  });
+
   it('returns bg-gray-500 for unknown provider', () => {
     expect(providerColor('unknown')).toBe('bg-gray-500');
   });

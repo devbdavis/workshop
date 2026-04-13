@@ -4,6 +4,7 @@ import { homedir } from 'os';
 import path from 'path';
 import { readdirSync, statSync, existsSync } from 'fs';
 import type { GlobalRepoId } from '@foundation/types';
+import { parseDefaultAiCli, isDefaultAiCli } from '@foundation/types.js';
 import type { GlobalRepoRepository, SettingsRepository } from '@domain/repo/repository';
 
 export interface RepoRouterDeps {
@@ -152,6 +153,21 @@ export function createRepoRouter(deps: RepoRouterDeps): Router {
     settings.set('issue_tracker', tracker as string);
     settings.set('issue_tracker_org', typeof orgName === 'string' ? orgName : '');
     res.json({ tracker, orgName: typeof orgName === 'string' ? orgName : '' });
+  });
+
+  router.get('/settings/default-ai-cli', (_req, res) => {
+    const provider = parseDefaultAiCli(settings.get('default_ai_cli'));
+    res.json({ provider });
+  });
+
+  router.put('/settings/default-ai-cli', (req, res) => {
+    const { provider } = req.body as { provider: unknown };
+    if (!isDefaultAiCli(provider)) {
+      res.status(400).json({ error: 'provider must be "claude" or "cursor"' });
+      return;
+    }
+    settings.set('default_ai_cli', provider);
+    res.json({ provider });
   });
 
   return router;

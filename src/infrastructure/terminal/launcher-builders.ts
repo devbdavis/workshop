@@ -211,6 +211,79 @@ export function buildGeminiLauncher(
   lines.push(`exec ${geminiArgs.join(' ')}`);
 }
 
+/**
+ * Cursor Agent CLI (`agent` binary). See https://cursor.com/docs/cli/overview
+ */
+export function buildCursorLauncher(
+  lines: string[],
+  sessionDir: string,
+  cwd: string,
+  options?: CreateSessionOptions,
+): void {
+  const promptFile = path.join(sessionDir, 'system-prompt.md');
+  const isScheduled = options?.background && !options?.todoId;
+
+  if (isScheduled) {
+    let fullPrompt = '';
+    if (options?.systemPrompt) {
+      let prompt = options.systemPrompt;
+      if (!options.skipBackgroundInstructions) {
+        prompt = appendBackgroundInstructions(prompt, options.todoId);
+      }
+      fullPrompt += prompt + '\n\n---\n\n';
+    }
+    if (options?.initialPrompt) {
+      fullPrompt += options.initialPrompt;
+    }
+    writeFileSync(promptFile, fullPrompt, 'utf-8');
+    lines.push(`cd ${JSON.stringify(cwd)}`);
+    lines.push('');
+    lines.push(
+      `exec agent -p "$(cat ${JSON.stringify(promptFile)})" --workspace ${JSON.stringify(cwd)} --approve-mcps --trust --output-format text`,
+    );
+    return;
+  }
+
+  lines.push(`cd ${JSON.stringify(cwd)}`);
+  lines.push('');
+
+  const agentArgs = ['agent', '--workspace', JSON.stringify(cwd), '--approve-mcps'];
+
+  if (options?.background && options?.todoId) {
+    let fullPrompt = '';
+    if (options?.systemPrompt) {
+      let prompt = options.systemPrompt;
+      if (!options.skipBackgroundInstructions) {
+        prompt = appendBackgroundInstructions(prompt, options.todoId);
+      }
+      fullPrompt += prompt + '\n\n---\n\n';
+    }
+    if (options?.initialPrompt) {
+      fullPrompt += options.initialPrompt;
+    }
+    if (fullPrompt) {
+      writeFileSync(promptFile, fullPrompt, 'utf-8');
+      lines.push(`exec ${agentArgs.join(' ')} "$(cat ${JSON.stringify(promptFile)})"`);
+    } else {
+      lines.push(`exec ${agentArgs.join(' ')}`);
+    }
+    return;
+  }
+
+  const parts: string[] = [];
+  if (options?.systemPrompt) parts.push(options.systemPrompt);
+  if (options?.initialPrompt) {
+    if (parts.length > 0) parts.push('---', '', options.initialPrompt);
+    else parts.push(options.initialPrompt);
+  }
+  if (parts.length > 0) {
+    writeFileSync(promptFile, parts.join('\n'), 'utf-8');
+    lines.push(`exec ${agentArgs.join(' ')} "$(cat ${JSON.stringify(promptFile)})"`);
+  } else {
+    lines.push(`exec ${agentArgs.join(' ')}`);
+  }
+}
+
 /** Build launcher script lines for a Codex CLI session */
 export function buildCodexLauncher(
   lines: string[],
@@ -271,7 +344,8 @@ export function sendInitialPrompt(
   const logFile = path.join(sessionDir, 'send-prompt.log');
 
   // Different CLIs use different prompt indicators
-  const grepPattern = provider === 'codex' ? "'^>'" : "'❯'";
+  const grepPattern =
+    provider === 'codex' || provider === 'cursor' ? "'^>'" : "'\u276f'";
 
   const script = `#!/bin/bash
 # Wait for ${provider} TUI to be ready (look for the input prompt indicator)

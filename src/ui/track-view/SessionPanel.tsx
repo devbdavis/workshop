@@ -11,6 +11,7 @@ const PROVIDER_COLORS: Record<string, string> = {
   claude: 'bg-orange-400',
   codex: 'bg-emerald-400',
   gemini: 'bg-blue-400',
+  cursor: 'bg-violet-400',
 };
 
 function StateIndicator({

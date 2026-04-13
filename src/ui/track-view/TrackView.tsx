@@ -1,6 +1,6 @@
 import { useEffect, useState, useCallback, useRef } from 'react';
 import { useParams, Link } from 'react-router-dom';
-import type { Track, Session, SessionId, SessionProvider, TrackSummary, ExternalTicket, Todo } from '@foundation/types';
+import type { Track, Session, SessionId, SessionProvider, TrackSummary, ExternalTicket, Todo, DefaultAiCli } from '@foundation/types';
 import type { DispatchOptions } from './DispatchDropdown';
 import { SummaryPanel } from './SummaryPanel';
 import { ContextPanel } from './ContextPanel';
@@ -35,6 +35,7 @@ export function TrackView() {
   const [idleAlerts, setIdleAlerts] = useState<IdleAlert[]>([]);
   const [pendingSelectSessionId, setPendingSelectSessionId] = useState<SessionId | null>(null);
   const [issueBaseUrl, setIssueBaseUrl] = useState<string | undefined>(undefined);
+  const [defaultAiCli, setDefaultAiCli] = useState<DefaultAiCli>('claude');
   // Session IDs that have been created but whose tmux/CLI init is still in progress.
   // Cleared when session:ready arrives for that session.
   const [startingSessions, setStartingSessions] = useState<Set<string>>(new Set());
@@ -84,6 +85,18 @@ export function TrackView() {
         }
       })
       .catch(() => { /* silently skip — no issue tracker configured */ });
+  }, []);
+
+  useEffect(() => {
+    function loadDefaultCli() {
+      fetch('/api/settings/default-ai-cli')
+        .then((r) => r.json())
+        .then((d: { provider: DefaultAiCli }) => setDefaultAiCli(d.provider))
+        .catch(() => { /* keep default */ });
+    }
+    loadDefaultCli();
+    window.addEventListener('focus', loadDefaultCli);
+    return () => window.removeEventListener('focus', loadDefaultCli);
   }, []);
 
   // Subscribe to WebSocket events. Auto-reconnects on disconnect (e.g. server restart)
@@ -145,7 +158,7 @@ export function TrackView() {
     };
   }, [trackId, loadTrack]);
 
-  async function createSession(provider: SessionProvider = 'claude', worktreeMode?: boolean): Promise<Session | null> {
+  async function createSession(provider: SessionProvider = defaultAiCli, worktreeMode?: boolean): Promise<Session | null> {
     if (!trackId) return null;
     try {
       const res = await fetch(`/api/tracks/${trackId}/sessions`, {
@@ -308,7 +321,7 @@ export function TrackView() {
         )}
         <span className="text-xs text-gray-500 bg-gray-800 px-2 py-0.5 rounded">{track.status}</span>
         <div className="ml-auto">
-          <NewSessionButton onCreateSession={createSession} />
+          <NewSessionButton defaultProvider={defaultAiCli} onCreateSession={createSession} />
         </div>
       </header>
 
@@ -429,7 +442,13 @@ export function TrackView() {
   );
 }
 
-function NewSessionButton({ onCreateSession }: { onCreateSession: (provider: SessionProvider, worktreeMode?: boolean) => Promise<Session | null> }) {
+function NewSessionButton({
+  defaultProvider,
+  onCreateSession,
+}: {
+  defaultProvider: DefaultAiCli;
+  onCreateSession: (provider: SessionProvider, worktreeMode?: boolean) => Promise<Session | null>;
+}) {
   const [open, setOpen] = useState(false);
   const [creating, setCreating] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
@@ -458,7 +477,7 @@ function NewSessionButton({ onCreateSession }: { onCreateSession: (provider: Ses
   return (
     <div ref={ref} className="relative inline-flex">
       <button
-        onClick={() => create('claude', true)}
+        onClick={() => create(defaultProvider, true)}
         disabled={creating}
         className="px-3 py-1.5 text-sm bg-blue-600 hover:bg-blue-500 disabled:opacity-70 disabled:cursor-not-allowed rounded-l-lg transition-colors flex items-center gap-1.5"
       >
@@ -493,6 +512,20 @@ function NewSessionButton({ onCreateSession }: { onCreateSession: (provider: Ses
           >
             <span className="w-2 h-2 rounded-full bg-orange-400" />
             Claude
+          </button>
+          <button
+            onClick={() => create('cursor', true)}
+            className="w-full text-left px-3 py-1.5 text-sm hover:bg-gray-700 flex items-center gap-2"
+          >
+            <span className="w-2 h-2 rounded-full bg-violet-400" />
+            <span>Cursor CLI <span className="text-[10px] text-gray-500 ml-0.5">(worktree)</span></span>
+          </button>
+          <button
+            onClick={() => create('cursor', false)}
+            className="w-full text-left px-3 py-1.5 text-sm hover:bg-gray-700 flex items-center gap-2"
+          >
+            <span className="w-2 h-2 rounded-full bg-violet-400" />
+            Cursor CLI
           </button>
           <button
             onClick={() => create('codex')}

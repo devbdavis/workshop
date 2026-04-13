@@ -114,8 +114,15 @@ function LeafPane({ node, trackId, sessions, todos, onSplit, onClose, onCreateSe
     [node.id, onSplit, onCreateSession],
   );
 
-  const providerLabel = session?.provider === 'codex' ? 'codex' : 'claude';
-  const providerColor = session?.provider === 'codex' ? 'bg-emerald-400' : 'bg-orange-400';
+  const providerLabel = session?.provider ?? 'claude';
+  const providerColor =
+    session?.provider === 'codex'
+      ? 'bg-emerald-400'
+      : session?.provider === 'gemini'
+        ? 'bg-blue-400'
+        : session?.provider === 'cursor'
+          ? 'bg-violet-400'
+          : 'bg-orange-400';
   const displayName = session?.name || (session ? `session:${session.id.slice(0, 8)}` : 'empty');
 
   const startEditing = useCallback(() => {
