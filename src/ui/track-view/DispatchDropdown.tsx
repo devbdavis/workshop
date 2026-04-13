@@ -9,6 +9,7 @@ export interface DispatchOptions {
 
 const PROVIDER_OPTIONS: { value: SessionProvider; label: string; color: string }[] = [
   { value: 'claude', label: 'Claude', color: 'bg-orange-400' },
+  { value: 'cursor', label: 'Cursor', color: 'bg-violet-400' },
   { value: 'codex', label: 'Codex', color: 'bg-emerald-400' },
 ];
 

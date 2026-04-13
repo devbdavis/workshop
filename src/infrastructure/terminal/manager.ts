@@ -13,7 +13,7 @@ import {
   capturePaneLines, isSessionIdle, isSessionNeedsInput, isSessionLoggedOut, isSessionExited,
 } from './pane-detection.js';
 import {
-  buildClaudeLauncher, buildGeminiLauncher, buildCodexLauncher,
+  buildClaudeLauncher, buildGeminiLauncher, buildCodexLauncher, buildCursorLauncher,
   sendInitialPrompt,
 } from './launcher-builders.js';
 
@@ -481,6 +481,8 @@ export function createTerminalManager(sessionRepo: SessionRepository, soulLoader
       buildCodexLauncher(launcherLines, sessionDir, cwd, effectiveOptions);
     } else if (provider === 'gemini') {
       buildGeminiLauncher(launcherLines, sessionDir, cwd, effectiveOptions);
+    } else if (provider === 'cursor') {
+      buildCursorLauncher(launcherLines, sessionDir, cwd, effectiveOptions);
     } else if (provider === 'claude') {
       buildClaudeLauncher(launcherLines, session.id, sessionDir, tmuxName, cwd, effectiveOptions);
     } else {
@@ -544,7 +546,11 @@ export function createTerminalManager(sessionRepo: SessionRepository, soulLoader
     // For non-Claude providers, use the tmux paste helper to deliver the
     // initial prompt after the TUI is ready. Claude handles this via
     // positional argument in the launch script (no race condition).
-    if (effectiveOptions?.initialPrompt && provider !== 'claude') {
+    if (
+      effectiveOptions?.initialPrompt &&
+      provider !== 'claude' &&
+      provider !== 'cursor'
+    ) {
       sendInitialPrompt(sessionDir, tmuxName, provider);
     }
   }

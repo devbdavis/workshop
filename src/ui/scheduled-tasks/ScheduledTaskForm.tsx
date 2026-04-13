@@ -26,7 +26,9 @@ export function ScheduledTaskForm({ task, tracks, agents, onSave, onClose, onSav
   const [taskPrompt, setTaskPrompt] = useState(task?.taskPrompt ?? '');
   const [trackId, setTrackId] = useState(task?.trackId ?? '');
   const [agentId, setAgentId] = useState(task?.agentId ?? '');
-  const [provider, setProvider] = useState(task?.provider ?? 'claude');
+  const [provider, setProvider] = useState<'claude' | 'cursor'>(
+    task?.provider === 'cursor' ? 'cursor' : 'claude',
+  );
   const [systemPromptOverride, setSystemPromptOverride] = useState(task?.systemPromptOverride ?? '');
   const [showAdvanced, setShowAdvanced] = useState(!!task?.systemPromptOverride);
 
@@ -532,11 +534,11 @@ export function ScheduledTaskForm({ task, tracks, agents, onSave, onClose, onSav
             <Field label="Provider">
               <select
                 value={provider}
-                onChange={(e) => setProvider(e.target.value as 'claude' | 'codex')}
+                onChange={(e) => setProvider(e.target.value as 'claude' | 'cursor')}
                 className="w-full px-3 py-1.5 bg-gray-800 border border-gray-700 rounded text-sm"
               >
                 <option value="claude">Claude</option>
-                <option value="codex">Codex</option>
+                <option value="cursor">Cursor</option>
               </select>
             </Field>
           </div>

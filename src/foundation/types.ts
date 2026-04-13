@@ -62,7 +62,43 @@ export interface TrackPath {
 
 // Session
 export type SessionState = 'active' | 'detached' | 'dead' | 'suspended';
-export type SessionProvider = 'claude' | 'codex' | 'gemini';
+export type SessionProvider = 'claude' | 'codex' | 'gemini' | 'cursor';
+
+const SESSION_PROVIDER_VALUES = new Set<string>(['claude', 'codex', 'gemini', 'cursor']);
+
+export function isSessionProvider(value: unknown): value is SessionProvider {
+  return typeof value === 'string' && SESSION_PROVIDER_VALUES.has(value);
+}
+
+/** Parse API / stored values into a session provider. Unknown values fall back to Claude. */
+export function parseSessionProvider(value: unknown): SessionProvider {
+  return isSessionProvider(value) ? value : 'claude';
+}
+
+/** Preferred default CLI for new sessions (General settings). */
+export type DefaultAiCli = 'claude' | 'cursor';
+
+export function isDefaultAiCli(value: unknown): value is DefaultAiCli {
+  return value === 'claude' || value === 'cursor';
+}
+
+export function parseDefaultAiCli(value: unknown): DefaultAiCli {
+  return isDefaultAiCli(value) ? value : 'claude';
+}
+
+/**
+ * Resolve a requested provider, falling back to the saved default when omitted.
+ * Invalid explicit values still fall back to Claude for safety.
+ */
+export function resolveSessionProvider(
+  requestedProvider: unknown,
+  savedDefaultAiCli: unknown,
+): SessionProvider {
+  if (requestedProvider === undefined || requestedProvider === null) {
+    return parseDefaultAiCli(savedDefaultAiCli);
+  }
+  return parseSessionProvider(requestedProvider);
+}
 
 export interface Session {
   id: SessionId;
