@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import type { TrackId, TodoId, SessionId, AgentId, SessionProvider, TrackRepo } from '@foundation/types';
+import { resolveSessionProvider } from '@foundation/types.js';
 import type { TodoRepository } from '@domain/todo/repository';
 import type { TrackRepository } from '@domain/track/repository';
 import type { SessionRepository } from '@domain/session/repository';
@@ -7,6 +8,7 @@ import type { SummaryRepository } from '@domain/summary/repository';
 import type { TicketRepository } from '@domain/ticket/repository';
 import type { PromptTemplateRepository } from '@domain/prompt-template/repository';
 import type { AgentRepository } from '@domain/agent/repository';
+import type { SettingsRepository } from '@domain/repo/repository';
 import type { FilesystemAgentScanner } from '@infrastructure/agents/filesystem-scanner.js';
 import type { VaultReader } from '@infrastructure/vault/reader.js';
 import { slugifyTrackName } from '@infrastructure/vault/utils.js';
@@ -22,6 +24,7 @@ export interface TodoRouterDeps {
   tickets: TicketRepository;
   promptTemplates: PromptTemplateRepository;
   agents: AgentRepository;
+  settings: SettingsRepository;
   filesystemScanner: FilesystemAgentScanner;
   projectRoot: string;
   terminal: {
@@ -37,7 +40,20 @@ export interface TodoRouterDeps {
 
 export function createTodoRouter(deps: TodoRouterDeps): Router {
   const router = Router();
-  const { todos, tracks, sessions, summaries, tickets, promptTemplates, agents, filesystemScanner, projectRoot, terminal, vaultReader } = deps;
+  const {
+    todos,
+    tracks,
+    sessions,
+    summaries,
+    tickets,
+    promptTemplates,
+    agents,
+    settings,
+    filesystemScanner,
+    projectRoot,
+    terminal,
+    vaultReader,
+  } = deps;
 
   // --- List all todos (with optional filters) ---
 
@@ -201,7 +217,10 @@ export function createTodoRouter(deps: TodoRouterDeps): Router {
       // Accept optional agentId, provider, and dangerouslySkipPermissions from request body.
       // If no agentId provided, fall back to the track's configured default agent.
       const agentId = (req.body?.agentId as AgentId | undefined) ?? track.defaultAgentId;
-      const provider: SessionProvider = req.body?.provider === 'codex' ? 'codex' : 'claude';
+      const provider: SessionProvider = resolveSessionProvider(
+        req.body?.provider,
+        settings.get('default_ai_cli'),
+      );
       const dangerouslySkipPermissions: boolean = req.body?.dangerouslySkipPermissions === true;
 
       // Compose system prompt: agent + track context + summary + template + repos + todo task

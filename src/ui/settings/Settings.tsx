@@ -7,6 +7,7 @@ import { Repositories } from './Repositories';
 import { AgentsSettings } from './AgentsSettings';
 import { SkillsSettings } from './SkillsSettings';
 import { IssueTracking } from './IssueTracking';
+import { DefaultAiCliSettings } from './DefaultAiCliSettings';
 
 type Tab = 'general' | 'repositories' | 'mcp' | 'templates' | 'agents' | 'skills' | 'issue-tracking';
 
@@ -53,6 +54,10 @@ export function Settings() {
         <div className="space-y-6">
           <section className="bg-gray-900 border border-gray-800 rounded-lg p-6">
             <ThemeSelector />
+          </section>
+
+          <section className="bg-gray-900 border border-gray-800 rounded-lg p-6">
+            <DefaultAiCliSettings />
           </section>
 
           <section className="bg-gray-900 border border-gray-800 rounded-lg p-6">
