@@ -4,6 +4,7 @@ import { homedir } from 'os';
 import path from 'path';
 import { Router } from 'express';
 import type { TrackId, SessionId, SessionProvider, RepoId, PathId, AgentId, AutomationRuleId, TemplateId, TerminalLayout, WorkflowTicket } from '@foundation/types';
+import { resolveSessionProvider } from '@foundation/types.js';
 import { VAULT_ROOT } from '@foundation/config.js';
 import { createTrackRepository } from '@infrastructure/persistence/track-repository.js';
 import { createSessionRepository } from '@infrastructure/persistence/session-repository.js';
@@ -192,6 +193,7 @@ export function createApiRouter(deps: ApiRouterDeps = {}): Router {
     summaryRepo: summaries,
     gitAdapter,
   });
+  const settingsRepo = createSettingsRepository();
 
   // Mount todo sub-router
   const todoRouter = createTodoRouter({
@@ -202,6 +204,7 @@ export function createApiRouter(deps: ApiRouterDeps = {}): Router {
     tickets,
     promptTemplates,
     agents,
+    settings: settingsRepo,
     filesystemScanner,
     projectRoot,
     terminal,
@@ -440,7 +443,6 @@ export function createApiRouter(deps: ApiRouterDeps = {}): Router {
 
   // Mount repo + settings sub-router
   const globalRepos = createGlobalRepoRepository();
-  const settingsRepo = createSettingsRepository();
   const repoRouter = createRepoRouter({ repos: globalRepos, settings: settingsRepo });
   router.use(repoRouter);
 
@@ -792,8 +794,10 @@ export function createApiRouter(deps: ApiRouterDeps = {}): Router {
         }
       }
 
-      // Validate provider if provided
-      const provider: SessionProvider = req.body?.provider === 'codex' ? 'codex' : 'claude';
+      const provider: SessionProvider = resolveSessionProvider(
+        req.body?.provider,
+        settingsRepo.get('default_ai_cli'),
+      );
 
       // worktreeMode: explicit request body takes precedence, then track-level default
       const requestWorktreeMode = req.body?.worktreeMode;

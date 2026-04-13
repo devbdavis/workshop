@@ -35,6 +35,7 @@ export function providerColor(provider: string): string {
     case 'claude': return 'bg-blue-500';
     case 'codex': return 'bg-red-500';
     case 'gemini': return 'bg-yellow-500';
+    case 'cursor': return 'bg-violet-500';
     default: return 'bg-gray-500';
   }
 }
