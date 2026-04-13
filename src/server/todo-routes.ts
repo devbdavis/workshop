@@ -145,11 +145,10 @@ export function createTodoRouter(deps: TodoRouterDeps): Router {
       return;
     }
 
-    // Clear session/agent assignment only when moving to 'done' — that's the only
-    // transition that also destroys the session. Moving to 'review' or back to
-    // 'backlog'/'ready' should preserve the link so the session header keeps showing
-    // the PR/ticket icons while the session is still alive.
-    const isMovingToDone = status === 'done' && existing.status === 'in-progress';
+    // Clear session/agent assignment when moving to 'done' from any active state.
+    // Moving to 'review' or back to 'backlog'/'ready' preserves the link so the
+    // session header keeps showing PR/ticket icons while the session is still alive.
+    const isMovingToDone = status === 'done' && existing.status !== 'done';
     const resolvedSessionId = isMovingToDone ? null : sessionId;
     const resolvedAgentId: null | undefined = isMovingToDone ? null : undefined;
 
@@ -171,13 +170,13 @@ export function createTodoRouter(deps: TodoRouterDeps): Router {
       return;
     }
 
-    // Hard-destroy session when todo is marked done
-    if (status === 'done' && existing.sessionId) {
+    // Soft-delete session to recycle bin when todo is marked done
+    if (isMovingToDone && existing.sessionId) {
       try {
-        await terminal.destroySession(existing.sessionId);
+        await terminal.softDeleteSession(existing.sessionId);
         broadcast('session:deleted', todo.trackId);
       } catch (err) {
-        console.error('Failed to clean up session for completed todo:', err);
+        console.error('Failed to soft-delete session for completed todo:', err);
       }
     }
 
