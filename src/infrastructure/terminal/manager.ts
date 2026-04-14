@@ -475,7 +475,18 @@ export function createTerminalManager(sessionRepo: SessionRepository, soulLoader
     const provider = session.provider;
     const sessionDir = getSessionDir(session.id);
     const launcherFile = path.join(sessionDir, 'launch.sh');
-    const launcherLines = ['#!/bin/bash', 'set -e', ''];
+    const sessionEnvFile = path.join(process.env.HOME ?? '/tmp', '.workshop', 'session.env');
+    const launcherLines = [
+      '#!/bin/bash', 'set -e', '',
+      `# Load dev credentials if pre-authenticated via scripts/workshop-auth.sh`,
+      `if [ -f ${JSON.stringify(sessionEnvFile)} ]; then`,
+      `  set -a`,
+      `  # shellcheck disable=SC1090`,
+      `  source ${JSON.stringify(sessionEnvFile)}`,
+      `  set +a`,
+      `fi`,
+      ``,
+    ];
 
     if (provider === 'codex') {
       buildCodexLauncher(launcherLines, sessionDir, cwd, effectiveOptions);
