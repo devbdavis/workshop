@@ -103,10 +103,14 @@ const TMUX_PATH_FLAG = process.env.PATH
  * Configure a freshly created tmux session for Workshop's browser terminal.
  *
  * - `mouse off`: xterm.js handles selection (soft-wrap aware) and cursor
- *   natively. Scroll is handled separately via server-driven copy-mode
- *   (see websocket.ts scroll handler).
- * - `set-clipboard on`: tmux copy-mode selections emit OSC 52 so the browser
- *   clipboard receives the text automatically.
+ *   natively. Scroll is handled by a capture-based scrollback overlay
+ *   (see websocket.ts capture-scrollback handler).
+ * - `set-clipboard on`: OSC 52 clipboard passthrough.
+ * - `status off`: hides the tmux status bar so the live terminal and
+ *   scrollback overlay are visually identical (no jarring bar appearing
+ *   and disappearing during transitions).
+ * - `history-limit 5000`: provides generous scrollback for the capture
+ *   overlay without making capture responses too large.
  *
  * These are set per-session so Workshop owns the UX regardless of ~/.tmux.conf.
  */
@@ -114,6 +118,8 @@ function configureTmuxSession(tmuxName: string): void {
   try {
     execSync(`tmux set-option -t ${tmuxName} mouse off`, { stdio: 'pipe' });
     execSync(`tmux set-option -t ${tmuxName} set-clipboard on`, { stdio: 'pipe' });
+    execSync(`tmux set-option -t ${tmuxName} status off`, { stdio: 'pipe' });
+    execSync(`tmux set-option -t ${tmuxName} history-limit 5000`, { stdio: 'pipe' });
   } catch (err) {
     console.warn(`[tmux] Failed to configure session ${tmuxName}:`, err);
   }
