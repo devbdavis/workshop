@@ -333,9 +333,14 @@ button:focus-visible {
 }
 
 /* xterm: force text cursor over the terminal canvas so it feels like a real
-   terminal instead of showing the browser's default pointer. */
-.xterm {
-  cursor: text;
+   terminal instead of showing the browser's default pointer.  Target the
+   screen, canvas layers, and helper textarea — xterm.js's own stylesheets
+   may override a bare `.xterm` rule. */
+.xterm,
+.xterm .xterm-screen,
+.xterm .xterm-screen canvas,
+.xterm .xterm-helper-textarea {
+  cursor: text !important;
 }
 
 /* xterm viewport: suppress the scrollbar so it doesn't occlude canvas content.
