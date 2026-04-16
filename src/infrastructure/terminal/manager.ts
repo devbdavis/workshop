@@ -99,6 +99,25 @@ const TMUX_PATH_FLAG = process.env.PATH
   ? `-e PATH=${JSON.stringify(process.env.PATH)}`
   : '';
 
+/**
+ * Configure a freshly created tmux session for Workshop's browser terminal.
+ *
+ * - `mouse on`: scroll wheel drives tmux copy-mode scrollback (xterm.js's own
+ *   scrollback is inert because tmux uses the alternate screen buffer).
+ * - `set-clipboard on`: tmux copy-mode selections emit OSC 52 so the browser
+ *   clipboard receives the text automatically.
+ *
+ * These are set per-session so Workshop owns the UX regardless of ~/.tmux.conf.
+ */
+function configureTmuxSession(tmuxName: string): void {
+  try {
+    execSync(`tmux set-option -t ${tmuxName} mouse on`, { stdio: 'pipe' });
+    execSync(`tmux set-option -t ${tmuxName} set-clipboard on`, { stdio: 'pipe' });
+  } catch (err) {
+    console.warn(`[tmux] Failed to configure session ${tmuxName}:`, err);
+  }
+}
+
 /** Seconds a dead tmux session gets before being reaped/suspended */
 const DYING_GRACE_PERIOD_MS = 30_000;
 
@@ -655,6 +674,7 @@ export function createTerminalManager(sessionRepo: SessionRepository, soulLoader
           `tmux new-session -d -s ${tmuxName} ${NIX_CLEAN_TMUX_FLAGS} ${TMUX_PATH_FLAG} -x 120 -y 40 -c ${JSON.stringify(cwd)}`,
           { stdio: 'pipe', env: cleanEnv },
         );
+        configureTmuxSession(tmuxName);
 
         if (!options?.skipClaude) {
           await launchCli(session, tmuxName, cwd, effectiveOptions);
@@ -978,6 +998,7 @@ export function createTerminalManager(sessionRepo: SessionRepository, soulLoader
             `tmux new-session -d -s ${tmuxName} ${NIX_CLEAN_TMUX_FLAGS} ${TMUX_PATH_FLAG} -x 120 -y 40 -c ${JSON.stringify(cwd)}`,
             { stdio: 'pipe', env: cleanEnv },
           );
+          configureTmuxSession(tmuxName);
 
           // Update the tmux session name and reactivate
           sessionRepo.updateTmuxSession(session.id, tmuxName);
@@ -1029,6 +1050,7 @@ export function createTerminalManager(sessionRepo: SessionRepository, soulLoader
         `tmux new-session -d -s ${tmuxName} ${NIX_CLEAN_TMUX_FLAGS} ${TMUX_PATH_FLAG} -x 120 -y 40 -c ${JSON.stringify(cwd)}`,
         { stdio: 'pipe', env: cleanEnv },
       );
+      configureTmuxSession(tmuxName);
 
       // Restore the DB record first so the session is visible again
       sessionRepo.restore(sessionId);
