@@ -173,7 +173,13 @@ export function setupWebSocket(server: HttpServer): void {
       // Check if it's a JSON control message
       if (msg.startsWith('{')) {
         try {
-          const ctrl = JSON.parse(msg) as { type: string; cols?: number; rows?: number };
+          const ctrl = JSON.parse(msg) as {
+            type: string;
+            cols?: number;
+            rows?: number;
+            scrollLines?: number;
+          };
+
           if (ctrl.type === 'resize' && ctrl.cols && ctrl.rows) {
             // Validate cols/rows are integers in a safe range to prevent injection
             const cols = Math.floor(Number(ctrl.cols));
@@ -193,6 +199,31 @@ export function setupWebSocket(server: HttpServer): void {
               );
             } catch {
               // Resize might fail if session is dead
+            }
+            return;
+          }
+
+          // Scrollback: capture the full pane history and send it to the
+          // client as a control message.  The client renders it in a
+          // separate xterm.js instance with native scrollback/selection.
+          if (ctrl.type === 'capture-scrollback') {
+            const scrollLines = Math.max(1, Math.min(50, Math.floor(Number(ctrl.scrollLines) || 3)));
+            try {
+              const captured = execSync(
+                `tmux capture-pane -p -e -S - -t ${session.tmuxSession}`,
+                { stdio: 'pipe', timeout: 5000, maxBuffer: 10 * 1024 * 1024 },
+              ).toString('utf-8');
+
+              // Control messages use a \x00 prefix to distinguish from PTY data
+              if (ws.readyState === WebSocket.OPEN) {
+                ws.send('\x00' + JSON.stringify({
+                  type: 'scrollback',
+                  content: captured,
+                  scrollLines,
+                }));
+              }
+            } catch (err) {
+              console.warn(`[scrollback] capture-pane failed for ${session.tmuxSession}:`, err);
             }
             return;
           }
