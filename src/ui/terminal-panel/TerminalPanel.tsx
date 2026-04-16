@@ -121,10 +121,13 @@ export function TerminalPanel({ trackId, sessionId, autoFocus, focusTrigger }: P
         return; // xterm.js handles normal scrollback scrolling
       }
 
-      // Live mode — scroll up enters scrollback
+      // Live mode — ALWAYS block wheel events.  tmux uses the alternate
+      // screen so xterm.js has no scrollback to scroll; unblocked events
+      // get converted to arrow keys and thrash the shell input line.
+      e.preventDefault();
+      e.stopPropagation();
+
       if (e.deltaY < 0 && !captureInFlightRef.current) {
-        e.preventDefault();
-        e.stopPropagation();
         captureInFlightRef.current = true;
         const lines = Math.max(1, Math.round(Math.abs(e.deltaY) / 30));
         if (ws.readyState === WebSocket.OPEN) {
