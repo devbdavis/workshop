@@ -102,8 +102,9 @@ const TMUX_PATH_FLAG = process.env.PATH
 /**
  * Configure a freshly created tmux session for Workshop's browser terminal.
  *
- * - `mouse on`: scroll wheel drives tmux copy-mode scrollback (xterm.js's own
- *   scrollback is inert because tmux uses the alternate screen buffer).
+ * - `mouse off`: xterm.js handles selection (soft-wrap aware) and cursor
+ *   natively. Scroll is handled separately via server-driven copy-mode
+ *   (see websocket.ts scroll handler).
  * - `set-clipboard on`: tmux copy-mode selections emit OSC 52 so the browser
  *   clipboard receives the text automatically.
  *
@@ -111,7 +112,7 @@ const TMUX_PATH_FLAG = process.env.PATH
  */
 function configureTmuxSession(tmuxName: string): void {
   try {
-    execSync(`tmux set-option -t ${tmuxName} mouse on`, { stdio: 'pipe' });
+    execSync(`tmux set-option -t ${tmuxName} mouse off`, { stdio: 'pipe' });
     execSync(`tmux set-option -t ${tmuxName} set-clipboard on`, { stdio: 'pipe' });
   } catch (err) {
     console.warn(`[tmux] Failed to configure session ${tmuxName}:`, err);

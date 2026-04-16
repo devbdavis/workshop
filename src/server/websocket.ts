@@ -173,7 +173,14 @@ export function setupWebSocket(server: HttpServer): void {
       // Check if it's a JSON control message
       if (msg.startsWith('{')) {
         try {
-          const ctrl = JSON.parse(msg) as { type: string; cols?: number; rows?: number };
+          const ctrl = JSON.parse(msg) as {
+            type: string;
+            cols?: number;
+            rows?: number;
+            direction?: string;
+            lines?: number;
+          };
+
           if (ctrl.type === 'resize' && ctrl.cols && ctrl.rows) {
             // Validate cols/rows are integers in a safe range to prevent injection
             const cols = Math.floor(Number(ctrl.cols));
@@ -193,6 +200,32 @@ export function setupWebSocket(server: HttpServer): void {
               );
             } catch {
               // Resize might fail if session is dead
+            }
+            return;
+          }
+
+          // Scroll: drive tmux copy-mode from the server so xterm.js can keep
+          // mouse-mode off (native selection + text cursor).  `copy-mode -e`
+          // is a no-op when already active and auto-exits on scroll-to-bottom.
+          if (ctrl.type === 'scroll' && (ctrl.direction === 'up' || ctrl.direction === 'down')) {
+            const lines = Math.min(Math.max(1, Math.floor(Number(ctrl.lines) || 1)), 50);
+            const tmux = session.tmuxSession;
+            try {
+              if (ctrl.direction === 'up') {
+                // Enter copy-mode (no-op if already in it) then scroll up
+                execSync(
+                  `tmux copy-mode -et ${tmux} \\; send-keys -t ${tmux} -N ${lines} -X scroll-up`,
+                  { stdio: 'pipe', timeout: 2000 },
+                );
+              } else {
+                // Scroll down; silently ignored if not in copy-mode
+                execSync(
+                  `tmux send-keys -t ${tmux} -N ${lines} -X scroll-down`,
+                  { stdio: 'pipe', timeout: 2000 },
+                );
+              }
+            } catch {
+              // Session dead or not in copy-mode — nothing to do
             }
             return;
           }

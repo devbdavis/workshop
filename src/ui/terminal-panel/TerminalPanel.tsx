@@ -78,6 +78,33 @@ export function TerminalPanel({ trackId, sessionId, autoFocus, focusTrigger }: P
       }
     });
 
+    // Scroll: intercept wheel events and send them to the server, which drives
+    // tmux copy-mode for scrollback.  This keeps tmux mouse-mode off so xterm.js
+    // handles selection natively (soft-wrap aware, text cursor, Cmd+C to copy).
+    let scrollAccum = 0;
+    let scrollTimer: ReturnType<typeof setTimeout> | null = null;
+    const container = containerRef.current;
+
+    const wheelHandler = (e: WheelEvent) => {
+      e.preventDefault();
+      if (ws.readyState !== WebSocket.OPEN) return;
+
+      scrollAccum += e.deltaY;
+      if (!scrollTimer) {
+        scrollTimer = setTimeout(() => {
+          const delta = scrollAccum;
+          scrollAccum = 0;
+          scrollTimer = null;
+          if (delta === 0) return;
+
+          const lines = Math.max(1, Math.round(Math.abs(delta) / 40));
+          const direction = delta < 0 ? 'up' : 'down';
+          ws.send(JSON.stringify({ type: 'scroll', direction, lines }));
+        }, 32);
+      }
+    };
+    container.addEventListener('wheel', wheelHandler, { passive: false });
+
     // Handle container resize.
     // Guard with `disposed` so queued ResizeObserver callbacks that fire after
     // cleanup don't call fitAddon.fit() on an already-disposed terminal
@@ -86,10 +113,12 @@ export function TerminalPanel({ trackId, sessionId, autoFocus, focusTrigger }: P
     const resizeObserver = new ResizeObserver(() => {
       if (!disposed) fitAddon.fit();
     });
-    resizeObserver.observe(containerRef.current);
+    resizeObserver.observe(container);
 
     return () => {
       disposed = true;
+      if (scrollTimer) clearTimeout(scrollTimer);
+      container.removeEventListener('wheel', wheelHandler);
       resizeObserver.disconnect();
       ws.close();
       term.dispose();
