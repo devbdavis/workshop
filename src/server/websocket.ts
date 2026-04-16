@@ -177,8 +177,7 @@ export function setupWebSocket(server: HttpServer): void {
             type: string;
             cols?: number;
             rows?: number;
-            direction?: string;
-            lines?: number;
+            scrollLines?: number;
           };
 
           if (ctrl.type === 'resize' && ctrl.cols && ctrl.rows) {
@@ -204,28 +203,27 @@ export function setupWebSocket(server: HttpServer): void {
             return;
           }
 
-          // Scroll: drive tmux copy-mode from the server so xterm.js can keep
-          // mouse-mode off (native selection + text cursor).  `copy-mode -e`
-          // is a no-op when already active and auto-exits on scroll-to-bottom.
-          if (ctrl.type === 'scroll' && (ctrl.direction === 'up' || ctrl.direction === 'down')) {
-            const lines = Math.min(Math.max(1, Math.floor(Number(ctrl.lines) || 1)), 50);
-            const tmux = session.tmuxSession;
+          // Scrollback: capture the full pane history and send it to the
+          // client as a control message.  The client renders it in a
+          // separate xterm.js instance with native scrollback/selection.
+          if (ctrl.type === 'capture-scrollback') {
+            const scrollLines = Math.max(1, Math.min(50, Math.floor(Number(ctrl.scrollLines) || 3)));
             try {
-              if (ctrl.direction === 'up') {
-                // Enter copy-mode (no-op if already in it) then scroll up
-                execSync(
-                  `tmux copy-mode -et ${tmux} \\; send-keys -t ${tmux} -N ${lines} -X scroll-up`,
-                  { stdio: 'pipe', timeout: 2000 },
-                );
-              } else {
-                // Scroll down; silently ignored if not in copy-mode
-                execSync(
-                  `tmux send-keys -t ${tmux} -N ${lines} -X scroll-down`,
-                  { stdio: 'pipe', timeout: 2000 },
-                );
+              const captured = execSync(
+                `tmux capture-pane -p -e -S - -t ${session.tmuxSession}`,
+                { stdio: 'pipe', timeout: 5000, maxBuffer: 10 * 1024 * 1024 },
+              ).toString('utf-8');
+
+              // Control messages use a \x00 prefix to distinguish from PTY data
+              if (ws.readyState === WebSocket.OPEN) {
+                ws.send('\x00' + JSON.stringify({
+                  type: 'scrollback',
+                  content: captured,
+                  scrollLines,
+                }));
               }
-            } catch {
-              // Session dead or not in copy-mode — nothing to do
+            } catch (err) {
+              console.warn(`[scrollback] capture-pane failed for ${session.tmuxSession}:`, err);
             }
             return;
           }
