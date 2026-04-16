@@ -22,8 +22,12 @@ export function TerminalPanel({ trackId, sessionId, autoFocus, focusTrigger }: P
 
     const term = new Terminal({
       cursorBlink: true,
+      cursorStyle: 'bar',
       fontSize: 13,
       fontFamily: 'Menlo, Monaco, "Courier New", monospace',
+      scrollback: 10000,
+      macOptionClickForcesSelection: true,
+      rightClickSelectsWord: true,
       theme: {
         background: '#0a0a0a',
         foreground: '#e5e5e5',

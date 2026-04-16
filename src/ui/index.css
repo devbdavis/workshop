@@ -332,6 +332,12 @@ button:focus-visible {
   scrollbar-color: var(--scrollbar-thumb) var(--scrollbar-track);
 }
 
+/* xterm: force text cursor over the terminal canvas so it feels like a real
+   terminal instead of showing the browser's default pointer. */
+.xterm {
+  cursor: text;
+}
+
 /* xterm viewport: suppress the scrollbar so it doesn't occlude canvas content.
    The terminal canvas fills the full width; the scrollbar gutter would paint
    over the rightmost characters. xterm handles scrolling internally. */
