@@ -12,6 +12,47 @@ const THEME = {
   selectionBackground: '#334155',
 } as const;
 
+const IS_MAC =
+  typeof navigator !== 'undefined' && /mac|iphone|ipad|ipod/i.test(navigator.platform);
+
+/**
+ * Copy/paste key handling.  Ctrl+C must stay as SIGINT, so non-Mac platforms
+ * use the Windows Terminal / VSCode convention: Ctrl+Shift+C / Ctrl+Shift+V.
+ * Alt+C / Alt+V also work on non-Mac as a closer analogue to Mac's Cmd+C.
+ * Mac keeps the native Cmd+C / Cmd+V (Alt is Option there — reserved for
+ * character input and Option-click selection).  Shift+Insert pastes everywhere.
+ *
+ * Returns true if the event should continue to xterm.js, false to consume it.
+ */
+function handleClipboardKey(
+  term: Terminal,
+  event: KeyboardEvent,
+  ws: WebSocket,
+): boolean {
+  if (event.type !== 'keydown') return true;
+
+  const copyModifier = IS_MAC
+    ? event.metaKey && !event.ctrlKey
+    : (event.ctrlKey && event.shiftKey) || (event.altKey && !event.ctrlKey && !event.shiftKey);
+  const key = event.key.toLowerCase();
+
+  if (copyModifier && key === 'c') {
+    const selection = term.getSelection();
+    if (!selection) return true; // nothing selected — let it fall through
+    void navigator.clipboard.writeText(selection).catch(() => { /* ignore */ });
+    return false;
+  }
+
+  if ((copyModifier && key === 'v') || (event.shiftKey && event.key === 'Insert')) {
+    void navigator.clipboard.readText().then((text) => {
+      if (text && ws.readyState === WebSocket.OPEN) ws.send(text);
+    }).catch(() => { /* clipboard blocked — ignore */ });
+    return false;
+  }
+
+  return true;
+}
+
 interface Props {
   trackId: string;
   sessionId: string;
@@ -59,6 +100,8 @@ export function TerminalPanel({ trackId, sessionId, autoFocus, focusTrigger }: P
     if (autoFocus) term.focus();
     termRef.current = term;
     fitAddonRef.current = fitAddon;
+
+    term.attachCustomKeyEventHandler((event) => handleClipboardKey(term, event, ws));
 
     // ── WebSocket ─────────────────────────────────────────────────────
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
@@ -184,6 +227,15 @@ export function TerminalPanel({ trackId, sessionId, autoFocus, focusTrigger }: P
 
       // Keyboard: arrows/pgup/pgdown navigate, Escape exits, typing exits + forwards
       scrollTerm.attachCustomKeyEventHandler((event) => {
+        // Clipboard shortcuts work identically to live mode.  Paste exits
+        // scrollback (handleClipboardKey sends the text via `ws`, which the
+        // shell will render once we close the overlay).
+        if (!handleClipboardKey(scrollTerm, event, ws)) {
+          if (event.type === 'keydown' && (event.key === 'v' || event.key === 'V' || event.key === 'Insert')) {
+            exitScrollback();
+          }
+          return false;
+        }
         if (event.type !== 'keydown') return true;
         switch (event.key) {
           case 'PageUp':   scrollTerm.scrollPages(-1); return false;
