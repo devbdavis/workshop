@@ -14,6 +14,21 @@ const PRIORITY_STYLES: Record<TodoPriority, { border: string; badge: string; lab
   low: { border: 'border-l-gray-600', badge: 'bg-gray-800 text-gray-400', label: 'Low' },
 };
 
+/**
+ * Small Linear mark — half-shaded circle.  Mirrors the icon used in the
+ * session pane header (SessionLinkButtons.tsx) but inlined here so the card
+ * stays self-contained.
+ */
+function LinearMark({ className }: { className?: string }) {
+  return (
+    <svg className={className} viewBox="0 0 16 16" fill="none" aria-hidden="true">
+      <path d="M8 1.5 A6.5 6.5 0 0 1 8 14.5 Z" fill="currentColor" fillOpacity="0.35" />
+      <path d="M8 1.5 A6.5 6.5 0 0 0 8 14.5 Z" fill="currentColor" fillOpacity="0.85" />
+      <circle cx="8" cy="8" r="6.5" stroke="currentColor" strokeOpacity="0.55" strokeWidth="1" />
+    </svg>
+  );
+}
+
 export function KanbanCard({ todo, trackName, onClick }: Props) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id: todo.id,
@@ -45,6 +60,15 @@ export function KanbanCard({ todo, trackName, onClick }: Props) {
           </span>
         )}
         <span className={`text-[10px] px-1.5 py-0.5 rounded ${ps.badge}`}>{ps.label}</span>
+        {todo.issueKey && (
+          <span
+            className="text-[10px] px-1.5 py-0.5 rounded bg-indigo-900/50 text-indigo-300 flex items-center gap-1 font-mono"
+            title={`Linked to Linear ticket ${todo.issueKey}`}
+          >
+            <LinearMark className="w-3 h-3" />
+            {todo.issueKey}
+          </span>
+        )}
         {todo.refined && (
           <span className="text-[10px] px-1.5 py-0.5 rounded bg-blue-900/50 text-blue-300">
             Refined
