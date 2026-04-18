@@ -139,16 +139,26 @@ export function IssueTracking() {
               className="bg-gray-800 border border-gray-700 rounded px-3 py-1.5 text-sm text-gray-200 focus:outline-none focus:border-blue-500 w-96 font-mono"
             />
             <p className="text-[11px] text-gray-500 mt-2">
-              Generate a Personal API key at{' '}
-              <a
-                href="https://linear.app/klaviyo/settings/account/security"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="text-blue-400 hover:underline"
-              >
-                linear.app/klaviyo/settings/account/security
-              </a>
-              . Used to list and import tickets assigned to you.
+              {config.orgName.trim() ? (
+                <>
+                  Generate a Personal API key at{' '}
+                  <a
+                    href={`https://linear.app/${config.orgName.trim()}/settings/account/security`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-blue-400 hover:underline"
+                  >
+                    linear.app/{config.orgName.trim()}/settings/account/security
+                  </a>
+                  . Used to list and import tickets assigned to you.
+                </>
+              ) : (
+                <>
+                  Generate a Personal API key from Linear: open Linear, then go to
+                  Settings → Account → Security &amp; access → Personal API keys.
+                  Used to list and import tickets assigned to you.
+                </>
+              )}
             </p>
             {config.linearApiKeyConfigured && (
               <button
