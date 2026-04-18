@@ -129,7 +129,7 @@ describe('Linear client', () => {
     expect(result).toBeNull();
   });
 
-  it('getIssueByIdentifier returns the first matching node', async () => {
+  it('getIssueByIdentifier returns the first matching node and filters by team/number', async () => {
     const issue = mkIssue({ identifier: 'ASY-42', title: 'Hello' });
     fetchSpy.mockResolvedValueOnce({
       ok: true,
@@ -137,8 +137,22 @@ describe('Linear client', () => {
       json: async () => ({ data: { issues: { nodes: [issue] } } }),
     });
 
-    const result = await getIssueByIdentifier('key', 'ASY-42');
+    const result = await getIssueByIdentifier('key', 'asy-42');
     expect(result?.title).toBe('Hello');
+
+    const body = JSON.parse(fetchSpy.mock.calls[0][1].body);
+    // Identifier must be split into team key (uppercased) + numeric issue number —
+    // Linear's IssueFilter has no top-level "identifier" field.
+    expect(body.variables).toEqual({ teamKey: 'ASY', number: 42 });
+    expect(body.query).toContain('team: { key: { eq: $teamKey }');
+    expect(body.query).toContain('number: { eq: $number }');
+    expect(body.query).not.toContain('identifier: { eq:');
+  });
+
+  it('getIssueByIdentifier returns null for malformed identifiers without making a request', async () => {
+    const result = await getIssueByIdentifier('key', 'not a ticket');
+    expect(result).toBeNull();
+    expect(fetchSpy).not.toHaveBeenCalled();
   });
 
   it('surfaces GraphQL errors as LinearApiError', async () => {

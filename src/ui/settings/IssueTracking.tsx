@@ -141,12 +141,12 @@ export function IssueTracking() {
             <p className="text-[11px] text-gray-500 mt-2">
               Generate a Personal API key at{' '}
               <a
-                href="https://linear.app/settings/api"
+                href="https://linear.app/your-team/settings/account/security"
                 target="_blank"
                 rel="noopener noreferrer"
                 className="text-blue-400 hover:underline"
               >
-                linear.app/settings/api
+                linear.app/your-team/settings/account/security
               </a>
               . Used to list and import tickets assigned to you.
             </p>
