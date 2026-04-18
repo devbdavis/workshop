@@ -62,6 +62,8 @@ import { createMcpServerConfigRepository } from '@infrastructure/persistence/mcp
 import { createMcpConfigRouter } from './mcp-config-routes.js';
 import { createGlobalRepoRepository, createSettingsRepository } from '@infrastructure/persistence/repo-repository.js';
 import { createRepoRouter } from './repo-routes.js';
+import { createBackupRouter } from './backup-routes.js';
+import { createBackupScheduler } from '@application/backup/backup-scheduler.js';
 import { createTicketImportIgnoreRepository } from '@infrastructure/persistence/ticket-import-ignore-repository.js';
 import { createTicketImportRouter } from './ticket-import-routes.js';
 import { createClaudeAdapter } from '@infrastructure/mcp-tools/claude-adapter.js';
@@ -447,6 +449,14 @@ export function createApiRouter(deps: ApiRouterDeps = {}): Router {
   const globalRepos = createGlobalRepoRepository();
   const repoRouter = createRepoRouter({ repos: globalRepos, settings: settingsRepo });
   router.use(repoRouter);
+
+  // Encrypted backups — daily to a cloud-synced directory, scrypt-derived AES-256-GCM.
+  const backupScheduler = createBackupScheduler({ settings: settingsRepo });
+  backupScheduler.start();
+  const backupRouter = createBackupRouter({ settings: settingsRepo, scheduler: backupScheduler });
+  router.use(backupRouter);
+  process.on('SIGINT', () => backupScheduler.stop());
+  process.on('SIGTERM', () => backupScheduler.stop());
 
   // Mount ticket-import sub-router (Linear import modal)
   const ticketImportIgnores = createTicketImportIgnoreRepository();

@@ -8,6 +8,7 @@ import { AgentsSettings } from './AgentsSettings';
 import { SkillsSettings } from './SkillsSettings';
 import { IssueTracking } from './IssueTracking';
 import { DefaultAiCliSettings } from './DefaultAiCliSettings';
+import { BackupSettings } from './BackupSettings';
 
 type Tab = 'general' | 'repositories' | 'mcp' | 'templates' | 'agents' | 'skills' | 'issue-tracking';
 
@@ -58,6 +59,10 @@ export function Settings() {
 
           <section className="bg-gray-900 border border-gray-800 rounded-lg p-6">
             <DefaultAiCliSettings />
+          </section>
+
+          <section className="bg-gray-900 border border-gray-800 rounded-lg p-6">
+            <BackupSettings />
           </section>
 
           <section className="bg-gray-900 border border-gray-800 rounded-lg p-6">
