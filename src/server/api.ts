@@ -62,6 +62,8 @@ import { createMcpServerConfigRepository } from '@infrastructure/persistence/mcp
 import { createMcpConfigRouter } from './mcp-config-routes.js';
 import { createGlobalRepoRepository, createSettingsRepository } from '@infrastructure/persistence/repo-repository.js';
 import { createRepoRouter } from './repo-routes.js';
+import { createTicketImportIgnoreRepository } from '@infrastructure/persistence/ticket-import-ignore-repository.js';
+import { createTicketImportRouter } from './ticket-import-routes.js';
 import { createClaudeAdapter } from '@infrastructure/mcp-tools/claude-adapter.js';
 import { createCodexAdapter } from '@infrastructure/mcp-tools/codex-adapter.js';
 import { createGeminiAdapter } from '@infrastructure/mcp-tools/gemini-adapter.js';
@@ -445,6 +447,16 @@ export function createApiRouter(deps: ApiRouterDeps = {}): Router {
   const globalRepos = createGlobalRepoRepository();
   const repoRouter = createRepoRouter({ repos: globalRepos, settings: settingsRepo });
   router.use(repoRouter);
+
+  // Mount ticket-import sub-router (Linear import modal)
+  const ticketImportIgnores = createTicketImportIgnoreRepository();
+  const ticketImportRouter = createTicketImportRouter({
+    settings: settingsRepo,
+    tracks,
+    todos,
+    ignores: ticketImportIgnores,
+  });
+  router.use(ticketImportRouter);
 
   // Mount MCP config sub-router
   const mcpConfigs = createMcpServerConfigRepository();

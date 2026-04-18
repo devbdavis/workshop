@@ -135,24 +135,47 @@ export function createRepoRouter(deps: RepoRouterDeps): Router {
   });
 
   // --- Get issue tracker setting ---
+  //
+  // The Linear API key is reported as a boolean `linearApiKeyConfigured`
+  // rather than echoed back verbatim — it's a credential, and the settings
+  // page never needs to re-display it.
 
   router.get('/settings/issue-tracker', (_req, res) => {
     const tracker = settings.get('issue_tracker') ?? 'linear';
     const orgName = settings.get('issue_tracker_org') ?? '';
-    res.json({ tracker, orgName });
+    const linearKey = settings.get('linear_api_key');
+    res.json({
+      tracker,
+      orgName,
+      linearApiKeyConfigured: !!(linearKey && linearKey.trim().length > 0),
+    });
   });
 
   // --- Update issue tracker setting ---
 
   router.put('/settings/issue-tracker', (req, res) => {
-    const { tracker, orgName } = req.body as { tracker: unknown; orgName: unknown };
+    const { tracker, orgName, linearApiKey } = req.body as {
+      tracker: unknown;
+      orgName: unknown;
+      linearApiKey: unknown;
+    };
     if (!tracker || !['linear', 'jira', 'none'].includes(tracker as string)) {
       res.status(400).json({ error: 'tracker must be linear, jira, or none' });
       return;
     }
     settings.set('issue_tracker', tracker as string);
     settings.set('issue_tracker_org', typeof orgName === 'string' ? orgName : '');
-    res.json({ tracker, orgName: typeof orgName === 'string' ? orgName : '' });
+    // Empty string clears the key; undefined/null leaves it unchanged so the UI
+    // can save other fields without forcing the user to re-enter the secret.
+    if (typeof linearApiKey === 'string') {
+      settings.set('linear_api_key', linearApiKey.trim());
+    }
+    const currentKey = settings.get('linear_api_key');
+    res.json({
+      tracker,
+      orgName: typeof orgName === 'string' ? orgName : '',
+      linearApiKeyConfigured: !!(currentKey && currentKey.trim().length > 0),
+    });
   });
 
   router.get('/settings/default-ai-cli', (_req, res) => {

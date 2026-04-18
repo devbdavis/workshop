@@ -713,6 +713,26 @@ function runMigrations(db: Database.Database): void {
     // Column already exists — safe to ignore
   }
 
+  // Migration: create ticket_import_ignores table — tracks external tickets the
+  // user has hidden from the Import modal so they don't keep reappearing. Kept
+  // in a dedicated table (not the settings K/V store) so ignores carry metadata
+  // (cached title/url) and can be browsed/unhidden from the UI.
+  try {
+    db.exec(`
+      CREATE TABLE ticket_import_ignores (
+        id TEXT PRIMARY KEY,
+        source TEXT NOT NULL,
+        external_id TEXT NOT NULL,
+        cached_title TEXT,
+        cached_url TEXT,
+        created_at TEXT NOT NULL,
+        UNIQUE(source, external_id)
+      );
+    `);
+  } catch {
+    // Table already exists — safe to ignore
+  }
+
   // Migration: fix stale last_run_status='running' on tasks whose session has ended.
   // Old server code set last_run_status='running' and never updated it after dispatch.
   // Any task that has a last_session_id is confirmed dispatched, so treat it as completed.
