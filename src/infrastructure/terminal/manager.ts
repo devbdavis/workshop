@@ -995,8 +995,10 @@ export function createTerminalManager(sessionRepo: SessionRepository, soulLoader
         try {
           const tmuxName = `workshop-${uuid().slice(0, 8)}`;
           // Restore the original CWD so Claude finds the conversation in the right project bucket.
-          // Worktree sessions use worktreeRoot (most specific); others use the stored workingDirectory.
-          const cwd = session.worktreeRoot || session.workingDirectory || process.env.HOME || '/tmp';
+          // workingDirectory is always the exact directory Claude launched from (e.g. workspace/repo
+          // for single-repo worktree sessions). worktreeRoot is the parent workspace directory and
+          // is less specific — prefer workingDirectory so Claude finds the correct project bucket.
+          const cwd = session.workingDirectory || session.worktreeRoot || process.env.HOME || '/tmp';
 
           const cleanEnv = { ...process.env };
           delete cleanEnv.CLAUDECODE;
@@ -1046,9 +1048,11 @@ export function createTerminalManager(sessionRepo: SessionRepository, soulLoader
       }
 
       const tmuxName = `workshop-${uuid().slice(0, 8)}`;
-      // Prefer worktreeRoot so Claude finds the conversation in the right
-      // project bucket; fall back through workingDirectory to HOME.
-      const cwd = session.worktreeRoot || session.workingDirectory || process.env.HOME || '/tmp';
+      // Prefer workingDirectory (the exact dir Claude launched from, e.g. workspace/repo for
+      // single-repo worktree sessions) over worktreeRoot (the parent workspace dir).
+      // Using worktreeRoot would send Claude to the wrong project bucket and produce
+      // "No conversation found" errors on resume.
+      const cwd = session.workingDirectory || session.worktreeRoot || process.env.HOME || '/tmp';
 
       const cleanEnv = { ...process.env };
       delete cleanEnv.CLAUDECODE;
