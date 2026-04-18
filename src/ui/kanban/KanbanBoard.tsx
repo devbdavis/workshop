@@ -19,6 +19,7 @@ import { KanbanColumn } from './KanbanColumn';
 import { KanbanCard } from './KanbanCard';
 import { TodoDetailModal } from './TodoDetailModal';
 import { CreateTodoModal } from './CreateTodoModal';
+import { ImportFromLinearModal } from './ImportFromLinearModal';
 
 const COLUMNS: { status: TodoStatus; label: string; color: string }[] = [
   { status: 'backlog', label: 'Backlog', color: 'bg-gray-500' },
@@ -48,6 +49,7 @@ export function KanbanBoard() {
   const [activeDrag, setActiveDrag] = useState<Todo | null>(null);
   const [selectedTodo, setSelectedTodo] = useState<Todo | null>(null);
   const [showCreateModal, setShowCreateModal] = useState(false);
+  const [showImportModal, setShowImportModal] = useState(false);
   const [loading, setLoading] = useState(true);
 
   // Cards win over columns for precise within-column reordering.
@@ -267,6 +269,12 @@ export function KanbanBoard() {
             ))}
           </select>
           <button
+            onClick={() => setShowImportModal(true)}
+            className="px-3 py-1.5 text-xs bg-gray-800 hover:bg-gray-700 text-gray-200 border border-gray-700 rounded-lg transition-colors"
+          >
+            Import from Linear
+          </button>
+          <button
             onClick={() => setShowCreateModal(true)}
             className="px-3 py-1.5 text-xs bg-blue-600 hover:bg-blue-500 text-white rounded-lg transition-colors"
           >
@@ -326,6 +334,14 @@ export function KanbanBoard() {
           defaultTrackId={filterTrackId || undefined}
           onClose={() => setShowCreateModal(false)}
           onCreate={handleCreateTodo}
+        />
+      )}
+
+      {showImportModal && (
+        <ImportFromLinearModal
+          tracks={tracks}
+          onClose={() => setShowImportModal(false)}
+          onImported={loadData}
         />
       )}
     </div>
