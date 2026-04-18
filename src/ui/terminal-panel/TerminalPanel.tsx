@@ -22,6 +22,12 @@ const IS_MAC =
  * Mac keeps the native Cmd+C / Cmd+V (Alt is Option there — reserved for
  * character input and Option-click selection).  Shift+Insert pastes everywhere.
  *
+ * On paste we call `event.preventDefault()` — otherwise the browser still
+ * fires its native `paste` event on xterm.js's hidden textarea, xterm sends
+ * the clipboard a second time via onData, and the user sees a double paste.
+ * This is most visible on macOS Cmd+V, but the same race exists anywhere the
+ * browser treats the keystroke as a native paste shortcut.
+ *
  * Returns true if the event should continue to xterm.js, false to consume it.
  */
 function handleClipboardKey(
@@ -39,11 +45,13 @@ function handleClipboardKey(
   if (copyModifier && key === 'c') {
     const selection = term.getSelection();
     if (!selection) return true; // nothing selected — let it fall through
+    event.preventDefault();
     void navigator.clipboard.writeText(selection).catch(() => { /* ignore */ });
     return false;
   }
 
   if ((copyModifier && key === 'v') || (event.shiftKey && event.key === 'Insert')) {
+    event.preventDefault();
     void navigator.clipboard.readText().then((text) => {
       if (text && ws.readyState === WebSocket.OPEN) ws.send(text);
     }).catch(() => { /* clipboard blocked — ignore */ });

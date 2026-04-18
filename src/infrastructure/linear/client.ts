@@ -132,18 +132,43 @@ interface IssueByIdentifierResponse {
 }
 
 /**
+ * Parse a Linear identifier like "ASY-1402" into its team key and issue number.
+ * Returns null for strings that don't match the expected shape.
+ */
+function parseIdentifier(identifier: string): { teamKey: string; number: number } | null {
+  const match = identifier.trim().match(/^([A-Z0-9]+)-(\d+)$/i);
+  if (!match) return null;
+  const number = Number.parseInt(match[2], 10);
+  if (!Number.isFinite(number)) return null;
+  return { teamKey: match[1].toUpperCase(), number };
+}
+
+/**
  * Look up a single issue by its identifier ("ASY-1402"). Returns null if the
- * issue isn't visible to the API key (private team, wrong key, etc.) rather
- * than throwing — the caller falls back to cached data.
+ * identifier can't be parsed or the issue isn't visible to the API key
+ * (private team, wrong key, etc.) — the caller falls back to cached data.
+ *
+ * Linear's `IssueFilter` has no top-level `identifier` field; the supported
+ * path is to filter by team key + issue number, which uniquely identifies an
+ * issue within the workspace.
  */
 export async function getIssueByIdentifier(apiKey: string, identifier: string): Promise<LinearIssue | null> {
+  const parsed = parseIdentifier(identifier);
+  if (!parsed) return null;
+
   const query = `
-    query IssueByIdentifier($identifier: String!) {
-      issues(filter: { identifier: { eq: $identifier } }, first: 1) {
+    query IssueByIdentifier($teamKey: String!, $number: Float!) {
+      issues(
+        filter: { team: { key: { eq: $teamKey } }, number: { eq: $number } },
+        first: 1
+      ) {
         nodes { ${ISSUE_FIELDS} }
       }
     }
   `;
-  const data = await graphql<IssueByIdentifierResponse>(apiKey, query, { identifier });
+  const data = await graphql<IssueByIdentifierResponse>(apiKey, query, {
+    teamKey: parsed.teamKey,
+    number: parsed.number,
+  });
   return data.issues.nodes[0] ?? null;
 }
