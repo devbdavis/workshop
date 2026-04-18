@@ -143,6 +143,37 @@ export interface ExternalTicket {
   createdAt: string;
 }
 
+// Ticket import — hidden tickets (user-hidden issues from import UI)
+export type TicketImportIgnoreId = string & { readonly __brand: 'TicketImportIgnoreId' };
+
+export interface TicketImportIgnore {
+  id: TicketImportIgnoreId;
+  source: TicketSource;
+  externalId: string;
+  cachedTitle?: string;
+  cachedUrl?: string;
+  createdAt: string;
+}
+
+/**
+ * Shape returned by integration endpoints when listing importable issues.
+ * Kept purposefully narrow — only fields that matter for the import UI.
+ */
+export interface ImportableIssue {
+  source: TicketSource;
+  externalId: string;
+  title: string;
+  description?: string;
+  url: string;
+  stateName?: string;
+  stateType?: string;
+  projectName?: string;
+  priority?: number;
+  updatedAt?: string;
+  /** Already-imported todo id, if any — lets UI hide or label these. */
+  importedTodoId?: TodoId;
+}
+
 // Summary
 export interface TrackSummary {
   id: SummaryId;
