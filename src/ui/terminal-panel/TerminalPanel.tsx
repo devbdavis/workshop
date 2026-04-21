@@ -16,17 +16,58 @@ const IS_MAC =
   typeof navigator !== 'undefined' && /mac|iphone|ipad|ipod/i.test(navigator.platform);
 
 /**
- * Copy/paste key handling.  Ctrl+C must stay as SIGINT, so non-Mac platforms
- * use the Windows Terminal / VSCode convention: Ctrl+Shift+C / Ctrl+Shift+V.
- * Alt+C / Alt+V also work on non-Mac as a closer analogue to Mac's Cmd+C.
- * Mac keeps the native Cmd+C / Cmd+V (Alt is Option there — reserved for
- * character input and Option-click selection).  Shift+Insert pastes everywhere.
+ * Write text to the system clipboard.  Prefers the async Clipboard API when
+ * available, but falls back to a hidden-textarea + `execCommand('copy')` —
+ * the async API silently fails when the document loses transient focus
+ * between keystrokes, which manifested as "Cmd+C only works once" on macOS
+ * Chrome.  Both paths restore the previously focused element so the next
+ * keystroke still lands in the terminal.
+ */
+function writeToClipboard(text: string): void {
+  const previousFocus = document.activeElement as HTMLElement | null;
+  const restoreFocus = () => {
+    if (previousFocus && typeof previousFocus.focus === 'function' && document.activeElement !== previousFocus) {
+      previousFocus.focus();
+    }
+  };
+
+  const fallback = () => {
+    const ta = document.createElement('textarea');
+    ta.value = text;
+    ta.setAttribute('readonly', '');
+    ta.style.cssText = 'position:fixed;left:-9999px;top:0;opacity:0;';
+    document.body.appendChild(ta);
+    ta.select();
+    try { document.execCommand('copy'); } catch { /* ignore */ }
+    document.body.removeChild(ta);
+    restoreFocus();
+  };
+
+  if (navigator.clipboard?.writeText && window.isSecureContext) {
+    navigator.clipboard.writeText(text).then(restoreFocus).catch(fallback);
+  } else {
+    fallback();
+  }
+}
+
+/**
+ * Copy/paste key handling.
  *
- * On paste we call `event.preventDefault()` — otherwise the browser still
- * fires its native `paste` event on xterm.js's hidden textarea, xterm sends
- * the clipboard a second time via onData, and the user sees a double paste.
- * This is most visible on macOS Cmd+V, but the same race exists anywhere the
- * browser treats the keystroke as a native paste shortcut.
+ * - macOS: Cmd+C / Cmd+V (the OS standard — Alt is Option, reserved for
+ *   character input and Option-click selection).
+ * - Windows/Linux: Ctrl+Shift+C / Ctrl+Shift+V (Windows Terminal / VSCode
+ *   convention; plain Ctrl+C must stay as SIGINT).  Shift+Insert pastes.
+ *
+ * The previous implementation also bound Alt+C / Alt+V on non-Mac as a
+ * "Cmd analogue", but Alt on Windows activates the browser / OS menu
+ * accelerators — pressing Alt+V would surface a context/menu popup
+ * instead of pasting, and the keystroke was unreliable in general.
+ *
+ * On paste we `preventDefault()` *and* `stopPropagation()` — otherwise the
+ * browser still fires its native `paste` event on xterm.js's hidden
+ * textarea and the text gets injected twice (visible as a double paste on
+ * Cmd+V).  stopPropagation also keeps Windows from treating the Alt
+ * release as a menu-bar accelerator trigger.
  *
  * Returns true if the event should continue to xterm.js, false to consume it.
  */
@@ -38,23 +79,27 @@ function handleClipboardKey(
   if (event.type !== 'keydown') return true;
 
   const copyModifier = IS_MAC
-    ? event.metaKey && !event.ctrlKey
-    : (event.ctrlKey && event.shiftKey) || (event.altKey && !event.ctrlKey && !event.shiftKey);
+    ? event.metaKey && !event.ctrlKey && !event.altKey
+    : event.ctrlKey && event.shiftKey && !event.altKey;
   const key = event.key.toLowerCase();
 
   if (copyModifier && key === 'c') {
+    if (!term.hasSelection()) return true; // nothing selected — let it fall through
     const selection = term.getSelection();
-    if (!selection) return true; // nothing selected — let it fall through
     event.preventDefault();
-    void navigator.clipboard.writeText(selection).catch(() => { /* ignore */ });
+    event.stopPropagation();
+    writeToClipboard(selection);
     return false;
   }
 
   if ((copyModifier && key === 'v') || (event.shiftKey && event.key === 'Insert')) {
     event.preventDefault();
-    void navigator.clipboard.readText().then((text) => {
-      if (text && ws.readyState === WebSocket.OPEN) ws.send(text);
-    }).catch(() => { /* clipboard blocked — ignore */ });
+    event.stopPropagation();
+    if (navigator.clipboard?.readText && window.isSecureContext) {
+      navigator.clipboard.readText().then((text) => {
+        if (text && ws.readyState === WebSocket.OPEN) ws.send(text);
+      }).catch(() => { /* clipboard blocked — ignore */ });
+    }
     return false;
   }
 

@@ -77,11 +77,20 @@ export function TerminalArea({ trackId, trackName, sessions, todos, deletedSessi
   const [pendingFocusSessionId, setPendingFocusSessionId] = useState<SessionId | null>(null);
   const [focusTrigger, setFocusTrigger] = useState(0);
   const prevStartingRef = useRef(new Set<string>());
+  // Remember which pendingSelectSessionId we've already consumed so the
+  // effect doesn't clobber the user's selection every time `sessions`
+  // updates (which happens on every WebSocket event — roughly constantly).
+  const lastHandledPendingRef = useRef<SessionId | null>(null);
 
-  // When a new session is signalled, jump selection to it.
+  // When a new session is signalled, jump selection to it — once per id.
   useEffect(() => {
-    if (!pendingSelectSessionId) return;
+    if (!pendingSelectSessionId) {
+      lastHandledPendingRef.current = null;
+      return;
+    }
+    if (lastHandledPendingRef.current === pendingSelectSessionId) return;
     if (!sessions.some((s) => s.id === pendingSelectSessionId)) return;
+    lastHandledPendingRef.current = pendingSelectSessionId;
     setSelectedIds([pendingSelectSessionId]);
     setPendingFocusSessionId(pendingSelectSessionId);
   }, [pendingSelectSessionId, sessions]);
@@ -98,6 +107,10 @@ export function TerminalArea({ trackId, trackName, sessions, todos, deletedSessi
   }, [startingSessions, pendingFocusSessionId]);
 
   const handleSelect = useCallback((id: SessionId, additive: boolean) => {
+    // Manual selection cancels any in-flight auto-focus.  Without this a
+    // session:ready event arriving after the user has already tabbed away
+    // would steal focus back to the just-created session.
+    setPendingFocusSessionId(null);
     setSelectedIds((prev) => {
       if (!additive) {
         return prev.length === 1 && prev[0] === id ? prev : [id];

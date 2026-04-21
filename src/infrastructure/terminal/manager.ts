@@ -157,21 +157,39 @@ function worktreeBranchName(name: string | undefined, sessionId: string, issueKe
 }
 
 /**
+ * Hard upper bound on how long we'll wait for `git fetch origin` before giving up
+ * and falling back to whatever `origin/<branch>` the local clone already knows.
+ * GitHub has periods of flakiness where fetches hang indefinitely; blocking
+ * session creation on that is worse than starting a few commits behind.
+ */
+const GIT_FETCH_TIMEOUT_MS = 15_000;
+
+/**
  * Fetch origin and return the remote-tracking ref for its HEAD branch (e.g. "origin/main").
  * Returns undefined if the repo has no remote or the ref cannot be determined — callers
  * fall back to creating the worktree from the current HEAD.
  *
  * Runs git commands via execAsync so the Node event loop stays free during network I/O.
+ * The fetch itself is bounded by GIT_FETCH_TIMEOUT_MS; on timeout or any other
+ * failure we fall through to the last-known `origin/<branch>` ref.
  */
 async function fetchAndResolveBase(repoPath: string): Promise<string | undefined> {
   try {
-    await execAsync(`git -C ${JSON.stringify(repoPath)} fetch origin --quiet`);
+    await execAsync(
+      `git -C ${JSON.stringify(repoPath)} fetch origin --quiet`,
+      { timeout: GIT_FETCH_TIMEOUT_MS, killSignal: 'SIGKILL' },
+    );
   } catch (err) {
     // Log so the failure is visible in server output — but don't bail; we can
     // still create the worktree from whatever remote-tracking ref exists locally.
+    // Distinguish timeout (GitHub slow/down) from other errors (auth, network, etc.)
+    // so operators can tell "we're stale" from "fetch is genuinely broken".
+    const e = err as NodeJS.ErrnoException & { signal?: string; killed?: boolean };
+    const timedOut = e?.killed === true || e?.signal === 'SIGKILL';
     console.warn(
-      `[worktree] git fetch origin failed for ${repoPath}:`,
-      err instanceof Error ? err.message.trim() : err,
+      timedOut
+        ? `[worktree] git fetch origin timed out after ${GIT_FETCH_TIMEOUT_MS}ms for ${repoPath} — falling back to last-known origin ref`
+        : `[worktree] git fetch origin failed for ${repoPath}: ${err instanceof Error ? err.message.trim() : err}`,
     );
   }
 
