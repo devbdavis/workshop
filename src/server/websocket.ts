@@ -111,62 +111,34 @@ export function setupWebSocket(server: HttpServer): void {
       activePtys.delete(sessionId);
     }
 
-    // Wait for the tmux session to appear — it may still be initialising in the
-    // background (worktree creation, git fetch, etc.). Poll up to 30s.
-    const tmuxReady = await waitForTmux(session.tmuxSession);
-    if (!tmuxReady) {
-      ws.close(1008, 'tmux session not found');
-      return;
+    // The client's ws.onopen fires as soon as the upgrade completes and
+    // immediately sends an initial resize with the true xterm dimensions.
+    // That message may arrive before we've spawned the pty (waitForTmux can
+    // take seconds on a fresh session while the launcher script boots).
+    // Register the message handler up front and buffer anything we can't
+    // act on yet — otherwise the initial resize is dropped and the tmux
+    // window stays pinned at the 120×40 default until the user manually
+    // resizes their browser window.
+    let ptyProcess: IPty | null = null;
+    // Wrapped in an object so TS control-flow analysis doesn't narrow the
+    // value to `never` across the `await` boundary below — mutation happens
+    // inside the message-handler closure, which TS can't see through.
+    const resize: { value: { cols: number; rows: number } | null } = { value: null };
+    const pendingWrites: string[] = [];
+
+    function applyResize(cols: number, rows: number): void {
+      if (!ptyProcess) return;
+      ptyProcess.resize(cols, rows);
+      try {
+        execSync(
+          `tmux resize-window -t ${session!.tmuxSession} -x ${cols} -y ${rows}`,
+          { stdio: 'pipe' },
+        );
+      } catch {
+        // Resize might fail if session is dead
+      }
     }
 
-    // Spawn a pty running `tmux attach-session`
-    let ptyProcess: IPty;
-    try {
-      // Filter out undefined env values that can cause node-pty to fail
-      const cleanEnv: { [key: string]: string } = {};
-      for (const [k, v] of Object.entries(process.env)) {
-        if (v !== undefined) cleanEnv[k] = v;
-      }
-      ptyProcess = pty.spawn(tmuxPath, ['attach-session', '-t', session.tmuxSession], {
-        name: 'xterm-256color',
-        cols: 120,
-        rows: 40,
-        env: cleanEnv,
-      });
-    } catch (err) {
-      console.error(`Failed to spawn pty for session ${sessionId}:`, err);
-      ws.close(1011, 'Failed to spawn terminal');
-      return;
-    }
-
-    const connection: PtyConnection = {
-      pty: ptyProcess,
-      ws,
-      tmuxSession: session.tmuxSession,
-    };
-    activePtys.set(sessionId, connection);
-
-    // Pipe pty output to WebSocket
-    const dataDisposable = ptyProcess.onData((data: string) => {
-      if (ws.readyState === WebSocket.OPEN) {
-        ws.send(data);
-      }
-    });
-
-    // Handle pty exit: dispose data handler first to prevent any final writes
-    // racing the close, then terminate immediately rather than sending a CLOSE
-    // frame — the client may already be gone (navigated away / component
-    // unmounted), and sending a CLOSE frame to a dead Vite proxy socket
-    // produces a spurious EPIPE.
-    const exitDisposable = ptyProcess.onExit(() => {
-      dataDisposable.dispose();
-      activePtys.delete(sessionId);
-      if (ws.readyState !== WebSocket.CLOSED) {
-        ws.terminate();
-      }
-    });
-
-    // Handle incoming WebSocket messages
     ws.on('message', (data: Buffer | string) => {
       const msg = typeof data === 'string' ? data : data.toString('utf-8');
 
@@ -187,19 +159,8 @@ export function setupWebSocket(server: HttpServer): void {
             if (!Number.isFinite(cols) || !Number.isFinite(rows) || cols < 1 || cols > 500 || rows < 1 || rows > 500) {
               return;
             }
-
-            // Resize the pty
-            ptyProcess.resize(cols, rows);
-
-            // Also resize the tmux window so tmux knows the new dimensions
-            try {
-              execSync(
-                `tmux resize-window -t ${session.tmuxSession} -x ${cols} -y ${rows}`,
-                { stdio: 'pipe' },
-              );
-            } catch {
-              // Resize might fail if session is dead
-            }
+            resize.value = { cols, rows };
+            applyResize(cols, rows);
             return;
           }
 
@@ -232,16 +193,102 @@ export function setupWebSocket(server: HttpServer): void {
         }
       }
 
-      // Write terminal input to the pty
-      ptyProcess.write(msg);
+      // Write terminal input to the pty — buffer if pty isn't ready yet
+      if (ptyProcess) {
+        ptyProcess.write(msg);
+      } else {
+        pendingWrites.push(msg);
+      }
     });
+
+    // Handle WebSocket close/error before the pty exists: just clean up.
+    let wsClosed = false;
+    const onEarlyClose = () => { wsClosed = true; };
+    ws.on('close', onEarlyClose);
+    ws.on('error', onEarlyClose);
+
+    // Wait for the tmux session to appear — it may still be initialising in the
+    // background (worktree creation, git fetch, etc.). Poll up to 30s.
+    const tmuxReady = await waitForTmux(session.tmuxSession);
+    if (wsClosed) return;
+    if (!tmuxReady) {
+      ws.close(1008, 'tmux session not found');
+      return;
+    }
+
+    // Spawn a pty running `tmux attach-session`.  Use the client's most
+    // recent resize (if we've seen one) as the initial pty size so tmux
+    // starts at the right dimensions without needing a later round-trip.
+    const initCols = resize.value?.cols ?? 120;
+    const initRows = resize.value?.rows ?? 40;
+    try {
+      // Filter out undefined env values that can cause node-pty to fail
+      const cleanEnv: { [key: string]: string } = {};
+      for (const [k, v] of Object.entries(process.env)) {
+        if (v !== undefined) cleanEnv[k] = v;
+      }
+      ptyProcess = pty.spawn(tmuxPath, ['attach-session', '-t', session.tmuxSession], {
+        name: 'xterm-256color',
+        cols: initCols,
+        rows: initRows,
+        env: cleanEnv,
+      });
+    } catch (err) {
+      console.error(`Failed to spawn pty for session ${sessionId}:`, err);
+      ws.close(1011, 'Failed to spawn terminal');
+      return;
+    }
+
+    // Also explicitly resize the tmux window to match — when tmux has
+    // multiple attached clients (or a prior detached-client resize left a
+    // stale size), `attach-session` alone won't shrink/grow the window.
+    if (resize.value) {
+      applyResize(resize.value.cols, resize.value.rows);
+    }
+
+    // Flush anything the client sent while we were waiting for tmux.
+    for (const msg of pendingWrites) {
+      ptyProcess.write(msg);
+    }
+    pendingWrites.length = 0;
+
+    const connection: PtyConnection = {
+      pty: ptyProcess,
+      ws,
+      tmuxSession: session.tmuxSession,
+    };
+    activePtys.set(sessionId, connection);
+
+    // Pipe pty output to WebSocket
+    const dataDisposable = ptyProcess.onData((data: string) => {
+      if (ws.readyState === WebSocket.OPEN) {
+        ws.send(data);
+      }
+    });
+
+    // Handle pty exit: dispose data handler first to prevent any final writes
+    // racing the close, then terminate immediately rather than sending a CLOSE
+    // frame — the client may already be gone (navigated away / component
+    // unmounted), and sending a CLOSE frame to a dead Vite proxy socket
+    // produces a spurious EPIPE.
+    const exitDisposable = ptyProcess.onExit(() => {
+      dataDisposable.dispose();
+      activePtys.delete(sessionId);
+      if (ws.readyState !== WebSocket.CLOSED) {
+        ws.terminate();
+      }
+    });
+
+    // Swap the early close/error handlers for the pty-aware versions.
+    ws.off('close', onEarlyClose);
+    ws.off('error', onEarlyClose);
 
     // Handle WebSocket close: kill the pty but NOT the tmux session
     ws.on('close', () => {
       dataDisposable.dispose();
       exitDisposable.dispose();
       try {
-        ptyProcess.kill();
+        ptyProcess!.kill();
       } catch {
         // pty may already be dead
       }
@@ -258,7 +305,7 @@ export function setupWebSocket(server: HttpServer): void {
         console.error(`WebSocket error for session ${sessionId}:`, err.message);
       }
       try {
-        ptyProcess.kill();
+        ptyProcess!.kill();
       } catch {
         // pty may already be dead
       }
