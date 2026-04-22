@@ -16,6 +16,20 @@ const IS_MAC =
   typeof navigator !== 'undefined' && /mac|iphone|ipad|ipod/i.test(navigator.platform);
 
 /**
+ * Strip trailing whitespace from each line of a terminal selection.
+ *
+ * xterm.js's `getSelection()` returns intermediate lines padded with the
+ * space cells that happen to sit between the last printed glyph and the
+ * right edge of the selection — so copying multiple lines yanks in a
+ * column of trailing blanks along with the actual content.  We trim
+ * spaces/tabs per line but preserve line breaks (CR, LF, CRLF) so the
+ * shape of the selection survives.
+ */
+function trimTrailingWhitespace(text: string): string {
+  return text.replace(/[ \t]+(\r\n|\r|\n|$)/g, '$1');
+}
+
+/**
  * Write text to the system clipboard.  Prefers the async Clipboard API when
  * available, but falls back to a hidden-textarea + `execCommand('copy')` —
  * the async API silently fails when the document loses transient focus
@@ -85,7 +99,7 @@ function handleClipboardKey(
 
   if (copyModifier && key === 'c') {
     if (!term.hasSelection()) return true; // nothing selected — let it fall through
-    const selection = term.getSelection();
+    const selection = trimTrailingWhitespace(term.getSelection());
     event.preventDefault();
     event.stopPropagation();
     writeToClipboard(selection);
@@ -235,6 +249,21 @@ export function TerminalPanel({ trackId, sessionId, autoFocus, focusTrigger }: P
     };
     container.addEventListener('wheel', wheelHandler, { passive: false, capture: true });
 
+    // ── Native copy: rewrite clipboard data to drop trailing whitespace ──
+    // Catches right-click → Copy, Edit menu → Copy, and anything else that
+    // dispatches a real `copy` event on xterm.js's hidden textarea
+    // (keyboard shortcuts go through handleClipboardKey instead).  Reads
+    // the selection from whichever terminal is active — scrollback if
+    // present, live otherwise.
+    const copyHandler = (event: ClipboardEvent) => {
+      const activeTerm = scrollbackRef.current?.term ?? term;
+      if (!activeTerm.hasSelection()) return;
+      const trimmed = trimTrailingWhitespace(activeTerm.getSelection());
+      event.clipboardData?.setData('text/plain', trimmed);
+      event.preventDefault();
+    };
+    container.addEventListener('copy', copyHandler, { capture: true });
+
     // ── Scrollback overlay ────────────────────────────────────────────
     function showScrollback(content: string, scrollLines: number) {
       if (!captureInFlightRef.current || !container) return; // stale/cancelled
@@ -334,6 +363,7 @@ export function TerminalPanel({ trackId, sessionId, autoFocus, focusTrigger }: P
       disposed = true;
       exitScrollback();
       container.removeEventListener('wheel', wheelHandler, true);
+      container.removeEventListener('copy', copyHandler, true);
       resizeObserver.disconnect();
       ws.close();
       term.dispose();
