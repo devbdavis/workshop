@@ -6,6 +6,15 @@ import { readdirSync, statSync, existsSync } from 'fs';
 import type { GlobalRepoId } from '@foundation/types';
 import { parseDefaultAiCli, isDefaultAiCli } from '@foundation/types.js';
 import type { GlobalRepoRepository, SettingsRepository } from '@domain/repo/repository';
+import {
+  detectAvailability,
+  isEditorChoice,
+  isTerminalChoice,
+  parseEditorChoice,
+  parseTerminalChoice,
+  resolveEditor,
+  resolveTerminal,
+} from '@infrastructure/launch/launch-apps.js';
 
 export interface RepoRouterDeps {
   repos: GlobalRepoRepository;
@@ -191,6 +200,53 @@ export function createRepoRouter(deps: RepoRouterDeps): Router {
     }
     settings.set('default_ai_cli', provider);
     res.json({ provider });
+  });
+
+  // --- Launch apps (editor / terminal) ---
+  //
+  // Reports both the user's preferences and what's actually available on this
+  // host so the UI can label "Auto → Cursor" or warn when a saved choice is
+  // missing (e.g. the user picked Konsole then moved to a machine without it).
+
+  router.get('/settings/launch-apps', (_req, res) => {
+    const availability = detectAvailability();
+    const editor = parseEditorChoice(settings.get('launch_editor'));
+    const terminal = parseTerminalChoice(settings.get('launch_terminal'));
+    res.json({
+      editor,
+      terminal,
+      resolvedEditor: resolveEditor(editor, availability),
+      resolvedTerminal: resolveTerminal(terminal, availability),
+      availability,
+    });
+  });
+
+  router.put('/settings/launch-apps', (req, res) => {
+    const { editor, terminal } = req.body as { editor?: unknown; terminal?: unknown };
+    if (editor !== undefined) {
+      if (!isEditorChoice(editor)) {
+        res.status(400).json({ error: 'editor must be one of: auto, cursor, code' });
+        return;
+      }
+      settings.set('launch_editor', editor);
+    }
+    if (terminal !== undefined) {
+      if (!isTerminalChoice(terminal)) {
+        res.status(400).json({ error: 'terminal must be one of: auto, iterm, konsole, gnome-terminal, wt' });
+        return;
+      }
+      settings.set('launch_terminal', terminal);
+    }
+    const availability = detectAvailability();
+    const savedEditor = parseEditorChoice(settings.get('launch_editor'));
+    const savedTerminal = parseTerminalChoice(settings.get('launch_terminal'));
+    res.json({
+      editor: savedEditor,
+      terminal: savedTerminal,
+      resolvedEditor: resolveEditor(savedEditor, availability),
+      resolvedTerminal: resolveTerminal(savedTerminal, availability),
+      availability,
+    });
   });
 
   return router;
