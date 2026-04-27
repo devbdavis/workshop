@@ -1,5 +1,4 @@
 import { existsSync, readFileSync, writeFileSync } from 'fs';
-import { execSync } from 'child_process';
 import { homedir } from 'os';
 import path from 'path';
 import { Router } from 'express';
@@ -71,19 +70,20 @@ import { createCodexAdapter } from '@infrastructure/mcp-tools/codex-adapter.js';
 import { createGeminiAdapter } from '@infrastructure/mcp-tools/gemini-adapter.js';
 import { createSoulLoader } from '@infrastructure/soul/soul-loader.js';
 import { ensureDefaultTodoTemplate } from '@infrastructure/persistence/database.js';
+import {
+  detectAvailability,
+  parseEditorChoice,
+  parseTerminalChoice,
+  resolveEditor,
+  resolveEditorTarget,
+  resolveTerminal,
+  launchEditor,
+  launchTerminal,
+} from '@infrastructure/launch/launch-apps.js';
 
 export interface ApiRouterDeps {
   automationEngine?: AutomationEngine;
 }
-
-// Detected once at startup — /proc/version contains "microsoft" or "WSL" on WSL2
-const IS_WSL: boolean = (() => {
-  try {
-    return /microsoft|wsl/i.test(readFileSync('/proc/version', 'utf8'));
-  } catch {
-    return false;
-  }
-})();
 
 export function createApiRouter(deps: ApiRouterDeps = {}): Router {
   const router = Router();
@@ -945,46 +945,34 @@ export function createApiRouter(deps: ApiRouterDeps = {}): Router {
     }
     try {
       // Resolve session name once — used by both terminal and editor paths.
-      const sessionName = (sessionId && typeof sessionId === 'string')
-        ? (sessions.findById(sessionId as SessionId)?.name ?? undefined)
+      const sessionIdStr = typeof sessionId === 'string' ? sessionId : undefined;
+      const sessionName = sessionIdStr
+        ? (sessions.findById(sessionIdStr as SessionId)?.name ?? undefined)
         : undefined;
 
+      const availability = detectAvailability();
+
       if (app === 'terminal') {
-        if (IS_WSL) {
-          // -w 0 targets the most recently used WT window (creates one if none exist).
-          // --profile uses the current distro name so WT opens the right WSL profile
-          // rather than defaulting to PowerShell or cmd.
-          // WSL_DISTRO_NAME is set by WSL itself (e.g. "Ubuntu", "Ubuntu-22.04").
-          // --title sets the tab title to the session name when available.
-          const distro = process.env['WSL_DISTRO_NAME'];
-          const profileArgs = distro ? `--profile ${JSON.stringify(distro)} ` : '';
-          const titleArgs = sessionName ? `--title ${JSON.stringify(sessionName)} ` : '';
-          execSync(`wt.exe -w 0 nt ${titleArgs}${profileArgs}wsl.exe --cd ${JSON.stringify(targetPath)}`, { stdio: 'pipe' });
-        } else {
-          execSync(`open -a iTerm ${JSON.stringify(targetPath)}`, { stdio: 'pipe' });
+        const choice = parseTerminalChoice(settingsRepo.get('launch_terminal'));
+        const resolved = resolveTerminal(choice, availability);
+        if (!resolved) {
+          res.status(400).json({
+            error: 'No terminal application is available on this system. Configure one in Settings → General.',
+          });
+          return;
         }
+        launchTerminal(resolved, targetPath, { title: sessionName });
       } else {
-        if (IS_WSL) {
-          // VSCode Remote WSL installs the `code` CLI shim into the WSL PATH.
-          execSync(`code ${JSON.stringify(targetPath)}`, { stdio: 'pipe' });
-        } else {
-          // Prefer a named workspace file if present:
-          // 1. Session workspace file (covers both multi-root worktrees and
-          //    single-root sessions — lives in ~/.workshop/sessions/{id}/workspace/)
-          // 2. workspace.code-workspace alongside the target path (legacy fallback)
-          const sessionWorkspaceFile = sessionId && typeof sessionId === 'string'
-            ? path.join(process.env.HOME || '/tmp', '.workshop', 'sessions', sessionId, 'workspace', 'workspace.code-workspace')
-            : null;
-          const workspaceFile = (sessionWorkspaceFile && existsSync(sessionWorkspaceFile))
-            ? sessionWorkspaceFile
-            : path.join(targetPath, 'workspace.code-workspace');
-          const editorTarget = existsSync(workspaceFile) ? workspaceFile : targetPath;
-          try {
-            execSync(`cursor ${JSON.stringify(editorTarget)}`, { stdio: 'pipe' });
-          } catch {
-            execSync(`open -a Cursor ${JSON.stringify(editorTarget)}`, { stdio: 'pipe' });
-          }
+        const choice = parseEditorChoice(settingsRepo.get('launch_editor'));
+        const resolved = resolveEditor(choice, availability);
+        if (!resolved) {
+          res.status(400).json({
+            error: 'No editor (Cursor or VSCode) is available on this system. Configure one in Settings → General.',
+          });
+          return;
         }
+        const editorTarget = resolveEditorTarget(targetPath, sessionIdStr);
+        launchEditor(resolved, editorTarget, availability.platform);
       }
       res.json({ ok: true });
     } catch (err) {
