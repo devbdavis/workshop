@@ -184,7 +184,9 @@ export function launchEditor(editor: ResolvedEditor, target: string, platform: P
  * Spawn the terminal at the given working directory. Throws on failure.
  *
  * - iTerm (macOS): `open -a iTerm <path>` — opens a new window pinned to the directory.
- * - Konsole (Linux): `konsole --workdir <path>` (detached so we don't block on the GUI process).
+ * - Konsole (Linux): `konsole --new-tab --workdir <path>` (detached so we don't block on
+ *   the GUI process). `--new-tab` opens in the existing Konsole window if one is running,
+ *   matching iTerm's tab-reuse behaviour; otherwise Konsole creates a new window.
  * - gnome-terminal (Linux): `gnome-terminal --working-directory=<path>`.
  * - Windows Terminal (WSL): `wt.exe -w 0 nt --profile <distro> wsl.exe --cd <path>`,
  *   matching the prior inline implementation.
@@ -202,8 +204,10 @@ export function launchTerminal(
     case 'konsole': {
       // `nohup … &` so Konsole survives this short-lived child shell exiting,
       // and we redirect output so it doesn't tie up our pipe.
+      // `--new-tab` reuses an existing Konsole window if one is running (matching
+      // iTerm's tab-reuse behaviour); otherwise Konsole opens a new window.
       const titleArgs = opts.title ? `-p tabtitle=${JSON.stringify(opts.title)} ` : '';
-      execSync(`nohup konsole ${titleArgs}--workdir ${quoted} >/dev/null 2>&1 &`, {
+      execSync(`nohup konsole --new-tab ${titleArgs}--workdir ${quoted} >/dev/null 2>&1 &`, {
         stdio: 'pipe',
         shell: '/bin/sh',
       });
