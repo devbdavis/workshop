@@ -161,8 +161,14 @@ function worktreeBranchName(name: string | undefined, sessionId: string, issueKe
  * and falling back to whatever `origin/<branch>` the local clone already knows.
  * GitHub has periods of flakiness where fetches hang indefinitely; blocking
  * session creation on that is worse than starting a few commits behind.
+ *
+ * 30s is intentionally generous — short enough that a wedged fetch doesn't make
+ * session creation feel broken, but long enough that a slow-but-healthy fetch
+ * (large repos, transient GitHub latency, slow network) completes successfully
+ * rather than always falling back to a stale origin ref. Earlier 15s was tripping
+ * on healthy-but-slow days, leaving worktrees several commits behind main.
  */
-const GIT_FETCH_TIMEOUT_MS = 15_000;
+const GIT_FETCH_TIMEOUT_MS = 30_000;
 
 /**
  * Fetch origin and return the remote-tracking ref for its HEAD branch (e.g. "origin/main").
