@@ -1,5 +1,4 @@
 import { Router } from 'express';
-import { spawn } from 'child_process';
 import fs from 'fs';
 import path from 'path';
 import type { SkillId } from '@foundation/types';
@@ -10,43 +9,24 @@ import {
   deleteGlobalSkill,
   renameGlobalSkill,
 } from '@infrastructure/skills/filesystem-scanner.js';
+import { callClaude, extractJson, ClaudeBinaryNotFoundError } from './claude-cli.js';
 
 export interface SkillRouterDeps {
   filesystemScanner: FilesystemSkillScanner;
   projectRoot: string;
 }
 
-function callClaude(prompt: string): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const child = spawn('claude', ['-p', prompt]);
-    const out: Buffer[] = [];
-    const err: Buffer[] = [];
-
-    child.stdout.on('data', (chunk: Buffer) => out.push(chunk));
-    child.stderr.on('data', (chunk: Buffer) => err.push(chunk));
-
-    const timer = setTimeout(() => {
-      child.kill();
-      reject(new Error('Claude CLI timed out after 120s'));
-    }, 120_000);
-
-    child.on('close', (code) => {
-      clearTimeout(timer);
-      if (code !== 0) {
-        reject(new Error(Buffer.concat(err).toString().trim() || `claude exited with code ${code}`));
-      } else {
-        resolve(Buffer.concat(out).toString());
-      }
-    });
-
-    child.on('error', (e) => { clearTimeout(timer); reject(e); });
-  });
-}
-
-function extractJson(text: string): unknown {
-  const match = text.match(/\{[\s\S]*\}/);
-  if (!match) throw new Error('No JSON object found in Claude response');
-  return JSON.parse(match[0]);
+/** Translate a callClaude error into an HTTP response. Surfaces the actual
+ *  error message so the UI can tell "claude not installed" from
+ *  "claude returned malformed JSON" — previously both showed the same
+ *  generic "make sure claude is available" message. */
+function respondWithClaudeError(res: import('express').Response, err: unknown, fallback: string): void {
+  if (err instanceof ClaudeBinaryNotFoundError) {
+    res.status(503).json({ error: err.message, code: 'claude_not_found' });
+    return;
+  }
+  const message = err instanceof Error ? err.message : String(err);
+  res.status(500).json({ error: `${fallback}: ${message}` });
 }
 
 export function createSkillRouter(deps: SkillRouterDeps): Router {
@@ -165,7 +145,7 @@ export function createSkillRouter(deps: SkillRouterDeps): Router {
       res.json(extractJson(output));
     } catch (err) {
       console.error('Skill generation failed:', err);
-      res.status(500).json({ error: 'Skill generation failed' });
+      respondWithClaudeError(res, err, 'Skill generation failed');
     }
   });
 
@@ -219,7 +199,7 @@ Return ONLY the JSON object, no other text or markdown.`;
       res.json(extractJson(output));
     } catch (err) {
       console.error('Skill improvement failed:', err);
-      res.status(500).json({ error: 'Skill improvement failed' });
+      respondWithClaudeError(res, err, 'Skill improvement failed');
     }
   });
 

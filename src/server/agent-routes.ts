@@ -1,5 +1,4 @@
 import { Router } from 'express';
-import { spawn } from 'child_process';
 import fs from 'fs';
 import path from 'path';
 import type { AgentId } from '@foundation/types';
@@ -10,6 +9,7 @@ import {
   updateGlobalAgent,
   deleteGlobalAgent,
 } from '@infrastructure/agents/filesystem-scanner.js';
+import { callClaude, extractJson, ClaudeBinaryNotFoundError } from './claude-cli.js';
 
 export interface AgentRouterDeps {
   agents: AgentRepository;
@@ -17,41 +17,16 @@ export interface AgentRouterDeps {
   projectRoot: string;
 }
 
-/**
- * Call the local `claude` CLI in print mode.
- * Uses the user's existing auth — no ANTHROPIC_API_KEY needed.
- */
-function callClaude(prompt: string): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const child = spawn('claude', ['-p', prompt]);
-    const out: Buffer[] = [];
-    const err: Buffer[] = [];
-
-    child.stdout.on('data', (chunk: Buffer) => out.push(chunk));
-    child.stderr.on('data', (chunk: Buffer) => err.push(chunk));
-
-    const timer = setTimeout(() => {
-      child.kill();
-      reject(new Error('Claude CLI timed out after 120s'));
-    }, 120_000);
-
-    child.on('close', (code) => {
-      clearTimeout(timer);
-      if (code !== 0) {
-        reject(new Error(Buffer.concat(err).toString().trim() || `claude exited with code ${code}`));
-      } else {
-        resolve(Buffer.concat(out).toString());
-      }
-    });
-
-    child.on('error', (e) => { clearTimeout(timer); reject(e); });
-  });
-}
-
-function extractJson(text: string): unknown {
-  const match = text.match(/\{[\s\S]*\}/);
-  if (!match) throw new Error('No JSON object found in Claude response');
-  return JSON.parse(match[0]);
+/** Translate a callClaude error into an HTTP response. See note in
+ *  skill-routes.ts — surfaces the actual error so the UI can distinguish
+ *  "claude binary not on the server's PATH" from real CLI failures. */
+function respondWithClaudeError(res: import('express').Response, err: unknown, fallback: string): void {
+  if (err instanceof ClaudeBinaryNotFoundError) {
+    res.status(503).json({ error: err.message, code: 'claude_not_found' });
+    return;
+  }
+  const message = err instanceof Error ? err.message : String(err);
+  res.status(500).json({ error: `${fallback}: ${message}` });
 }
 
 export function createAgentRouter(deps: AgentRouterDeps): Router {
@@ -235,7 +210,7 @@ export function createAgentRouter(deps: AgentRouterDeps): Router {
       res.json(extractJson(output));
     } catch (err) {
       console.error('Agent generation failed:', err);
-      res.status(500).json({ error: 'Agent generation failed' });
+      respondWithClaudeError(res, err, 'Agent generation failed');
     }
   });
 
@@ -310,7 +285,7 @@ Return ONLY the JSON object, no other text or markdown.`;
       res.json(extractJson(output));
     } catch (err) {
       console.error('Agent improvement failed:', err);
-      res.status(500).json({ error: 'Agent improvement failed' });
+      respondWithClaudeError(res, err, 'Agent improvement failed');
     }
   });
 
