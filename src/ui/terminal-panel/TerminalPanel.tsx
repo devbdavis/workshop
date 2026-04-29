@@ -14,6 +14,10 @@ const THEME = {
 
 const IS_MAC =
   typeof navigator !== 'undefined' && /mac|iphone|ipad|ipod/i.test(navigator.platform);
+const IS_WINDOWS =
+  typeof navigator !== 'undefined' && /win/i.test(navigator.platform) && !IS_MAC;
+/** Anything that isn't Mac or Windows we treat as Linux/BSD. */
+const IS_LINUX = !IS_MAC && !IS_WINDOWS;
 
 /**
  * Strip trailing whitespace from each line of a terminal selection.
@@ -67,34 +71,47 @@ function writeToClipboard(text: string): void {
 /**
  * Copy/paste key handling.
  *
- * - macOS: Cmd+C / Cmd+V (the OS standard — Alt is Option, reserved for
- *   character input and Option-click selection).
- * - Windows/Linux: Ctrl+Shift+C / Ctrl+Shift+V (Windows Terminal / VSCode
- *   convention; plain Ctrl+C must stay as SIGINT).  Shift+Insert pastes.
+ * Modifiers per platform:
+ * - macOS: Cmd (Meta) — the OS standard.
+ * - Linux: Ctrl+Shift OR Alt — Konsole/gnome-terminal use Ctrl+Shift, but Alt
+ *   is widely used in terminal emulators and Linux browsers don't eat Alt+V
+ *   as a menu accelerator the way Windows does.
+ * - Windows: Ctrl+Shift only — Alt is reserved by the OS/browser for menu
+ *   accelerators (Alt+V opens the View menu / context popup), so we don't
+ *   bind it there.
  *
- * The previous implementation also bound Alt+C / Alt+V on non-Mac as a
- * "Cmd analogue", but Alt on Windows activates the browser / OS menu
- * accelerators — pressing Alt+V would surface a context/menu popup
- * instead of pasting, and the keystroke was unreliable in general.
+ * Plus Shift+Insert pastes on every platform (X11 convention).
+ * Plain Ctrl+C must always pass through as SIGINT.
  *
- * On paste we `preventDefault()` *and* `stopPropagation()` — otherwise the
- * browser still fires its native `paste` event on xterm.js's hidden
- * textarea and the text gets injected twice (visible as a double paste on
- * Cmd+V).  stopPropagation also keeps Windows from treating the Alt
- * release as a menu-bar accelerator trigger.
+ * Paste implementation note: we deliberately do NOT call
+ * `navigator.clipboard.readText()` here. That API triggers Chrome's
+ * clipboard permission prompt on Linux (the small popup that appeared
+ * "for 3 seconds" before the paste went through). Instead, we return
+ * `false` from the custom key handler — which makes xterm.js skip its
+ * own keystroke processing (so we don't get a stray ^V written to the
+ * shell) — but we deliberately do NOT call `preventDefault()`. That lets
+ * the browser's native paste action proceed: it fires a `paste` event
+ * on xterm.js's hidden textarea, and xterm.js's own paste handler
+ * (handlePasteEvent in browser/Clipboard.ts) reads `clipboardData`
+ * synchronously — no permission prompt — and feeds the text into the
+ * terminal via the core data event, including bracketed-paste mode and
+ * CRLF normalisation.  The previous "double paste" hazard doesn't apply
+ * because we no longer have two competing paste paths.
  *
  * Returns true if the event should continue to xterm.js, false to consume it.
  */
 function handleClipboardKey(
   term: Terminal,
   event: KeyboardEvent,
-  ws: WebSocket,
+  _ws: WebSocket,
 ): boolean {
   if (event.type !== 'keydown') return true;
 
   const copyModifier = IS_MAC
     ? event.metaKey && !event.ctrlKey && !event.altKey
-    : event.ctrlKey && event.shiftKey && !event.altKey;
+    : (event.ctrlKey && event.shiftKey && !event.altKey)
+      // Alt+C / Alt+V on Linux only — Windows treats Alt as menu accelerator.
+      || (IS_LINUX && event.altKey && !event.ctrlKey && !event.shiftKey && !event.metaKey);
   const key = event.key.toLowerCase();
 
   if (copyModifier && key === 'c') {
@@ -107,13 +124,11 @@ function handleClipboardKey(
   }
 
   if ((copyModifier && key === 'v') || (event.shiftKey && event.key === 'Insert')) {
-    event.preventDefault();
-    event.stopPropagation();
-    if (navigator.clipboard?.readText && window.isSecureContext) {
-      navigator.clipboard.readText().then((text) => {
-        if (text && ws.readyState === WebSocket.OPEN) ws.send(text);
-      }).catch(() => { /* clipboard blocked — ignore */ });
-    }
+    // Skip xterm.js processing (avoids ^V being written to the shell) but
+    // do NOT preventDefault — let the browser's native paste action fire,
+    // which dispatches a `paste` event on the textarea that xterm.js's
+    // own handler picks up. See the function-level comment for the full
+    // rationale.
     return false;
   }
 
@@ -309,15 +324,15 @@ export function TerminalPanel({ trackId, sessionId, autoFocus, focusTrigger }: P
 
       // Keyboard: arrows/pgup/pgdown navigate, Escape exits, typing exits + forwards
       scrollTerm.attachCustomKeyEventHandler((event) => {
-        // Clipboard shortcuts work identically to live mode.  Paste exits
-        // scrollback (handleClipboardKey sends the text via `ws`, which the
-        // shell will render once we close the overlay).
-        if (!handleClipboardKey(scrollTerm, event, ws)) {
-          if (event.type === 'keydown' && (event.key === 'v' || event.key === 'V' || event.key === 'Insert')) {
-            exitScrollback();
-          }
-          return false;
-        }
+        // Clipboard shortcuts work identically to live mode.  For paste,
+        // the browser's native paste action fires a `paste` event on the
+        // scrollback terminal's textarea — xterm.js's paste handler picks
+        // it up and triggers `onData` (below), which calls exitScrollback()
+        // and forwards the text to the shell.  We deliberately do NOT
+        // exitScrollback() here in the keydown handler: that would dispose
+        // the scrollback terminal before the paste event has a chance to
+        // fire, and the paste would be lost.
+        if (!handleClipboardKey(scrollTerm, event, ws)) return false;
         if (event.type !== 'keydown') return true;
         switch (event.key) {
           case 'PageUp':   scrollTerm.scrollPages(-1); return false;
