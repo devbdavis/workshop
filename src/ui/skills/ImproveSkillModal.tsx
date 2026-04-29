@@ -37,7 +37,11 @@ export function ImproveSkillModal({ skill, onApply, onClose }: Props) {
         body: JSON.stringify({ feedback: feedback.trim() }),
       });
       if (!res.ok) {
-        setError('Improvement failed — check that the claude CLI is available.');
+        // Surface the server's actual error message so the user can tell
+        // "claude not on the workshop server's PATH" from "CLI ran but
+        // returned bad JSON" etc., instead of a generic catch-all.
+        const body = await res.json().catch(() => null);
+        setError(body?.error || `Improvement failed (HTTP ${res.status}). Check server logs.`);
         return;
       }
       setImproved(await res.json());

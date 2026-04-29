@@ -39,7 +39,8 @@ export function SkillFormModal({ initial, onSave, onClose, onSaveAsTemplate }: P
         body: JSON.stringify({ description: generateInput }),
       });
       if (!res.ok) {
-        setGenerateError('Generation failed — check that the Claude CLI is available.');
+        const body = await res.json().catch(() => null);
+        setGenerateError(body?.error || `Generation failed (HTTP ${res.status}). Check server logs.`);
         return;
       }
       const data = await res.json();

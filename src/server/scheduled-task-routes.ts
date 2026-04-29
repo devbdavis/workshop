@@ -1,5 +1,4 @@
 import { Router } from 'express';
-import { spawn } from 'child_process';
 import fs from 'fs';
 import path from 'path';
 import os from 'os';
@@ -9,38 +8,18 @@ import type { TaskScheduler } from '@application/scheduler/task-scheduler.js';
 import { scheduleConfigToCron, describeSchedule, validateScheduleConfig, getNextScheduledAfter } from '@application/scheduler/cron-utils.js';
 import type { ScheduledTask } from '@foundation/types';
 import { broadcast } from './events.js';
+import { callClaude, extractJson, ClaudeBinaryNotFoundError } from './claude-cli.js';
 
-function callClaude(prompt: string): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const child = spawn('claude', ['-p', prompt]);
-    const out: Buffer[] = [];
-    const err: Buffer[] = [];
-
-    child.stdout.on('data', (chunk: Buffer) => out.push(chunk));
-    child.stderr.on('data', (chunk: Buffer) => err.push(chunk));
-
-    const timer = setTimeout(() => {
-      child.kill();
-      reject(new Error('Claude CLI timed out after 120s'));
-    }, 120_000);
-
-    child.on('close', (code) => {
-      clearTimeout(timer);
-      if (code !== 0) {
-        reject(new Error(Buffer.concat(err).toString().trim() || `claude exited with code ${code}`));
-      } else {
-        resolve(Buffer.concat(out).toString());
-      }
-    });
-
-    child.on('error', (e) => { clearTimeout(timer); reject(e); });
-  });
-}
-
-function extractJson(text: string): unknown {
-  const match = text.match(/\{[\s\S]*\}/);
-  if (!match) throw new Error('No JSON object found in Claude response');
-  return JSON.parse(match[0]);
+/** Translate a callClaude error into an HTTP response. See note in
+ *  skill-routes.ts — surfaces the actual error so the UI can distinguish
+ *  "claude binary not on the server's PATH" from real CLI failures. */
+function respondWithClaudeError(res: import('express').Response, err: unknown, fallback: string): void {
+  if (err instanceof ClaudeBinaryNotFoundError) {
+    res.status(503).json({ error: err.message, code: 'claude_not_found' });
+    return;
+  }
+  const message = err instanceof Error ? err.message : String(err);
+  res.status(500).json({ error: `${fallback}: ${message}` });
 }
 
 /** Slug a task name to a safe filename: "Daily Action Items" → "daily-action-items" */
@@ -233,7 +212,7 @@ Return ONLY the JSON object, no other text or markdown.`;
       res.json(extractJson(output));
     } catch (err) {
       console.error('Schedule generation failed:', err);
-      res.status(500).json({ error: 'Schedule generation failed' });
+      respondWithClaudeError(res, err, 'Schedule generation failed');
     }
   });
 
