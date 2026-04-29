@@ -46,6 +46,14 @@ describe('isSessionIdle (preCapture)', () => {
     expect(isSessionIdle(session, ['esc to interrupt', '❯'])).toBe(false);
   });
 
+  it('returns false when a local agent is still running despite idle prompt', () => {
+    // Claude can hand control back (idle ❯) while an Agent task continues
+    // asynchronously — the TUI shows "N local agent(s) still running" near
+    // the bottom. Treat that as not-idle so we don't reap the session.
+    expect(isSessionIdle(session, ['Some prior output', '❯', '1 local agent still running · ↓ to manage'])).toBe(false);
+    expect(isSessionIdle(session, ['❯', '2 local agents still running'])).toBe(false);
+  });
+
   it('returns false when no prompt marker is present', () => {
     expect(isSessionIdle(session, ['some output', 'more output'])).toBe(false);
   });

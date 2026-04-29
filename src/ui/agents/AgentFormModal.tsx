@@ -48,7 +48,8 @@ export function AgentFormModal({ initial, onSave, onClose, onSaveAsTemplate }: P
         body: JSON.stringify({ description: generateInput }),
       });
       if (!res.ok) {
-        setGenerateError('Generation failed — check that ANTHROPIC_API_KEY is set.');
+        const body = await res.json().catch(() => null);
+        setGenerateError(body?.error || `Generation failed (HTTP ${res.status}). Check server logs.`);
         return;
       }
       const data = await res.json();

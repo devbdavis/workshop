@@ -113,6 +113,9 @@ const TMUX_PATH_FLAG = process.env.PATH
  *   overlay without making capture responses too large.
  *
  * These are set per-session so Workshop owns the UX regardless of ~/.tmux.conf.
+ *
+ * Also ensures the *server-wide* `terminal-features` list includes
+ * `hyperlinks` — see ensureTmuxHyperlinks() for the rationale.
  */
 function configureTmuxSession(tmuxName: string): void {
   try {
@@ -122,6 +125,44 @@ function configureTmuxSession(tmuxName: string): void {
     execSync(`tmux set-option -t ${tmuxName} history-limit 5000`, { stdio: 'pipe' });
   } catch (err) {
     console.warn(`[tmux] Failed to configure session ${tmuxName}:`, err);
+  }
+
+  ensureTmuxHyperlinks();
+}
+
+/**
+ * Ensure tmux passes through OSC 8 hyperlinks to the attached client.
+ *
+ * Background: the workshop client attaches via node-pty with TERM=xterm-256color.
+ * tmux 3.6's default `terminal-features` for `xterm*` is `clipboard:ccolour:
+ * cstyle:focus:title` — no `hyperlinks`. Without that feature, tmux strips
+ * OSC 8 escape sequences (the ones Claude's TUI emits for markdown links)
+ * when rendering its internal cell buffer out to the attached client. The
+ * `capture-pane -e` path preserves them in raw form — which is exactly why
+ * markdown links were clickable in the scrollback overlay but not in the
+ * live pane.
+ *
+ * Fix: append `*:hyperlinks` to the server-wide terminal-features list.
+ * This is idempotent — we check first to avoid accumulating duplicates
+ * across session creates and tmux server restarts. Cached at module scope
+ * so we only pay for the show-options round-trip once per server lifetime.
+ */
+let hyperlinksConfigured = false;
+function ensureTmuxHyperlinks(): void {
+  if (hyperlinksConfigured) return;
+  try {
+    const features = execSync('tmux show-options -gs terminal-features', {
+      stdio: 'pipe',
+      encoding: 'utf-8',
+    });
+    if (!features.includes('hyperlinks')) {
+      execSync('tmux set-option -as terminal-features "*:hyperlinks"', { stdio: 'pipe' });
+    }
+    hyperlinksConfigured = true;
+  } catch (err) {
+    // Older tmux (< 3.2) doesn't support terminal-features — degrades gracefully
+    // to "no live hyperlinks", same as before this fix.
+    console.warn('[tmux] Could not enable hyperlinks feature (older tmux?):', err);
   }
 }
 
@@ -161,8 +202,14 @@ function worktreeBranchName(name: string | undefined, sessionId: string, issueKe
  * and falling back to whatever `origin/<branch>` the local clone already knows.
  * GitHub has periods of flakiness where fetches hang indefinitely; blocking
  * session creation on that is worse than starting a few commits behind.
+ *
+ * 30s is intentionally generous — short enough that a wedged fetch doesn't make
+ * session creation feel broken, but long enough that a slow-but-healthy fetch
+ * (large repos, transient GitHub latency, slow network) completes successfully
+ * rather than always falling back to a stale origin ref. Earlier 15s was tripping
+ * on healthy-but-slow days, leaving worktrees several commits behind main.
  */
-const GIT_FETCH_TIMEOUT_MS = 15_000;
+const GIT_FETCH_TIMEOUT_MS = 30_000;
 
 /**
  * Fetch origin and return the remote-tracking ref for its HEAD branch (e.g. "origin/main").
