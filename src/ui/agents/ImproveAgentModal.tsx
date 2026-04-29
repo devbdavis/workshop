@@ -40,7 +40,10 @@ export function ImproveAgentModal({ agent, onApply, onClose }: Props) {
         body: JSON.stringify({ feedback: feedback.trim() }),
       });
       if (!res.ok) {
-        setError('Improvement failed — check that ANTHROPIC_API_KEY is set.');
+        // Surface the server's actual error so the user can tell missing
+        // CLI from CLI failures from bad-JSON-from-claude.
+        const body = await res.json().catch(() => null);
+        setError(body?.error || `Improvement failed (HTTP ${res.status}). Check server logs.`);
         return;
       }
       setImproved(await res.json());
