@@ -27,8 +27,14 @@ export function isSessionIdle(session: Session, preCapture?: string[]): boolean 
   // Active work indicators — scan ALL captured lines, not just the tail.
   // The TUI may render indicators above the prompt row; slicing to 8 would
   // miss them if the capture window is larger (e.g. the 20-line sync capture).
+  //
+  // `local agent(s) still running` covers the case where Claude has handed
+  // control back to the user (idle ❯ prompt visible) but a sub-Agent task
+  // is still running asynchronously — the TUI shows a status line like
+  // "1 local agent still running · ↓ to manage". Without this we'd
+  // mis-classify those sessions as idle and reap them mid-task.
   const allContent = lines.join(' ');
-  if (/Running…|Thinking|thinking|esc to interrupt/i.test(allContent)) return false;
+  if (/Running…|Thinking|thinking|esc to interrupt|local agents? still running/i.test(allContent)) return false;
   // Check if any of the last 8 lines contains the CLI prompt indicator.
   // The prompt line is typically just `❯` or `❯ ` (possibly with spaces).
   return lines.slice(-8).some(line => {
