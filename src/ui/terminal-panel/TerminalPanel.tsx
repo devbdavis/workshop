@@ -12,6 +12,24 @@ const THEME = {
   selectionBackground: '#334155',
 } as const;
 
+/**
+ * Custom OSC 8 link handler. Without this, xterm.js's `defaultActivate`
+ * (in `OscLinkProvider.ts`) pops a `confirm("...WARNING: This link could
+ * potentially be dangerous")` dialog on every click. tmux now passes OSC 8
+ * through to xterm (see `ensureTmuxHyperlinks` in terminal/manager.ts), so
+ * Claude's markdown links would all hit that dialog.
+ *
+ * We open in a new tab with `noopener,noreferrer` so the popup can't reach
+ * back into Workshop via `window.opener`. xterm's built-in URL-protocol
+ * filter (which restricts to http/https unless `allowNonHttpProtocols` is
+ * set) still applies upstream of this handler.
+ */
+const LINK_HANDLER = {
+  activate(_event: MouseEvent, uri: string) {
+    window.open(uri, '_blank', 'noopener,noreferrer');
+  },
+};
+
 const IS_MAC =
   typeof navigator !== 'undefined' && /mac|iphone|ipad|ipod/i.test(navigator.platform);
 const IS_WINDOWS =
@@ -173,6 +191,7 @@ export function TerminalPanel({ trackId, sessionId, autoFocus, focusTrigger }: P
       macOptionClickForcesSelection: true,
       rightClickSelectsWord: true,
       theme: THEME,
+      linkHandler: LINK_HANDLER,
     });
     const fitAddon = new FitAddon();
     term.loadAddon(fitAddon);
@@ -296,6 +315,7 @@ export function TerminalPanel({ trackId, sessionId, autoFocus, focusTrigger }: P
         fontFamily: 'Menlo, Monaco, "Courier New", monospace',
         scrollback: 50000,
         theme: THEME,
+        linkHandler: LINK_HANDLER,
       });
       const scrollFit = new FitAddon();
       scrollTerm.loadAddon(scrollFit);
