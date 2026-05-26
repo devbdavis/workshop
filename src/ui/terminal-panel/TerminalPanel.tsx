@@ -1,8 +1,10 @@
-import { useEffect, useRef } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { Terminal } from '@xterm/xterm';
 import { FitAddon } from '@xterm/addon-fit';
 import { WebLinksAddon } from '@xterm/addon-web-links';
 import '@xterm/xterm/css/xterm.css';
+import { TerminalSearchBar } from './TerminalSearchBar';
+import { createSearchSession, type SearchResultInfo, type SearchSession } from './terminal-search';
 
 /** Shared terminal theme — keeps live and scrollback visually identical. */
 const THEME = {
@@ -153,6 +155,20 @@ function handleClipboardKey(
   return true;
 }
 
+/**
+ * Detect the "find in history" shortcut — Cmd+F on macOS, Ctrl+F elsewhere.
+ * Plain Cmd/Ctrl only; combos with Shift/Alt are ignored so they remain
+ * available to the underlying shell (e.g. fzf bindings).
+ */
+function isFindShortcut(event: KeyboardEvent): boolean {
+  if (event.type !== 'keydown') return false;
+  if (event.key.toLowerCase() !== 'f') return false;
+  if (event.shiftKey || event.altKey) return false;
+  return IS_MAC
+    ? event.metaKey && !event.ctrlKey
+    : event.ctrlKey && !event.metaKey;
+}
+
 interface Props {
   trackId: string;
   sessionId: string;
@@ -166,6 +182,9 @@ interface ScrollbackState {
   overlay: HTMLDivElement;
   autoExitEnabled: boolean;
   autoExitTimer: ReturnType<typeof setTimeout>;
+  search: SearchSession;
+  /** Drops the result-count subscription installed in `showScrollback`. */
+  unsubscribeSearch: () => void;
 }
 
 export function TerminalPanel({ trackId, sessionId, autoFocus, focusTrigger }: Props) {
@@ -176,6 +195,23 @@ export function TerminalPanel({ trackId, sessionId, autoFocus, focusTrigger }: P
 
   const scrollbackRef = useRef<ScrollbackState | null>(null);
   const captureInFlightRef = useRef(false);
+
+  // Search state.  `searchVisible` mirrors scrollback presence: the search
+  // bar only renders while we have a scrollback terminal to search.  The
+  // `pendingSearch` ref carries intent across the async capture round-trip:
+  // when Cmd+F is pressed in live mode, we flip it on, request a capture,
+  // and the scrollback overlay reads it to decide whether to focus the
+  // search input vs. the terminal.
+  const [searchVisible, setSearchVisible] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [searchResult, setSearchResult] = useState<SearchResultInfo | null>(null);
+  const [searchFocusTrigger, setSearchFocusTrigger] = useState(0);
+  const pendingSearchRef = useRef(false);
+  // React state setters captured for use inside the imperative useEffect
+  // below.  Refs avoid re-running the terminal-setup effect when state
+  // changes; the values themselves are reactive via useState.
+  const searchQueryRef = useRef(searchQuery);
+  searchQueryRef.current = searchQuery;
 
   useEffect(() => {
     const container = containerRef.current;
@@ -202,7 +238,40 @@ export function TerminalPanel({ trackId, sessionId, autoFocus, focusTrigger }: P
     termRef.current = term;
     fitAddonRef.current = fitAddon;
 
-    term.attachCustomKeyEventHandler((event) => handleClipboardKey(term, event, ws));
+    term.attachCustomKeyEventHandler((event) => {
+      if (isFindShortcut(event)) {
+        event.preventDefault();
+        event.stopPropagation();
+        openSearch();
+        return false;
+      }
+      return handleClipboardKey(term, event, ws);
+    });
+
+    /**
+     * Open the search bar.  If we're already in scrollback mode the bar
+     * just appears (and the input is refocused); otherwise we trigger a
+     * capture-scrollback round-trip and `showScrollback` will bring the
+     * bar up once the overlay exists.
+     */
+    function openSearch() {
+      if (scrollbackRef.current) {
+        setSearchVisible(true);
+        setSearchFocusTrigger((n) => n + 1);
+        return;
+      }
+      if (captureInFlightRef.current) return;
+      pendingSearchRef.current = true;
+      captureInFlightRef.current = true;
+      if (ws.readyState === WebSocket.OPEN) {
+        // scrollLines=1 keeps the view near the bottom; the user will
+        // navigate via search-next/prev rather than mouse scroll.
+        ws.send(JSON.stringify({ type: 'capture-scrollback', scrollLines: 1 }));
+      } else {
+        captureInFlightRef.current = false;
+        pendingSearchRef.current = false;
+      }
+    }
 
     // ── WebSocket ─────────────────────────────────────────────────────
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
@@ -316,9 +385,17 @@ export function TerminalPanel({ trackId, sessionId, autoFocus, focusTrigger }: P
         scrollback: 50000,
         theme: THEME,
         linkHandler: LINK_HANDLER,
+        // SearchAddon's match decorations call `registerMarker` /
+        // `registerDecoration`, which are still on xterm.js's proposed-API
+        // shelf.  Without this flag the addon throws as soon as a match is
+        // found, the error gets swallowed inside the addon, and findNext
+        // ends up reporting zero matches even on text the user can see.
+        allowProposedApi: true,
       });
       const scrollFit = new FitAddon();
       scrollTerm.loadAddon(scrollFit);
+      const search = createSearchSession(scrollTerm);
+      const unsubscribeSearch = search.onResultChange((info) => setSearchResult(info));
       scrollTerm.open(overlay);
       scrollFit.fit();
 
@@ -334,16 +411,40 @@ export function TerminalPanel({ trackId, sessionId, autoFocus, focusTrigger }: P
         overlay,
         autoExitEnabled: false,
         autoExitTimer: timer,
+        search,
+        unsubscribeSearch,
       };
 
-      // Write captured pane content, then scroll up to the requested offset
+      const wasPendingSearch = pendingSearchRef.current;
+      pendingSearchRef.current = false;
+
+      // Write captured pane content, then scroll up to the requested
+      // offset.  If the user opened this overlay via the find shortcut,
+      // focus the search input rather than the terminal so they can type
+      // immediately; otherwise keep the focus contract used by mouse-wheel
+      // scrollback.
       scrollTerm.write(content.replace(/\r?\n/g, '\r\n'), () => {
         scrollTerm.scrollLines(-scrollLines);
-        scrollTerm.focus();
+        if (wasPendingSearch) {
+          setSearchVisible(true);
+          setSearchFocusTrigger((n) => n + 1);
+          // Re-run any existing query against the freshly-written buffer
+          // so the user sees matches without needing to retype.
+          const existing = searchQueryRef.current;
+          if (existing) search.findNext(existing);
+        } else {
+          scrollTerm.focus();
+        }
       });
 
-      // Keyboard: arrows/pgup/pgdown navigate, Escape exits, typing exits + forwards
+      // Keyboard: arrows/pgup/pgdown navigate, Escape exits, typing exits + forwards.
       scrollTerm.attachCustomKeyEventHandler((event) => {
+        if (isFindShortcut(event)) {
+          event.preventDefault();
+          event.stopPropagation();
+          openSearch();
+          return false;
+        }
         // Clipboard shortcuts work identically to live mode.  For paste,
         // the browser's native paste action fires a `paste` event on the
         // scrollback terminal's textarea — xterm.js's paste handler picks
@@ -378,9 +479,15 @@ export function TerminalPanel({ trackId, sessionId, autoFocus, focusTrigger }: P
       const sb = scrollbackRef.current;
       if (!sb) return;
       clearTimeout(sb.autoExitTimer);
+      sb.unsubscribeSearch();
+      sb.search.dispose();
       sb.term.dispose();
       sb.overlay.remove();
       scrollbackRef.current = null;
+      setSearchVisible(false);
+      setSearchQuery('');
+      setSearchResult(null);
+      pendingSearchRef.current = false;
       term.focus();
     }
 
@@ -411,11 +518,57 @@ export function TerminalPanel({ trackId, sessionId, autoFocus, focusTrigger }: P
     termRef.current?.focus();
   }, [focusTrigger]);
 
+  // ── Search-bar callbacks ────────────────────────────────────────────
+  // These run against whichever SearchSession is currently mounted on the
+  // scrollback overlay.  When no overlay exists the calls are no-ops; the
+  // bar shouldn't be visible in that case anyway.
+  const handleSearchQueryChange = useCallback((next: string) => {
+    setSearchQuery(next);
+    const session = scrollbackRef.current?.search;
+    if (!session) return;
+    // Incremental find — `findNext` with the `incremental` option keeps
+    // the current selection as long as it still matches the new prefix.
+    session.findNext(next);
+  }, []);
+
+  const handleSearchNext = useCallback(() => {
+    const session = scrollbackRef.current?.search;
+    if (!session) return;
+    session.findNext(searchQueryRef.current);
+  }, []);
+
+  const handleSearchPrevious = useCallback(() => {
+    const session = scrollbackRef.current?.search;
+    if (!session) return;
+    session.findPrevious(searchQueryRef.current);
+  }, []);
+
+  const handleSearchClose = useCallback(() => {
+    const session = scrollbackRef.current?.search;
+    session?.clear();
+    setSearchVisible(false);
+    setSearchQuery('');
+    setSearchResult(null);
+    scrollbackRef.current?.term.focus();
+  }, []);
+
   return (
     <div
       ref={containerRef}
       className="h-full w-full relative"
       onClick={() => termRef.current?.focus()}
-    />
+    >
+      {searchVisible && (
+        <TerminalSearchBar
+          query={searchQuery}
+          onQueryChange={handleSearchQueryChange}
+          onNext={handleSearchNext}
+          onPrevious={handleSearchPrevious}
+          onClose={handleSearchClose}
+          result={searchResult}
+          focusTrigger={searchFocusTrigger}
+        />
+      )}
+    </div>
   );
 }
