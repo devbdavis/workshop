@@ -238,6 +238,77 @@ export interface Todo {
   updatedAt: string;
 }
 
+// PR Monitor — tracks status checks and unresolved comments on PRs linked to todos.
+// Polled in the background (capped at a handful of requests per cycle) so the
+// UI can surface "needs attention" affordances without spamming GitHub.
+
+/** Lifecycle state of the PR itself. */
+export type PrState = 'open' | 'draft' | 'merged' | 'closed' | 'unknown';
+
+/** Rolled-up status-check verdict across all checks/statuses on the PR head. */
+export type PrCheckStatus = 'none' | 'pending' | 'passing' | 'failing' | 'error';
+
+/** A single failing check surfaced to the UI. */
+export interface PrCheckSummary {
+  /** Display name (workflow / context). */
+  name: string;
+  /** GitHub conclusion (SUCCESS, FAILURE, CANCELLED, TIMED_OUT, ...) when COMPLETED. */
+  conclusion?: string;
+  /** GitHub status (QUEUED, IN_PROGRESS, COMPLETED, ...). */
+  status?: string;
+  /** Link the user can click to inspect the failure. */
+  detailsUrl?: string;
+  /** Short text the checker provided (truncated by the poller). */
+  summary?: string;
+}
+
+/** A single PR comment surfaced to the UI as "needs attention". */
+export interface PrComment {
+  /** GitHub node ID — used so the UI can dispatch a response for a single comment. */
+  id: string;
+  author: string;
+  body: string;
+  createdAt: string;
+  url?: string;
+  /** `issue` = PR-level comment; `review` = inline review comment. */
+  kind: 'issue' | 'review';
+  /** For review comments only: the file path being reviewed. */
+  path?: string;
+  /** For review comments only: the diff line. */
+  line?: number;
+}
+
+/** A PR being polled by the background monitor. */
+export interface PrMonitor {
+  /** Canonical PR URL (https://github.com/owner/repo/pull/N). Primary key. */
+  prUrl: string;
+  todoId: TodoId;
+  trackId: TrackId;
+  repoOwner: string;
+  repoName: string;
+  prNumber: number;
+  prTitle?: string;
+  /** Head ref name (the branch the PR is merging from), captured on each poll. */
+  prBranch?: string;
+  state: PrState;
+  checkStatus: PrCheckStatus;
+  failingChecks: PrCheckSummary[];
+  unresolvedComments: PrComment[];
+  /** ISO timestamp when the PR first started "needing attention" in the current cycle. */
+  needsAttentionSince?: string;
+  /** When we last finished a poll for this PR (success or failure). */
+  lastPolledAt?: string;
+  /** When the last meaningful change was observed (new comment, status flip). */
+  lastEventAt?: string;
+  /** False once the PR is merged or closed — the poller skips it after that. */
+  monitoring: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+/** What the UI/API surface as "this PR wants you to look at it". */
+export type PrAttentionReason = 'failing-checks' | 'unresolved-comments' | 'both' | 'none';
+
 // Terminal layout (recursive split tree)
 export type LayoutNodeId = string & { readonly __brand: 'LayoutNodeId' };
 
@@ -267,12 +338,24 @@ export interface TerminalLayout {
 }
 
 // Prompt template
+/**
+ * Reserved system templates that the app maintains itself.
+ * - `todo`: the default dispatched-todo template (also flagged via legacy `is_default = 1`).
+ * - `pr-build-fix`: the prompt sent to a sub-agent when a monitored PR has failing CI checks.
+ * - `pr-comment-response`: the prompt sent to a sub-agent when a monitored PR has unresolved comments.
+ *
+ * User-created templates leave `systemKind` undefined.
+ */
+export type PromptTemplateSystemKind = 'todo' | 'pr-build-fix' | 'pr-comment-response';
+
 export interface PromptTemplate {
   id: TemplateId;
   name: string;
   description?: string;
   content: string;
   isDefault: boolean;
+  /** Non-empty for the small set of templates Workshop manages itself. */
+  systemKind?: PromptTemplateSystemKind;
   createdAt: string;
   updatedAt: string;
 }

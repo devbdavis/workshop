@@ -1,6 +1,6 @@
 import { useEffect, useState, useCallback, useRef } from 'react';
 import { useParams, Link } from 'react-router-dom';
-import type { Track, Session, SessionId, SessionProvider, TrackSummary, ExternalTicket, Todo, DefaultAiCli } from '@foundation/types';
+import type { Track, Session, SessionId, SessionProvider, TrackSummary, ExternalTicket, Todo, DefaultAiCli, PrMonitor, TodoId } from '@foundation/types';
 import type { DispatchOptions } from './DispatchDropdown';
 import { SummaryPanel } from './SummaryPanel';
 import { ContextPanel } from './ContextPanel';
@@ -25,6 +25,7 @@ export function TrackView() {
   const [summary, setSummary] = useState<TrackSummary | null>(null);
   const [tickets, setTickets] = useState<ExternalTicket[]>([]);
   const [todos, setTodos] = useState<Todo[]>([]);
+  const [prMonitors, setPrMonitors] = useState<PrMonitor[]>([]);
   const [deletedSessions, setDeletedSessions] = useState<Session[]>([]);
   const [activeSessionIds, setActiveSessionIds] = useState<SessionId[]>([]);
   const [loading, setLoading] = useState(true);
@@ -43,13 +44,14 @@ export function TrackView() {
   const loadTrack = useCallback(async () => {
     if (!trackId) return;
     try {
-      const [trackRes, sessionsRes, summaryRes, ticketsRes, todosRes, deletedRes] = await Promise.all([
+      const [trackRes, sessionsRes, summaryRes, ticketsRes, todosRes, deletedRes, prMonitorsRes] = await Promise.all([
         fetch(`/api/tracks/${trackId}`),
         fetch(`/api/tracks/${trackId}/sessions`),
         fetch(`/api/tracks/${trackId}/summary`),
         fetch(`/api/tracks/${trackId}/tickets`),
         fetch(`/api/tracks/${trackId}/todos`),
         fetch(`/api/tracks/${trackId}/sessions/deleted`),
+        fetch(`/api/tracks/${trackId}/pr-monitors`),
       ]);
       if (trackRes.ok) setTrack(await trackRes.json());
       if (sessionsRes.ok) {
@@ -60,6 +62,7 @@ export function TrackView() {
       if (ticketsRes.ok) setTickets(await ticketsRes.json());
       if (todosRes.ok) setTodos(await todosRes.json());
       if (deletedRes.ok) setDeletedSessions(await deletedRes.json());
+      if (prMonitorsRes.ok) setPrMonitors(await prMonitorsRes.json());
     } catch (err) {
       console.error('Failed to load track:', err);
     } finally {
@@ -364,7 +367,9 @@ export function TrackView() {
             <SessionPanel
               sessions={activeSessionIds.length > 0 ? sessions.filter((s) => activeSessionIds.includes(s.id)) : sessions.slice(0, 1)}
               todos={todos}
+              prMonitors={prMonitors}
               onOpenTodo={setSelectedTodo}
+              onRefresh={loadTrack}
             />
           ) : sidebarTab === 'todos' ? (
             <TodoPanel track={track} todos={todos} sessions={sessions} onUpdate={loadTrack} />
