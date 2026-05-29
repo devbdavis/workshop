@@ -743,6 +743,55 @@ function runMigrations(db: Database.Database): void {
       AND last_session_id IS NOT NULL;
   `);
 
+  // Migration: add system_kind column to prompt_templates so we can recognise
+  // app-managed templates (todo dispatch, PR build-fix, PR comment-response)
+  // and ensure they always exist. User-created templates leave this NULL.
+  try {
+    db.exec(`ALTER TABLE prompt_templates ADD COLUMN system_kind TEXT;`);
+  } catch {
+    // Column already exists — safe to ignore
+  }
+
+  // Migration: create pr_monitors table. The poller in src/application/pr-monitor
+  // walks rows where monitoring=1 ordered by last_polled_at and refreshes a small
+  // batch on each tick. PR URL is the natural key — one row per PR.
+  try {
+    db.exec(`
+      CREATE TABLE pr_monitors (
+        pr_url TEXT PRIMARY KEY,
+        todo_id TEXT NOT NULL REFERENCES todos(id) ON DELETE CASCADE,
+        track_id TEXT NOT NULL REFERENCES tracks(id) ON DELETE CASCADE,
+        repo_owner TEXT NOT NULL,
+        repo_name TEXT NOT NULL,
+        pr_number INTEGER NOT NULL,
+        pr_title TEXT,
+        pr_branch TEXT,
+        state TEXT NOT NULL DEFAULT 'unknown',
+        check_status TEXT NOT NULL DEFAULT 'none',
+        failing_checks TEXT,
+        unresolved_comments TEXT,
+        needs_attention_since TEXT,
+        last_polled_at TEXT,
+        last_event_at TEXT,
+        monitoring INTEGER NOT NULL DEFAULT 1,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      );
+    `);
+    db.exec(`CREATE INDEX idx_pr_monitors_todo ON pr_monitors(todo_id);`);
+    db.exec(`CREATE INDEX idx_pr_monitors_polling ON pr_monitors(monitoring, last_polled_at);`);
+  } catch {
+    // Table already exists — safe to ignore
+  }
+
+  // Migration: back-fill pr_branch on pr_monitors for installs that ran the
+  // earlier schema (no-op when the table is fresh).
+  try {
+    db.exec(`ALTER TABLE pr_monitors ADD COLUMN pr_branch TEXT;`);
+  } catch {
+    // Column already exists — safe to ignore
+  }
+
   // Seed default repo_root setting
   db.exec(`INSERT OR IGNORE INTO settings (key, value) VALUES ('repo_root', '~/repos');`);
 
@@ -874,13 +923,120 @@ export function ensureDefaultTodoTemplate(): void {
     templateId = uuid();
     const now = new Date().toISOString();
     db.prepare(
-      `INSERT INTO prompt_templates (id, name, description, content, is_default, created_at, updated_at)
-       VALUES (?, ?, ?, ?, 1, ?, ?)`,
+      `INSERT INTO prompt_templates (id, name, description, content, is_default, system_kind, created_at, updated_at)
+       VALUES (?, ?, ?, ?, 1, 'todo', ?, ?)`,
     ).run(templateId, 'Todo Prompt Template', 'Default system prompt for dispatched todos', DEFAULT_TODO_TEMPLATE_CONTENT, now, now);
   }
+
+  // Stamp system_kind='todo' on the legacy default row if it predates the column.
+  db.prepare(`UPDATE prompt_templates SET system_kind = 'todo' WHERE id = ? AND (system_kind IS NULL OR system_kind = '')`).run(templateId);
 
   // Back-fill all tracks that have no default template assigned
   db.prepare(
     `UPDATE tracks SET default_prompt_template_id = ?, updated_at = ? WHERE default_prompt_template_id IS NULL`,
   ).run(templateId, new Date().toISOString());
+}
+
+const DEFAULT_PR_BUILD_FIX_TEMPLATE_CONTENT = `## PR Build Fix
+
+You are running as a background sub-agent dispatched to investigate and fix a failing CI build on a pull request.
+
+**PR:** [{{pr.title}}]({{pr.url}})
+**Branch:** \`{{pr.branch}}\`
+**Repository:** {{pr.repo}}
+
+### Failing checks
+
+{{pr.failing_checks}}
+
+### Your task
+
+1. Check out the PR branch locally (\`gh pr checkout {{pr.number}}\`) or work in the existing worktree.
+2. Reproduce the failure locally where possible — read the linked check logs first.
+3. Fix the underlying issue. Do not paper over the symptom (skipping tests, lowering thresholds, etc.) unless the user explicitly asks.
+4. Commit and push the fix to the same branch. Do NOT open a new PR.
+5. Briefly report what was wrong and what you changed.
+
+If you cannot determine the cause from the logs alone, stop and report what you tried and what's needed to proceed.
+`;
+
+const DEFAULT_PR_COMMENT_RESPONSE_TEMPLATE_CONTENT = `## PR Comment Response
+
+You are running as a background sub-agent dispatched to address review feedback on a pull request.
+
+**PR:** [{{pr.title}}]({{pr.url}})
+**Branch:** \`{{pr.branch}}\`
+**Repository:** {{pr.repo}}
+
+### Comments to address
+
+{{pr.comments}}
+
+### Your task
+
+1. Read each comment carefully. If a comment is asking a question, you may answer it directly via \`gh pr comment\` rather than changing code.
+2. For code-change requests, check out the PR branch (\`gh pr checkout {{pr.number}}\`), make the change, commit, and push to the same branch.
+3. Reply to each comment so the reviewer knows it's been addressed — use \`gh api\` to post threaded review-comment replies or \`gh pr comment\` for issue-level comments.
+4. Briefly report which comments you handled and how.
+
+If a comment is unclear or you genuinely disagree, leave a reply explaining your reasoning rather than making the change.
+`;
+
+interface SystemTemplateSpec {
+  systemKind: 'pr-build-fix' | 'pr-comment-response';
+  name: string;
+  description: string;
+  content: string;
+}
+
+const SYSTEM_TEMPLATE_SPECS: SystemTemplateSpec[] = [
+  {
+    systemKind: 'pr-build-fix',
+    name: 'PR Build Fix',
+    description: 'Prompt sent to a sub-agent when a monitored PR has failing CI checks. Editable.',
+    content: DEFAULT_PR_BUILD_FIX_TEMPLATE_CONTENT,
+  },
+  {
+    systemKind: 'pr-comment-response',
+    name: 'PR Comment Response',
+    description: 'Prompt sent to a sub-agent when a monitored PR has unresolved comments. Editable.',
+    content: DEFAULT_PR_COMMENT_RESPONSE_TEMPLATE_CONTENT,
+  },
+];
+
+/**
+ * Ensure each well-known system template row exists. Idempotent — runs on every
+ * startup. If the row already exists the user's edits are preserved; only the
+ * `system_kind` flag is healed when missing.
+ */
+export function ensureSystemPromptTemplates(): void {
+  const db = getDatabase();
+  const now = new Date().toISOString();
+
+  for (const spec of SYSTEM_TEMPLATE_SPECS) {
+    const existing = db.prepare(
+      `SELECT id, system_kind FROM prompt_templates WHERE system_kind = ? LIMIT 1`,
+    ).get(spec.systemKind) as { id: string; system_kind: string | null } | undefined;
+
+    if (existing) {
+      // Heal any missing/empty system_kind flag (shouldn't happen, defensive).
+      if (!existing.system_kind) {
+        db.prepare(`UPDATE prompt_templates SET system_kind = ? WHERE id = ?`).run(spec.systemKind, existing.id);
+      }
+      continue;
+    }
+
+    // Also tolerate older installs that created the row by name but never set
+    // system_kind. Find by exact name as a fallback.
+    const byName = db.prepare(`SELECT id FROM prompt_templates WHERE name = ? LIMIT 1`).get(spec.name) as { id: string } | undefined;
+    if (byName) {
+      db.prepare(`UPDATE prompt_templates SET system_kind = ? WHERE id = ?`).run(spec.systemKind, byName.id);
+      continue;
+    }
+
+    db.prepare(
+      `INSERT INTO prompt_templates (id, name, description, content, is_default, system_kind, created_at, updated_at)
+       VALUES (?, ?, ?, ?, 0, ?, ?, ?)`,
+    ).run(uuid(), spec.name, spec.description, spec.content, spec.systemKind, now, now);
+  }
 }

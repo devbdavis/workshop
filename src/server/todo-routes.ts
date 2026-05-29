@@ -11,6 +11,7 @@ import type { AgentRepository } from '@domain/agent/repository';
 import type { SettingsRepository } from '@domain/repo/repository';
 import type { FilesystemAgentScanner } from '@infrastructure/agents/filesystem-scanner.js';
 import type { VaultReader } from '@infrastructure/vault/reader.js';
+import type { PrMonitorRegistrar } from '@application/pr-monitor/registrar.js';
 import { slugifyTrackName } from '@infrastructure/vault/utils.js';
 import { interpolateTemplate } from '@application/track-management/prompt-interpolation.js';
 import { composeVaultContext } from '@application/vault/compose-vault-context.js';
@@ -36,6 +37,12 @@ export interface TodoRouterDeps {
     softDeleteSession: (sessionId: SessionId) => Promise<void>;
   };
   vaultReader: VaultReader;
+  /**
+   * Optional — when provided, the todo update endpoint reconciles PR monitor
+   * rows against the new `pullRequests` list so submit-for-review et al don't
+   * need a separate API call to register monitoring.
+   */
+  prMonitorRegistrar?: PrMonitorRegistrar;
 }
 
 export function createTodoRouter(deps: TodoRouterDeps): Router {
@@ -53,6 +60,7 @@ export function createTodoRouter(deps: TodoRouterDeps): Router {
     projectRoot,
     terminal,
     vaultReader,
+    prMonitorRegistrar,
   } = deps;
 
   // --- List all todos (with optional filters) ---
@@ -180,6 +188,21 @@ export function createTodoRouter(deps: TodoRouterDeps): Router {
       }
     }
 
+    // Reconcile PR monitor rows when pullRequests changed (or the todo moved to done).
+    // The registrar is idempotent — calling it on every update is cheap.
+    if (prMonitorRegistrar) {
+      try {
+        if (isMovingToDone) {
+          // Closing out the todo — stop tracking its PRs entirely.
+          prMonitorRegistrar.removeAllForTodo(todo.id);
+        } else if (pullRequests !== undefined) {
+          prMonitorRegistrar.reconcile(todo);
+        }
+      } catch (err) {
+        console.error('Failed to reconcile PR monitors for todo:', err);
+      }
+    }
+
     broadcast('todo:updated', todo.trackId);
     res.json(todo);
   });
@@ -191,6 +214,15 @@ export function createTodoRouter(deps: TodoRouterDeps): Router {
     if (!todo) {
       res.status(404).json({ error: 'Todo not found' });
       return;
+    }
+    // Drop PR monitors before deleting the todo so the ON DELETE CASCADE doesn't
+    // sweep them silently — we want explicit unregister behaviour for observability.
+    if (prMonitorRegistrar) {
+      try {
+        prMonitorRegistrar.removeAllForTodo(todo.id);
+      } catch (err) {
+        console.error('Failed to remove PR monitors for deleted todo:', err);
+      }
     }
     todos.delete(todo.id);
     broadcast('todo:deleted', todo.trackId);
