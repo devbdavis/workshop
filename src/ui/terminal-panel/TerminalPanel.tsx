@@ -170,8 +170,10 @@ function isFindShortcut(event: KeyboardEvent): boolean {
 }
 
 interface Props {
-  trackId: string;
-  sessionId: string;
+  trackId?: string;
+  sessionId?: string;
+  /** Explicit WS path override (e.g. auth terminals). When set, trackId/sessionId are ignored. */
+  wsPath?: string;
   autoFocus?: boolean;
   focusTrigger?: number;
 }
@@ -187,7 +189,7 @@ interface ScrollbackState {
   unsubscribeSearch: () => void;
 }
 
-export function TerminalPanel({ trackId, sessionId, autoFocus, focusTrigger }: Props) {
+export function TerminalPanel({ trackId = '', sessionId = '', wsPath, autoFocus, focusTrigger }: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
   const termRef = useRef<Terminal | null>(null);
   const wsRef = useRef<WebSocket | null>(null);
@@ -275,7 +277,8 @@ export function TerminalPanel({ trackId, sessionId, autoFocus, focusTrigger }: P
 
     // ── WebSocket ─────────────────────────────────────────────────────
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-    const wsUrl = `${protocol}//${window.location.host}/ws/tracks/${trackId}/sessions/${sessionId}/terminal`;
+    const path = wsPath ?? `/ws/tracks/${trackId}/sessions/${sessionId}/terminal`;
+    const wsUrl = `${protocol}//${window.location.host}${path}`;
     const ws = new WebSocket(wsUrl);
     wsRef.current = ws;
 
@@ -510,7 +513,7 @@ export function TerminalPanel({ trackId, sessionId, autoFocus, focusTrigger }: P
       ws.close();
       term.dispose();
     };
-  }, [trackId, sessionId]);
+  }, [trackId, sessionId, wsPath]);
 
   // Focus pulse — separate effect to avoid recreating the terminal.
   useEffect(() => {
