@@ -4,6 +4,7 @@ import { execSync } from 'child_process';
 import * as pty from 'node-pty';
 import type { IncomingMessage } from 'http';
 import { createSessionRepository } from '@infrastructure/persistence/session-repository.js';
+import { getAuthTmux } from '@infrastructure/terminal/auth-terminal.js';
 import { addEventClient } from './events.js';
 import { extractToken, validateToken } from './auth-middleware.js';
 import type { SessionId } from '@foundation/types';
@@ -53,6 +54,15 @@ export function setupWebSocket(server: HttpServer): void {
       return;
     }
 
+    // Auth terminal connections (ephemeral, no track/session DB record)
+    const authMatch = url.pathname.match(/^\/ws\/auth\/([^/]+)\/terminal$/);
+    if (authMatch) {
+      wss.handleUpgrade(request, socket, head, (ws) => {
+        handleAuthTerminalConnection(ws, authMatch[1]);
+      });
+      return;
+    }
+
     // Terminal connections
     const match = url.pathname.match(/^\/ws\/tracks\/[^/]+\/sessions\/([^/]+)\/terminal$/);
     if (!match) {
@@ -95,10 +105,34 @@ export function setupWebSocket(server: HttpServer): void {
       ws.close(1008, 'Session not found');
       return;
     }
+    // Wait for the tmux session to appear — it may still be initialising in the
+    // background (worktree creation, git fetch, etc.). attachTmux polls for it.
+    await attachTmux(ws, session.tmuxSession, sessionId);
+  }
 
-    // If there's already an active pty for this session, clean it up first.
+  /**
+   * Auth terminals are ephemeral and not backed by the sessions table. Look up
+   * the tmux session name from the in-memory auth map and attach to it. Keyed
+   * as `auth:<authId>` in activePtys so it can't collide with session ids.
+   */
+  async function handleAuthTerminalConnection(ws: WebSocket, authId: string): Promise<void> {
+    const tmuxSession = getAuthTmux(authId);
+    if (!tmuxSession) {
+      ws.close(1008, 'auth terminal not found');
+      return;
+    }
+    await attachTmux(ws, tmuxSession, `auth:${authId}`);
+  }
+
+  /**
+   * Bridge a WebSocket to a tmux session via a node-pty `attach-session`.
+   * Shared by the session and auth terminal paths. `connKey` keys the
+   * activePtys map (a sessionId, or `auth:<authId>`).
+   */
+  async function attachTmux(ws: WebSocket, tmuxSession: string, connKey: string): Promise<void> {
+    // If there's already an active pty for this key, clean it up first.
     // The old WebSocket may have disconnected without proper cleanup.
-    const existing = activePtys.get(sessionId);
+    const existing = activePtys.get(connKey);
     if (existing) {
       try {
         existing.pty.kill();
@@ -108,7 +142,7 @@ export function setupWebSocket(server: HttpServer): void {
       if (existing.ws.readyState === WebSocket.OPEN) {
         existing.ws.close(1000, 'Replaced by new connection');
       }
-      activePtys.delete(sessionId);
+      activePtys.delete(connKey);
     }
 
     // The client's ws.onopen fires as soon as the upgrade completes and
@@ -131,7 +165,7 @@ export function setupWebSocket(server: HttpServer): void {
       ptyProcess.resize(cols, rows);
       try {
         execSync(
-          `tmux resize-window -t ${session!.tmuxSession} -x ${cols} -y ${rows}`,
+          `tmux resize-window -t ${tmuxSession} -x ${cols} -y ${rows}`,
           { stdio: 'pipe' },
         );
       } catch {
@@ -171,7 +205,7 @@ export function setupWebSocket(server: HttpServer): void {
             const scrollLines = Math.max(1, Math.min(50, Math.floor(Number(ctrl.scrollLines) || 3)));
             try {
               const captured = execSync(
-                `tmux capture-pane -p -e -S - -t ${session.tmuxSession}`,
+                `tmux capture-pane -p -e -S - -t ${tmuxSession}`,
                 { stdio: 'pipe', timeout: 5000, maxBuffer: 10 * 1024 * 1024 },
               ).toString('utf-8');
 
@@ -184,7 +218,7 @@ export function setupWebSocket(server: HttpServer): void {
                 }));
               }
             } catch (err) {
-              console.warn(`[scrollback] capture-pane failed for ${session.tmuxSession}:`, err);
+              console.warn(`[scrollback] capture-pane failed for ${tmuxSession}:`, err);
             }
             return;
           }
@@ -209,7 +243,7 @@ export function setupWebSocket(server: HttpServer): void {
 
     // Wait for the tmux session to appear — it may still be initialising in the
     // background (worktree creation, git fetch, etc.). Poll up to 30s.
-    const tmuxReady = await waitForTmux(session.tmuxSession);
+    const tmuxReady = await waitForTmux(tmuxSession);
     if (wsClosed) return;
     if (!tmuxReady) {
       ws.close(1008, 'tmux session not found');
@@ -227,14 +261,14 @@ export function setupWebSocket(server: HttpServer): void {
       for (const [k, v] of Object.entries(process.env)) {
         if (v !== undefined) cleanEnv[k] = v;
       }
-      ptyProcess = pty.spawn(tmuxPath, ['attach-session', '-t', session.tmuxSession], {
+      ptyProcess = pty.spawn(tmuxPath, ['attach-session', '-t', tmuxSession], {
         name: 'xterm-256color',
         cols: initCols,
         rows: initRows,
         env: cleanEnv,
       });
     } catch (err) {
-      console.error(`Failed to spawn pty for session ${sessionId}:`, err);
+      console.error(`Failed to spawn pty for ${connKey}:`, err);
       ws.close(1011, 'Failed to spawn terminal');
       return;
     }
@@ -255,9 +289,9 @@ export function setupWebSocket(server: HttpServer): void {
     const connection: PtyConnection = {
       pty: ptyProcess,
       ws,
-      tmuxSession: session.tmuxSession,
+      tmuxSession,
     };
-    activePtys.set(sessionId, connection);
+    activePtys.set(connKey, connection);
 
     // Pipe pty output to WebSocket
     const dataDisposable = ptyProcess.onData((data: string) => {
@@ -273,7 +307,7 @@ export function setupWebSocket(server: HttpServer): void {
     // produces a spurious EPIPE.
     const exitDisposable = ptyProcess.onExit(() => {
       dataDisposable.dispose();
-      activePtys.delete(sessionId);
+      activePtys.delete(connKey);
       if (ws.readyState !== WebSocket.CLOSED) {
         ws.terminate();
       }
@@ -292,7 +326,7 @@ export function setupWebSocket(server: HttpServer): void {
       } catch {
         // pty may already be dead
       }
-      activePtys.delete(sessionId);
+      activePtys.delete(connKey);
     });
 
     // Handle WebSocket errors — EPIPE and ECONNRESET are expected whenever the
@@ -302,14 +336,14 @@ export function setupWebSocket(server: HttpServer): void {
       dataDisposable.dispose();
       exitDisposable.dispose();
       if (err.code !== 'EPIPE' && err.code !== 'ECONNRESET') {
-        console.error(`WebSocket error for session ${sessionId}:`, err.message);
+        console.error(`WebSocket error for ${connKey}:`, err.message);
       }
       try {
         ptyProcess!.kill();
       } catch {
         // pty may already be dead
       }
-      activePtys.delete(sessionId);
+      activePtys.delete(connKey);
     });
   }
 }

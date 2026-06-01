@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import type { Agent, SessionProvider } from '@foundation/types';
+import { useAvailableClis } from '../hooks/useAvailableClis';
 
 export interface DispatchOptions {
   agentId?: string;
@@ -7,11 +8,12 @@ export interface DispatchOptions {
   dangerouslySkipPermissions?: boolean;
 }
 
-const PROVIDER_OPTIONS: { value: SessionProvider; label: string; color: string }[] = [
-  { value: 'claude', label: 'Claude', color: 'bg-orange-400' },
-  { value: 'cursor', label: 'Cursor', color: 'bg-violet-400' },
-  { value: 'codex', label: 'Codex', color: 'bg-emerald-400' },
-];
+const PROVIDER_COLORS: Record<string, string> = {
+  claude: 'bg-orange-400',
+  cursor: 'bg-violet-400',
+  codex: 'bg-emerald-400',
+  gemini: 'bg-blue-400',
+};
 
 interface Props {
   agents: Agent[];
@@ -27,6 +29,23 @@ export function DispatchDropdown({ agents, onSelect, onClose, popUp, defaultAgen
   const [provider, setProvider] = useState<SessionProvider>('claude');
   const [dangerouslySkipPermissions, setDangerouslySkipPermissions] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
+  const { clis } = useAvailableClis();
+
+  // Offer only enabled agents (gated via Settings → Available CLIs).
+  const providerOptions = clis
+    .filter((c) => c.kind === 'agent' && c.enabled)
+    .map((c) => ({
+      value: c.provider as SessionProvider,
+      label: c.label.replace(/ (Code|CLI)$/, ''),
+      color: PROVIDER_COLORS[c.id] ?? 'bg-gray-400',
+    }));
+
+  // Keep the selected provider valid as the enabled set loads/changes.
+  useEffect(() => {
+    if (providerOptions.length > 0 && !providerOptions.some((p) => p.value === provider)) {
+      setProvider(providerOptions[0].value);
+    }
+  }, [providerOptions, provider]);
 
   useEffect(() => {
     function handleClickOutside(e: MouseEvent) {
@@ -53,7 +72,7 @@ export function DispatchDropdown({ agents, onSelect, onClose, popUp, defaultAgen
       {/* Provider toggle */}
       <div className="flex items-center gap-1 px-3 py-2 border-b border-gray-700">
         <span className="text-[10px] text-gray-500 mr-1">Run as:</span>
-        {PROVIDER_OPTIONS.map((p) => (
+        {providerOptions.map((p) => (
           <button
             key={p.value}
             onClick={() => setProvider(p.value)}
