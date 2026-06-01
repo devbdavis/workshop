@@ -8,6 +8,7 @@ import { AgentsSettings } from './AgentsSettings';
 import { SkillsSettings } from './SkillsSettings';
 import { IssueTracking } from './IssueTracking';
 import { DefaultAiCliSettings } from './DefaultAiCliSettings';
+import { AvailableClisSettings } from './AvailableClisSettings';
 import { BackupSettings } from './BackupSettings';
 import { LaunchAppsSettings } from './LaunchAppsSettings';
 
@@ -60,6 +61,10 @@ export function Settings() {
 
           <section className="bg-gray-900 border border-gray-800 rounded-lg p-6">
             <DefaultAiCliSettings />
+          </section>
+
+          <section className="bg-gray-900 border border-gray-800 rounded-lg p-6">
+            <AvailableClisSettings />
           </section>
 
           <section className="bg-gray-900 border border-gray-800 rounded-lg p-6">

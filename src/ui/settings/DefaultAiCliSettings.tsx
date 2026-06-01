@@ -1,9 +1,11 @@
 import { useState, useEffect } from 'react';
 import type { DefaultAiCli } from '@foundation/types';
+import { useAvailableClis } from '../hooks/useAvailableClis';
 
 export function DefaultAiCliSettings() {
   const [provider, setProvider] = useState<DefaultAiCli>('claude');
   const [loading, setLoading] = useState(true);
+  const { clis } = useAvailableClis();
 
   useEffect(() => {
     function load() {
@@ -40,6 +42,15 @@ export function DefaultAiCliSettings() {
     return <p className="text-xs text-gray-500">Loading…</p>;
   }
 
+  // Offer only enabled agents. Always include the currently-saved provider so a
+  // previously-chosen-but-now-disabled default stays visible/selectable.
+  const enabledAgents = clis.filter((c) => c.kind === 'agent' && c.enabled);
+  const options = enabledAgents.map((c) => ({ value: c.provider as DefaultAiCli, label: c.label }));
+  if (!options.some((o) => o.value === provider)) {
+    const current = clis.find((c) => c.kind === 'agent' && c.provider === provider);
+    options.unshift({ value: provider, label: current?.label ?? provider });
+  }
+
   return (
     <div>
       <h2 className="text-sm font-semibold text-gray-200 mb-1">Default AI CLI</h2>
@@ -53,8 +64,11 @@ export function DefaultAiCliSettings() {
         onChange={(e) => handleChange(e.target.value as DefaultAiCli)}
         className="bg-gray-800 border border-gray-700 rounded px-3 py-1.5 text-sm text-gray-200 focus:outline-none focus:border-blue-500 w-72"
       >
-        <option value="claude">Claude Code (default)</option>
-        <option value="cursor">Cursor CLI</option>
+        {options.map((o) => (
+          <option key={o.value} value={o.value}>
+            {o.label}
+          </option>
+        ))}
       </select>
     </div>
   );
