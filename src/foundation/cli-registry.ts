@@ -38,6 +38,7 @@ export const CLI_REGISTRY: CliDescriptor[] = [
   // --- Tools ---
   { id: 'gh', label: 'GitHub CLI (gh)', kind: 'tool', binary: 'gh', loginCommand: 'gh auth login' },
   { id: 'glab', label: 'GitLab CLI (glab)', kind: 'tool', binary: 'glab', loginCommand: 'glab auth login' },
+  { id: 'tea', label: 'Forgejo/Gitea CLI (tea)', kind: 'tool', binary: 'tea', loginCommand: 'tea login add' },
 ];
 
 export function getCliDescriptor(id: string): CliDescriptor | undefined {

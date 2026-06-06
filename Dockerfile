@@ -50,6 +50,18 @@ RUN curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg \
   && apt-get update && apt-get install -y --no-install-recommends gh \
   && rm -rf /var/lib/apt/lists/*
 
+# --- Gitea/Forgejo CLI (tea) -----------------------------------------------
+# Static binary, arch-matched to the image. Drives self-hosted Forgejo/Gitea
+# (PRs, issues, releases) the way gh drives GitHub. No secret baked in — auth
+# comes from the interactive auth terminal (`tea login add`) and persists to
+# ~/.config/tea on the /config volume, same as gh/Claude.
+ARG TEA_VERSION=0.14.1
+RUN arch="$(dpkg --print-architecture)" \
+  && curl -fsSL "https://dl.gitea.com/tea/${TEA_VERSION}/tea-${TEA_VERSION}-linux-${arch}" \
+       -o /usr/local/bin/tea \
+  && chmod +x /usr/local/bin/tea \
+  && tea --version
+
 # --- Nix (multi-user) for per-project dependency management ----------------
 # Tracked projects use flake.nix + direnv `use flake`. The Determinate
 # installer is container-friendly (--init none = no systemd) and enables the
