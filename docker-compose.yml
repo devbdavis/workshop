@@ -1,0 +1,39 @@
+# Workshop — run the command center in Docker.
+#
+# Quick start:
+#   1. Make sure the host's ~/.claude is logged in (`claude` works on the host).
+#   2. Put (or clone) the git repos you want Workshop to manage under ./repos
+#      (or set REPOS_DIR to an absolute host path).
+#   3. docker compose up -d --build
+#   4. Open http://<host>:3002
+#
+# Override defaults with a .env file next to this compose file, e.g.:
+#   REPOS_DIR=/mnt/user/code
+#   CLAUDE_CONFIG_DIR=/mnt/user/appdata/workshop/claude
+#   PUID=99
+#   PGID=100
+services:
+  workshop:
+    build: .
+    image: workshop:latest
+    container_name: workshop
+    restart: unless-stopped
+    ports:
+      - "3002:3002"
+    environment:
+      PORT: "3002"
+      NODE_ENV: production
+      # unraid default ownership: nobody:users. Set to 0/0 to run as root.
+      PUID: "${PUID:-99}"
+      PGID: "${PGID:-100}"
+      WORKSHOP_VAULT_ROOT: /config/.workshop/vault
+    volumes:
+      # Persistent Workshop state (SQLite db, auth-token, sessions, vault, sprites)
+      - workshop-state:/config
+      # Claude Code auth/config — reuses your existing login (read/write)
+      - ${CLAUDE_CONFIG_DIR:-${HOME}/.claude}:/config/.claude
+      # Git repos Workshop operates on — reference them as /repos/<name> in the UI
+      - ${REPOS_DIR:-./repos}:/repos
+
+volumes:
+  workshop-state:

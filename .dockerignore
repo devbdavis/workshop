@@ -5,3 +5,8 @@ workshop.db-shm
 workshop.db-wal
 .workshop
 *.log
+.git
+.claude
+tests
+plans
+repos

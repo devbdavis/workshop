@@ -3,11 +3,18 @@ import { execSync } from 'child_process';
 import { homedir } from 'os';
 import path from 'path';
 import { readdirSync, statSync, existsSync } from 'fs';
-import type { GlobalRepoId } from '@foundation/types';
+import type { GlobalRepoId, SessionProvider } from '@foundation/types';
 import { parseDefaultAiCli, isDefaultAiCli } from '@foundation/types.js';
+import {
+  CLI_REGISTRY,
+  AGENT_IDS,
+  DEFAULT_AVAILABLE_AGENTS,
+  getCliDescriptor,
+} from '@foundation/cli-registry.js';
 import type { GlobalRepoRepository, SettingsRepository } from '@domain/repo/repository';
 import {
   detectAvailability,
+  hasCli,
   isEditorChoice,
   isTerminalChoice,
   parseEditorChoice,
@@ -15,6 +22,37 @@ import {
   resolveEditor,
   resolveTerminal,
 } from '@infrastructure/launch/launch-apps.js';
+import {
+  startAuthTerminal,
+  stopAuthTerminal,
+} from '@infrastructure/terminal/auth-terminal.js';
+
+/**
+ * Read the stored list of enabled agents. Stored as a comma-joined string
+ * under `available_clis`; filtered to valid agent ids; defaults when unset.
+ */
+function parseAvailableAgents(raw: string | null): SessionProvider[] {
+  if (!raw) return [...DEFAULT_AVAILABLE_AGENTS];
+  const ids = raw
+    .split(',')
+    .map((s) => s.trim())
+    .filter((s): s is SessionProvider => (AGENT_IDS as string[]).includes(s));
+  return ids.length > 0 ? ids : [...DEFAULT_AVAILABLE_AGENTS];
+}
+
+/** Build the GET/PUT /settings/clis response payload. */
+function buildClisPayload(available: SessionProvider[]) {
+  const enabledSet = new Set<string>(available);
+  const clis = CLI_REGISTRY.map((c) => ({
+    id: c.id,
+    label: c.label,
+    kind: c.kind,
+    provider: c.provider,
+    installed: hasCli(c.binary),
+    enabled: c.kind === 'agent' ? enabledSet.has(c.id) : true,
+  }));
+  return { clis, available };
+}
 
 export interface RepoRouterDeps {
   repos: GlobalRepoRepository;
@@ -195,11 +233,58 @@ export function createRepoRouter(deps: RepoRouterDeps): Router {
   router.put('/settings/default-ai-cli', (req, res) => {
     const { provider } = req.body as { provider: unknown };
     if (!isDefaultAiCli(provider)) {
-      res.status(400).json({ error: 'provider must be "claude" or "cursor"' });
+      res.status(400).json({ error: 'provider must be one of: claude, codex, gemini, cursor' });
       return;
     }
     settings.set('default_ai_cli', provider);
     res.json({ provider });
+  });
+
+  // --- CLI availability + auth ---
+  //
+  // Reports every registered AI CLI / tool, whether its binary is installed on
+  // this host, and (for agents) whether the user has enabled it. The enabled
+  // set gates the New Session and Default AI CLI dropdowns.
+
+  router.get('/settings/clis', (_req, res) => {
+    const available = parseAvailableAgents(settings.get('available_clis'));
+    res.json(buildClisPayload(available));
+  });
+
+  router.put('/settings/available-clis', (req, res) => {
+    const { available } = req.body as { available: unknown };
+    if (!Array.isArray(available)) {
+      res.status(400).json({ error: 'available must be an array of agent ids' });
+      return;
+    }
+    const valid = available.filter(
+      (id): id is SessionProvider => typeof id === 'string' && (AGENT_IDS as string[]).includes(id),
+    );
+    settings.set('available_clis', valid.join(','));
+    res.json(buildClisPayload(valid));
+  });
+
+  // Start an interactive auth terminal for a CLI/tool. Returns an authId the
+  // client uses to open a WebSocket terminal (/ws/auth/:authId/terminal).
+  router.post('/auth/cli/:id', async (req, res) => {
+    const descriptor = getCliDescriptor(req.params.id);
+    if (!descriptor) {
+      res.status(400).json({ error: `Unknown CLI: ${req.params.id}` });
+      return;
+    }
+    try {
+      const { authId } = await startAuthTerminal(descriptor.loginCommand);
+      res.json({ authId });
+    } catch (err) {
+      console.error(`Failed to start auth terminal for ${descriptor.id}:`, err);
+      res.status(500).json({ error: 'Failed to start auth terminal' });
+    }
+  });
+
+  // Tear down an auth terminal (kills its tmux session). Idempotent.
+  router.delete('/auth/cli/:authId', (req, res) => {
+    stopAuthTerminal(req.params.authId);
+    res.status(204).send();
   });
 
   // --- Launch apps (editor / terminal) ---

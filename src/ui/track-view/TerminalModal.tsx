@@ -2,8 +2,10 @@ import { useState, useCallback, useEffect, useRef } from 'react';
 import { TerminalPanel } from '../terminal-panel/TerminalPanel';
 
 interface Props {
-  trackId: string;
-  sessionId: string;
+  trackId?: string;
+  sessionId?: string;
+  /** Explicit WS path override (e.g. auth terminals). */
+  wsPath?: string;
   title: string;
   onClose: () => void;
 }
@@ -42,7 +44,7 @@ const CURSOR_MAP: Record<ResizeDirection, string> = {
   sw: 'nesw-resize',
 };
 
-export function TerminalModal({ trackId, sessionId, title, onClose }: Props) {
+export function TerminalModal({ trackId, sessionId, wsPath, title, onClose }: Props) {
   const [size, setSize] = useState<Size>(() => ({
     width: Math.round(window.innerWidth * 0.8),
     height: Math.round(window.innerHeight * 0.8),
@@ -221,7 +223,7 @@ export function TerminalModal({ trackId, sessionId, title, onClose }: Props) {
 
         {/* Terminal content */}
         <div className="flex-1 min-h-0">
-          <TerminalPanel trackId={trackId} sessionId={sessionId} autoFocus />
+          <TerminalPanel trackId={trackId} sessionId={sessionId} wsPath={wsPath} autoFocus />
         </div>
 
         {/* Resize handles */}
