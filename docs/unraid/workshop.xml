@@ -1,0 +1,63 @@
+<?xml version="1.0"?>
+<!--
+  Unraid Community Applications template for Workshop.
+
+  Workshop is not published to a public registry, so build the image first
+  (on the unraid host or another machine and `docker save`/`load`), tagging it
+  `workshop:latest`:
+
+      docker build -t workshop:latest https://github.com/bdavis-klaviyo/workshop.git#docker-builds
+
+  Then add this template via the Docker tab → "Add Container" → Template, or drop
+  this file in /boot/config/plugins/dockerMan/templates-user/.
+-->
+<Container version="2">
+  <Name>workshop</Name>
+  <Repository>workshop:latest</Repository>
+  <Registry/>
+  <Network>bridge</Network>
+  <MyIP/>
+  <Shell>bash</Shell>
+  <Privileged>false</Privileged>
+  <Support/>
+  <Project>https://github.com/bdavis-klaviyo/workshop</Project>
+  <Overview>
+    Workshop — a local-first project command center for managing parallel work
+    tracks with AI-assisted (Claude Code) terminal sessions. Requires a
+    logged-in ~/.claude mounted from the host for Claude authentication.
+  </Overview>
+  <Category>Productivity: Tools:</Category>
+  <WebUI>http://[IP]:[PORT:3002]/</WebUI>
+  <Icon>https://raw.githubusercontent.com/bdavis-klaviyo/workshop/main/public/favicon.svg</Icon>
+  <ExtraParams>--init</ExtraParams>
+  <DonateText/>
+  <DonateLink/>
+
+  <Config Name="WebUI Port" Target="3002" Default="3002" Mode="tcp"
+          Description="Workshop web UI / API port" Type="Port"
+          Display="always" Required="true" Mask="false">3002</Config>
+
+  <Config Name="State" Target="/config" Default="/mnt/user/appdata/workshop"
+          Mode="rw" Description="Persistent state: SQLite db, auth-token, sessions, vault, sprites"
+          Type="Path" Display="always" Required="true" Mask="false">/mnt/user/appdata/workshop</Config>
+
+  <Config Name="Claude config" Target="/config/.claude" Default="/mnt/user/appdata/workshop/claude"
+          Mode="rw" Description="Claude Code auth/config (must be a logged-in ~/.claude)"
+          Type="Path" Display="always" Required="true" Mask="false">/mnt/user/appdata/workshop/claude</Config>
+
+  <Config Name="Repos" Target="/repos" Default="/mnt/user/code"
+          Mode="rw" Description="Host directory of git repos Workshop manages (reference as /repos/&lt;name&gt;)"
+          Type="Path" Display="always" Required="true" Mask="false">/mnt/user/code</Config>
+
+  <Config Name="PUID" Target="PUID" Default="99" Mode=""
+          Description="User id to run as (unraid default: 99 = nobody)"
+          Type="Variable" Display="advanced" Required="false" Mask="false">99</Config>
+
+  <Config Name="PGID" Target="PGID" Default="100" Mode=""
+          Description="Group id to run as (unraid default: 100 = users)"
+          Type="Variable" Display="advanced" Required="false" Mask="false">100</Config>
+
+  <Config Name="PORT" Target="PORT" Default="3002" Mode=""
+          Description="Internal server port (keep in sync with the WebUI port mapping)"
+          Type="Variable" Display="advanced" Required="false" Mask="false">3002</Config>
+</Container>

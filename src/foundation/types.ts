@@ -75,11 +75,15 @@ export function parseSessionProvider(value: unknown): SessionProvider {
   return isSessionProvider(value) ? value : 'claude';
 }
 
-/** Preferred default CLI for new sessions (General settings). */
-export type DefaultAiCli = 'claude' | 'cursor';
+/**
+ * Preferred default CLI for new sessions (General settings).
+ * Widened to the full SessionProvider set so any installed/enabled agent can
+ * be the default (claude/codex/gemini/cursor).
+ */
+export type DefaultAiCli = SessionProvider;
 
 export function isDefaultAiCli(value: unknown): value is DefaultAiCli {
-  return value === 'claude' || value === 'cursor';
+  return isSessionProvider(value);
 }
 
 export function parseDefaultAiCli(value: unknown): DefaultAiCli {

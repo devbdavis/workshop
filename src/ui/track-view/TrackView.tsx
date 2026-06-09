@@ -10,6 +10,15 @@ import { TrackConfig } from './TrackConfig';
 import { SessionPanel } from './SessionPanel';
 import { TodoDetailModal } from '../kanban/TodoDetailModal';
 import { TerminalArea } from '../terminal-panel/TerminalArea';
+import { useAvailableClis } from '../hooks/useAvailableClis';
+
+/** Display metadata for the New Session provider menu, keyed by provider id. */
+const PROVIDER_META: Record<SessionProvider, { label: string; color: string }> = {
+  claude: { label: 'Claude', color: 'bg-orange-400' },
+  cursor: { label: 'Cursor CLI', color: 'bg-violet-400' },
+  codex: { label: 'Codex', color: 'bg-emerald-400' },
+  gemini: { label: 'Gemini', color: 'bg-blue-400' },
+};
 
 interface IdleAlert {
   id: string;
@@ -457,6 +466,12 @@ function NewSessionButton({
   const [open, setOpen] = useState(false);
   const [creating, setCreating] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
+  const { clis } = useAvailableClis();
+
+  // Offer only enabled agents (gated via Settings → Available CLIs).
+  const enabledProviders = clis
+    .filter((c) => c.kind === 'agent' && c.enabled)
+    .map((c) => c.provider as SessionProvider);
 
   // Close dropdown when clicking outside
   useEffect(() => {
@@ -504,41 +519,27 @@ function NewSessionButton({
       </button>
       {open && (
         <div className="absolute right-0 top-full mt-1 bg-gray-800 border border-gray-700 rounded-lg shadow-lg py-1 z-50 min-w-[160px]">
-          <button
-            onClick={() => create('claude', true)}
-            className="w-full text-left px-3 py-1.5 text-sm hover:bg-gray-700 flex items-center gap-2"
-          >
-            <span className="w-2 h-2 rounded-full bg-orange-400" />
-            <span>Claude <span className="text-[10px] text-gray-500 ml-0.5">(worktree)</span></span>
-          </button>
-          <button
-            onClick={() => create('claude', false)}
-            className="w-full text-left px-3 py-1.5 text-sm hover:bg-gray-700 flex items-center gap-2"
-          >
-            <span className="w-2 h-2 rounded-full bg-orange-400" />
-            Claude
-          </button>
-          <button
-            onClick={() => create('cursor', true)}
-            className="w-full text-left px-3 py-1.5 text-sm hover:bg-gray-700 flex items-center gap-2"
-          >
-            <span className="w-2 h-2 rounded-full bg-violet-400" />
-            <span>Cursor CLI <span className="text-[10px] text-gray-500 ml-0.5">(worktree)</span></span>
-          </button>
-          <button
-            onClick={() => create('cursor', false)}
-            className="w-full text-left px-3 py-1.5 text-sm hover:bg-gray-700 flex items-center gap-2"
-          >
-            <span className="w-2 h-2 rounded-full bg-violet-400" />
-            Cursor CLI
-          </button>
-          <button
-            onClick={() => create('codex')}
-            className="w-full text-left px-3 py-1.5 text-sm hover:bg-gray-700 flex items-center gap-2"
-          >
-            <span className="w-2 h-2 rounded-full bg-emerald-400" />
-            Codex
-          </button>
+          {enabledProviders.map((p) => {
+            const meta = PROVIDER_META[p];
+            return (
+              <div key={p}>
+                <button
+                  onClick={() => create(p, true)}
+                  className="w-full text-left px-3 py-1.5 text-sm hover:bg-gray-700 flex items-center gap-2"
+                >
+                  <span className={`w-2 h-2 rounded-full ${meta.color}`} />
+                  <span>{meta.label} <span className="text-[10px] text-gray-500 ml-0.5">(worktree)</span></span>
+                </button>
+                <button
+                  onClick={() => create(p, false)}
+                  className="w-full text-left px-3 py-1.5 text-sm hover:bg-gray-700 flex items-center gap-2"
+                >
+                  <span className={`w-2 h-2 rounded-full ${meta.color}`} />
+                  {meta.label}
+                </button>
+              </div>
+            );
+          })}
         </div>
       )}
     </div>
