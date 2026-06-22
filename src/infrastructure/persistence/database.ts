@@ -743,6 +743,46 @@ function runMigrations(db: Database.Database): void {
       AND last_session_id IS NOT NULL;
   `);
 
+  // Migration: multi-user profiles. Profiles are *identity, not security* — the
+  // shared auth token is still the access boundary. These tables let two people
+  // sharing one Workshop server keep per-user favorites/hidden/theme/editor settings.
+  try {
+    db.exec(`
+      CREATE TABLE users (
+        id TEXT PRIMARY KEY,
+        name TEXT NOT NULL,
+        color TEXT,
+        created_at TEXT NOT NULL
+      );
+
+      CREATE TABLE user_settings (
+        user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        key TEXT NOT NULL,
+        value TEXT NOT NULL,
+        PRIMARY KEY (user_id, key)
+      );
+
+      CREATE TABLE user_track_prefs (
+        user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        track_id TEXT NOT NULL REFERENCES tracks(id) ON DELETE CASCADE,
+        is_favorite INTEGER NOT NULL DEFAULT 0,
+        is_hidden INTEGER NOT NULL DEFAULT 0,
+        updated_at TEXT NOT NULL,
+        PRIMARY KEY (user_id, track_id)
+      );
+    `);
+  } catch {
+    // Tables already exist — safe to ignore
+  }
+
+  // Migration: add owner_user_id column to tracks (shared "owner tag", nullable —
+  // drives the Mine/Theirs dashboard filter).
+  try {
+    db.exec(`ALTER TABLE tracks ADD COLUMN owner_user_id TEXT;`);
+  } catch {
+    // Column already exists — safe to ignore
+  }
+
   // Seed default repo_root setting
   db.exec(`INSERT OR IGNORE INTO settings (key, value) VALUES ('repo_root', '~/Klaviyo/Repos');`);
 

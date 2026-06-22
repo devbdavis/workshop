@@ -12,6 +12,27 @@ export type AgentId = string & { readonly __brand: 'AgentId' };
 export type ScheduledTaskId = string & { readonly __brand: 'ScheduledTaskId' };
 export type WorkflowTicketId = string & { readonly __brand: 'WorkflowTicketId' };
 export type WorkflowTransitionId = string & { readonly __brand: 'WorkflowTransitionId' };
+export type UserId = string & { readonly __brand: 'UserId' };
+
+// User profile — lightweight identity for a shared Workshop server. NOT a security
+// boundary (the shared auth token still gates access); used to scope per-user
+// favorites/hidden tracks, theme, and editor-launch settings.
+export interface User {
+  id: UserId;
+  name: string;
+  /** Accent color for the profile chip (hex). */
+  color?: string;
+  createdAt: string;
+}
+
+/** Per-user, per-track preferences (favorite / hidden). */
+export interface UserTrackPrefs {
+  userId: UserId;
+  trackId: TrackId;
+  isFavorite: boolean;
+  isHidden: boolean;
+  updatedAt: string;
+}
 
 // Track
 export interface Track {
@@ -30,12 +51,19 @@ export interface Track {
   worktreeMode?: boolean;
   /** Default agent to use when dispatching messages on this track */
   defaultAgentId?: AgentId;
+  /** Shared "owner tag" — which user this track belongs to (drives Mine/Theirs filter). */
+  ownerUserId?: UserId;
   createdAt: string;
   updatedAt: string;
   // Populated relations
   repos?: TrackRepo[];
   paths?: TrackPath[];
   tickets?: ExternalTicket[];
+  // Per-current-user prefs, enriched at API time from user_track_prefs
+  /** True if the current profile has favorited this track. */
+  favorite?: boolean;
+  /** True if the current profile has hidden this track. */
+  hidden?: boolean;
 }
 
 export interface TrackRepo {
