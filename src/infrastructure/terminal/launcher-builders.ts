@@ -122,6 +122,17 @@ export function buildClaudeLauncher(
   lines.push(`cd ${JSON.stringify(cwd)}`);
   lines.push('');
 
+  // Force Claude's classic inline renderer instead of the full-screen
+  // alternate-screen TUI (default since Claude Code v2.1.118). The alternate
+  // screen keeps no tmux scrollback (history_size stays 0) and enables SGR
+  // mouse mode, which breaks Workshop's capture-based scrollback overlay —
+  // the browser terminal can't scroll up at all. Inline rendering keeps the
+  // pane's scrollback buffer populated so the overlay works. Use `:=` so an
+  // explicit env override (e.g. a user opting back into fullscreen) still wins.
+  lines.push(': "${CLAUDE_CODE_DISABLE_ALTERNATE_SCREEN:=1}"');
+  lines.push('export CLAUDE_CODE_DISABLE_ALTERNATE_SCREEN');
+  lines.push('');
+
   const claudeArgs = ['claude'];
 
   // Resume a previous Claude session if we have a resume ID
