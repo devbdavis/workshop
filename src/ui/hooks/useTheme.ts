@@ -60,11 +60,17 @@ export const THEMES: Theme[] = [
 ];
 
 const STORAGE_KEY = 'workshop-theme';
+const THEME_SETTING_KEY = 'theme';
+const VALID_THEMES = new Set<string>(THEMES.map((t) => t.id));
 
 export function applyTheme(themeId: ThemeId): void {
   document.documentElement.setAttribute('data-theme', themeId);
 }
 
+/**
+ * Theme is stored per-profile on the server (so it follows you across devices), with
+ * localStorage kept as a pre-paint cache to avoid a flash before /api/me resolves.
+ */
 export function useTheme() {
   const [theme, setThemeState] = useState<ThemeId>(() => {
     const stored = localStorage.getItem(STORAGE_KEY) as ThemeId | null;
@@ -75,10 +81,31 @@ export function useTheme() {
     applyTheme(theme);
   }, [theme]);
 
+  // On mount, reconcile with the active profile's server-side theme.
+  useEffect(() => {
+    fetch('/api/me/settings')
+      .then((r) => r.json() as Promise<Record<string, string>>)
+      .then((s) => {
+        const serverTheme = s[THEME_SETTING_KEY];
+        if (serverTheme && VALID_THEMES.has(serverTheme)) {
+          localStorage.setItem(STORAGE_KEY, serverTheme);
+          setThemeState(serverTheme as ThemeId);
+          applyTheme(serverTheme as ThemeId);
+        }
+      })
+      .catch(() => {});
+  }, []);
+
   function setTheme(id: ThemeId) {
     localStorage.setItem(STORAGE_KEY, id);
     setThemeState(id);
     applyTheme(id);
+    // Persist to the active profile (cookie-scoped); ignore failures (offline/no profile).
+    fetch(`/api/me/settings/${THEME_SETTING_KEY}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ value: id }),
+    }).catch(() => {});
   }
 
   return { theme, setTheme, themes: THEMES };
