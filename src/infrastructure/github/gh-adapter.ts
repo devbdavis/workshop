@@ -11,6 +11,8 @@ export interface GhPrSnapshot {
   unresolvedComments: PrComment[];
   prTitle?: string;
   headRefName?: string;
+  /** SHA of the PR head commit — used by the poller to detect fresh pushes. */
+  headRefOid?: string;
   isDraft: boolean;
   /** True when the PR has been merged or hard-closed and the poller should stop. */
   finished: boolean;
@@ -94,6 +96,7 @@ interface GhPrJson {
   isDraft?: boolean;
   title?: string;
   headRefName?: string;
+  headRefOid?: string;
   mergedAt?: string | null;
   closed?: boolean;
   statusCheckRollup?: GhCheckRollupNode[];
@@ -233,6 +236,7 @@ export function snapshotFromGhJson(raw: GhPrJson): GhPrSnapshot {
     unresolvedComments: finished ? [] : comments,
     prTitle: raw.title,
     headRefName: raw.headRefName,
+    headRefOid: raw.headRefOid,
     isDraft: !!raw.isDraft,
     finished,
   };
@@ -247,6 +251,7 @@ const GH_PR_VIEW_FIELDS = [
   'isDraft',
   'title',
   'headRefName',
+  'headRefOid',
   'mergedAt',
   'closed',
   'statusCheckRollup',

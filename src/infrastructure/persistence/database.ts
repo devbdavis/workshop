@@ -792,6 +792,25 @@ function runMigrations(db: Database.Database): void {
     // Column already exists — safe to ignore
   }
 
+  // Migration: track head_ref_oid so we can detect pushes, remember the
+  // timestamp of the last push, and record why the monitor was paused
+  // (merged/closed vs. stale-since-last-push).
+  try {
+    db.exec(`ALTER TABLE pr_monitors ADD COLUMN head_ref_oid TEXT;`);
+  } catch {
+    // Column already exists — safe to ignore
+  }
+  try {
+    db.exec(`ALTER TABLE pr_monitors ADD COLUMN last_push_at TEXT;`);
+  } catch {
+    // Column already exists — safe to ignore
+  }
+  try {
+    db.exec(`ALTER TABLE pr_monitors ADD COLUMN pause_reason TEXT;`);
+  } catch {
+    // Column already exists — safe to ignore
+  }
+
   // Seed default repo_root setting
   db.exec(`INSERT OR IGNORE INTO settings (key, value) VALUES ('repo_root', '~/Klaviyo/Repos');`);
 

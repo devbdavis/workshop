@@ -134,6 +134,51 @@ export function createPrMonitorRouter(deps: PrMonitorRouterDeps): Router {
     }
   });
 
+  // Resume monitoring on a PR the poller previously paused (e.g. stale-cutoff).
+  // Body accepts either { prUrl } or { todoId } — with todoId we resume every
+  // paused monitor on that todo. Immediately refreshes each resumed PR via `gh`
+  // so the caller gets fresh state back without waiting for the next tick.
+  router.post('/pr-monitors/resume', async (req, res) => {
+    try {
+      const body = (req.body ?? {}) as { prUrl?: string; todoId?: string };
+      const targets: string[] = [];
+
+      if (typeof body.prUrl === 'string' && body.prUrl.trim().length > 0) {
+        const existing = monitors.findByUrl(body.prUrl);
+        if (!existing) {
+          res.status(404).json({ error: 'No monitor registered for that PR URL' });
+          return;
+        }
+        targets.push(body.prUrl);
+      } else if (typeof body.todoId === 'string' && body.todoId.trim().length > 0) {
+        const rows = monitors.findByTodo(body.todoId as TodoId);
+        if (rows.length === 0) {
+          res.status(404).json({ error: 'No PR monitors registered for that todo' });
+          return;
+        }
+        for (const m of rows) targets.push(m.prUrl);
+      } else {
+        res.status(400).json({ error: 'Provide either prUrl or todoId' });
+        return;
+      }
+
+      const resumed: import('@foundation/types').PrMonitor[] = [];
+      const refreshed: import('@foundation/types').PrMonitor[] = [];
+      for (const prUrl of targets) {
+        const row = monitors.resumeMonitoring(prUrl);
+        if (row) {
+          resumed.push(row);
+          const fresh = await poller.pollUrl(prUrl);
+          if (fresh) refreshed.push(fresh);
+        }
+      }
+      res.json({ resumed, refreshed });
+    } catch (err) {
+      console.error('PR monitor resume failed:', err);
+      res.status(500).json({ error: 'Resume failed' });
+    }
+  });
+
   router.post('/todos/:todoId/pr-actions/dispatch-fix', async (req, res) => {
     try {
       const body = (req.body ?? {}) as DispatchBody;
