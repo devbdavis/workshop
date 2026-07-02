@@ -69,7 +69,12 @@ import { createClaudeAdapter } from '@infrastructure/mcp-tools/claude-adapter.js
 import { createCodexAdapter } from '@infrastructure/mcp-tools/codex-adapter.js';
 import { createGeminiAdapter } from '@infrastructure/mcp-tools/gemini-adapter.js';
 import { createSoulLoader } from '@infrastructure/soul/soul-loader.js';
-import { ensureDefaultTodoTemplate } from '@infrastructure/persistence/database.js';
+import { ensureDefaultTodoTemplate, ensureSystemPromptTemplates } from '@infrastructure/persistence/database.js';
+import { createPrMonitorRepository } from '@infrastructure/persistence/pr-monitor-repository.js';
+import { createGhAdapter } from '@infrastructure/github/gh-adapter.js';
+import { createPrMonitorPoller } from '@application/pr-monitor/poller.js';
+import { createPrMonitorRegistrar } from '@application/pr-monitor/registrar.js';
+import { createPrMonitorRouter } from './pr-monitor-routes.js';
 import {
   detectAvailability,
   parseEditorChoice,
@@ -102,6 +107,8 @@ export function createApiRouter(deps: ApiRouterDeps = {}): Router {
 
   // Ensure the default todo template exists and is assigned to all tracks
   ensureDefaultTodoTemplate();
+  // Ensure system templates for PR build-fix + comment-response exist (idempotent).
+  ensureSystemPromptTemplates();
 
   // Sync session states on startup and periodically (every 30s).
   // Dead tmux sessions are removed from the DB (or suspended if resumable).
@@ -199,6 +206,20 @@ export function createApiRouter(deps: ApiRouterDeps = {}): Router {
   });
   const settingsRepo = createSettingsRepository();
 
+  // PR monitor infrastructure — wired before the todo router so todo updates
+  // can reconcile monitors as part of their normal flow.
+  const prMonitors = createPrMonitorRepository();
+  const ghAdapter = createGhAdapter();
+  const prRegistrar = createPrMonitorRegistrar(prMonitors);
+  const prPoller = createPrMonitorPoller({
+    monitors: prMonitors,
+    gh: ghAdapter,
+    broadcast: (type, trackId, payload) => broadcast(type, trackId, payload),
+  });
+  prPoller.start();
+  process.on('SIGINT', () => prPoller.stop());
+  process.on('SIGTERM', () => prPoller.stop());
+
   // Mount todo sub-router
   const todoRouter = createTodoRouter({
     todos,
@@ -213,8 +234,27 @@ export function createApiRouter(deps: ApiRouterDeps = {}): Router {
     projectRoot,
     terminal,
     vaultReader,
+    prMonitorRegistrar: prRegistrar,
   });
   router.use(todoRouter);
+
+  // Mount PR-monitor sub-router (action dispatch + status queries)
+  const prMonitorRouter = createPrMonitorRouter({
+    monitors: prMonitors,
+    registrar: prRegistrar,
+    poller: prPoller,
+    todos,
+    tracks,
+    summaries,
+    tickets,
+    promptTemplates,
+    agents,
+    filesystemScanner,
+    settings: settingsRepo,
+    projectRoot,
+    terminal,
+  });
+  router.use(prMonitorRouter);
 
   // Mount agent sub-router
   const agentRouter = createAgentRouter({ agents, filesystemScanner, projectRoot });
