@@ -94,7 +94,7 @@ describe('PrMonitorRepository', () => {
 
     // Re-register (e.g. todo updated) should preserve the existing state but
     // reset monitoring=1 in case it was paused.
-    repo.pauseMonitoring('https://github.com/acme/widgets/pull/2');
+    repo.pauseMonitoring('https://github.com/acme/widgets/pull/2', 'user');
     repo.register({
       prUrl: 'https://github.com/acme/widgets/pull/2',
       todoId,
@@ -139,6 +139,64 @@ describe('PrMonitorRepository', () => {
       stopMonitoring: true,
     });
     expect(result?.monitoring).toBe(false);
+    expect(result?.pauseReason).toBe('finished');
+  });
+
+  it('applyPoll bumps last_push_at when the head SHA changes', async () => {
+    const { trackId, todoId } = seedTrackAndTodo();
+    const repo = createPrMonitorRepository();
+
+    repo.register({ prUrl: 'https://github.com/x/y/pull/4', todoId, trackId, repoOwner: 'x', repoName: 'y', prNumber: 4 });
+    const first = repo.applyPoll('https://github.com/x/y/pull/4', {
+      state: 'open', checkStatus: 'passing', failingChecks: [], unresolvedComments: [],
+      headRefOid: 'sha-a', changed: true, stopMonitoring: false,
+    });
+    expect(first?.headRefOid).toBe('sha-a');
+    const firstPushAt = first?.lastPushAt;
+    expect(firstPushAt).toBeDefined();
+
+    // Poll again with same sha — lastPushAt should not move.
+    const second = repo.applyPoll('https://github.com/x/y/pull/4', {
+      state: 'open', checkStatus: 'passing', failingChecks: [], unresolvedComments: [],
+      headRefOid: 'sha-a', changed: false, stopMonitoring: false,
+    });
+    expect(second?.lastPushAt).toBe(firstPushAt);
+
+    // Small sleep so the third poll gets a distinguishable ISO timestamp
+    // (better-sqlite3 stores whatever we hand it — Node's Date.now() has ms
+    // resolution which can collide inside a tight synchronous loop).
+    await new Promise((r) => setTimeout(r, 10));
+
+    // Poll again with a new sha — lastPushAt should advance.
+    const third = repo.applyPoll('https://github.com/x/y/pull/4', {
+      state: 'open', checkStatus: 'passing', failingChecks: [], unresolvedComments: [],
+      headRefOid: 'sha-b', changed: false, stopMonitoring: false,
+    });
+    expect(third?.headRefOid).toBe('sha-b');
+    expect(third?.lastPushAt).toBeDefined();
+    expect(third?.lastPushAt).not.toBe(firstPushAt);
+  });
+
+  it('resumeMonitoring un-pauses, clears pauseReason, and queues an immediate re-poll', () => {
+    const { trackId, todoId } = seedTrackAndTodo();
+    const repo = createPrMonitorRepository();
+
+    repo.register({ prUrl: 'https://github.com/x/y/pull/5', todoId, trackId, repoOwner: 'x', repoName: 'y', prNumber: 5 });
+    repo.applyPoll('https://github.com/x/y/pull/5', {
+      state: 'open', checkStatus: 'passing', failingChecks: [], unresolvedComments: [],
+      changed: false, stopMonitoring: true, // simulate stale pause
+    });
+    const paused = repo.findByUrl('https://github.com/x/y/pull/5')!;
+    expect(paused.monitoring).toBe(false);
+    expect(paused.pauseReason).toBe('stale');
+
+    const resumed = repo.resumeMonitoring('https://github.com/x/y/pull/5');
+    expect(resumed?.monitoring).toBe(true);
+    expect(resumed?.pauseReason).toBeUndefined();
+    // last_polled_at cleared so the row jumps to the front of the polling queue.
+    expect(resumed?.lastPolledAt).toBeUndefined();
+    // last_push_at reset so the stale clock restarts.
+    expect(resumed?.lastPushAt).toBeDefined();
   });
 });
 

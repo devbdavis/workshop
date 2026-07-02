@@ -282,6 +282,15 @@ export interface PrComment {
   line?: number;
 }
 
+/**
+ * Reason the poller flipped `monitoring` off:
+ * - `finished`: PR was merged or closed
+ * - `stale`: PR has had no push in the configured cutoff window
+ * - `user`: user paused it manually via the UI (reserved for future)
+ * `undefined` means the monitor is still active or was never paused.
+ */
+export type PrPauseReason = 'finished' | 'stale' | 'user';
+
 /** A PR being polled by the background monitor. */
 export interface PrMonitor {
   /** Canonical PR URL (https://github.com/owner/repo/pull/N). Primary key. */
@@ -294,6 +303,8 @@ export interface PrMonitor {
   prTitle?: string;
   /** Head ref name (the branch the PR is merging from), captured on each poll. */
   prBranch?: string;
+  /** SHA of the PR head commit. Used to detect new pushes → resets `lastPushAt`. */
+  headRefOid?: string;
   state: PrState;
   checkStatus: PrCheckStatus;
   failingChecks: PrCheckSummary[];
@@ -304,8 +315,12 @@ export interface PrMonitor {
   lastPolledAt?: string;
   /** When the last meaningful change was observed (new comment, status flip). */
   lastEventAt?: string;
-  /** False once the PR is merged or closed — the poller skips it after that. */
+  /** When we last saw a push (headRefOid change). Seeded on first poll. */
+  lastPushAt?: string;
+  /** False once the PR is merged or closed OR the poller auto-paused it as stale. */
   monitoring: boolean;
+  /** Set alongside `monitoring=false` so the UI can explain why polling stopped. */
+  pauseReason?: PrPauseReason;
   createdAt: string;
   updatedAt: string;
 }

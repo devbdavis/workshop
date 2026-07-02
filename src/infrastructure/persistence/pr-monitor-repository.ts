@@ -10,6 +10,7 @@ import type {
   PrCheckStatus,
   PrCheckSummary,
   PrComment,
+  PrPauseReason,
   TodoId,
   TrackId,
 } from '@foundation/types';
@@ -23,6 +24,7 @@ interface PrMonitorRow {
   pr_number: number;
   pr_title: string | null;
   pr_branch: string | null;
+  head_ref_oid: string | null;
   state: string;
   check_status: string;
   failing_checks: string | null;
@@ -30,13 +32,16 @@ interface PrMonitorRow {
   needs_attention_since: string | null;
   last_polled_at: string | null;
   last_event_at: string | null;
+  last_push_at: string | null;
   monitoring: number;
+  pause_reason: string | null;
   created_at: string;
   updated_at: string;
 }
 
 const VALID_STATES: ReadonlySet<PrState> = new Set(['open', 'draft', 'merged', 'closed', 'unknown']);
 const VALID_CHECK_STATUSES: ReadonlySet<PrCheckStatus> = new Set(['none', 'pending', 'passing', 'failing', 'error']);
+const VALID_PAUSE_REASONS: ReadonlySet<PrPauseReason> = new Set(['finished', 'stale', 'user']);
 
 function parseState(raw: string): PrState {
   return VALID_STATES.has(raw as PrState) ? (raw as PrState) : 'unknown';
@@ -44,6 +49,11 @@ function parseState(raw: string): PrState {
 
 function parseCheckStatus(raw: string): PrCheckStatus {
   return VALID_CHECK_STATUSES.has(raw as PrCheckStatus) ? (raw as PrCheckStatus) : 'none';
+}
+
+function parsePauseReason(raw: string | null): PrPauseReason | undefined {
+  if (raw === null) return undefined;
+  return VALID_PAUSE_REASONS.has(raw as PrPauseReason) ? (raw as PrPauseReason) : undefined;
 }
 
 function parseJsonArray<T>(raw: string | null): T[] {
@@ -66,6 +76,7 @@ function rowToMonitor(row: PrMonitorRow): PrMonitor {
     prNumber: row.pr_number,
     prTitle: row.pr_title ?? undefined,
     prBranch: row.pr_branch ?? undefined,
+    headRefOid: row.head_ref_oid ?? undefined,
     state: parseState(row.state),
     checkStatus: parseCheckStatus(row.check_status),
     failingChecks: parseJsonArray<PrCheckSummary>(row.failing_checks),
@@ -73,7 +84,9 @@ function rowToMonitor(row: PrMonitorRow): PrMonitor {
     needsAttentionSince: row.needs_attention_since ?? undefined,
     lastPolledAt: row.last_polled_at ?? undefined,
     lastEventAt: row.last_event_at ?? undefined,
+    lastPushAt: row.last_push_at ?? undefined,
     monitoring: row.monitoring === 1,
+    pauseReason: parsePauseReason(row.pause_reason),
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
@@ -110,14 +123,14 @@ export function createPrMonitorRepository(): PrMonitorRepository {
     INSERT INTO pr_monitors (
       pr_url, todo_id, track_id, repo_owner, repo_name, pr_number, pr_title, pr_branch,
       state, check_status, failing_checks, unresolved_comments,
-      needs_attention_since, last_polled_at, last_event_at, monitoring,
+      needs_attention_since, last_polled_at, last_event_at, last_push_at, monitoring, pause_reason,
       created_at, updated_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, NULL, 'unknown', 'none', NULL, NULL, NULL, NULL, NULL, 1, ?, ?)
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, NULL, 'unknown', 'none', NULL, NULL, NULL, NULL, NULL, NULL, 1, NULL, ?, ?)
   `);
   const updateRegistrationStmt = db.prepare(`
     UPDATE pr_monitors
     SET todo_id = ?, track_id = ?, repo_owner = ?, repo_name = ?, pr_number = ?,
-        pr_title = COALESCE(?, pr_title), monitoring = 1, updated_at = ?
+        pr_title = COALESCE(?, pr_title), monitoring = 1, pause_reason = NULL, updated_at = ?
     WHERE pr_url = ?
   `);
   const applyPollStmt = db.prepare(`
@@ -125,14 +138,23 @@ export function createPrMonitorRepository(): PrMonitorRepository {
     SET state = ?, check_status = ?, failing_checks = ?, unresolved_comments = ?,
         pr_title = COALESCE(?, pr_title),
         pr_branch = COALESCE(?, pr_branch),
+        head_ref_oid = COALESCE(?, head_ref_oid),
         needs_attention_since = ?,
         last_polled_at = ?,
         last_event_at = COALESCE(?, last_event_at),
+        last_push_at = COALESCE(?, last_push_at),
         monitoring = ?,
+        pause_reason = ?,
         updated_at = ?
     WHERE pr_url = ?
   `);
-  const pauseStmt = db.prepare('UPDATE pr_monitors SET monitoring = 0, updated_at = ? WHERE pr_url = ?');
+  const pauseStmt = db.prepare('UPDATE pr_monitors SET monitoring = 0, pause_reason = ?, updated_at = ? WHERE pr_url = ?');
+  const resumeStmt = db.prepare(`
+    UPDATE pr_monitors
+    SET monitoring = 1, pause_reason = NULL,
+        last_push_at = ?, last_polled_at = NULL, updated_at = ?
+    WHERE pr_url = ?
+  `);
   const deleteStmt = db.prepare('DELETE FROM pr_monitors WHERE pr_url = ?');
 
   return {
@@ -191,9 +213,17 @@ export function createPrMonitorRepository(): PrMonitorRepository {
       return result.changes > 0;
     },
 
-    pauseMonitoring(prUrl: string): PrMonitor | null {
+    pauseMonitoring(prUrl: string, reason: PrPauseReason): PrMonitor | null {
       const now = new Date().toISOString();
-      pauseStmt.run(now, prUrl);
+      pauseStmt.run(reason, now, prUrl);
+      return this.findByUrl(prUrl);
+    },
+
+    resumeMonitoring(prUrl: string): PrMonitor | null {
+      const now = new Date().toISOString();
+      // last_polled_at=NULL bumps the row to the front of the polling queue so
+      // the caller can trust the next tick (or an immediate pollNow) will refresh it.
+      resumeStmt.run(now, now, prUrl);
       return this.findByUrl(prUrl);
     },
 
@@ -203,7 +233,20 @@ export function createPrMonitorRepository(): PrMonitorRepository {
       const now = new Date().toISOString();
       const eventTimestamp = update.changed ? now : null;
       const needsAttentionSince = deriveNeedsAttentionSince(existing, update, now);
+
+      // Push detection: if a new oid appeared, bump last_push_at.
+      // First-ever poll (existing.headRefOid missing) also seeds last_push_at.
+      const nextOid = update.headRefOid;
+      const seededPushTimestamp =
+        nextOid && (!existing.headRefOid || existing.headRefOid !== nextOid) ? now : null;
+
+      // Merge/close always wins; otherwise let existing monitoring/pauseReason ride.
+      // The poller decides stale-pause itself and sends stopMonitoring=true with reason.
       const monitoring = update.stopMonitoring ? 0 : (existing.monitoring ? 1 : 0);
+      const pauseReason = update.stopMonitoring
+        ? (update.state === 'merged' || update.state === 'closed' ? 'finished' : (existing.pauseReason ?? 'stale'))
+        : (existing.pauseReason ?? null);
+
       applyPollStmt.run(
         update.state,
         update.checkStatus,
@@ -211,10 +254,13 @@ export function createPrMonitorRepository(): PrMonitorRepository {
         update.unresolvedComments.length > 0 ? JSON.stringify(update.unresolvedComments) : null,
         update.prTitle ?? null,
         update.prBranch ?? null,
+        nextOid ?? null,
         needsAttentionSince,
         now,
         eventTimestamp,
+        seededPushTimestamp,
         monitoring,
+        pauseReason,
         now,
         prUrl,
       );

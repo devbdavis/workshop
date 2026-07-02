@@ -39,10 +39,17 @@ function fakeRepo(): PrMonitorRepository {
       return next;
     },
     unregister: (url) => store.delete(url),
-    pauseMonitoring: (url) => {
+    pauseMonitoring: (url, reason) => {
       const m = store.get(url);
       if (!m) return null;
-      const next = { ...m, monitoring: false };
+      const next = { ...m, monitoring: false, pauseReason: reason };
+      store.set(url, next);
+      return next;
+    },
+    resumeMonitoring: (url) => {
+      const m = store.get(url);
+      if (!m) return null;
+      const next = { ...m, monitoring: true, pauseReason: undefined };
       store.set(url, next);
       return next;
     },

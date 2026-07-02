@@ -41,6 +41,30 @@ export function PrAttentionPanel({ todo, monitor, onRefresh }: Props) {
   const needsComments = monitor.unresolvedComments.length > 0;
   const isFinished = monitor.state === 'merged' || monitor.state === 'closed';
   const needsAttention = !isFinished && (needsFix || needsComments);
+  const isStalePaused = !monitor.monitoring && monitor.pauseReason === 'stale' && !isFinished;
+
+  async function resumeMonitoring() {
+    setError(null);
+    setSuccess(null);
+    setDispatching('resume');
+    try {
+      const res = await fetch(`/api/pr-monitors/resume`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ prUrl: monitor.prUrl }),
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(typeof data.error === 'string' ? data.error : `HTTP ${res.status}`);
+      }
+      setSuccess('Monitoring resumed. Fresh state fetched from GitHub.');
+      onRefresh();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to resume monitoring');
+    } finally {
+      setDispatching(null);
+    }
+  }
 
   async function dispatchFix() {
     setError(null);
@@ -232,7 +256,22 @@ export function PrAttentionPanel({ todo, monitor, onRefresh }: Props) {
         </div>
       )}
 
-      {!needsAttention && !isFinished && (
+      {isStalePaused && (
+        <div className="rounded border border-gray-700 bg-gray-900/60 p-2 space-y-2">
+          <p className="text-xs text-gray-400">
+            Monitoring paused — no push observed in the last hour and no outstanding CI failures or unresolved comments.
+            Resume if you're expecting late review feedback.
+          </p>
+          <button
+            onClick={resumeMonitoring}
+            disabled={dispatching !== null}
+            className="w-full text-xs px-2 py-1.5 rounded bg-blue-700/80 hover:bg-blue-700 disabled:opacity-50 text-blue-50 font-medium transition-colors"
+          >
+            {dispatching === 'resume' ? 'Resuming…' : 'Resume monitoring'}
+          </button>
+        </div>
+      )}
+      {!needsAttention && !isFinished && !isStalePaused && (
         <p className="text-xs text-gray-500 italic">
           Waiting on CI checks. Last polled{' '}
           {monitor.lastPolledAt ? new Date(monitor.lastPolledAt).toLocaleTimeString() : 'never'}.
