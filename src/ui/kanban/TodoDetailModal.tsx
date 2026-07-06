@@ -224,6 +224,16 @@ export function TodoDetailModal({ todo, tracks, onClose, onSave, onDelete, onDis
                         {pr.title || pr.url}
                       </a>
                       <button
+                        onClick={() => onDispatch(todo!.id, { agentId: 'project:pr-review' }, {
+                          title, description: description || undefined, status, priority, refined,
+                          pullRequests: pullRequests.length > 0 ? pullRequests : undefined,
+                        })}
+                        className="opacity-0 group-hover:opacity-100 text-emerald-500 hover:text-emerald-300 text-xs px-1 transition-opacity"
+                        title="Dispatch a PR review session (pr-review agent)"
+                      >
+                        Review
+                      </button>
+                      <button
                         onClick={() => startEditPr(i)}
                         className="opacity-0 group-hover:opacity-100 text-gray-500 hover:text-gray-300 text-xs px-1 transition-opacity"
                         title="Edit"

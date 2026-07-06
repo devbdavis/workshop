@@ -314,7 +314,10 @@ export function createTodoRouter(deps: TodoRouterDeps): Router {
 
       const systemPrompt = parts.join('\n\n---\n\n');
 
-      const taskPrompt = `Complete the following task:\n\n**${todo.title}**\n\n${todo.description || 'No additional details provided.'}`;
+      const prLines = (todo.pullRequests ?? [])
+        .map((pr) => `- ${pr.title ? `${pr.title}: ` : ''}${pr.url}`)
+        .join('\n');
+      const taskPrompt = `Complete the following task:\n\n**${todo.title}**\n\n${todo.description || 'No additional details provided.'}${prLines ? `\n\nAssociated pull requests:\n${prLines}` : ''}`;
 
       const session = await terminal.createSession(todo.trackId, {
         systemPrompt,
