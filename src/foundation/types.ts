@@ -688,6 +688,8 @@ export interface PrReview {
   prTitle?: string;
   prAuthor?: string;
   prBranch?: string;
+  /** PR description (markdown), clamped at fetch time. */
+  prBody?: string;
   /** Head SHA at the time the agent reported findings — drives the "PR changed since analysis" warning. */
   headSha?: string;
   state: PrReviewState;

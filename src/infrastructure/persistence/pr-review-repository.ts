@@ -28,6 +28,7 @@ interface PrReviewRow {
   pr_title: string | null;
   pr_author: string | null;
   pr_branch: string | null;
+  pr_body: string | null;
   head_sha: string | null;
   state: string;
   discovered_via: string;
@@ -69,6 +70,7 @@ function rowToReview(row: PrReviewRow): PrReview {
     prTitle: row.pr_title ?? undefined,
     prAuthor: row.pr_author ?? undefined,
     prBranch: row.pr_branch ?? undefined,
+    prBody: row.pr_body ?? undefined,
     headSha: row.head_sha ?? undefined,
     state: VALID_STATES.has(row.state as PrReviewState) ? (row.state as PrReviewState) : 'incoming',
     discoveredVia: (row.discovered_via === 'manual' ? 'manual' : 'poll') as PrReviewDiscoveredVia,
@@ -111,9 +113,9 @@ export function createPrReviewRepository(): PrReviewRepository {
   const findByUrlStmt = db.prepare('SELECT * FROM pr_reviews WHERE pr_url = ?');
   const insertStmt = db.prepare(`
     INSERT INTO pr_reviews (
-      id, pr_url, repo_owner, repo_name, pr_number, pr_title, pr_author, pr_branch,
+      id, pr_url, repo_owner, repo_name, pr_number, pr_title, pr_author, pr_branch, pr_body,
       state, discovered_via, created_at, updated_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'incoming', ?, ?, ?)
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'incoming', ?, ?, ?)
   `);
   const deleteStmt = db.prepare('DELETE FROM pr_reviews WHERE id = ?');
   const findingsStmt = db.prepare('SELECT * FROM pr_review_findings WHERE review_id = ? ORDER BY file ASC, line ASC');
@@ -160,6 +162,7 @@ export function createPrReviewRepository(): PrReviewRepository {
         reg.prTitle ?? null,
         reg.prAuthor ?? null,
         reg.prBranch ?? null,
+        reg.prBody ?? null,
         reg.discoveredVia,
         now,
         now,

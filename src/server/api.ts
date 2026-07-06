@@ -303,6 +303,7 @@ export function createApiRouter(deps: ApiRouterDeps = {}): Router {
     discovery: prReviewDiscovery,
     gh: ghAdapter,
     ghReview: ghReviewAdapter,
+    sessions,
     tracks,
     agents,
     filesystemScanner,

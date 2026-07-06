@@ -11,6 +11,7 @@ import type {
 } from '@foundation/types';
 import type { PrReviewRepository, PrReviewFindingInput } from '@domain/pr-review/repository';
 import type { PrReviewDiscoveryPoller } from '@application/pr-review/discovery-poller';
+import type { SessionRepository } from '@domain/session/repository';
 import type { TrackRepository } from '@domain/track/repository';
 import type { AgentRepository } from '@domain/agent/repository';
 import type { SettingsRepository } from '@domain/repo/repository';
@@ -33,6 +34,7 @@ export interface PrReviewRouterDeps {
   discovery: PrReviewDiscoveryPoller;
   gh: GhAdapter;
   ghReview: GhReviewAdapter;
+  sessions: SessionRepository;
   tracks: TrackRepository;
   agents: AgentRepository;
   filesystemScanner: FilesystemAgentScanner;
@@ -87,7 +89,7 @@ function parseReportedFindings(raw: unknown): Omit<PrReviewFindingInput, 'anchor
 
 export function createPrReviewRouter(deps: PrReviewRouterDeps): Router {
   const router = Router();
-  const { reviews, discovery, gh, ghReview, tracks, agents, filesystemScanner, settings, projectRoot, terminal } = deps;
+  const { reviews, discovery, gh, ghReview, sessions, tracks, agents, filesystemScanner, settings, projectRoot, terminal } = deps;
 
   /** The dedicated system track that hosts analysis sessions (lazily created, id cached in settings). */
   function ensureReviewTrack(): TrackId {
@@ -118,7 +120,15 @@ export function createPrReviewRouter(deps: PrReviewRouterDeps): Router {
       res.status(404).json({ error: 'PR review not found' });
       return;
     }
-    res.json({ ...review, findings: reviews.findingsByReview(review.id) });
+    // Session info lets the UI open a terminal to converse with the review agent.
+    const session = review.sessionId ? sessions.findById(review.sessionId) : null;
+    res.json({
+      ...review,
+      findings: reviews.findingsByReview(review.id),
+      session: session
+        ? { id: session.id, trackId: session.trackId, name: session.name, state: session.state }
+        : null,
+    });
   });
 
   router.post('/pr-reviews/poll-now', async (_req, res) => {
@@ -149,6 +159,7 @@ export function createPrReviewRouter(deps: PrReviewRouterDeps): Router {
         prTitle: snapshot.prTitle,
         prAuthor: snapshot.prAuthor,
         prBranch: snapshot.headRefName,
+        prBody: snapshot.prBody,
         discoveredVia: 'manual',
       });
       broadcast('pr-review:updated', EVENT_TRACK, { reviewId: review.id });

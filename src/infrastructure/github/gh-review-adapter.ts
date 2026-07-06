@@ -4,7 +4,7 @@ import type { PrReviewVerdict } from '@foundation/types';
 
 const execFileAsync = promisify(execFile);
 
-/** One PR returned by `gh search prs --review-requested=@me`. */
+/** One PR returned by `gh search prs user-review-requested:@me`. */
 export interface DiscoveredPr {
   url: string;
   title: string;
@@ -12,7 +12,19 @@ export interface DiscoveredPr {
   repoOwner: string;
   repoName: string;
   number: number;
+  /** PR description (markdown), clamped. */
+  body?: string;
   updatedAt?: string;
+}
+
+/** Keep stored PR descriptions bounded — the dashboard shows a scrollable excerpt. */
+export const PR_BODY_MAX = 5_000;
+
+export function clampPrBody(body: string | null | undefined): string | undefined {
+  if (!body) return undefined;
+  const trimmed = body.trim();
+  if (trimmed.length === 0) return undefined;
+  return trimmed.length > PR_BODY_MAX ? `${trimmed.slice(0, PR_BODY_MAX)}…` : trimmed;
 }
 
 export interface GhReviewComment {
@@ -43,6 +55,7 @@ interface GhSearchPrNode {
   author?: { login?: string };
   repository?: { name?: string; nameWithOwner?: string };
   number?: number;
+  body?: string;
   updatedAt?: string;
 }
 
@@ -103,15 +116,18 @@ export function createGhReviewAdapter(opts: CreateGhReviewAdapterOptions = {}): 
 
   return {
     async searchReviewRequestedPrs(): Promise<DiscoveredPr[]> {
+      // user-review-requested (raw search qualifier — gh has no flag for it) matches
+      // only PRs where the user is EXPLICITLY requested; --review-requested would
+      // also match requests aimed at teams the user belongs to.
       const { stdout } = await exec(ghBinary, [
         'search',
         'prs',
-        '--review-requested=@me',
+        'user-review-requested:@me',
         '--state=open',
         '--limit',
         '100',
         '--json',
-        'url,title,author,repository,number,updatedAt',
+        'url,title,author,repository,number,body,updatedAt',
       ]);
       const nodes = JSON.parse(stdout) as GhSearchPrNode[];
       const out: DiscoveredPr[] = [];
@@ -126,6 +142,7 @@ export function createGhReviewAdapter(opts: CreateGhReviewAdapterOptions = {}): 
           repoOwner: owner,
           repoName: name,
           number: node.number,
+          body: clampPrBody(node.body),
           updatedAt: node.updatedAt,
         });
       }
