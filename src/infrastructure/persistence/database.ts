@@ -879,6 +879,13 @@ function runMigrations(db: Database.Database): void {
     // Tables already exist — safe to ignore
   }
 
+  // Migration: PR description on pr_reviews (no-op when the table is fresh).
+  try {
+    db.exec(`ALTER TABLE pr_reviews ADD COLUMN pr_body TEXT;`);
+  } catch {
+    // Column already exists — safe to ignore
+  }
+
   // Seed default repo_root setting
   db.exec(`INSERT OR IGNORE INTO settings (key, value) VALUES ('repo_root', '~/Klaviyo/Repos');`);
 

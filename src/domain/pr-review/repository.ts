@@ -19,6 +19,7 @@ export interface PrReviewRegistration {
   prTitle?: string;
   prAuthor?: string;
   prBranch?: string;
+  prBody?: string;
   discoveredVia: PrReviewDiscoveredVia;
 }
 

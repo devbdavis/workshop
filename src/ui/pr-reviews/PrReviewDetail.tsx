@@ -1,7 +1,9 @@
 import { useCallback, useEffect, useState } from 'react';
+import Markdown from 'react-markdown';
 import type { PrReview, PrReviewFinding, PrReviewVerdict } from '@foundation/types';
 import { FindingCard } from './FindingCard';
 import { STATE_BADGE } from './PrReviewsPage';
+import { TerminalModal } from '../track-view/TerminalModal';
 
 interface Props {
   reviewId: string;
@@ -9,7 +11,14 @@ interface Props {
   onChanged: () => void;
 }
 
-type ReviewWithFindings = PrReview & { findings: PrReviewFinding[] };
+interface ReviewSessionInfo {
+  id: string;
+  trackId: string;
+  name?: string;
+  state: string;
+}
+
+type ReviewWithFindings = PrReview & { findings: PrReviewFinding[]; session: ReviewSessionInfo | null };
 
 const VERDICT_OPTIONS: Array<{ value: PrReviewVerdict; label: string }> = [
   { value: 'approve', label: 'Approve' },
@@ -23,6 +32,8 @@ export function PrReviewDetail({ reviewId, refreshKey, onChanged }: Props) {
   const [verdict, setVerdict] = useState<PrReviewVerdict>('comment');
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [showTerminal, setShowTerminal] = useState(false);
+  const [showDescription, setShowDescription] = useState(false);
 
   const load = useCallback(async () => {
     try {
@@ -100,8 +111,14 @@ export function PrReviewDetail({ reviewId, refreshKey, onChanged }: Props) {
           <span className={`shrink-0 px-1.5 py-0.5 rounded text-[10px] font-medium ${badge.className}`}>{badge.label}</span>
         </div>
         <div className="flex items-center gap-3 text-xs text-gray-500">
-          <a href={review.prUrl} target="_blank" rel="noreferrer" className="hover:text-blue-300">
-            {review.repoOwner}/{review.repoName}#{review.prNumber}
+          <a
+            href={review.prUrl}
+            target="_blank"
+            rel="noreferrer"
+            className="text-blue-400 hover:text-blue-300"
+            title="Open the pull request on GitHub"
+          >
+            {review.repoOwner}/{review.repoName}#{review.prNumber} ↗
           </a>
           {review.prAuthor && <span>by {review.prAuthor}</span>}
           {review.prBranch && <span className="font-mono">{review.prBranch}</span>}
@@ -114,6 +131,15 @@ export function PrReviewDetail({ reviewId, refreshKey, onChanged }: Props) {
               className="px-3 py-1 text-xs font-medium rounded bg-blue-900/60 text-blue-200 hover:bg-blue-800/60 disabled:opacity-50"
             >
               {busy === 'analyze' ? 'Dispatching…' : analyzing ? 'Re-analyze' : review.findings.length > 0 ? 'Re-analyze' : 'Analyze'}
+            </button>
+          )}
+          {review.session && (
+            <button
+              onClick={() => setShowTerminal(true)}
+              className="px-3 py-1 text-xs font-medium rounded bg-gray-800 text-gray-300 hover:bg-gray-700"
+              title="Open the review agent's terminal — ask questions or steer the review"
+            >
+              Chat with agent
             </button>
           )}
           {analyzing && <span className="text-[11px] text-yellow-300/80">Agent session running in the background…</span>}
@@ -139,6 +165,23 @@ export function PrReviewDetail({ reviewId, refreshKey, onChanged }: Props) {
       </header>
 
       {error && <div className="px-3 py-2 text-xs text-red-300 bg-red-900/20 border border-red-900/50 rounded">{error}</div>}
+
+      {review.prBody && (
+        <section className="border border-gray-800 rounded-md bg-gray-900/40">
+          <button
+            onClick={() => setShowDescription((v) => !v)}
+            className="w-full flex items-center gap-2 px-3 py-2 text-xs font-medium text-gray-400 hover:text-gray-200"
+          >
+            <span className="text-[10px]">{showDescription ? '▾' : '▸'}</span>
+            Description
+          </button>
+          {showDescription && (
+            <div className="px-3 pb-3 text-xs text-gray-400 prose prose-invert prose-sm max-w-none max-h-80 overflow-y-auto">
+              <Markdown>{review.prBody}</Markdown>
+            </div>
+          )}
+        </section>
+      )}
 
       {review.findings.length > 0 && (
         <section className="space-y-2">
@@ -207,6 +250,15 @@ export function PrReviewDetail({ reviewId, refreshKey, onChanged }: Props) {
             View on GitHub →
           </a>
         </div>
+      )}
+
+      {showTerminal && review.session && (
+        <TerminalModal
+          trackId={review.session.trackId}
+          sessionId={review.session.id}
+          title={review.session.name || `Review PR #${review.prNumber}`}
+          onClose={() => setShowTerminal(false)}
+        />
       )}
     </div>
   );

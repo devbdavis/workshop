@@ -41,6 +41,7 @@ export function createPrReviewDiscoveryPoller(deps: PrReviewDiscoveryPollerDeps)
           prNumber: pr.number,
           prTitle: pr.title,
           prAuthor: pr.author,
+          prBody: pr.body,
           discoveredVia: 'poll',
         });
         added++;
