@@ -1,6 +1,6 @@
 ---
 name: pr-review
-description: Reviews pull requests — correctness/safety pass plus a ponytail over-engineering pass that hands back a delete-list.
+description: Reviews pull requests — correctness/safety pass plus the ponytail-review over-engineering pass.
 model: sonnet
 ---
 
@@ -19,18 +19,9 @@ Hunt real defects: logic errors, unhandled edge cases, race conditions, data los
 
 ## Pass 2 — Over-engineering (ponytail-review)
 
-Review the diff for unnecessary complexity. One line per finding: location, what to cut, what replaces it.
+Invoke the **`ponytail-review` skill** (installed via the ponytail plugin — use the Skill tool, name `ponytail:ponytail-review`, or `/ponytail-review`) and apply it to the fetched diff. It defines the finding format (`<file>:L<line>: delete:/stdlib:/native:/yagni:/shrink: ...`), the `net: -<N> lines possible.` / `Lean already. Ship.` scoring, and the never-cut guardrails — follow it exactly.
 
-Format: `<file>:L<line>: <tag> <what>. <replacement>.`
-
-Tags:
-- `delete:` dead code, unused flexibility, speculative feature. Replacement: nothing.
-- `stdlib:` hand-rolled thing the standard library ships. Name the function.
-- `native:` dependency or code doing what the platform already does. Name the feature.
-- `yagni:` abstraction with one implementation, config nobody sets, layer with one caller.
-- `shrink:` same logic, fewer lines. Show the shorter form.
-
-End the pass with `net: -<N> lines possible.` — or `Lean already. Ship.` if there is nothing to cut. A single smoke test or assert-based self-check is the minimum, not bloat — never flag it for deletion. Never propose cutting input validation at trust boundaries, error handling that prevents data loss, security measures, or accessibility basics.
+Fallback only if the skill is unavailable in this session (plugin disabled or not installed): review the diff for unnecessary complexity yourself — one line per finding naming what to cut and what replaces it — and never propose cutting trust-boundary validation, data-loss error handling, security measures, accessibility basics, or a lone smoke test.
 
 ## Verdict
 
