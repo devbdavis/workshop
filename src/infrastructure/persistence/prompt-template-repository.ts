@@ -1,17 +1,18 @@
 import { v4 as uuid } from 'uuid';
 import { getDatabase } from './database.js';
 import type { PromptTemplateRepository } from '@domain/prompt-template/repository';
-import type { PromptTemplate, TemplateId } from '@foundation/types';
+import type { PromptTemplate, PromptTemplateSystemKind, TemplateId } from '@foundation/types';
 
 export function createPromptTemplateRepository(): PromptTemplateRepository {
   const db = getDatabase();
 
   // Prepare statements once
-  const findAllStmt = db.prepare('SELECT * FROM prompt_templates ORDER BY is_default DESC, created_at ASC');
+  const findAllStmt = db.prepare('SELECT * FROM prompt_templates ORDER BY is_default DESC, system_kind IS NULL, created_at ASC');
   const findByIdStmt = db.prepare('SELECT * FROM prompt_templates WHERE id = ?');
   const findDefaultStmt = db.prepare('SELECT * FROM prompt_templates WHERE is_default = 1 LIMIT 1');
+  const findBySystemKindStmt = db.prepare('SELECT * FROM prompt_templates WHERE system_kind = ? LIMIT 1');
   const insertStmt = db.prepare(
-    'INSERT INTO prompt_templates (id, name, description, content, is_default, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)',
+    'INSERT INTO prompt_templates (id, name, description, content, is_default, system_kind, created_at, updated_at) VALUES (?, ?, ?, ?, ?, NULL, ?, ?)',
   );
   const updateStmt = db.prepare(
     'UPDATE prompt_templates SET name = ?, description = ?, content = ?, updated_at = ? WHERE id = ?',
@@ -31,6 +32,11 @@ export function createPromptTemplateRepository(): PromptTemplateRepository {
 
     findDefault(): PromptTemplate | null {
       const row = findDefaultStmt.get() as TemplateRow | undefined;
+      return row ? rowToTemplate(row) : null;
+    },
+
+    findBySystemKind(kind: PromptTemplateSystemKind): PromptTemplate | null {
+      const row = findBySystemKindStmt.get(kind) as TemplateRow | undefined;
       return row ? rowToTemplate(row) : null;
     },
 
@@ -73,8 +79,20 @@ interface TemplateRow {
   description: string | null;
   content: string;
   is_default: number;
+  system_kind: string | null;
   created_at: string;
   updated_at: string;
+}
+
+const VALID_SYSTEM_KINDS: ReadonlySet<PromptTemplateSystemKind> = new Set([
+  'todo',
+  'pr-build-fix',
+  'pr-comment-response',
+]);
+
+function parseSystemKind(raw: string | null): PromptTemplateSystemKind | undefined {
+  if (raw === null) return undefined;
+  return VALID_SYSTEM_KINDS.has(raw as PromptTemplateSystemKind) ? (raw as PromptTemplateSystemKind) : undefined;
 }
 
 function rowToTemplate(row: TemplateRow): PromptTemplate {
@@ -84,6 +102,7 @@ function rowToTemplate(row: TemplateRow): PromptTemplate {
     description: row.description || undefined,
     content: row.content,
     isDefault: row.is_default === 1,
+    systemKind: parseSystemKind(row.system_kind),
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
