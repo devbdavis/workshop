@@ -2,7 +2,7 @@ import { existsSync, readFileSync, writeFileSync } from 'fs';
 import { homedir } from 'os';
 import path from 'path';
 import { Router } from 'express';
-import type { TrackId, SessionId, SessionProvider, RepoId, PathId, AgentId, AutomationRuleId, TemplateId, TerminalLayout, WorkflowTicket } from '@foundation/types';
+import type { TrackId, SessionId, SessionProvider, RepoId, PathId, AgentId, AutomationRuleId, TemplateId, TerminalLayout, TodoId, WorkflowTicket } from '@foundation/types';
 import { resolveSessionProvider } from '@foundation/types.js';
 import { VAULT_ROOT } from '@foundation/config.js';
 import { createTrackRepository } from '@infrastructure/persistence/track-repository.js';
@@ -827,10 +827,29 @@ export function createApiRouter(deps: ApiRouterDeps = {}): Router {
         return;
       }
 
+      // Optional todo link — the session works on this task and the todo is
+      // marked in-progress once the session exists.
+      const todoId = req.body?.todoId as TodoId | undefined;
+      const todo = todoId ? todos.findById(todoId) : undefined;
+      if (todoId && !todo) {
+        res.status(404).json({ error: 'Todo not found' });
+        return;
+      }
+
+      const agentId = (req.body?.agentId as AgentId | undefined) ?? undefined;
+
       // Auto-compose system prompt from track context + summary + template
       let systemPrompt = req.body?.systemPrompt;
       if (!systemPrompt) {
         const parts: string[] = [];
+
+        // 0. Agent role prompt (workshop DB first, then filesystem agents)
+        if (agentId) {
+          const agent = agents.findById(agentId) ?? filesystemScanner.findById(agentId, projectRoot);
+          if (agent) {
+            parts.push(`## Agent: ${agent.name}\n\n${agent.systemPrompt}`);
+          }
+        }
 
         // 1. Track context (freeform user-provided context)
         if (track.context) {
@@ -880,10 +899,21 @@ export function createApiRouter(deps: ApiRouterDeps = {}): Router {
           parts.push(`## Track Paths\n\n${pathLines}`);
         }
 
+        // 7. The task, when the session is linked to a todo
+        if (todo) {
+          parts.push(`## Task\n\n**${todo.title}**\n\n${todo.description || ''}`);
+        }
+
         if (parts.length > 0) {
           systemPrompt = parts.join('\n\n---\n\n');
         }
       }
+
+      // Initial prompt: explicit body value wins; a linked todo supplies a
+      // task prompt as fallback (cursor requires a non-empty prompt).
+      const bodyPrompt = typeof req.body?.initialPrompt === 'string' ? req.body.initialPrompt.trim() : '';
+      const initialPrompt = bodyPrompt
+        || (todo ? `Complete the following task:\n\n**${todo.title}**\n\n${todo.description || 'No additional details provided.'}` : undefined);
 
       const provider: SessionProvider = resolveSessionProvider(
         req.body?.provider,
@@ -902,12 +932,26 @@ export function createApiRouter(deps: ApiRouterDeps = {}): Router {
       const session = await terminal.createSession(trackId, {
         systemPrompt,
         provider,
+        initialPrompt,
+        todoId: todo?.id,
+        name: typeof req.body?.name === 'string' && req.body.name.trim() ? req.body.name.trim() : todo?.title,
+        issueKey: todo?.issueKey,
         workingDirectory: repos[0]?.path,
         worktreeMode: worktreeMode && repos.length > 0,
         repos: worktreeMode ? repos : undefined,
         additionalDirs: trackPaths.length > 0 ? trackPaths.map((p) => p.path) : undefined,
         onReady: (s) => broadcast('session:ready', trackId, { sessionId: s.id }),
       });
+
+      if (todo) {
+        todos.update(todo.id, {
+          status: 'in-progress',
+          sessionId: session.id as SessionId,
+          agentId,
+        });
+        broadcast('todo:updated', trackId);
+      }
+
       broadcast('session:created', trackId, { sessionId: session.id });
       res.status(201).json(session);
     } catch (err) {
