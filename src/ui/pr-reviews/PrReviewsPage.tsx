@@ -14,6 +14,8 @@ export const STATE_BADGE: Record<PrReviewState, { label: string; className: stri
   ready: { label: 'Findings ready', className: 'text-emerald-300 bg-emerald-900/40' },
   submitted: { label: 'Submitted', className: 'text-purple-300 bg-purple-900/40' },
   dismissed: { label: 'Dismissed', className: 'text-gray-400 bg-gray-800' },
+  // Removed rows are filtered out server-side; entry exists for type exhaustiveness.
+  removed: { label: 'Removed', className: 'text-gray-500 bg-gray-800' },
 };
 
 function SidebarItem({ review, selected, onSelect }: { review: PrReviewListItem; selected: boolean; onSelect: () => void }) {
