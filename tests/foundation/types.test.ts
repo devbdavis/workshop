@@ -24,11 +24,13 @@ describe('session/default CLI parsing', () => {
   });
 
   describe('isDefaultAiCli', () => {
-    it('accepts only claude and cursor', () => {
+    it('accepts every supported session provider', () => {
       expect(isDefaultAiCli('claude')).toBe(true);
       expect(isDefaultAiCli('cursor')).toBe(true);
-      expect(isDefaultAiCli('codex')).toBe(false);
+      expect(isDefaultAiCli('codex')).toBe(true);
+      expect(isDefaultAiCli('gemini')).toBe(true);
       expect(isDefaultAiCli(undefined)).toBe(false);
+      expect(isDefaultAiCli('gpt')).toBe(false);
     });
   });
 
@@ -37,8 +39,9 @@ describe('session/default CLI parsing', () => {
       expect(parseSessionProvider('invalid')).toBe('claude');
     });
 
-    it('falls back to claude for invalid default CLI values', () => {
-      expect(parseDefaultAiCli('codex')).toBe('claude');
+    it('preserves valid default CLI values and falls back to claude for invalid ones', () => {
+      expect(parseDefaultAiCli('codex')).toBe('codex');
+      expect(parseDefaultAiCli('invalid')).toBe('claude');
     });
   });
 
