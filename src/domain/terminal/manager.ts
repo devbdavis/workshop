@@ -10,6 +10,8 @@ export interface CreateSessionOptions {
   workingDirectory?: string;
   /** Which AI CLI to use. Defaults to 'claude'. */
   provider?: SessionProvider;
+  /** Model override passed to the AI CLI (claude: `--model`, e.g. "opus"). Ignored by other providers. */
+  model?: string;
   /** If true, do not start the AI CLI in the tmux session. Defaults to false. */
   skipClaude?: boolean;
   /** If true, the session runs as a background agent. Defaults to false. */

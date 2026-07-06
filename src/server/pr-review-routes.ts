@@ -9,6 +9,7 @@ import type {
   TrackId,
   TrackRepo,
 } from '@foundation/types';
+import { isSessionProvider, resolveSessionProvider } from '@foundation/types.js';
 import type { PrReviewRepository, PrReviewFindingInput } from '@domain/pr-review/repository';
 import type { PrReviewDiscoveryPoller } from '@application/pr-review/discovery-poller';
 import type { SessionRepository } from '@domain/session/repository';
@@ -24,6 +25,8 @@ import { broadcast } from './events.js';
 
 const PR_REVIEW_AGENT_ID = 'global:pr-review' as AgentId;
 const TRACK_SETTING_KEY = 'pr_review_track_id';
+const PROVIDER_SETTING_KEY = 'pr_review_provider';
+const MODEL_SETTING_KEY = 'pr_review_model';
 /** Event channel — the dashboard filters on event type, not trackId. */
 const EVENT_TRACK = 'pr-reviews';
 
@@ -48,6 +51,7 @@ export interface PrReviewRouterDeps {
         background?: boolean;
         initialPrompt?: string;
         provider?: SessionProvider;
+        model?: string;
         name?: string;
         worktreeMode?: boolean;
         repos?: TrackRepo[];
@@ -107,10 +111,13 @@ export function createPrReviewRouter(deps: PrReviewRouterDeps): Router {
 
   router.get('/pr-reviews', (_req, res) => {
     const counts = reviews.countFindings();
-    const rows = reviews.findAll().map((r) => ({
-      ...r,
-      findingCounts: counts.get(r.id) ?? { open: 0, total: 0 },
-    }));
+    const rows = reviews
+      .findAll()
+      .filter((r) => r.state !== 'removed')
+      .map((r) => ({
+        ...r,
+        findingCounts: counts.get(r.id) ?? { open: 0, total: 0 },
+      }));
     res.json(rows);
   });
 
@@ -136,6 +143,37 @@ export function createPrReviewRouter(deps: PrReviewRouterDeps): Router {
     res.json({ added });
   });
 
+  // Which CLI/model runs review analysis sessions. Empty provider = follow the
+  // workshop-wide default AI CLI; model applies to claude sessions (--model).
+  router.get('/settings/pr-review', (_req, res) => {
+    res.json({
+      provider: settings.get(PROVIDER_SETTING_KEY) ?? '',
+      model: settings.get(MODEL_SETTING_KEY) ?? '',
+    });
+  });
+
+  router.put('/settings/pr-review', (req, res) => {
+    const { provider, model } = (req.body ?? {}) as { provider?: unknown; model?: unknown };
+    if (provider !== undefined) {
+      if (provider !== '' && !isSessionProvider(provider)) {
+        res.status(400).json({ error: 'provider must be empty (use default) or one of: claude, codex, gemini, cursor' });
+        return;
+      }
+      settings.set(PROVIDER_SETTING_KEY, provider);
+    }
+    if (model !== undefined) {
+      if (typeof model !== 'string') {
+        res.status(400).json({ error: 'model must be a string' });
+        return;
+      }
+      settings.set(MODEL_SETTING_KEY, model.trim());
+    }
+    res.json({
+      provider: settings.get(PROVIDER_SETTING_KEY) ?? '',
+      model: settings.get(MODEL_SETTING_KEY) ?? '',
+    });
+  });
+
   // Manual add by URL. Fetches metadata via gh so the sidebar entry is useful.
   router.post('/pr-reviews', async (req, res) => {
     try {
@@ -147,6 +185,13 @@ export function createPrReviewRouter(deps: PrReviewRouterDeps): Router {
       }
       const existing = reviews.findByUrl(url);
       if (existing) {
+        // Pasting the URL of a removed PR is an explicit request to bring it back.
+        if (existing.state === 'removed') {
+          const restored = reviews.update(existing.id, { state: 'incoming' });
+          broadcast('pr-review:updated', EVENT_TRACK, { reviewId: existing.id });
+          res.json(restored);
+          return;
+        }
         res.json(existing);
         return;
       }
@@ -185,8 +230,18 @@ export function createPrReviewRouter(deps: PrReviewRouterDeps): Router {
         return;
       }
       const trackId = ensureReviewTrack();
+      // Provider/model come from the PR-review settings; empty provider falls
+      // back to the workshop-wide default AI CLI. Model applies to claude only.
+      const providerSetting = settings.get(PROVIDER_SETTING_KEY);
+      const provider = resolveSessionProvider(
+        providerSetting && providerSetting.length > 0 ? providerSetting : undefined,
+        settings.get('default_ai_cli'),
+      );
+      const model = settings.get(MODEL_SETTING_KEY)?.trim() || undefined;
       const session = await terminal.createSession(trackId, {
         systemPrompt: `## Agent: ${agent.name}\n\n${agent.systemPrompt}`,
+        provider,
+        model,
         background: true,
         initialPrompt: [
           `Review the pull request at ${review.prUrl}.`,
@@ -258,6 +313,19 @@ export function createPrReviewRouter(deps: PrReviewRouterDeps): Router {
       console.error('Failed to record PR review report:', err);
       res.status(500).json({ error: err instanceof Error ? err.message : 'Failed to record report' });
     }
+  });
+
+  // Remove a PR from the dashboard entirely. The row is kept (state=removed)
+  // so discovery's upsert-by-URL never re-adds it; manual add-by-URL restores it.
+  router.delete('/pr-reviews/:id', (req, res) => {
+    const review = reviews.findById(req.params.id as PrReviewId);
+    if (!review) {
+      res.status(404).json({ error: 'PR review not found' });
+      return;
+    }
+    reviews.update(review.id, { state: 'removed' });
+    broadcast('pr-review:updated', EVENT_TRACK, { reviewId: review.id });
+    res.status(204).end();
   });
 
   // Edit draft summary / verdict, or dismiss/restore the whole PR.

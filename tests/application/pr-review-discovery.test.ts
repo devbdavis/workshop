@@ -99,6 +99,23 @@ describe('PR review discovery poller', () => {
     expect(reviews.findById(manual.id)).not.toBeNull();
   });
 
+  it('never re-adds or prunes a removed PR, even while it still appears in search', async () => {
+    const reviews = createPrReviewRepository();
+    const poller = createPrReviewDiscoveryPoller({
+      reviews,
+      gh: { searchReviewRequestedPrs: async () => [discovered(1)] },
+      broadcast: vi.fn(),
+    });
+    await poller.pollNow();
+    const row = reviews.findAll()[0];
+    reviews.update(row.id, { state: 'removed' });
+
+    // Still in search results → upsert must leave the removed row alone.
+    expect(await poller.pollNow()).toBe(0);
+    expect(reviews.findById(row.id)?.state).toBe('removed');
+    expect(reviews.findAll()).toHaveLength(1);
+  });
+
   it('swallows gh failures without touching stored rows', async () => {
     const reviews = createPrReviewRepository();
     reviews.upsertIncoming({
