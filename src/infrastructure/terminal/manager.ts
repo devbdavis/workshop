@@ -9,6 +9,9 @@ import type { SessionRepository } from '@domain/session/repository';
 import type { Session, SessionId, TrackId, TrackRepo } from '@foundation/types';
 import type { SoulLoader } from '@infrastructure/soul/soul-loader.js';
 import type { TodoRepository } from '@domain/todo/repository.js';
+import type { PluginRepository } from '@domain/plugin/repository';
+import { toEnabledPluginsMap } from '@domain/plugin/repository.js';
+import { readAgentsRules } from '@infrastructure/plugins/rules-writer.js';
 import {
   capturePane, isSessionIdle, isSessionNeedsInput, isSessionLoggedOut, isSessionExited,
 } from './pane-detection.js';
@@ -270,7 +273,7 @@ async function fetchAndResolveBase(repoPath: string): Promise<string | undefined
  * All repos are processed in parallel — significant speedup for multi-repo tracks.
  * Returns the workspace path. Throws on failure (caller should handle gracefully).
  */
-async function createWorktrees(sessionId: string, repos: TrackRepo[], sessionName?: string, issueKey?: string): Promise<string> {
+async function createWorktrees(sessionId: string, repos: TrackRepo[], sessionName?: string, issueKey?: string, agentsRules?: string | null): Promise<string> {
   const workspaceDir = path.join(SESSION_DATA_DIR, sessionId, 'workspace');
   mkdirSync(workspaceDir, { recursive: true });
 
@@ -328,7 +331,7 @@ async function createWorktrees(sessionId: string, repos: TrackRepo[], sessionNam
 
   // Write merged .claude/settings.json and workspace.code-workspace
   try {
-    writeWorkspaceArtifacts(workspaceDir, repos, sessionName);
+    writeWorkspaceArtifacts(workspaceDir, repos, sessionName, agentsRules);
   } catch (err) {
     console.warn('[worktree] Failed to write workspace artifacts:', err);
   }
@@ -376,7 +379,14 @@ function readProjectSettings(repoPath: string): ClaudeProjectSettings | null {
  * reflects the latest committed project settings.
  * Best-effort — failures are logged but do not block session creation.
  */
-function writeWorkspaceArtifacts(workspaceDir: string, repos: TrackRepo[], sessionName?: string): void {
+function writeWorkspaceArtifacts(workspaceDir: string, repos: TrackRepo[], sessionName?: string, agentsRules?: string | null): void {
+  // Plugin rules for AGENTS.md-reading CLIs (Codex, Cursor). The workspace
+  // root sits outside the git worktrees, so this can never be committed.
+  if (agentsRules) {
+    writeFileSync(path.join(workspaceDir, 'AGENTS.md'), agentsRules + '\n', 'utf-8');
+    console.log('[worktree] AGENTS.md plugin rules written to workspace root');
+  }
+
   const allowSet = new Set<string>();
   const denySet = new Set<string>();
   const mergedEnv: Record<string, string> = {};
@@ -488,7 +498,12 @@ function hashString(s: string): number {
   return hash >>> 0; // unsigned 32-bit
 }
 
-export function createTerminalManager(sessionRepo: SessionRepository, soulLoader?: SoulLoader, todoRepo?: TodoRepository): TerminalManager {
+export function createTerminalManager(
+  sessionRepo: SessionRepository,
+  soulLoader?: SoulLoader,
+  todoRepo?: TodoRepository,
+  pluginRepo?: PluginRepository,
+): TerminalManager {
   try {
     execSync('which tmux', { stdio: 'pipe' });
   } catch {
@@ -566,6 +581,21 @@ export function createTerminalManager(sessionRepo: SessionRepository, soulLoader
     const provider = session.provider;
     const sessionDir = getSessionDir(session.id);
     const launcherFile = path.join(sessionDir, 'launch.sh');
+
+    // Inject the plugin registry's enablement map. Done here (not in
+    // createSession) so resume/restore re-derive the current registry state
+    // on every relaunch. Cheap: one prepared-statement SQLite read.
+    if (pluginRepo) {
+      try {
+        const registered = pluginRepo.findAll();
+        if (registered.length > 0) {
+          effectiveOptions = { ...(effectiveOptions ?? {}), enabledPlugins: toEnabledPluginsMap(registered) };
+        }
+      } catch (err) {
+        console.warn(`[plugins] Failed to resolve plugin enablement for session ${session.id}:`, err);
+      }
+    }
+
     const sessionEnvFile = path.join(process.env.HOME ?? '/tmp', '.workshop', 'session.env');
     const launcherLines = [
       '#!/bin/bash', 'set -e', '',
@@ -697,8 +727,18 @@ export function createTerminalManager(sessionRepo: SessionRepository, soulLoader
 
         if (options?.worktreeMode && options.repos?.length) {
           try {
+            // Rules payload for AGENTS.md-reading CLIs (Codex/Cursor), read
+            // from the locally synced plugin clones — no network here.
+            let agentsRules: string | null = null;
+            if (pluginRepo) {
+              try {
+                agentsRules = readAgentsRules(pluginRepo.findAll().filter((p) => p.enabled && p.providers?.cursor));
+              } catch (err) {
+                console.warn(`[plugins] Failed to read plugin rules for session ${session.id}:`, err);
+              }
+            }
             const worktreeRoot = await createWorktrees(
-              session.id, options.repos, options.name, options.issueKey,
+              session.id, options.repos, options.name, options.issueKey, agentsRules,
             );
             sessionRepo.updateWorktreeRoot(session.id, worktreeRoot);
             session.worktreeRoot = worktreeRoot;
