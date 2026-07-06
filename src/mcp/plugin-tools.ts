@@ -1,7 +1,7 @@
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
 
-const PR_REVIEW_AGENT_ID = 'project:pr-review';
+const PR_REVIEW_AGENT_ID = 'global:pr-review';
 
 export function registerPluginTools(server: McpServer, api: (path: string, options?: RequestInit) => Promise<any>) {
   server.tool(
