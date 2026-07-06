@@ -79,6 +79,10 @@ import { createGhAdapter } from '@infrastructure/github/gh-adapter.js';
 import { createPrMonitorPoller } from '@application/pr-monitor/poller.js';
 import { createPrMonitorRegistrar } from '@application/pr-monitor/registrar.js';
 import { createPrMonitorRouter } from './pr-monitor-routes.js';
+import { createPrReviewRepository } from '@infrastructure/persistence/pr-review-repository.js';
+import { createGhReviewAdapter } from '@infrastructure/github/gh-review-adapter.js';
+import { createPrReviewDiscoveryPoller } from '@application/pr-review/discovery-poller.js';
+import { createPrReviewRouter } from './pr-review-routes.js';
 import {
   detectAvailability,
   parseEditorChoice,
@@ -245,6 +249,18 @@ export function createApiRouter(deps: ApiRouterDeps = {}): Router {
   process.on('SIGINT', () => prPoller.stop());
   process.on('SIGTERM', () => prPoller.stop());
 
+  // PR Review dashboard — incoming review requests + agent findings.
+  const prReviews = createPrReviewRepository();
+  const ghReviewAdapter = createGhReviewAdapter();
+  const prReviewDiscovery = createPrReviewDiscoveryPoller({
+    reviews: prReviews,
+    gh: ghReviewAdapter,
+    broadcast: (type, trackId, payload) => broadcast(type, trackId, payload),
+  });
+  prReviewDiscovery.start();
+  process.on('SIGINT', () => prReviewDiscovery.stop());
+  process.on('SIGTERM', () => prReviewDiscovery.stop());
+
   // Mount todo sub-router
   const todoRouter = createTodoRouter({
     todos,
@@ -280,6 +296,22 @@ export function createApiRouter(deps: ApiRouterDeps = {}): Router {
     terminal,
   });
   router.use(prMonitorRouter);
+
+  // Mount PR-review dashboard sub-router
+  const prReviewRouter = createPrReviewRouter({
+    reviews: prReviews,
+    discovery: prReviewDiscovery,
+    gh: ghAdapter,
+    ghReview: ghReviewAdapter,
+    sessions,
+    tracks,
+    agents,
+    filesystemScanner,
+    settings: settingsRepo,
+    projectRoot,
+    terminal,
+  });
+  router.use(prReviewRouter);
 
   // Mount agent sub-router
   const agentRouter = createAgentRouter({ agents, filesystemScanner, projectRoot });

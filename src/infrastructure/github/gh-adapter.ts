@@ -10,6 +10,10 @@ export interface GhPrSnapshot {
   failingChecks: PrCheckSummary[];
   unresolvedComments: PrComment[];
   prTitle?: string;
+  /** PR author login — used by the PR review dashboard on manual add. */
+  prAuthor?: string;
+  /** PR description (markdown, clamped) — used by the PR review dashboard on manual add. */
+  prBody?: string;
   headRefName?: string;
   /** SHA of the PR head commit — used by the poller to detect fresh pushes. */
   headRefOid?: string;
@@ -43,6 +47,8 @@ export function parsePrUrl(url: string): { owner: string; repo: string; number: 
 const COMMENT_BODY_MAX = 1200;
 /** Maximum length of a check summary blob — kept short so the DB row stays small. */
 const CHECK_SUMMARY_MAX = 400;
+/** Maximum stored PR description length (PR review dashboard). */
+const PR_BODY_MAX_LENGTH = 5_000;
 
 function clampString(value: string | null | undefined, max: number): string | undefined {
   if (!value) return undefined;
@@ -95,6 +101,8 @@ interface GhPrJson {
   state?: string;
   isDraft?: boolean;
   title?: string;
+  body?: string;
+  author?: { login?: string };
   headRefName?: string;
   headRefOid?: string;
   mergedAt?: string | null;
@@ -235,6 +243,8 @@ export function snapshotFromGhJson(raw: GhPrJson): GhPrSnapshot {
     failingChecks: finished ? [] : checks.failing,
     unresolvedComments: finished ? [] : comments,
     prTitle: raw.title,
+    prAuthor: raw.author?.login,
+    prBody: clampString(raw.body, PR_BODY_MAX_LENGTH),
     headRefName: raw.headRefName,
     headRefOid: raw.headRefOid,
     isDraft: !!raw.isDraft,
@@ -250,6 +260,8 @@ const GH_PR_VIEW_FIELDS = [
   'state',
   'isDraft',
   'title',
+  'body',
+  'author',
   'headRefName',
   'headRefOid',
   'mergedAt',

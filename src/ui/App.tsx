@@ -11,6 +11,7 @@ import { WorkflowPage } from './workflow/WorkflowPage';
 import { EpicDetail } from './workflow/EpicDetail';
 import { DiscussionsPage } from './discussions/DiscussionsPage';
 import { NotificationsPage } from './notifications/NotificationsPage';
+import { PrReviewsPage } from './pr-reviews/PrReviewsPage';
 import { TopNav } from './TopNav';
 
 export function App() {
@@ -36,6 +37,7 @@ export function App() {
             <Route path="/workflow" element={<WorkflowPage />} />
             <Route path="/workflow/:id" element={<EpicDetail />} />
             <Route path="/notifications" element={<NotificationsPage />} />
+            <Route path="/pr-reviews" element={<PrReviewsPage />} />
           </Routes>
         </div>
       </div>
