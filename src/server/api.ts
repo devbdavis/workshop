@@ -16,6 +16,7 @@ import { createAgentRepository } from '@infrastructure/persistence/agent-reposit
 import { createTerminalManager } from '@infrastructure/terminal/manager.js';
 import { createGitAdapter } from '@infrastructure/git/git-adapter.js';
 import { createFilesystemAgentScanner } from '@infrastructure/agents/filesystem-scanner.js';
+import { ensureAutoInstallAgents } from '@infrastructure/agents/template-installer.js';
 import { createFilesystemSkillScanner } from '@infrastructure/skills/filesystem-scanner.js';
 import { createVaultReader } from '@infrastructure/vault/reader.js';
 import { createVaultWriter } from '@infrastructure/vault/writer.js';
@@ -119,6 +120,13 @@ export function createApiRouter(deps: ApiRouterDeps = {}): Router {
 
   // Ensure the default todo template exists and is assigned to all tracks
   ensureDefaultTodoTemplate();
+
+  // Install repo-committed agent templates flagged autoInstall into ~/.claude/agents
+  try {
+    ensureAutoInstallAgents(projectRoot);
+  } catch (err) {
+    console.warn('[agents] Auto-install of template agents failed:', err);
+  }
 
   // Sync session states on startup and periodically (every 30s).
   // Dead tmux sessions are removed from the DB (or suspended if resumable).

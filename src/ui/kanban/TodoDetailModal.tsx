@@ -224,7 +224,7 @@ export function TodoDetailModal({ todo, tracks, onClose, onSave, onDelete, onDis
                         {pr.title || pr.url}
                       </a>
                       <button
-                        onClick={() => onDispatch(todo!.id, { agentId: 'project:pr-review' }, {
+                        onClick={() => onDispatch(todo!.id, { agentId: 'global:pr-review' }, {
                           title, description: description || undefined, status, priority, refined,
                           pullRequests: pullRequests.length > 0 ? pullRequests : undefined,
                         })}
