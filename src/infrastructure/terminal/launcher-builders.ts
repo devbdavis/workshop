@@ -24,7 +24,11 @@ const WORKSHOP_API_URL = process.env.WORKSHOP_API_URL || `http://localhost:${pro
 export function writeHookSettings(
   sessionDir: string,
   sessionId: string,
-  options?: { executionTicketId?: string; mcpServers?: Record<string, unknown> },
+  options?: {
+    executionTicketId?: string;
+    mcpServers?: Record<string, unknown>;
+    enabledPlugins?: Record<string, boolean>;
+  },
 ): string {
   const settingsFile = path.join(sessionDir, 'settings.json');
   const hooks: Record<string, unknown[]> = {};
@@ -78,6 +82,12 @@ export function writeHookSettings(
   const settings: Record<string, unknown> = { hooks };
   if (options?.mcpServers) {
     settings.mcpServers = options.mcpServers;
+  }
+  // Per-session plugin enablement — --settings has higher precedence than
+  // user settings, so explicit false here disables a user-globally installed
+  // plugin (and its hooks) for this session only.
+  if (options?.enabledPlugins && Object.keys(options.enabledPlugins).length > 0) {
+    settings.enabledPlugins = options.enabledPlugins;
   }
   writeFileSync(settingsFile, JSON.stringify(settings, null, 2), 'utf-8');
   return settingsFile;
@@ -166,6 +176,7 @@ export function buildClaudeLauncher(
   const settingsFile = writeHookSettings(sessionDir, sessionId, {
     executionTicketId: options?.executionTicketId,
     mcpServers: options?.mcpServers,
+    enabledPlugins: options?.enabledPlugins,
   });
   claudeArgs.push('--settings', JSON.stringify(settingsFile));
 

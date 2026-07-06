@@ -743,6 +743,26 @@ function runMigrations(db: Database.Database): void {
       AND last_session_id IS NOT NULL;
   `);
 
+  // Migration: create plugins table — workshop-global registry of AI-CLI
+  // marketplace plugins (e.g. Claude Code plugins) ensured-installed at server
+  // startup and enabled per-session at launch time.
+  try {
+    db.exec(`
+      CREATE TABLE plugins (
+        id TEXT PRIMARY KEY,
+        marketplace_repo TEXT NOT NULL,
+        plugin_name TEXT NOT NULL UNIQUE,
+        description TEXT,
+        enabled INTEGER NOT NULL DEFAULT 1,
+        providers TEXT,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      );
+    `);
+  } catch {
+    // Table already exists — safe to ignore
+  }
+
   // Migration: add system_kind column to prompt_templates so we can recognise
   // app-managed templates (todo dispatch, PR build-fix, PR comment-response)
   // and ensure they always exist. User-created templates leave this NULL.
@@ -816,6 +836,17 @@ function runMigrations(db: Database.Database): void {
 
   // Seed default prompt templates if the table is empty
   seedDefaultTemplates(db);
+
+  // Seed default plugins (ponytail) if not present
+  seedDefaultPlugins(db);
+}
+
+function seedDefaultPlugins(db: Database.Database): void {
+  const now = new Date().toISOString();
+  db.prepare(
+    `INSERT OR IGNORE INTO plugins (id, marketplace_repo, plugin_name, description, enabled, created_at, updated_at)
+     VALUES (?, 'DietrichGebert/ponytail', 'ponytail@ponytail', 'Lazy senior dev discipline — YAGNI ladder + /ponytail-review over-engineering review', 1, ?, ?)`,
+  ).run(uuid(), now, now);
 }
 
 function seedDefaultTemplates(db: Database.Database): void {

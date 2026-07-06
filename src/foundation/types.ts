@@ -609,6 +609,43 @@ export interface McpInstallResult {
   message: string;
 }
 
+// Marketplace Plugin
+export type PluginId = string & { readonly __brand: 'PluginId' };
+
+/** Which AI CLIs a plugin's repo can reach, detected from repo contents at sync */
+export interface PluginProviders {
+  /** Repo ships .claude-plugin/ — installable via claude plugin CLI */
+  claude?: boolean;
+  /** Repo ships gemini-extension.json — installable via gemini extensions */
+  gemini?: boolean;
+  /** Repo ships AGENTS.md — rules injectable for Codex */
+  codex?: boolean;
+  /** Repo ships AGENTS.md — rules injectable for Cursor (worktree workspaces) */
+  cursor?: boolean;
+}
+
+export interface Plugin {
+  id: PluginId;
+  /** Marketplace GitHub repo, e.g. 'DietrichGebert/ponytail' */
+  marketplaceRepo: string;
+  /** Claude Code plugin identifier, e.g. 'ponytail@ponytail' */
+  pluginName: string;
+  description?: string;
+  enabled: boolean;
+  /** Detected provider coverage — undefined until first sync */
+  providers?: PluginProviders;
+  createdAt: string;
+  updatedAt: string;
+}
+
+/** Result of one provider-adapter step during plugin sync */
+export interface PluginSyncResult {
+  pluginName: string;
+  provider: 'clone' | 'claude' | 'gemini' | 'codex-rules';
+  success: boolean;
+  message: string;
+}
+
 // Skill
 export type SkillId = string & { readonly __brand: 'SkillId' };
 export type SkillSource = 'global' | 'project';

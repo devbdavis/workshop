@@ -1,6 +1,7 @@
 import { useParams, useNavigate } from 'react-router-dom';
 import { PromptTemplates } from './PromptTemplates';
 import { McpServers } from './McpServers';
+import { Plugins } from './Plugins';
 import { SoulEditor } from './SoulEditor';
 import { ThemeSelector } from './ThemeSelector';
 import { Repositories } from './Repositories';
@@ -12,13 +13,14 @@ import { AvailableClisSettings } from './AvailableClisSettings';
 import { BackupSettings } from './BackupSettings';
 import { LaunchAppsSettings } from './LaunchAppsSettings';
 
-type Tab = 'general' | 'repositories' | 'mcp' | 'templates' | 'agents' | 'skills' | 'issue-tracking';
+type Tab = 'general' | 'repositories' | 'mcp' | 'plugins' | 'templates' | 'agents' | 'skills' | 'issue-tracking';
 
 const TABS: { id: Tab; label: string }[] = [
   { id: 'general', label: 'General' },
   { id: 'agents', label: 'Agents' },
   { id: 'skills', label: 'Skills' },
   { id: 'mcp', label: 'MCP' },
+  { id: 'plugins', label: 'Plugins' },
   { id: 'templates', label: 'Templates' },
   { id: 'repositories', label: 'Repositories' },
   { id: 'issue-tracking', label: 'Issue Tracking' },
@@ -93,6 +95,14 @@ export function Settings() {
         <div className="space-y-6">
           <section className="bg-gray-900 border border-gray-800 rounded-lg p-6">
             <McpServers />
+          </section>
+        </div>
+      )}
+
+      {activeTab === 'plugins' && (
+        <div className="space-y-6">
+          <section className="bg-gray-900 border border-gray-800 rounded-lg p-6">
+            <Plugins />
           </section>
         </div>
       )}

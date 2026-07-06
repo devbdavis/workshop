@@ -28,6 +28,12 @@ export interface CreateSessionOptions {
   claudeResumeId?: string;
   /** Per-session MCP server configs to inject into the session's settings.json */
   mcpServers?: Record<string, unknown>;
+  /**
+   * Per-session Claude Code plugin enablement map (pluginName → enabled),
+   * written into the session's settings.json. Injected by the terminal
+   * manager from the plugin registry — callers should not set this.
+   */
+  enabledPlugins?: Record<string, boolean>;
   /** If true, pass --dangerously-skip-permissions to Claude so it runs without permission prompts. */
   dangerouslySkipPermissions?: boolean;
   /** If true, skip the automatic background agent instructions appended to the system prompt. */
