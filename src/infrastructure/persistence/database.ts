@@ -831,6 +831,61 @@ function runMigrations(db: Database.Database): void {
     // Column already exists — safe to ignore
   }
 
+  // Migration: PR Review Dashboard. pr_reviews holds incoming review requests
+  // (discovered by the review-request poller or added by URL); pr_review_findings
+  // holds the structured feedback the pr-review agent reports back. Distinct from
+  // pr_monitors, which tracks the user's own outgoing PRs per todo.
+  try {
+    db.exec(`
+      CREATE TABLE pr_reviews (
+        id TEXT PRIMARY KEY,
+        pr_url TEXT NOT NULL UNIQUE,
+        repo_owner TEXT NOT NULL,
+        repo_name TEXT NOT NULL,
+        pr_number INTEGER NOT NULL,
+        pr_title TEXT,
+        pr_author TEXT,
+        pr_branch TEXT,
+        head_sha TEXT,
+        state TEXT NOT NULL DEFAULT 'incoming',
+        discovered_via TEXT NOT NULL DEFAULT 'poll',
+        session_id TEXT,
+        draft_summary TEXT,
+        suggested_verdict TEXT,
+        submitted_at TEXT,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      );
+    `);
+    db.exec(`
+      CREATE TABLE pr_review_findings (
+        id TEXT PRIMARY KEY,
+        review_id TEXT NOT NULL REFERENCES pr_reviews(id) ON DELETE CASCADE,
+        file TEXT NOT NULL,
+        line INTEGER,
+        side TEXT NOT NULL DEFAULT 'RIGHT',
+        category TEXT,
+        summary TEXT NOT NULL,
+        failure_scenario TEXT,
+        suggested_comment TEXT NOT NULL,
+        code_context TEXT,
+        anchored INTEGER NOT NULL DEFAULT 0,
+        status TEXT NOT NULL DEFAULT 'open',
+        created_at TEXT NOT NULL
+      );
+    `);
+    db.exec(`CREATE INDEX idx_pr_review_findings_review ON pr_review_findings(review_id);`);
+  } catch {
+    // Tables already exist — safe to ignore
+  }
+
+  // Migration: PR description on pr_reviews (no-op when the table is fresh).
+  try {
+    db.exec(`ALTER TABLE pr_reviews ADD COLUMN pr_body TEXT;`);
+  } catch {
+    // Column already exists — safe to ignore
+  }
+
   // Seed default repo_root setting
   db.exec(`INSERT OR IGNORE INTO settings (key, value) VALUES ('repo_root', '~/repos');`);
 

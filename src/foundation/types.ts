@@ -667,3 +667,63 @@ export interface Skill {
   createdAt: string;
   updatedAt: string;
 }
+
+// PR Review Dashboard — incoming review requests + agent findings
+export type PrReviewId = string & { readonly __brand: 'PrReviewId' };
+export type PrReviewFindingId = string & { readonly __brand: 'PrReviewFindingId' };
+
+/** Lifecycle: discovered/added → agent dispatched → findings in → review posted. */
+export type PrReviewState = 'incoming' | 'analyzing' | 'ready' | 'submitted' | 'dismissed';
+export type PrReviewVerdict = 'approve' | 'request_changes' | 'comment';
+export type PrReviewDiscoveredVia = 'poll' | 'manual';
+
+/** A PR the user has been asked to review (or added by hand). */
+export interface PrReview {
+  id: PrReviewId;
+  /** Canonical PR URL (https://github.com/owner/repo/pull/N). Unique. */
+  prUrl: string;
+  repoOwner: string;
+  repoName: string;
+  prNumber: number;
+  prTitle?: string;
+  prAuthor?: string;
+  prBranch?: string;
+  /** PR description (markdown), clamped at fetch time. */
+  prBody?: string;
+  /** Head SHA at the time the agent reported findings — drives the "PR changed since analysis" warning. */
+  headSha?: string;
+  state: PrReviewState;
+  discoveredVia: PrReviewDiscoveredVia;
+  /** Background session running (or that ran) the analysis. */
+  sessionId?: SessionId;
+  /** Agent-drafted overall review comment, editable by the user before submit. */
+  draftSummary?: string;
+  suggestedVerdict?: PrReviewVerdict;
+  submittedAt?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export type PrReviewFindingStatus = 'open' | 'dismissed' | 'posted';
+
+/** One piece of agent feedback on a PR, GitHub-inline-comment shaped. */
+export interface PrReviewFinding {
+  id: PrReviewFindingId;
+  reviewId: PrReviewId;
+  /** Repo-relative file path. */
+  file: string;
+  /** Line in the PR head version of the file. */
+  line?: number;
+  side: 'LEFT' | 'RIGHT';
+  category?: string;
+  summary: string;
+  failureScenario?: string;
+  /** The text that becomes the inline GitHub comment if kept. */
+  suggestedComment: string;
+  /** Diff hunk excerpt around the line, extracted server-side at report time. */
+  codeContext?: string;
+  /** True when file+line lands on a diff line — eligible for a true inline comment. */
+  anchored: boolean;
+  status: PrReviewFindingStatus;
+  createdAt: string;
+}
