@@ -14,6 +14,7 @@ import { z } from 'zod';
 import { readFileSync } from 'fs';
 import path from 'path';
 import { registerTodoTools } from './todo-tools.js';
+import { registerPluginTools } from './plugin-tools.js';
 import { registerVaultTools } from './vault-tools.js';
 import { registerScheduledTaskTools } from './scheduled-task-tools.js';
 import { registerWorkflowTools } from './workflow-tools.js';
@@ -404,6 +405,10 @@ server.tool(
 // --- Todo Tools ---
 
 registerTodoTools(server, api);
+
+// --- Marketplace Plugin Tools ---
+
+registerPluginTools(server, api);
 
 // --- Vault Tools ---
 
