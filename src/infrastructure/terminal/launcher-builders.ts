@@ -150,6 +150,10 @@ export function buildClaudeLauncher(
     claudeArgs.push('--resume', options.claudeResumeId);
   }
 
+  if (options?.model) {
+    claudeArgs.push('--model', JSON.stringify(options.model));
+  }
+
   if (options?.systemPrompt && !options?.claudeResumeId) {
     let prompt = options.systemPrompt;
     if (options.background && !options.skipBackgroundInstructions) {
