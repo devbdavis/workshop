@@ -10,6 +10,8 @@ export interface GhPrSnapshot {
   failingChecks: PrCheckSummary[];
   unresolvedComments: PrComment[];
   prTitle?: string;
+  /** PR author login — used by the PR review dashboard on manual add. */
+  prAuthor?: string;
   headRefName?: string;
   /** SHA of the PR head commit — used by the poller to detect fresh pushes. */
   headRefOid?: string;
@@ -95,6 +97,7 @@ interface GhPrJson {
   state?: string;
   isDraft?: boolean;
   title?: string;
+  author?: { login?: string };
   headRefName?: string;
   headRefOid?: string;
   mergedAt?: string | null;
@@ -235,6 +238,7 @@ export function snapshotFromGhJson(raw: GhPrJson): GhPrSnapshot {
     failingChecks: finished ? [] : checks.failing,
     unresolvedComments: finished ? [] : comments,
     prTitle: raw.title,
+    prAuthor: raw.author?.login,
     headRefName: raw.headRefName,
     headRefOid: raw.headRefOid,
     isDraft: !!raw.isDraft,
@@ -250,6 +254,7 @@ const GH_PR_VIEW_FIELDS = [
   'state',
   'isDraft',
   'title',
+  'author',
   'headRefName',
   'headRefOid',
   'mergedAt',
