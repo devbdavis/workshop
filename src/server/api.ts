@@ -59,6 +59,9 @@ import { createMatrixRouter } from '@application/matrix-router/router.js';
 import { createDiscussionRouter } from './discussion-routes.js';
 import { createMcpServerConfigRepository } from '@infrastructure/persistence/mcp-config-repository.js';
 import { createMcpConfigRouter } from './mcp-config-routes.js';
+import { createPluginRouter } from './plugin-routes.js';
+import { createPluginRepository } from '@infrastructure/persistence/plugin-repository.js';
+import { ensureRegisteredPluginsInstalled } from '@infrastructure/plugins/ensure-installed.js';
 import { createGlobalRepoRepository, createSettingsRepository } from '@infrastructure/persistence/repo-repository.js';
 import { createRepoRouter } from './repo-routes.js';
 import { createBackupRouter } from './backup-routes.js';
@@ -98,7 +101,21 @@ export function createApiRouter(deps: ApiRouterDeps = {}): Router {
   const filesystemScanner = createFilesystemAgentScanner();
   const projectRoot = process.cwd();
   const soulLoader = createSoulLoader(projectRoot);
-  const terminal = createTerminalManager(sessions, soulLoader, todos);
+  const plugins = createPluginRepository();
+  const terminal = createTerminalManager(sessions, soulLoader, todos, plugins);
+
+  // Ensure registered marketplace plugins are installed across AI CLIs.
+  // Fire-and-forget — network/git work must never block server boot.
+  ensureRegisteredPluginsInstalled(plugins)
+    .then((results) => {
+      const failures = results.filter((r) => !r.success);
+      if (failures.length > 0) {
+        console.warn('[plugins] Startup sync completed with failures:', failures.map((f) => `${f.provider}:${f.pluginName} — ${f.message}`).join('; '));
+      } else {
+        console.log(`[plugins] Startup sync complete (${results.length} step(s))`);
+      }
+    })
+    .catch((err) => console.error('[plugins] Startup sync failed:', err));
 
   // Ensure the default todo template exists and is assigned to all tracks
   ensureDefaultTodoTemplate();
@@ -467,6 +484,10 @@ export function createApiRouter(deps: ApiRouterDeps = {}): Router {
     ignores: ticketImportIgnores,
   });
   router.use(ticketImportRouter);
+
+  // Mount marketplace plugin sub-router
+  const pluginRouter = createPluginRouter({ plugins });
+  router.use(pluginRouter);
 
   // Mount MCP config sub-router
   const mcpConfigs = createMcpServerConfigRepository();
