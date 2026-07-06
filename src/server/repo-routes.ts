@@ -27,12 +27,24 @@ import {
   stopAuthTerminal,
 } from '@infrastructure/terminal/auth-terminal.js';
 
+/** Every agent CLI whose binary is present on this host. */
+function installedAgents(): SessionProvider[] {
+  return CLI_REGISTRY
+    .filter((c) => c.kind === 'agent' && hasCli(c.binary))
+    .map((c) => c.provider as SessionProvider);
+}
+
 /**
  * Read the stored list of enabled agents. Stored as a comma-joined string
- * under `available_clis`; filtered to valid agent ids; defaults when unset.
+ * under `available_clis`; filtered to valid agent ids. When the user has
+ * never customised the list, every *installed* agent CLI is enabled — an
+ * explicit Settings → Available CLIs save takes over from there.
  */
 function parseAvailableAgents(raw: string | null): SessionProvider[] {
-  if (!raw) return [...DEFAULT_AVAILABLE_AGENTS];
+  if (!raw) {
+    const installed = installedAgents();
+    return installed.length > 0 ? installed : [...DEFAULT_AVAILABLE_AGENTS];
+  }
   const ids = raw
     .split(',')
     .map((s) => s.trim())
