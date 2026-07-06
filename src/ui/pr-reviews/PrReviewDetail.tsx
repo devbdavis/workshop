@@ -161,6 +161,18 @@ export function PrReviewDetail({ reviewId, refreshKey, onChanged }: Props) {
               Restore
             </button>
           )}
+          <button
+            onClick={() => {
+              if (window.confirm('Remove this PR from the dashboard? Discovery will not re-add it (pasting the URL brings it back).')) {
+                void call('remove', `/api/pr-reviews/${review.id}`, { method: 'DELETE' });
+              }
+            }}
+            disabled={busy !== null}
+            className="ml-auto px-3 py-1 text-xs font-medium rounded text-red-400/70 hover:text-red-300 hover:bg-red-900/20 disabled:opacity-50"
+            title="Remove from the list entirely and block re-discovery"
+          >
+            Remove
+          </button>
         </div>
       </header>
 

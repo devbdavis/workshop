@@ -56,7 +56,7 @@ interface PrReviewFindingRow {
   created_at: string;
 }
 
-const VALID_STATES: ReadonlySet<PrReviewState> = new Set(['incoming', 'analyzing', 'ready', 'submitted', 'dismissed']);
+const VALID_STATES: ReadonlySet<PrReviewState> = new Set(['incoming', 'analyzing', 'ready', 'submitted', 'dismissed', 'removed']);
 const VALID_VERDICTS: ReadonlySet<PrReviewVerdict> = new Set(['approve', 'request_changes', 'comment']);
 const VALID_FINDING_STATUSES: ReadonlySet<PrReviewFindingStatus> = new Set(['open', 'dismissed', 'posted']);
 

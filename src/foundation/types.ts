@@ -672,8 +672,10 @@ export interface Skill {
 export type PrReviewId = string & { readonly __brand: 'PrReviewId' };
 export type PrReviewFindingId = string & { readonly __brand: 'PrReviewFindingId' };
 
-/** Lifecycle: discovered/added → agent dispatched → findings in → review posted. */
-export type PrReviewState = 'incoming' | 'analyzing' | 'ready' | 'submitted' | 'dismissed';
+/** Lifecycle: discovered/added → agent dispatched → findings in → review posted.
+ *  `removed` rows are hidden everywhere and block re-discovery (the poller's
+ *  upsert-by-URL finds them and leaves them alone). */
+export type PrReviewState = 'incoming' | 'analyzing' | 'ready' | 'submitted' | 'dismissed' | 'removed';
 export type PrReviewVerdict = 'approve' | 'request_changes' | 'comment';
 export type PrReviewDiscoveredVia = 'poll' | 'manual';
 
