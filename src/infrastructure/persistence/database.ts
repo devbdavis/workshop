@@ -993,12 +993,6 @@ const DEFAULT_TODO_TEMPLATE_CONTENT = `## Repositories
 
 ---
 
-## Workflow
-
-Work this task using the orchestrate skill: invoke the Skill tool with skill "orchestrate" before doing anything else. It walks the standard flow — plan, execute via cheaper subagents, self-review, then offer a PR.
-
----
-
 ## Background Agent Instructions
 
 You are running as a background agent dispatched from Workshop.
@@ -1025,8 +1019,9 @@ export function ensureDefaultTodoTemplate(): void {
   if (existing) {
     templateId = existing.id;
     // Replace old soul-based content, templates that still include the /exit
-    // instruction, or templates predating the orchestrate workflow section.
-    if (existing.content.includes('Workshop Agent Soul') || existing.content.includes('You are Jeeves') || existing.content.includes('Use /exit to close your session') || !existing.content.includes('orchestrate')) {
+    // instruction, or templates referencing the retired orchestrate skill
+    // (the flow now lives in the Orchestrator agent's prompt).
+    if (existing.content.includes('Workshop Agent Soul') || existing.content.includes('You are Jeeves') || existing.content.includes('Use /exit to close your session') || existing.content.includes('skill "orchestrate"')) {
       db.prepare(`UPDATE prompt_templates SET content = ?, updated_at = ? WHERE id = ?`).run(
         DEFAULT_TODO_TEMPLATE_CONTENT, new Date().toISOString(), templateId,
       );

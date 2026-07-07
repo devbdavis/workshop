@@ -21,26 +21,28 @@ afterAll(() => {
 });
 
 describe('ensureDefaultTodoTemplate', () => {
-  it('seeds a default template containing the orchestrate workflow section', () => {
+  it('seeds a default template with the task and background instructions', () => {
     ensureDefaultTodoTemplate();
     const row = getDatabase()
       .prepare(`SELECT content FROM prompt_templates WHERE is_default = 1`)
       .get() as { content: string };
-    expect(row.content).toContain('orchestrate');
-    expect(row.content).toContain('## Workflow');
     expect(row.content).toContain('{{todo.id}}');
+    expect(row.content).toContain('## Task');
+    // The orchestrator flow lives in the agent prompt, not the template
+    expect(row.content).not.toContain('orchestrate');
   });
 
-  it('upgrades an existing default row that predates the workflow section', () => {
+  it('replaces a default row still referencing the retired orchestrate skill', () => {
     const db = getDatabase();
     db.prepare(`UPDATE prompt_templates SET content = ? WHERE is_default = 1`).run(
-      '## Task\n\n**{{todo.title}}**\n\n{{todo.description}}',
+      '## Workflow\n\ninvoke the Skill tool with skill "orchestrate"\n\n## Task\n\n**{{todo.title}}**',
     );
     ensureDefaultTodoTemplate();
     const row = db
       .prepare(`SELECT content FROM prompt_templates WHERE is_default = 1`)
       .get() as { content: string };
-    expect(row.content).toContain('## Workflow');
+    expect(row.content).not.toContain('orchestrate');
+    expect(row.content).toContain('{{todo.id}}');
   });
 
   it('leaves an up-to-date default row untouched', () => {
