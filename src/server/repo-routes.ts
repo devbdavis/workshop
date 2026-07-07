@@ -252,6 +252,23 @@ export function createRepoRouter(deps: RepoRouterDeps): Router {
     res.json({ provider });
   });
 
+  // Which model dispatched (orchestrator) sessions run on. Applies to claude
+  // sessions via `--model`; other providers ignore it. Unset defaults to
+  // "opus"; an explicit empty string disables the flag entirely.
+  router.get('/settings/dispatch-model', (_req, res) => {
+    res.json({ model: settings.get('dispatch_model') ?? 'opus' });
+  });
+
+  router.put('/settings/dispatch-model', (req, res) => {
+    const { model } = req.body as { model: unknown };
+    if (typeof model !== 'string') {
+      res.status(400).json({ error: 'model must be a string' });
+      return;
+    }
+    settings.set('dispatch_model', model.trim());
+    res.json({ model: model.trim() });
+  });
+
   // --- CLI availability + auth ---
   //
   // Reports every registered AI CLI / tool, whether its binary is installed on

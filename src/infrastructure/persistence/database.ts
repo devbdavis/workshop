@@ -1018,8 +1018,10 @@ export function ensureDefaultTodoTemplate(): void {
 
   if (existing) {
     templateId = existing.id;
-    // Replace old soul-based content or templates that still include the /exit instruction
-    if (existing.content.includes('Workshop Agent Soul') || existing.content.includes('You are Jeeves') || existing.content.includes('Use /exit to close your session')) {
+    // Replace old soul-based content, templates that still include the /exit
+    // instruction, or templates referencing the retired orchestrate skill
+    // (the flow now lives in the Orchestrator agent's prompt).
+    if (existing.content.includes('Workshop Agent Soul') || existing.content.includes('You are Jeeves') || existing.content.includes('Use /exit to close your session') || existing.content.includes('skill "orchestrate"')) {
       db.prepare(`UPDATE prompt_templates SET content = ?, updated_at = ? WHERE id = ?`).run(
         DEFAULT_TODO_TEMPLATE_CONTENT, new Date().toISOString(), templateId,
       );

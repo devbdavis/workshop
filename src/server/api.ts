@@ -649,7 +649,13 @@ export function createApiRouter(deps: ApiRouterDeps = {}): Router {
       res.status(400).json({ error: 'name is required' });
       return;
     }
-    const track = tracks.create({ name, description, status: 'active' });
+    // New tracks default to the Orchestrator agent (auto-installed from
+    // templates/agents/orchestrator.md) so dispatched todos follow the
+    // standard plan → execute → self-review → PR flow out of the box.
+    const orchestratorId = 'global:orchestrator' as AgentId;
+    const defaultAgentId = filesystemScanner.findById(orchestratorId, projectRoot) ? orchestratorId : undefined;
+
+    const track = tracks.create({ name, description, status: 'active', defaultAgentId });
 
     // Auto-assign the default todo template to newly created tracks
     const defaultTemplate = promptTemplates.findDefault();
@@ -952,6 +958,13 @@ export function createApiRouter(deps: ApiRouterDeps = {}): Router {
         settingsRepo.get('default_ai_cli'),
       );
 
+      // Task-bearing sessions (linked todo or an initial prompt) are
+      // orchestrators — run them on the configured dispatch model (default
+      // opus). Plain interactive terminals keep the CLI's own default.
+      const model: string | undefined = todo || initialPrompt
+        ? (settingsRepo.get('dispatch_model') ?? 'opus').trim() || undefined
+        : undefined;
+
       // worktreeMode: explicit request body takes precedence, then track-level default
       const requestWorktreeMode = req.body?.worktreeMode;
       const worktreeMode = typeof requestWorktreeMode === 'boolean'
@@ -964,6 +977,7 @@ export function createApiRouter(deps: ApiRouterDeps = {}): Router {
       const session = await terminal.createSession(trackId, {
         systemPrompt,
         provider,
+        model,
         initialPrompt,
         todoId: todo?.id,
         name: typeof req.body?.name === 'string' && req.body.name.trim() ? req.body.name.trim() : todo?.title,
