@@ -31,7 +31,7 @@ export interface TodoRouterDeps {
   terminal: {
     createSession: (
       trackId: TrackId,
-      opts?: { systemPrompt?: string; workingDirectory?: string; background?: boolean; todoId?: string; initialPrompt?: string; provider?: SessionProvider; name?: string; worktreeMode?: boolean; repos?: TrackRepo[]; issueKey?: string; dangerouslySkipPermissions?: boolean; skipBackgroundInstructions?: boolean; onReady?: (session: { id: SessionId }) => void },
+      opts?: { systemPrompt?: string; workingDirectory?: string; background?: boolean; todoId?: string; initialPrompt?: string; provider?: SessionProvider; model?: string; name?: string; worktreeMode?: boolean; repos?: TrackRepo[]; issueKey?: string; dangerouslySkipPermissions?: boolean; skipBackgroundInstructions?: boolean; onReady?: (session: { id: SessionId }) => void },
     ) => Promise<{ id: SessionId; trackId: TrackId; tmuxSession: string; state: string }>;
     destroySession: (sessionId: SessionId) => Promise<void>;
     softDeleteSession: (sessionId: SessionId) => Promise<void>;
@@ -254,6 +254,10 @@ export function createTodoRouter(deps: TodoRouterDeps): Router {
       );
       const dangerouslySkipPermissions: boolean = req.body?.dangerouslySkipPermissions === true;
 
+      // Dispatched sessions are orchestrators — run them on the configured
+      // model (default opus). Empty setting disables the --model flag.
+      const model: string | undefined = (settings.get('dispatch_model') ?? 'opus').trim() || undefined;
+
       // Compose system prompt: agent + track context + summary + template + repos + todo task
       const parts: string[] = [];
       const repos = tracks.findReposByTrack(todo.trackId);
@@ -358,6 +362,7 @@ export function createTodoRouter(deps: TodoRouterDeps): Router {
         todoId: todo.id,
         initialPrompt: taskPrompt,
         provider,
+        model,
         name: todo.title,
         worktreeMode: track.worktreeMode && repos.length > 0,
         repos: track.worktreeMode ? repos : undefined,
