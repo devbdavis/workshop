@@ -1,6 +1,7 @@
 ---
 name: Senior Node Engineer
 description: A senior Node.js/TypeScript engineer that enforces best practices, strict typing, and thoughtful dependency management.
+model: sonnet
 color: steelblue
 tools: Read, Edit, Write, Bash, Glob, Grep, WebSearch, WebFetch
 ---

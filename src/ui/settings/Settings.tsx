@@ -9,6 +9,7 @@ import { AgentsSettings } from './AgentsSettings';
 import { SkillsSettings } from './SkillsSettings';
 import { IssueTracking } from './IssueTracking';
 import { DefaultAiCliSettings } from './DefaultAiCliSettings';
+import { DispatchModelSettings } from './DispatchModelSettings';
 import { PrReviewSettings } from './PrReviewSettings';
 import { AvailableClisSettings } from './AvailableClisSettings';
 import { BackupSettings } from './BackupSettings';
@@ -64,6 +65,10 @@ export function Settings() {
 
           <section className="bg-gray-900 border border-gray-800 rounded-lg p-6">
             <DefaultAiCliSettings />
+          </section>
+
+          <section className="bg-gray-900 border border-gray-800 rounded-lg p-6">
+            <DispatchModelSettings />
           </section>
 
           <section className="bg-gray-900 border border-gray-800 rounded-lg p-6">

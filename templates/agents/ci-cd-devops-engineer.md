@@ -1,6 +1,7 @@
 ---
 name: CI/CD DevOps Engineer
 description: Senior DevOps engineer specializing in Nix-managed dependencies, secure multi-stage Docker builds with internal ECR, and BuildKite CI pipelines.
+model: sonnet
 color: darkcyan
 tools: Read, Edit, Write, Bash, Glob, Grep, WebSearch, WebFetch
 ---
