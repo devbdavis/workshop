@@ -52,6 +52,38 @@ function parseAvailableAgents(raw: string | null): SessionProvider[] {
   return ids.length > 0 ? ids : [...DEFAULT_AVAILABLE_AGENTS];
 }
 
+/**
+ * Author-login substrings hidden from the PR-monitor (outgoing PRs) comment
+ * feed by default. Bots (and only bots, hopefully) match these; humans,
+ * CodeRabbit, and Cursor/bugbot don't.
+ */
+export const DEFAULT_PR_MONITOR_IGNORED_AUTHORS: readonly string[] = [
+  'trunk-io',
+  'spacelift',
+  'spacelift',
+  'wiz-inc',
+  'linear-code',
+];
+
+/**
+ * Read the stored ignored-comment-authors list. Stored as a JSON array string
+ * under `pr_monitor_ignored_authors`; falls back to the default list when
+ * unset or malformed. Shared by the settings route and the gh-adapter getter
+ * so both agree on the same default.
+ */
+export function parsePrMonitorIgnoredAuthors(raw: string | null): string[] {
+  if (!raw) return [...DEFAULT_PR_MONITOR_IGNORED_AUTHORS];
+  try {
+    const parsed: unknown = JSON.parse(raw);
+    if (Array.isArray(parsed) && parsed.every((entry): entry is string => typeof entry === 'string')) {
+      return parsed;
+    }
+  } catch {
+    // fall through to default
+  }
+  return [...DEFAULT_PR_MONITOR_IGNORED_AUTHORS];
+}
+
 /** Build the GET/PUT /settings/clis response payload. */
 function buildClisPayload(available: SessionProvider[]) {
   const enabledSet = new Set<string>(available);
@@ -267,6 +299,24 @@ export function createRepoRouter(deps: RepoRouterDeps): Router {
     }
     settings.set('dispatch_model', model.trim());
     res.json({ model: model.trim() });
+  });
+
+  // Author-login substrings hidden from the PR-monitor (outgoing PRs) comment
+  // feed. Case-insensitive substring match; see parsePrMonitorIgnoredAuthors
+  // for the default list and storage format.
+  router.get('/settings/pr-monitor-ignored-authors', (_req, res) => {
+    res.json({ authors: parsePrMonitorIgnoredAuthors(settings.get('pr_monitor_ignored_authors')) });
+  });
+
+  router.put('/settings/pr-monitor-ignored-authors', (req, res) => {
+    const { authors } = req.body as { authors: unknown };
+    if (!Array.isArray(authors) || !authors.every((a) => typeof a === 'string')) {
+      res.status(400).json({ error: 'authors must be an array of strings' });
+      return;
+    }
+    const cleaned = authors.map((a) => a.trim()).filter((a) => a.length > 0);
+    settings.set('pr_monitor_ignored_authors', JSON.stringify(cleaned));
+    res.json({ authors: cleaned });
   });
 
   // --- CLI availability + auth ---

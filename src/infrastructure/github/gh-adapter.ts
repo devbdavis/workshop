@@ -178,20 +178,34 @@ function deriveCheckStatus(rollup: GhCheckRollupNode[] | undefined): { status: P
 }
 
 /**
+ * `gh pr view --json comments,reviews` reports every comment author as a bare
+ * `{ login }` with no bot flag — bots (trunk-io, spacelift, etc.)
+ * are indistinguishable from humans except by login string. Filtering is
+ * therefore a case-insensitive substring match against the caller-supplied
+ * ignore list rather than any bot-detection heuristic.
+ */
+function isIgnoredAuthor(login: string, ignoredAuthors: readonly string[]): boolean {
+  const lowerLogin = login.toLowerCase();
+  return ignoredAuthors.some((substr) => substr.length > 0 && lowerLogin.includes(substr.toLowerCase()));
+}
+
+/**
  * Reviews and review-thread comments come back as one stream per review. The
  * resolution flag tells us whether a thread is still open. PR-level comments
  * (issue comments) don't have a resolution concept — we surface all of them
  * that arrived after the last polled-at timestamp; for the first poll we include
  * all of them. The caller distinguishes which to act on via the `kind` field.
  */
-function deriveComments(raw: GhPrJson): PrComment[] {
+function deriveComments(raw: GhPrJson, ignoredAuthors: readonly string[]): PrComment[] {
   const out: PrComment[] = [];
 
   for (const c of raw.comments ?? []) {
     if (!c.id) continue;
+    const author = c.author?.login ?? 'unknown';
+    if (isIgnoredAuthor(author, ignoredAuthors)) continue;
     out.push({
       id: c.id,
-      author: c.author?.login ?? 'unknown',
+      author,
       body: clampString(c.body, COMMENT_BODY_MAX) ?? '',
       createdAt: c.createdAt ?? new Date().toISOString(),
       url: c.url,
@@ -200,13 +214,20 @@ function deriveComments(raw: GhPrJson): PrComment[] {
   }
 
   for (const review of raw.reviews ?? []) {
+    const reviewAuthor = review.author?.login ?? 'unknown';
     // Top-level review body (the "Changes requested" summary). Only surface it
     // if the review carries no inline thread comments — otherwise it's noise.
     const hasInline = (review.comments ?? []).length > 0;
-    if (!hasInline && review.body && review.body.trim().length > 0 && review.state !== 'APPROVED') {
+    if (
+      !hasInline &&
+      review.body &&
+      review.body.trim().length > 0 &&
+      review.state !== 'APPROVED' &&
+      !isIgnoredAuthor(reviewAuthor, ignoredAuthors)
+    ) {
       out.push({
-        id: review.id ?? `${review.author?.login ?? 'unknown'}-${review.createdAt ?? ''}`,
-        author: review.author?.login ?? 'unknown',
+        id: review.id ?? `${reviewAuthor}-${review.createdAt ?? ''}`,
+        author: reviewAuthor,
         body: clampString(review.body, COMMENT_BODY_MAX) ?? '',
         createdAt: review.createdAt ?? new Date().toISOString(),
         url: review.url,
@@ -216,9 +237,11 @@ function deriveComments(raw: GhPrJson): PrComment[] {
     for (const rc of review.comments ?? []) {
       if (rc.isResolved) continue;
       if (!rc.id) continue;
+      const rcAuthor = rc.author?.login ?? 'unknown';
+      if (isIgnoredAuthor(rcAuthor, ignoredAuthors)) continue;
       out.push({
         id: rc.id,
-        author: rc.author?.login ?? 'unknown',
+        author: rcAuthor,
         body: clampString(rc.body, COMMENT_BODY_MAX) ?? '',
         createdAt: rc.createdAt ?? new Date().toISOString(),
         url: rc.url,
@@ -232,10 +255,10 @@ function deriveComments(raw: GhPrJson): PrComment[] {
   return out;
 }
 
-export function snapshotFromGhJson(raw: GhPrJson): GhPrSnapshot {
+export function snapshotFromGhJson(raw: GhPrJson, ignoredCommentAuthors: readonly string[] = []): GhPrSnapshot {
   const state = deriveState(raw);
   const checks = deriveCheckStatus(raw.statusCheckRollup);
-  const comments = deriveComments(raw);
+  const comments = deriveComments(raw, ignoredCommentAuthors);
   const finished = state === 'merged' || state === 'closed';
   return {
     state,
@@ -278,11 +301,17 @@ export interface CreateGhAdapterOptions {
   exec?: (binary: string, args: string[]) => Promise<{ stdout: string; stderr: string }>;
   /** Override for tests — defaults to 30s per call. */
   timeoutMs?: number;
+  /**
+   * Read live (not cached) on every fetch so a settings change takes effect
+   * on the next poll without a server restart. Defaults to no filtering.
+   */
+  getIgnoredCommentAuthors?: () => string[];
 }
 
 export function createGhAdapter(opts: CreateGhAdapterOptions = {}): GhAdapter {
   const ghBinary = opts.ghBinary ?? 'gh';
   const timeoutMs = opts.timeoutMs ?? 30_000;
+  const getIgnoredCommentAuthors = opts.getIgnoredCommentAuthors ?? (() => []);
   const exec =
     opts.exec ??
     ((binary: string, args: string[]) =>
@@ -301,7 +330,7 @@ export function createGhAdapter(opts: CreateGhAdapterOptions = {}): GhAdapter {
       } catch (err) {
         throw new Error(`gh pr view returned unparseable JSON for ${prUrl}: ${(err as Error).message}`);
       }
-      return snapshotFromGhJson(raw);
+      return snapshotFromGhJson(raw, getIgnoredCommentAuthors());
     },
   };
 }

@@ -137,6 +137,42 @@ describe('snapshotFromGhJson', () => {
     expect(review.line).toBe(12);
   });
 
+  it('filters comments whose author login matches an ignored substring (case-insensitive)', () => {
+    const snap = snapshotFromGhJson(
+      {
+        state: 'OPEN',
+        comments: [
+          { id: 'i1', author: { login: 'trunk-io' }, body: 'merged', createdAt: '2026-05-01' },
+          { id: 'i2', author: { login: 'spacelift' }, body: 'coverage', createdAt: '2026-05-01' },
+          { id: 'i3', author: { login: 'coderabbitai' }, body: 'suggestion', createdAt: '2026-05-01' },
+          { id: 'i4', author: { login: 'a-human' }, body: 'please fix', createdAt: '2026-05-01' },
+        ],
+        reviews: [
+          {
+            id: 'r1',
+            author: { login: 'wiz-inc-abc123' },
+            state: 'CHANGES_REQUESTED',
+            comments: [
+              { id: 'rc1', author: { login: 'wiz-inc-abc123' }, body: 'scan', createdAt: '2026-05-01', isResolved: false },
+              { id: 'rc2', author: { login: 'cursor' }, body: 'bug', createdAt: '2026-05-01', isResolved: false },
+            ],
+          },
+        ],
+      },
+      ['trunk-io', 'spacelift', 'wiz-inc'],
+    );
+    // Ignored bots dropped; humans + unlisted bots (coderabbitai, cursor) kept.
+    expect(snap.unresolvedComments.map((c) => c.id).sort()).toEqual(['i3', 'i4', 'rc2']);
+  });
+
+  it('keeps every comment when the ignore list is empty (default)', () => {
+    const snap = snapshotFromGhJson({
+      state: 'OPEN',
+      comments: [{ id: 'i1', author: { login: 'trunk-io' }, body: 'merged', createdAt: '2026-05-01' }],
+    });
+    expect(snap.unresolvedComments.map((c) => c.id)).toEqual(['i1']);
+  });
+
   it('skips empty review bodies and approved reviews', () => {
     const snap = snapshotFromGhJson({
       state: 'OPEN',

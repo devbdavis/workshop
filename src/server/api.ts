@@ -64,7 +64,7 @@ import { createPluginRouter } from './plugin-routes.js';
 import { createPluginRepository } from '@infrastructure/persistence/plugin-repository.js';
 import { ensureRegisteredPluginsInstalled } from '@infrastructure/plugins/ensure-installed.js';
 import { createGlobalRepoRepository, createSettingsRepository } from '@infrastructure/persistence/repo-repository.js';
-import { createRepoRouter } from './repo-routes.js';
+import { createRepoRouter, parsePrMonitorIgnoredAuthors } from './repo-routes.js';
 import { createBackupRouter } from './backup-routes.js';
 import { createBackupScheduler } from '@application/backup/backup-scheduler.js';
 import { createTicketImportIgnoreRepository } from '@infrastructure/persistence/ticket-import-ignore-repository.js';
@@ -238,7 +238,9 @@ export function createApiRouter(deps: ApiRouterDeps = {}): Router {
   // PR monitor infrastructure — wired before the todo router so todo updates
   // can reconcile monitors as part of their normal flow.
   const prMonitors = createPrMonitorRepository();
-  const ghAdapter = createGhAdapter();
+  const ghAdapter = createGhAdapter({
+    getIgnoredCommentAuthors: () => parsePrMonitorIgnoredAuthors(settingsRepo.get('pr_monitor_ignored_authors')),
+  });
   const prRegistrar = createPrMonitorRegistrar(prMonitors);
   const prPoller = createPrMonitorPoller({
     monitors: prMonitors,

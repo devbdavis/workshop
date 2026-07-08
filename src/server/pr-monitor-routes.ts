@@ -68,6 +68,11 @@ interface DispatchBody {
   commentIds?: string[];
 }
 
+interface DismissCommentsBody {
+  prUrl?: string;
+  commentIds?: string[];
+}
+
 function pickMonitorForDispatch(monitors: PrMonitor[], requestedUrl?: string): PrMonitor | null {
   if (monitors.length === 0) return null;
   if (requestedUrl) {
@@ -266,6 +271,50 @@ export function createPrMonitorRouter(deps: PrMonitorRouterDeps): Router {
     } catch (err) {
       console.error('Failed to dispatch PR comment response:', err);
       res.status(500).json({ error: err instanceof Error ? err.message : 'Failed to dispatch comment response' });
+    }
+  });
+
+  router.post('/todos/:todoId/pr-actions/dismiss-comments', (req, res) => {
+    try {
+      const todo = todos.findById(req.params.todoId as TodoId);
+      if (!todo) {
+        res.status(404).json({ error: 'Todo not found' });
+        return;
+      }
+      const body = (req.body ?? {}) as DismissCommentsBody;
+      if (typeof body.prUrl !== 'string' || body.prUrl.trim().length === 0) {
+        res.status(400).json({ error: 'prUrl is required' });
+        return;
+      }
+      if (!Array.isArray(body.commentIds) || body.commentIds.length === 0 ||
+          !body.commentIds.every((id) => typeof id === 'string' && id.length > 0)) {
+        res.status(400).json({ error: 'commentIds must be a non-empty array of strings' });
+        return;
+      }
+      // Scope the monitor to this todo (mirrors dispatch-comments) so a mismatched
+      // todoId/prUrl pair can't dismiss comments on an unrelated PR.
+      const target = pickMonitorForDispatch(monitors.findByTodo(todo.id), body.prUrl);
+      if (!target) {
+        res.status(404).json({ error: 'No PR monitor available for this todo' });
+        return;
+      }
+      const monitor = monitors.dismissComments(target.prUrl, body.commentIds);
+      if (!monitor) {
+        res.status(404).json({ error: 'No PR monitor registered for that PR URL' });
+        return;
+      }
+      broadcast('pr:updated', monitor.trackId, {
+        todoId: monitor.todoId,
+        prUrl: monitor.prUrl,
+        state: monitor.state,
+        checkStatus: monitor.checkStatus,
+        monitoring: monitor.monitoring,
+        pauseReason: monitor.pauseReason,
+      });
+      res.json({ monitor });
+    } catch (err) {
+      console.error('Failed to dismiss PR comments:', err);
+      res.status(500).json({ error: err instanceof Error ? err.message : 'Failed to dismiss comments' });
     }
   });
 

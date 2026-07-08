@@ -54,4 +54,12 @@ export interface PrMonitorRepository {
   resumeMonitoring(prUrl: string): PrMonitor | null;
   /** Records the result of a poll attempt and bumps `lastPolledAt`. */
   applyPoll(prUrl: string, update: PrMonitorPollUpdate): PrMonitor | null;
+  /** Marks comments as dismissed (persisted so they don't reappear on the next poll)
+   *  and immediately strips them from `unresolvedComments`. Returns null if unknown. */
+  dismissComments(prUrl: string, commentIds: string[]): PrMonitor | null;
+  /** The set of comment IDs previously dismissed for this PR. Empty if unknown/none.
+   *  The poller uses this to filter the raw `gh` snapshot before deciding whether
+   *  anything changed, so a dismissed-but-still-open GitHub comment doesn't keep the
+   *  monitor perpetually "changed". */
+  getDismissedCommentIds(prUrl: string): string[];
 }

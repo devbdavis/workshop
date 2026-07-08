@@ -79,6 +79,15 @@ export function createPrMonitorPoller(deps: PrMonitorPollerDeps): PrMonitorPolle
   async function refreshOne(monitor: PrMonitor): Promise<PrMonitor | null> {
     try {
       const snapshot = await deps.gh.fetchPrSnapshot(monitor.prUrl);
+      // The raw snapshot still contains comments the user dismissed (dismissal
+      // never touches GitHub). Strip them here so `changed`/`hasAttention` compare
+      // against the same dismissal-aware view that applyPoll persists — otherwise a
+      // dismissed-but-still-open comment reads as "changed" on every poll forever
+      // and blocks the stale auto-pause.
+      const dismissed = new Set(deps.monitors.getDismissedCommentIds(monitor.prUrl));
+      const effectiveComments = dismissed.size
+        ? snapshot.unresolvedComments.filter((c) => !dismissed.has(c.id))
+        : snapshot.unresolvedComments;
       const changed = changedFromPrevious(
         {
           state: monitor.state,
@@ -87,7 +96,7 @@ export function createPrMonitorPoller(deps: PrMonitorPollerDeps): PrMonitorPolle
           commentCount: monitor.unresolvedComments.length,
           prTitle: monitor.prTitle,
         },
-        snapshot,
+        { ...snapshot, unresolvedComments: effectiveComments },
       );
       // Stale-cutoff decision:
       // Only relevant for PRs the poll says are still open/draft AND have no
@@ -100,7 +109,7 @@ export function createPrMonitorPoller(deps: PrMonitorPollerDeps): PrMonitorPolle
       const hasAttention =
         snapshot.checkStatus === 'failing' ||
         snapshot.checkStatus === 'error' ||
-        snapshot.unresolvedComments.length > 0;
+        effectiveComments.length > 0;
       const priorPushAt = monitor.lastPushAt;
       const observedPush = !!snapshot.headRefOid && snapshot.headRefOid !== monitor.headRefOid;
       const stale =
@@ -115,7 +124,7 @@ export function createPrMonitorPoller(deps: PrMonitorPollerDeps): PrMonitorPolle
         state: snapshot.state,
         checkStatus: snapshot.checkStatus,
         failingChecks: snapshot.failingChecks,
-        unresolvedComments: snapshot.unresolvedComments,
+        unresolvedComments: effectiveComments,
         prTitle: snapshot.prTitle,
         prBranch: snapshot.headRefName,
         headRefOid: snapshot.headRefOid,
