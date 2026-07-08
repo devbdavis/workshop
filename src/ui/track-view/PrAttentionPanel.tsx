@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import type { PrCheckStatus, PrMonitor, PrState, Todo } from '@foundation/types';
+import { PrCommentList } from './PrCommentList';
 
 interface Props {
   todo: Todo;
@@ -23,14 +24,9 @@ const CHECK_BADGE: Record<PrCheckStatus, { label: string; className: string }> =
   error: { label: 'CI error', className: 'text-orange-300 bg-orange-900/40' },
 };
 
-function shorten(body: string, max = 240): string {
-  const trimmed = body.trim();
-  if (trimmed.length <= max) return trimmed;
-  return `${trimmed.slice(0, max)}…`;
-}
-
 export function PrAttentionPanel({ todo, monitor, onRefresh }: Props) {
   const [dispatching, setDispatching] = useState<string | null>(null);
+  const [dismissing, setDismissing] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
   const [expandedCommentIds, setExpandedCommentIds] = useState<Set<string>>(new Set());
@@ -116,6 +112,30 @@ export function PrAttentionPanel({ todo, monitor, onRefresh }: Props) {
     }
   }
 
+  async function dismissComments(commentIds: string[]) {
+    setError(null);
+    setSuccess(null);
+    const key = commentIds.length === 1 ? `comment-${commentIds[0]}` : 'all-comments';
+    setDismissing(key);
+    try {
+      const res = await fetch(`/api/todos/${todo.id}/pr-actions/dismiss-comments`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ prUrl: monitor.prUrl, commentIds }),
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(typeof data.error === 'string' ? data.error : `HTTP ${res.status}`);
+      }
+      setSuccess(commentIds.length === 1 ? 'Comment dismissed.' : `Dismissed ${commentIds.length} comment(s).`);
+      onRefresh();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to dismiss comment');
+    } finally {
+      setDismissing(null);
+    }
+  }
+
   function toggleCommentExpansion(id: string) {
     setExpandedCommentIds((prev) => {
       const next = new Set(prev);
@@ -192,68 +212,15 @@ export function PrAttentionPanel({ todo, monitor, onRefresh }: Props) {
       )}
 
       {needsComments && (
-        <div className="space-y-2">
-          <div className="flex items-center justify-between">
-            <div className="text-[11px] uppercase tracking-wide text-pink-300 font-semibold">Unresolved comments</div>
-            <button
-              onClick={() => dispatchComments(undefined)}
-              disabled={dispatching !== null || monitor.unresolvedComments.length === 0}
-              className="text-[11px] px-2 py-0.5 rounded bg-pink-700/70 hover:bg-pink-700 disabled:opacity-50 text-pink-50 transition-colors"
-            >
-              {dispatching === 'all-comments' ? 'Dispatching…' : 'Address all'}
-            </button>
-          </div>
-          <ul className="space-y-2">
-            {monitor.unresolvedComments.map((c) => {
-              const expanded = expandedCommentIds.has(c.id);
-              return (
-                <li key={c.id} className="rounded border border-gray-700 bg-gray-900/60 p-2 text-xs">
-                  <div className="flex items-center justify-between gap-2">
-                    <div className="min-w-0">
-                      <span className="text-gray-300 font-medium">@{c.author}</span>
-                      {c.kind === 'review' && c.path && (
-                        <span className="text-gray-500 ml-1.5">
-                          {c.path}{c.line !== undefined ? `:${c.line}` : ''}
-                        </span>
-                      )}
-                      {c.kind === 'issue' && <span className="text-gray-500 ml-1.5">(PR comment)</span>}
-                    </div>
-                    <button
-                      onClick={() => toggleCommentExpansion(c.id)}
-                      className="text-[10px] text-gray-500 hover:text-gray-300 shrink-0"
-                    >
-                      {expanded ? 'Less' : 'More'}
-                    </button>
-                  </div>
-                  <p className={`mt-1 text-gray-300 whitespace-pre-wrap ${expanded ? '' : 'line-clamp-3'}`}>
-                    {expanded ? c.body : shorten(c.body)}
-                  </p>
-                  <div className="flex items-center justify-between mt-2 gap-2">
-                    {c.url ? (
-                      <a
-                        href={c.url}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="text-[11px] text-blue-400 hover:text-blue-300"
-                      >
-                        Open in GitHub
-                      </a>
-                    ) : (
-                      <span />
-                    )}
-                    <button
-                      onClick={() => dispatchComments([c.id])}
-                      disabled={dispatching !== null}
-                      className="text-[11px] px-2 py-0.5 rounded bg-pink-700/70 hover:bg-pink-700 disabled:opacity-50 text-pink-50 transition-colors"
-                    >
-                      {dispatching === `comment-${c.id}` ? 'Dispatching…' : 'Address this'}
-                    </button>
-                  </div>
-                </li>
-              );
-            })}
-          </ul>
-        </div>
+        <PrCommentList
+          comments={monitor.unresolvedComments}
+          dispatching={dispatching}
+          dismissing={dismissing}
+          expandedCommentIds={expandedCommentIds}
+          onToggleExpand={toggleCommentExpansion}
+          onDispatch={dispatchComments}
+          onDismiss={dismissComments}
+        />
       )}
 
       {isStalePaused && (

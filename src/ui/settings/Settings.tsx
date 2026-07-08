@@ -11,6 +11,7 @@ import { IssueTracking } from './IssueTracking';
 import { DefaultAiCliSettings } from './DefaultAiCliSettings';
 import { DispatchModelSettings } from './DispatchModelSettings';
 import { PrReviewSettings } from './PrReviewSettings';
+import { PrMonitorFilterSettings } from './PrMonitorFilterSettings';
 import { AvailableClisSettings } from './AvailableClisSettings';
 import { BackupSettings } from './BackupSettings';
 import { LaunchAppsSettings } from './LaunchAppsSettings';
@@ -73,6 +74,10 @@ export function Settings() {
 
           <section className="bg-gray-900 border border-gray-800 rounded-lg p-6">
             <PrReviewSettings />
+          </section>
+
+          <section className="bg-gray-900 border border-gray-800 rounded-lg p-6">
+            <PrMonitorFilterSettings />
           </section>
 
           <section className="bg-gray-900 border border-gray-800 rounded-lg p-6">
