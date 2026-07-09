@@ -9,13 +9,22 @@ export interface NewSessionOptions {
   agentId?: string;
   todoId?: string;
   initialPrompt?: string;
+  /** Start a plain shell instead of an AI CLI — a terminal inside the container. */
+  shell?: boolean;
+  /** Shell sessions only: pin the working directory instead of using the track's first repo. */
+  cwd?: string;
+  name?: string;
 }
 
-const PROVIDER_META: Record<SessionProvider, { label: string; color: string }> = {
+/** `shell` isn't a SessionProvider — it's the absence of one. */
+type ProviderChoice = SessionProvider | 'shell';
+
+const PROVIDER_META: Record<ProviderChoice, { label: string; color: string }> = {
   claude: { label: 'Claude', color: 'bg-orange-400' },
   cursor: { label: 'Cursor CLI', color: 'bg-violet-400' },
   codex: { label: 'Codex', color: 'bg-emerald-400' },
   gemini: { label: 'Gemini', color: 'bg-blue-400' },
+  shell: { label: 'Shell', color: 'bg-gray-400' },
 };
 
 interface Props {
@@ -29,22 +38,23 @@ interface Props {
 }
 
 export function NewSessionModal({ track, todos, defaultProvider, onClose, onCreate, onTodosChanged }: Props) {
-  const [provider, setProvider] = useState<SessionProvider>(defaultProvider);
+  const [provider, setProvider] = useState<ProviderChoice>(defaultProvider);
   const [worktree, setWorktree] = useState(true);
   const [agentId, setAgentId] = useState<string>(track.defaultAgentId ?? '');
   const [selectedTodoId, setSelectedTodoId] = useState<string | null>(null);
   const [prompt, setPrompt] = useState('');
-  const [createTodo, setCreateTodo] = useState(false);
   const [agents, setAgents] = useState<Agent[]>([]);
   const [showImport, setShowImport] = useState(false);
   const [starting, setStarting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const { clis } = useAvailableClis();
 
-  // Offer only enabled agent CLIs (gated via Settings → Available CLIs).
-  const providerOptions = clis
-    .filter((c) => c.kind === 'agent' && c.enabled)
-    .map((c) => c.provider as SessionProvider);
+  // Offer only enabled agent CLIs (gated via Settings → Available CLIs), plus a
+  // plain shell — always available, since it launches nothing.
+  const providerOptions: ProviderChoice[] = [
+    ...clis.filter((c) => c.kind === 'agent' && c.enabled).map((c) => c.provider as SessionProvider),
+    'shell',
+  ];
 
   // Open tasks that aren't already being worked on by a session.
   const openTodos = todos.filter((t) => t.status !== 'done' && !t.sessionId);
@@ -64,6 +74,7 @@ export function NewSessionModal({ track, todos, defaultProvider, onClose, onCrea
     return () => window.removeEventListener('keydown', handleEscape);
   }, [onClose, showImport]);
 
+  const isShell = provider === 'shell';
   const trimmedPrompt = prompt.trim();
   // Cursor's agent CLI must be launched with a prompt — require a task or free text.
   const cursorNeedsPrompt = provider === 'cursor' && !selectedTodoId && !trimmedPrompt;
@@ -74,10 +85,21 @@ export function NewSessionModal({ track, todos, defaultProvider, onClose, onCrea
     setStarting(true);
     setError(null);
     try {
+      if (isShell) {
+        const created = await onCreate({ provider: 'claude', shell: true, worktreeMode: worktree });
+        if (!created) {
+          setError('Failed to start session.');
+          setStarting(false);
+          return;
+        }
+        onClose();
+        return;
+      }
+
       let todoId = selectedTodoId ?? undefined;
 
-      // Ad-hoc prompt the user wants tracked → create a todo first.
-      if (!todoId && trimmedPrompt && createTodo) {
+      // Ad-hoc prompt → always create a todo so the work is tracked.
+      if (!todoId && trimmedPrompt) {
         const res = await fetch(`/api/tracks/${track.id}/todos`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -126,6 +148,16 @@ export function NewSessionModal({ track, todos, defaultProvider, onClose, onCrea
         </div>
 
         <div className="p-5 space-y-4">
+          {/* A shell session takes no task, prompt, or agent — it just opens a terminal. */}
+          {isShell && (
+            <p className="text-xs text-gray-500 border border-gray-800 rounded-lg px-3 py-2">
+              Opens an interactive shell in the session's working directory — inside the
+              Workshop container, with nix, direnv, and git available. No AI CLI is started.
+            </p>
+          )}
+
+          {!isShell && (
+          <>
           {/* Task selection */}
           <div>
             <div className="flex items-center justify-between mb-1.5">
@@ -185,15 +217,7 @@ export function NewSessionModal({ track, todos, defaultProvider, onClose, onCrea
               className="w-full px-3 py-2 bg-gray-800 border border-gray-700 rounded-lg text-sm text-gray-200 placeholder-gray-600 outline-none focus:border-blue-500 resize-y"
             />
             {!selectedTodoId && trimmedPrompt && (
-              <label className="flex items-center gap-2 mt-1.5 text-xs text-gray-400 cursor-pointer select-none">
-                <input
-                  type="checkbox"
-                  checked={createTodo}
-                  onChange={(e) => setCreateTodo(e.target.checked)}
-                  className="rounded border-gray-600 bg-gray-800"
-                />
-                Create a todo so this work is tracked
-              </label>
+              <p className="mt-1.5 text-xs text-gray-500">A todo will be created so this work is tracked.</p>
             )}
           </div>
 
@@ -213,6 +237,8 @@ export function NewSessionModal({ track, todos, defaultProvider, onClose, onCrea
               ))}
             </select>
           </div>
+          </>
+          )}
 
           {/* CLI tool */}
           <div>

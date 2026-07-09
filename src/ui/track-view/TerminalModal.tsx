@@ -8,6 +8,8 @@ interface Props {
   wsPath?: string;
   title: string;
   onClose: () => void;
+  /** When set, shows a Dock button that moves this session into the pane layout. */
+  onDock?: () => void;
 }
 
 interface Size {
@@ -44,7 +46,7 @@ const CURSOR_MAP: Record<ResizeDirection, string> = {
   sw: 'nesw-resize',
 };
 
-export function TerminalModal({ trackId, sessionId, wsPath, title, onClose }: Props) {
+export function TerminalModal({ trackId, sessionId, wsPath, title, onClose, onDock }: Props) {
   const [size, setSize] = useState<Size>(() => ({
     width: Math.round(window.innerWidth * 0.8),
     height: Math.round(window.innerHeight * 0.8),
@@ -211,6 +213,15 @@ export function TerminalModal({ trackId, sessionId, wsPath, title, onClose }: Pr
             <span className="text-sm text-gray-200 truncate">{title}</span>
           </div>
           <div className="flex items-center gap-3 shrink-0" onMouseDown={(e) => e.stopPropagation()}>
+            {onDock && (
+              <button
+                onClick={onDock}
+                className="text-xs text-gray-400 hover:text-emerald-400 border border-gray-700 rounded px-2 py-0.5"
+                title="Dock this terminal as a pane"
+              >
+                Dock
+              </button>
+            )}
             <kbd className="text-xs text-gray-600 font-mono">esc</kbd>
             <button
               onClick={onClose}

@@ -5,6 +5,7 @@ import type { Session } from '@foundation/types';
 import { TerminalPanel } from './TerminalPanel';
 import { SplitDivider } from './SplitDivider';
 import { SessionLinkButtons } from './SessionLinkButtons';
+import { useEditorLaunch } from '@ui/hooks/useEditorLaunch';
 
 interface Props {
   node: LayoutNode;
@@ -103,6 +104,7 @@ function LeafPane({ node, trackId, sessions, todos, onSplit, onClose, onCreateSe
   const [editing, setEditing] = useState(false);
   const [editValue, setEditValue] = useState('');
   const inputRef = useRef<HTMLInputElement>(null);
+  const editor = useEditorLaunch();
 
   const handleSplit = useCallback(
     async (direction: 'horizontal' | 'vertical') => {
@@ -202,32 +204,30 @@ function LeafPane({ node, trackId, sessions, todos, onSplit, onClose, onCreateSe
             return (
               <>
                 <button
-                  onClick={() => fetch('/api/shell/open-in-editor', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ path: editorPath }),
-                  })}
+                  onClick={() => editor.openInEditor(editorPath, session.id)}
                   className="flex items-center gap-0.5 text-[10px] text-gray-500 hover:text-blue-400 px-1"
-                  title={`Open in Cursor: ${editorPath}`}
+                  title={`Open in editor: ${editorPath}`}
                 >
                   <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                     <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" />
                     <polyline points="15 3 21 3 21 9" />
                     <line x1="10" y1="14" x2="21" y2="3" />
                   </svg>
-                  <span>Cursor</span>
+                  <span>{editor.uriPrefix ? 'Editor' : 'Cursor'}</span>
                 </button>
-                <button
-                  onClick={() => fetch('/api/shell/open-in-editor', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ path: terminalPath, app: 'terminal' }),
-                  })}
-                  className="text-[10px] text-gray-500 hover:text-green-400 px-1 font-mono"
-                  title={`Open in iTerm: ${terminalPath}`}
-                >
-                  &gt;_
-                </button>
+                {!editor.uriPrefix && (
+                  <button
+                    onClick={() => fetch('/api/shell/open-in-editor', {
+                      method: 'POST',
+                      headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify({ path: terminalPath, app: 'terminal' }),
+                    })}
+                    className="text-[10px] text-gray-500 hover:text-green-400 px-1 font-mono"
+                    title={`Open in terminal: ${terminalPath}`}
+                  >
+                    &gt;_
+                  </button>
+                )}
               </>
             );
           })()}

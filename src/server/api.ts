@@ -65,6 +65,9 @@ import { createPluginRepository } from '@infrastructure/persistence/plugin-repos
 import { ensureRegisteredPluginsInstalled } from '@infrastructure/plugins/ensure-installed.js';
 import { createGlobalRepoRepository, createSettingsRepository } from '@infrastructure/persistence/repo-repository.js';
 import { createRepoRouter, parsePrMonitorIgnoredAuthors } from './repo-routes.js';
+import { createUserRepository } from '@infrastructure/persistence/user-repository.js';
+import { createUserRouter } from './user-routes.js';
+import { getProfileId } from './profile.js';
 import { createBackupRouter } from './backup-routes.js';
 import { createBackupScheduler } from '@application/backup/backup-scheduler.js';
 import { createTicketImportIgnoreRepository } from '@infrastructure/persistence/ticket-import-ignore-repository.js';
@@ -75,12 +78,11 @@ import { createGeminiAdapter } from '@infrastructure/mcp-tools/gemini-adapter.js
 import { createSoulLoader } from '@infrastructure/soul/soul-loader.js';
 import { ensureDefaultTodoTemplate, ensureSystemPromptTemplates } from '@infrastructure/persistence/database.js';
 import { createPrMonitorRepository } from '@infrastructure/persistence/pr-monitor-repository.js';
-import { createGhAdapter } from '@infrastructure/github/gh-adapter.js';
+import { createForgeAdapter } from '@infrastructure/forge/forge-adapter.js';
 import { createPrMonitorPoller } from '@application/pr-monitor/poller.js';
 import { createPrMonitorRegistrar } from '@application/pr-monitor/registrar.js';
 import { createPrMonitorRouter } from './pr-monitor-routes.js';
 import { createPrReviewRepository } from '@infrastructure/persistence/pr-review-repository.js';
-import { createGhReviewAdapter } from '@infrastructure/github/gh-review-adapter.js';
 import { createPrReviewDiscoveryPoller } from '@application/pr-review/discovery-poller.js';
 import { createPrReviewRouter } from './pr-review-routes.js';
 import {
@@ -238,13 +240,14 @@ export function createApiRouter(deps: ApiRouterDeps = {}): Router {
   // PR monitor infrastructure — wired before the todo router so todo updates
   // can reconcile monitors as part of their normal flow.
   const prMonitors = createPrMonitorRepository();
-  const ghAdapter = createGhAdapter({
+  // One adapter fronting both GitHub (`gh`) and Gitea/Forgejo (`tea` logins).
+  const forgeAdapter = createForgeAdapter({
     getIgnoredCommentAuthors: () => parsePrMonitorIgnoredAuthors(settingsRepo.get('pr_monitor_ignored_authors')),
   });
   const prRegistrar = createPrMonitorRegistrar(prMonitors);
   const prPoller = createPrMonitorPoller({
     monitors: prMonitors,
-    gh: ghAdapter,
+    gh: forgeAdapter,
     broadcast: (type, trackId, payload) => broadcast(type, trackId, payload),
   });
   prPoller.start();
@@ -253,10 +256,9 @@ export function createApiRouter(deps: ApiRouterDeps = {}): Router {
 
   // PR Review dashboard — incoming review requests + agent findings.
   const prReviews = createPrReviewRepository();
-  const ghReviewAdapter = createGhReviewAdapter();
   const prReviewDiscovery = createPrReviewDiscoveryPoller({
     reviews: prReviews,
-    gh: ghReviewAdapter,
+    forge: forgeAdapter,
     broadcast: (type, trackId, payload) => broadcast(type, trackId, payload),
   });
   prReviewDiscovery.start();
@@ -303,8 +305,8 @@ export function createApiRouter(deps: ApiRouterDeps = {}): Router {
   const prReviewRouter = createPrReviewRouter({
     reviews: prReviews,
     discovery: prReviewDiscovery,
-    gh: ghAdapter,
-    ghReview: ghReviewAdapter,
+    gh: forgeAdapter,
+    ghReview: forgeAdapter,
     sessions,
     tracks,
     agents,
@@ -549,6 +551,10 @@ export function createApiRouter(deps: ApiRouterDeps = {}): Router {
   const repoRouter = createRepoRouter({ repos: globalRepos, settings: settingsRepo });
   router.use(repoRouter);
 
+  // Mount profiles + per-user settings sub-router (lightweight multi-user layer)
+  const users = createUserRepository();
+  router.use(createUserRouter({ users, tracks }));
+
   // Encrypted backups — daily to a cloud-synced directory, scrypt-derived AES-256-GCM.
   const backupScheduler = createBackupScheduler({ settings: settingsRepo });
   backupScheduler.start();
@@ -620,8 +626,21 @@ export function createApiRouter(deps: ApiRouterDeps = {}): Router {
 
   // --- Tracks ---
 
-  router.get('/tracks', (_req, res) => {
-    res.json(tracks.findAll());
+  router.get('/tracks', (req, res) => {
+    const all = tracks.findAll();
+    // Enrich with the active profile's favorite/hidden prefs (if a profile is selected).
+    const profileId = getProfileId(req);
+    if (!profileId) {
+      res.json(all);
+      return;
+    }
+    const prefs = new Map(users.getTrackPrefs(profileId).map((p) => [p.trackId, p]));
+    res.json(
+      all.map((t) => {
+        const p = prefs.get(t.id);
+        return { ...t, favorite: p?.isFavorite ?? false, hidden: p?.isHidden ?? false };
+      }),
+    );
   });
 
   /**
@@ -867,20 +886,35 @@ export function createApiRouter(deps: ApiRouterDeps = {}): Router {
         return;
       }
 
+      // A shell session is a tmux pane at the workspace cwd with no AI CLI —
+      // the way to get an interactive terminal inside the container (nix,
+      // direnv, git) without sshd or `docker exec`. It carries no task, agent,
+      // prompt, or model.
+      const shell = req.body?.shell === true;
+
+      // A shell session may pin its own cwd — "Open in Terminal" opens one at the
+      // pane's working directory rather than the track's first repo.
+      const rawCwd = shell && typeof req.body?.cwd === 'string' ? req.body.cwd : '';
+      if (rawCwd && (!rawCwd.startsWith('/') || rawCwd.includes('..') || !existsSync(rawCwd))) {
+        res.status(400).json({ error: 'cwd must be an absolute path that exists' });
+        return;
+      }
+      const shellCwd = rawCwd || undefined;
+
       // Optional todo link — the session works on this task and the todo is
       // marked in-progress once the session exists.
-      const todoId = req.body?.todoId as TodoId | undefined;
+      const todoId = shell ? undefined : (req.body?.todoId as TodoId | undefined);
       const todo = todoId ? todos.findById(todoId) : undefined;
       if (todoId && !todo) {
         res.status(404).json({ error: 'Todo not found' });
         return;
       }
 
-      const agentId = (req.body?.agentId as AgentId | undefined) ?? undefined;
+      const agentId = shell ? undefined : ((req.body?.agentId as AgentId | undefined) ?? undefined);
 
       // Auto-compose system prompt from track context + summary + template
-      let systemPrompt = req.body?.systemPrompt;
-      if (!systemPrompt) {
+      let systemPrompt = shell ? undefined : req.body?.systemPrompt;
+      if (!shell && !systemPrompt) {
         const parts: string[] = [];
 
         // 0. Agent role prompt (workshop DB first, then filesystem agents)
@@ -951,7 +985,7 @@ export function createApiRouter(deps: ApiRouterDeps = {}): Router {
 
       // Initial prompt: explicit body value wins; a linked todo supplies a
       // task prompt as fallback (cursor requires a non-empty prompt).
-      const bodyPrompt = typeof req.body?.initialPrompt === 'string' ? req.body.initialPrompt.trim() : '';
+      const bodyPrompt = !shell && typeof req.body?.initialPrompt === 'string' ? req.body.initialPrompt.trim() : '';
       const initialPrompt = bodyPrompt
         || (todo ? `Complete the following task:\n\n**${todo.title}**\n\n${todo.description || 'No additional details provided.'}` : undefined);
 
@@ -967,11 +1001,14 @@ export function createApiRouter(deps: ApiRouterDeps = {}): Router {
         ? (settingsRepo.get('dispatch_model') ?? 'opus').trim() || undefined
         : undefined;
 
-      // worktreeMode: explicit request body takes precedence, then track-level default
+      // worktreeMode: explicit request body takes precedence, then track-level default.
+      // A shell never gets its own worktree — it opens where you asked it to.
       const requestWorktreeMode = req.body?.worktreeMode;
-      const worktreeMode = typeof requestWorktreeMode === 'boolean'
-        ? requestWorktreeMode
-        : (track.worktreeMode ?? false);
+      const worktreeMode = shell
+        ? false
+        : typeof requestWorktreeMode === 'boolean'
+          ? requestWorktreeMode
+          : (track.worktreeMode ?? false);
 
       const repos = tracks.findReposByTrack(trackId);
       const trackPaths = tracks.findPathsByTrack(trackId);
@@ -981,10 +1018,13 @@ export function createApiRouter(deps: ApiRouterDeps = {}): Router {
         provider,
         model,
         initialPrompt,
+        skipClaude: shell,
         todoId: todo?.id,
-        name: typeof req.body?.name === 'string' && req.body.name.trim() ? req.body.name.trim() : todo?.title,
+        name: typeof req.body?.name === 'string' && req.body.name.trim()
+          ? req.body.name.trim()
+          : (todo?.title ?? (shell ? 'Shell' : undefined)),
         issueKey: todo?.issueKey,
-        workingDirectory: repos[0]?.path,
+        workingDirectory: shellCwd ?? repos[0]?.path,
         worktreeMode: worktreeMode && repos.length > 0,
         repos: worktreeMode ? repos : undefined,
         additionalDirs: trackPaths.length > 0 ? trackPaths.map((p) => p.path) : undefined,
@@ -1089,6 +1129,19 @@ export function createApiRouter(deps: ApiRouterDeps = {}): Router {
 
   // --- Open in editor ---
 
+  // Resolve the editor target path (prefers a .code-workspace file) WITHOUT launching.
+  // Used by the client when a per-user editor URI prefix is configured: the browser
+  // builds `<prefix><path>` itself and hands off to the local editor (Remote-SSH).
+  router.get('/shell/resolve-editor-target', (req, res) => {
+    const targetPath = typeof req.query.path === 'string' ? req.query.path : '';
+    if (!targetPath || targetPath.includes('..')) {
+      res.status(400).json({ error: 'valid path is required' });
+      return;
+    }
+    const sessionId = typeof req.query.sessionId === 'string' ? req.query.sessionId : undefined;
+    res.json({ path: resolveEditorTarget(targetPath, sessionId) });
+  });
+
   router.post('/shell/open-in-editor', (req, res) => {
     const { path: targetPath, app, sessionId } = req.body;
     if (!targetPath || typeof targetPath !== 'string') {
@@ -1118,7 +1171,7 @@ export function createApiRouter(deps: ApiRouterDeps = {}): Router {
         const resolved = resolveTerminal(choice, availability);
         if (!resolved) {
           res.status(400).json({
-            error: 'No terminal application is available on this system. Configure one in Settings → General.',
+            error: 'No terminal application is available on this system. Configure one in Settings → General, or start a Shell session for a terminal inside the container.',
           });
           return;
         }

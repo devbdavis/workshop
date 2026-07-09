@@ -1,5 +1,5 @@
 import type { PrMonitorRepository } from '@domain/pr-monitor/repository';
-import { parsePrUrl } from '@infrastructure/github/gh-adapter.js';
+import { parsePrUrl } from '@infrastructure/forge/pr-url.js';
 import type { PullRequest, Todo } from '@foundation/types';
 
 export interface PrMonitorRegistrar {
