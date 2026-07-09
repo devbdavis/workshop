@@ -884,20 +884,26 @@ export function createApiRouter(deps: ApiRouterDeps = {}): Router {
         return;
       }
 
+      // A shell session is a tmux pane at the workspace cwd with no AI CLI —
+      // the way to get an interactive terminal inside the container (nix,
+      // direnv, git) without sshd or `docker exec`. It carries no task, agent,
+      // prompt, or model.
+      const shell = req.body?.shell === true;
+
       // Optional todo link — the session works on this task and the todo is
       // marked in-progress once the session exists.
-      const todoId = req.body?.todoId as TodoId | undefined;
+      const todoId = shell ? undefined : (req.body?.todoId as TodoId | undefined);
       const todo = todoId ? todos.findById(todoId) : undefined;
       if (todoId && !todo) {
         res.status(404).json({ error: 'Todo not found' });
         return;
       }
 
-      const agentId = (req.body?.agentId as AgentId | undefined) ?? undefined;
+      const agentId = shell ? undefined : ((req.body?.agentId as AgentId | undefined) ?? undefined);
 
       // Auto-compose system prompt from track context + summary + template
-      let systemPrompt = req.body?.systemPrompt;
-      if (!systemPrompt) {
+      let systemPrompt = shell ? undefined : req.body?.systemPrompt;
+      if (!shell && !systemPrompt) {
         const parts: string[] = [];
 
         // 0. Agent role prompt (workshop DB first, then filesystem agents)
@@ -968,7 +974,7 @@ export function createApiRouter(deps: ApiRouterDeps = {}): Router {
 
       // Initial prompt: explicit body value wins; a linked todo supplies a
       // task prompt as fallback (cursor requires a non-empty prompt).
-      const bodyPrompt = typeof req.body?.initialPrompt === 'string' ? req.body.initialPrompt.trim() : '';
+      const bodyPrompt = !shell && typeof req.body?.initialPrompt === 'string' ? req.body.initialPrompt.trim() : '';
       const initialPrompt = bodyPrompt
         || (todo ? `Complete the following task:\n\n**${todo.title}**\n\n${todo.description || 'No additional details provided.'}` : undefined);
 
@@ -998,8 +1004,11 @@ export function createApiRouter(deps: ApiRouterDeps = {}): Router {
         provider,
         model,
         initialPrompt,
+        skipClaude: shell,
         todoId: todo?.id,
-        name: typeof req.body?.name === 'string' && req.body.name.trim() ? req.body.name.trim() : todo?.title,
+        name: typeof req.body?.name === 'string' && req.body.name.trim()
+          ? req.body.name.trim()
+          : (todo?.title ?? (shell ? 'Shell' : undefined)),
         issueKey: todo?.issueKey,
         workingDirectory: repos[0]?.path,
         worktreeMode: worktreeMode && repos.length > 0,
@@ -1148,7 +1157,7 @@ export function createApiRouter(deps: ApiRouterDeps = {}): Router {
         const resolved = resolveTerminal(choice, availability);
         if (!resolved) {
           res.status(400).json({
-            error: 'No terminal application is available on this system. Configure one in Settings → General.',
+            error: 'No terminal application is available on this system. Configure one in Settings → General, or start a Shell session for a terminal inside the container.',
           });
           return;
         }
