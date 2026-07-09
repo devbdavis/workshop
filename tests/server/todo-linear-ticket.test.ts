@@ -1,0 +1,114 @@
+import { describe, it, expect, beforeAll, afterAll } from 'vitest';
+import express from 'express';
+import type { Server } from 'node:http';
+import { createTodoRouter, type TodoRouterDeps } from '@server/todo-routes.js';
+
+// Exercises the "create Linear ticket" round-trip: dispatch seeds a pending job,
+// the report endpoint marks it done + links the issue key, and status reflects it.
+// Also guards route ordering (POST /todos/report-linear-ticket must not be
+// captured by the /todos/:todoId/... routes).
+
+function buildApp() {
+  const todoStore = new Map<string, any>([
+    ['todo-1', { id: 'todo-1', trackId: 'track-1', title: 'Add dedup', status: 'backlog' }],
+  ]);
+  const trackStore = new Map<string, any>([['track-1', { id: 'track-1' }]]);
+  const settingsStore = new Map<string, string>();
+  let createdSessions = 0;
+
+  const deps = {
+    todos: {
+      findById: (id: string) => todoStore.get(id) ?? null,
+      update: (id: string, data: any) => {
+        const next = { ...todoStore.get(id), ...data };
+        todoStore.set(id, next);
+        return next;
+      },
+    },
+    tracks: {
+      findById: (id: string) => trackStore.get(id) ?? null,
+      create: (d: any) => {
+        const t = { id: 'sys-track', ...d };
+        trackStore.set(t.id, t);
+        return t;
+      },
+    },
+    settings: {
+      get: (k: string) => settingsStore.get(k) ?? null,
+      set: (k: string, v: string) => settingsStore.set(k, v),
+    },
+    terminal: {
+      createSession: async () => {
+        createdSessions += 1;
+        return { id: 'sess-1', trackId: 'sys-track', tmuxSession: 't', state: 'active' };
+      },
+    },
+  } as unknown as TodoRouterDeps;
+
+  const app = express();
+  app.use(express.json());
+  app.use(createTodoRouter(deps));
+  return { app, todoStore, settingsStore, sessions: () => createdSessions };
+}
+
+describe('create-linear-ticket round-trip', () => {
+  let server: Server;
+  let base: string;
+  let ctx: ReturnType<typeof buildApp>;
+
+  beforeAll(async () => {
+    ctx = buildApp();
+    server = ctx.app.listen(0);
+    const addr = server.address();
+    const port = typeof addr === 'object' && addr ? addr.port : 0;
+    base = `http://127.0.0.1:${port}`;
+  });
+
+  afterAll(() => {
+    server.close();
+  });
+
+  it('dispatches onto a lazily-created system track and seeds a pending job', async () => {
+    const res = await fetch(`${base}/todos/todo-1/create-linear-ticket`, { method: 'POST' });
+    expect(res.status).toBe(201);
+    expect(ctx.sessions()).toBe(1);
+    expect(ctx.settingsStore.get('linear_ticket_track_id')).toBe('sys-track');
+
+    const status = await (await fetch(`${base}/todos/todo-1/linear-ticket-status`)).json();
+    expect(status.status).toBe('pending');
+  });
+
+  it('records the reported ticket and links the issue key to the todo', async () => {
+    const report = await fetch(`${base}/todos/report-linear-ticket`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        todoId: 'todo-1',
+        issueKey: 'ASY-1402',
+        url: 'https://linear.app/x/issue/ASY-1402',
+        title: 'Add dedup',
+        body: '## Description\n...',
+      }),
+    });
+    expect(report.status).toBe(200);
+
+    const status = await (await fetch(`${base}/todos/todo-1/linear-ticket-status`)).json();
+    expect(status).toMatchObject({
+      status: 'done',
+      issueKey: 'ASY-1402',
+      url: 'https://linear.app/x/issue/ASY-1402',
+      title: 'Add dedup',
+    });
+    // issue key written back onto the todo
+    expect(ctx.todoStore.get('todo-1').issueKey).toBe('ASY-1402');
+  });
+
+  it('rejects a report with no todoId', async () => {
+    const res = await fetch(`${base}/todos/report-linear-ticket`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ issueKey: 'ASY-9' }),
+    });
+    expect(res.status).toBe(400);
+  });
+});

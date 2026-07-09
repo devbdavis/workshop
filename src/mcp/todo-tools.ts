@@ -80,6 +80,22 @@ export function registerTodoTools(server: McpServer, api: (path: string, options
   );
 
   server.tool(
+    'workshop_report_linear_ticket',
+    'Report a Linear ticket created from a todo back to Workshop, so the "Create Linear Ticket" modal can display it and the ticket links to the todo. Call this once, after the ticket has been filed in Linear.',
+    {
+      todoId: z.string().describe('The Workshop todo id the ticket was created from (given in the task prompt)'),
+      issueKey: z.string().describe('The created Linear ticket key, e.g. "ASY-1402"'),
+      url: z.string().describe('The full URL of the created Linear ticket'),
+      title: z.string().describe('The ticket title'),
+      body: z.string().describe('The full ticket description/body in Markdown'),
+    },
+    async (args) => {
+      const result = await api('/todos/report-linear-ticket', { method: 'POST', body: JSON.stringify(args) });
+      return { content: [{ type: 'text' as const, text: JSON.stringify(result, null, 2) }] };
+    },
+  );
+
+  server.tool(
     'workshop_delete_todo',
     'Delete a todo',
     {
