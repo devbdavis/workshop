@@ -7,6 +7,7 @@ import {
   resetDatabase,
   ensureSystemPromptTemplates,
   LEGACY_PR_COMMENT_RESPONSE_CONTENTS,
+  LEGACY_PR_BUILD_FIX_CONTENTS,
 } from '@infrastructure/persistence/database';
 
 let workDir: string;
@@ -55,5 +56,38 @@ describe('ensureSystemPromptTemplates — pr-comment-response', () => {
     db.prepare(`UPDATE prompt_templates SET content = ? WHERE system_kind = 'pr-comment-response'`).run(custom);
     ensureSystemPromptTemplates();
     expect(commentTemplate().content).toBe(custom);
+  });
+});
+
+function buildFixTemplate(): { content: string } {
+  return getDatabase()
+    .prepare(`SELECT content FROM prompt_templates WHERE system_kind = 'pr-build-fix'`)
+    .get() as { content: string };
+}
+
+describe('ensureSystemPromptTemplates — pr-build-fix', () => {
+  it('seeds the short send-to-session default (no stand-alone sub-agent framing)', () => {
+    ensureSystemPromptTemplates();
+    const { content } = buildFixTemplate();
+    expect(content).toContain('{{pr.failing_checks}}');
+    expect(content).not.toContain('background sub-agent');
+  });
+
+  it('upgrades an un-edited row still holding a legacy default in place', () => {
+    const db = getDatabase();
+    db.prepare(`UPDATE prompt_templates SET content = ? WHERE system_kind = 'pr-build-fix'`)
+      .run(LEGACY_PR_BUILD_FIX_CONTENTS[0]);
+    ensureSystemPromptTemplates();
+    const { content } = buildFixTemplate();
+    expect(content).not.toContain('background sub-agent');
+    expect(content).toContain('{{pr.failing_checks}}');
+  });
+
+  it('leaves a user-edited row untouched', () => {
+    const db = getDatabase();
+    const custom = 'House style: fix {{pr.failing_checks}} carefully.';
+    db.prepare(`UPDATE prompt_templates SET content = ? WHERE system_kind = 'pr-build-fix'`).run(custom);
+    ensureSystemPromptTemplates();
+    expect(buildFixTemplate().content).toBe(custom);
   });
 });

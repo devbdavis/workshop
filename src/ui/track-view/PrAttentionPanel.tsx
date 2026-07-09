@@ -63,12 +63,12 @@ export function PrAttentionPanel({ todo, monitor, sessionActive, onRefresh }: Pr
     }
   }
 
-  async function dispatchFix() {
+  async function sendFix() {
     setError(null);
     setSuccess(null);
     setDispatching('fix');
     try {
-      const res = await fetch(`/api/todos/${todo.id}/pr-actions/dispatch-fix`, {
+      const res = await fetch(`/api/todos/${todo.id}/pr-actions/send-fix`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ prUrl: monitor.prUrl }),
@@ -77,10 +77,10 @@ export function PrAttentionPanel({ todo, monitor, sessionActive, onRefresh }: Pr
         const data = await res.json().catch(() => ({}));
         throw new Error(typeof data.error === 'string' ? data.error : `HTTP ${res.status}`);
       }
-      setSuccess('Dispatched a sub-agent to investigate the failing build.');
+      setSuccess('Sent the failing checks to the session.');
       onRefresh();
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to dispatch fix');
+      setError(err instanceof Error ? err.message : 'Failed to send failing checks');
     } finally {
       setDispatching(null);
     }
@@ -201,12 +201,15 @@ export function PrAttentionPanel({ todo, monitor, sessionActive, onRefresh }: Pr
             ))}
           </ul>
           <button
-            onClick={dispatchFix}
-            disabled={dispatching !== null}
+            onClick={sendFix}
+            disabled={dispatching !== null || !sessionActive}
             className="w-full text-xs px-2 py-1.5 rounded bg-amber-700/80 hover:bg-amber-700 disabled:opacity-50 text-amber-50 font-medium transition-colors"
           >
-            {dispatching === 'fix' ? 'Dispatching…' : 'Investigate & Fix Build'}
+            {dispatching === 'fix' ? 'Sending…' : 'Send failing checks to session'}
           </button>
+          {!sessionActive && (
+            <p className="text-[11px] text-gray-500">Session not running — start or resume it to send the failing checks.</p>
+          )}
         </div>
       )}
 

@@ -290,13 +290,7 @@ export function createApiRouter(deps: ApiRouterDeps = {}): Router {
     poller: prPoller,
     todos,
     tracks,
-    summaries,
-    tickets,
     promptTemplates,
-    agents,
-    filesystemScanner,
-    settings: settingsRepo,
-    projectRoot,
     terminal,
   });
   router.use(prMonitorRouter);
