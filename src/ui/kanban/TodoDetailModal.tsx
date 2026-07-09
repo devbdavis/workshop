@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import type { Todo, TodoStatus, TodoPriority, Track, Agent, PullRequest } from '@foundation/types';
 import { DispatchDropdown, type DispatchOptions } from '../track-view/DispatchDropdown';
+import { LinearTicketModal } from './LinearTicketModal';
 
 interface Props {
   todo: Todo | null;
@@ -9,7 +10,6 @@ interface Props {
   onSave: (todoId: string, data: Partial<Todo>) => void;
   onDelete: (todoId: string) => void;
   onDispatch: (todoId: string, opts: DispatchOptions, formData?: Partial<Todo>) => void;
-  onCreateLinearTicket: (todoId: string, formData?: Partial<Todo>) => void;
 }
 
 const STATUSES: { value: TodoStatus; label: string }[] = [
@@ -26,7 +26,7 @@ const PRIORITIES: { value: TodoPriority; label: string }[] = [
   { value: 'low', label: 'Low' },
 ];
 
-export function TodoDetailModal({ todo, tracks, onClose, onSave, onDelete, onDispatch, onCreateLinearTicket }: Props) {
+export function TodoDetailModal({ todo, tracks, onClose, onSave, onDelete, onDispatch }: Props) {
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [resolution, setResolution] = useState('');
@@ -40,6 +40,8 @@ export function TodoDetailModal({ todo, tracks, onClose, onSave, onDelete, onDis
   const [agents, setAgents] = useState<Agent[]>([]);
   const [showDispatch, setShowDispatch] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
+  const [creatingTicket, setCreatingTicket] = useState(false);
+  const [ticketError, setTicketError] = useState<string | null>(null);
 
   useEffect(() => {
     if (todo) {
@@ -55,6 +57,8 @@ export function TodoDetailModal({ todo, tracks, onClose, onSave, onDelete, onDis
       setRefined(todo.refined);
       setShowDispatch(false);
       setConfirmDelete(false);
+      setCreatingTicket(false);
+      setTicketError(null);
     }
   }, [todo]);
 
@@ -91,6 +95,22 @@ export function TodoDetailModal({ todo, tracks, onClose, onSave, onDelete, onDis
       priority,
       refined,
     });
+  }
+
+  async function handleCreateLinearTicket() {
+    setTicketError(null);
+    // Persist current edits first so the drafting agent sees the latest content.
+    await fetch(`/api/todos/${todo!.id}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ title, description: description || undefined, status, priority, refined }),
+    });
+    const res = await fetch(`/api/todos/${todo!.id}/create-linear-ticket`, { method: 'POST' }).catch(() => null);
+    if (!res || !res.ok) {
+      setTicketError('Could not start ticket creation. Try again.');
+      return;
+    }
+    setCreatingTicket(true);
   }
 
   function commitPrDraft() {
@@ -370,13 +390,16 @@ export function TodoDetailModal({ todo, tracks, onClose, onSave, onDelete, onDis
               </div>
             )}
             {!issueKey && (
-              <button
-                onClick={() => onCreateLinearTicket(todo.id, { title, description: description || undefined, status, priority, refined })}
-                className="px-3 py-1.5 text-xs bg-indigo-700 hover:bg-indigo-600 text-white rounded-lg transition-colors"
-                title="Dispatch an agent to draft and file a Linear ticket from this todo"
-              >
-                Create Linear Ticket
-              </button>
+              <>
+                {ticketError && <span className="text-xs text-red-400 self-center">{ticketError}</span>}
+                <button
+                  onClick={handleCreateLinearTicket}
+                  className="px-3 py-1.5 text-xs bg-indigo-700 hover:bg-indigo-600 text-white rounded-lg transition-colors"
+                  title="Dispatch an agent to draft and file a Linear ticket from this todo"
+                >
+                  Create Linear Ticket
+                </button>
+              </>
             )}
             {status !== 'ready' && status !== 'done' && status !== 'in-progress' && (
               <button
@@ -403,6 +426,10 @@ export function TodoDetailModal({ todo, tracks, onClose, onSave, onDelete, onDis
           </div>
         </div>
       </div>
+
+      {creatingTicket && (
+        <LinearTicketModal todoId={todo.id} onClose={() => setCreatingTicket(false)} />
+      )}
     </div>
   );
 }

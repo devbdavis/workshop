@@ -113,19 +113,6 @@ export function TodoPanel({ track, todos, sessions, onUpdate }: Props) {
     onUpdate();
   }
 
-  async function createLinearTicket(todoId: string, formData?: Partial<Todo>) {
-    if (formData) {
-      await fetch(`/api/todos/${todoId}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(formData),
-      });
-    }
-    await fetch(`/api/todos/${todoId}/create-linear-ticket`, { method: 'POST' });
-    setEditingTodo(null);
-    onUpdate();
-  }
-
   return (
     <div className="p-4 border-b border-gray-800">
       <div className="flex items-center justify-between mb-2">
@@ -269,7 +256,6 @@ export function TodoPanel({ track, todos, sessions, onUpdate }: Props) {
           setEditingTodo(null);
         }}
         onDispatch={dispatchTodoFromModal}
-        onCreateLinearTicket={createLinearTicket}
       />
     </div>
   );

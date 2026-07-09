@@ -228,19 +228,6 @@ export function KanbanBoard() {
     loadData();
   }
 
-  async function handleCreateLinearTicket(todoId: string, formData?: Partial<Todo>) {
-    if (formData) {
-      await fetch(`/api/todos/${todoId}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(formData),
-      });
-    }
-    await fetch(`/api/todos/${todoId}/create-linear-ticket`, { method: 'POST' });
-    setSelectedTodo(null);
-    loadData();
-  }
-
   async function handleCreateTodo(
     trackId: string,
     data: { title: string; description?: string; priority: TodoPriority; status: TodoStatus },
@@ -338,7 +325,6 @@ export function KanbanBoard() {
           onSave={handleSaveTodo}
           onDelete={handleDeleteTodo}
           onDispatch={handleDispatchTodo}
-          onCreateLinearTicket={handleCreateLinearTicket}
         />
       )}
 
