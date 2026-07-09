@@ -4,7 +4,8 @@ import { TerminalPanel } from './TerminalPanel';
 import { TrackOfficeStrip } from './TrackOfficeStrip';
 import { RecentlyDeletedPanel } from './RecentlyDeletedPanel';
 import { SessionLinkButtons } from './SessionLinkButtons';
-import { useLaunchApps, editorLabel, terminalLabel } from '@ui/hooks/useLaunchApps';
+import { TerminalModal } from '../track-view/TerminalModal';
+import { useLaunchApps, editorLabel } from '@ui/hooks/useLaunchApps';
 import { useEditorLaunch } from '@ui/hooks/useEditorLaunch';
 
 interface Props {
@@ -22,11 +23,18 @@ interface Props {
   defaultOpenPath?: string;
   onSelectionChange?: (ids: SessionId[]) => void;
   issueBaseUrl?: string;
+  /** Create an undocked shell session at `cwd` — opened in the floating terminal modal. */
+  onOpenShell?: (cwd: string, name: string) => Promise<Session | null>;
 }
 
 const storageKey = (trackId: string) => `workshop:selected:${trackId}`;
 
-export function TerminalArea({ trackId, trackName, sessions, todos, deletedSessions, startingSessions, pendingSelectSessionId, onDestroySession, onRenameSession, onRestoreSession, onPurgeSession, defaultOpenPath, onSelectionChange, issueBaseUrl }: Props) {
+/** `/repos/workshop/src` → `src`. Used to name shell sessions after their folder. */
+function basename(p: string): string {
+  return p.replace(/\/+$/, '').split('/').pop() || p;
+}
+
+export function TerminalArea({ trackId, trackName, sessions, todos, deletedSessions, startingSessions, pendingSelectSessionId, onDestroySession, onRenameSession, onRestoreSession, onPurgeSession, defaultOpenPath, onSelectionChange, issueBaseUrl, onOpenShell }: Props) {
   const [selectedIds, setSelectedIds] = useState<SessionId[]>(() => {
     try {
       const stored = localStorage.getItem(storageKey(trackId));
@@ -127,12 +135,56 @@ export function TerminalArea({ trackId, trackName, sessions, todos, deletedSessi
     });
   }, []);
 
+  // A terminal opened from a pane header lives in a floating modal until docked.
+  // It is a real session all along, so it also shows up in the office strip.
+  const [shellModal, setShellModal] = useState<{ sessionId: SessionId; title: string } | null>(null);
+
+  // cwd → the shell session we opened for it. Without this, every click of the
+  // terminal button spawns another tmux session that nobody ever reaps.
+  const shellSessionsRef = useRef(new Map<string, SessionId>());
+
+  const openShellTerminal = useCallback(
+    async (cwd: string) => {
+      if (!onOpenShell) return;
+      const existing = shellSessionsRef.current.get(cwd);
+      if (existing && sessions.some((s) => s.id === existing)) {
+        setShellModal({ sessionId: existing, title: cwd });
+        return;
+      }
+      shellSessionsRef.current.delete(cwd);
+      const session = await onOpenShell(cwd, `Shell: ${basename(cwd)}`);
+      if (session) {
+        shellSessionsRef.current.set(cwd, session.id);
+        setShellModal({ sessionId: session.id, title: cwd });
+      }
+    },
+    [onOpenShell, sessions],
+  );
+
+  const dockShellTerminal = useCallback(() => {
+    if (!shellModal) return;
+    const id = shellModal.sessionId;
+    // Same two-pane cap as additive click-selection in the office strip.
+    setSelectedIds((prev) => (prev.includes(id) ? prev : prev.length >= 2 ? [prev[1], id] : [...prev, id]));
+    setShellModal(null);
+  }, [shellModal]);
+
   const selectedSessions = selectedIds
     .map((id) => sessions.find((s) => s.id === id))
     .filter((s): s is Session => s !== undefined);
 
   return (
     <div className="h-full flex flex-col">
+      {shellModal && (
+        <TerminalModal
+          trackId={trackId}
+          sessionId={shellModal.sessionId}
+          title={shellModal.title}
+          onClose={() => setShellModal(null)}
+          onDock={dockShellTerminal}
+        />
+      )}
+
       {showRecentlyDeleted && (
         <RecentlyDeletedPanel
           sessions={deletedSessions}
@@ -170,6 +222,7 @@ export function TerminalArea({ trackId, trackName, sessions, todos, deletedSessi
                 autoFocus={i === 0}
                 focusTrigger={i === 0 ? focusTrigger : undefined}
                 issueBaseUrl={issueBaseUrl}
+                onOpenTerminal={onOpenShell ? openShellTerminal : undefined}
               />
             </div>
           ))
@@ -202,16 +255,16 @@ interface PaneProps {
   autoFocus: boolean;
   focusTrigger?: number;
   issueBaseUrl?: string;
+  onOpenTerminal?: (cwd: string) => void;
 }
 
-function TerminalPane({ trackId, session, todos, onDestroy, onRename, defaultOpenPath, autoFocus, focusTrigger, issueBaseUrl }: PaneProps) {
+function TerminalPane({ trackId, session, todos, onDestroy, onRename, defaultOpenPath, autoFocus, focusTrigger, issueBaseUrl, onOpenTerminal }: PaneProps) {
   const [editing, setEditing] = useState(false);
   const [editValue, setEditValue] = useState('');
   const inputRef = useRef<HTMLInputElement>(null);
   const launchApps = useLaunchApps();
   const editor = useEditorLaunch();
   const editorName = editor.uriPrefix ? 'Editor' : editorLabel(launchApps);
-  const terminalName = terminalLabel(launchApps);
 
   const displayName = session.name || `session:${session.id.slice(0, 8)}`;
   const editorPath = session.worktreeRoot ?? defaultOpenPath;
@@ -281,22 +334,20 @@ function TerminalPane({ trackId, session, todos, onDestroy, onRename, defaultOpe
                 </svg>
                 <span>{editorName}</span>
               </button>
-              {/* Host-side terminal launch is meaningless when the editor opens remotely
-                  (Docker host) — the in-app terminal already serves that role. */}
-              {!editor.uriPrefix && (
-                <button
-                  onClick={() => fetch('/api/shell/open-in-editor', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ path: terminalPath, app: 'terminal' }),
-                  })}
-                  className="text-[10px] text-gray-500 hover:text-green-400 px-1 font-mono"
-                  title={`Open in ${terminalName}: ${terminalPath}`}
-                >
-                  &gt;_
-                </button>
-              )}
             </>
+          )}
+          {/* Opens a shell session at this pane's cwd in a floating, dockable
+              terminal — inside the container, so it works under Docker too.
+              Gated on terminalPath, not editorPath: a session can have a working
+              directory without the track exposing an editor root. */}
+          {onOpenTerminal && terminalPath && (
+            <button
+              onClick={() => onOpenTerminal(terminalPath)}
+              className="text-[10px] text-gray-500 hover:text-green-400 px-1 font-mono"
+              title={`Open a terminal in: ${terminalPath}`}
+            >
+              &gt;_
+            </button>
           )}
           <button
             onClick={onDestroy}
