@@ -87,13 +87,7 @@ function runMigrations(db: Database.Database): void {
       created_at TEXT NOT NULL
     );
 
-    CREATE TABLE IF NOT EXISTS summaries (
-      id TEXT PRIMARY KEY,
-      track_id TEXT NOT NULL REFERENCES tracks(id) ON DELETE CASCADE,
-      content TEXT NOT NULL,
-      version INTEGER NOT NULL,
-      created_at TEXT NOT NULL
-    );
+    -- ponytail: Track Summary feature removed; existing DBs keep an unused summaries table (harmless, no migration to drop it).
 
     CREATE TABLE IF NOT EXISTS automation_rules (
       id TEXT PRIMARY KEY,

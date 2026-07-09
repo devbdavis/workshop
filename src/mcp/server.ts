@@ -3,7 +3,7 @@
  * Workshop MCP Server
  *
  * Exposes Workshop's HTTP API as MCP tools so Claude Code can interact
- * with project tracks, context, summaries, and sessions.
+ * with project tracks, context, and sessions.
  *
  * Usage: WORKSHOP_API_URL=http://localhost:3002 npx tsx src/mcp/server.ts
  */
@@ -120,47 +120,15 @@ server.tool(
 
 server.tool(
   'workshop_get_context',
-  'Get the current context and summary for a track',
+  'Get the current context for a track',
   { trackId: z.string().describe('The track ID') },
   async ({ trackId }) => {
     const track = await api(`/tracks/${trackId}`);
-    let summaryText = 'No summary available.';
-    try {
-      const summary = await api(`/tracks/${trackId}/summary`);
-      summaryText = `v${summary.version} (${summary.createdAt}):\n${summary.content}`;
-    } catch {
-      // No summary yet
-    }
     const result = {
       context: track.context || null,
-      summary: summaryText,
       description: track.description || null,
     };
     return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
-  },
-);
-
-// --- Get Summary ---
-
-server.tool(
-  'workshop_get_summary',
-  'Get the latest AI-generated summary for a track',
-  { trackId: z.string().describe('The track ID') },
-  async ({ trackId }) => {
-    const summary = await api(`/tracks/${trackId}/summary`);
-    return { content: [{ type: 'text', text: JSON.stringify(summary, null, 2) }] };
-  },
-);
-
-// --- Refresh Summary ---
-
-server.tool(
-  'workshop_refresh_summary',
-  'Regenerate the AI summary for a track (calls claude CLI)',
-  { trackId: z.string().describe('The track ID') },
-  async ({ trackId }) => {
-    const summary = await api(`/tracks/${trackId}/summary/refresh`, { method: 'POST' });
-    return { content: [{ type: 'text', text: JSON.stringify(summary, null, 2) }] };
   },
 );
 
@@ -218,7 +186,7 @@ server.tool(
 
 server.tool(
   'workshop_create_session',
-  'Create a new AI terminal session in a track. System prompt is auto-composed from track context + summary + template unless explicitly provided.',
+  'Create a new AI terminal session in a track. System prompt is auto-composed from track context + template unless explicitly provided.',
   {
     trackId: z.string().describe('The track ID'),
     systemPrompt: z.string().optional().describe('Custom system prompt (overrides auto-compose)'),
@@ -251,13 +219,6 @@ server.tool(
     }
 
     try {
-      const summary = await api(`/tracks/${trackId}/summary`);
-      parts.push(`## Current Status\n\n${summary.content}`);
-    } catch {
-      // No summary
-    }
-
-    try {
       const prompt = await api(`/tracks/${trackId}/prompt`);
       if (prompt.interpolated) {
         parts.push(prompt.interpolated);
@@ -266,7 +227,7 @@ server.tool(
       // No prompt template
     }
 
-    const composed = parts.length > 0 ? parts.join('\n\n---\n\n') : '(empty — no context, summary, or template configured)';
+    const composed = parts.length > 0 ? parts.join('\n\n---\n\n') : '(empty — no context or template configured)';
     return { content: [{ type: 'text', text: composed }] };
   },
 );

@@ -7,7 +7,6 @@ import { resolveSessionProvider } from '@foundation/types.js';
 import { VAULT_ROOT } from '@foundation/config.js';
 import { createTrackRepository } from '@infrastructure/persistence/track-repository.js';
 import { createSessionRepository } from '@infrastructure/persistence/session-repository.js';
-import { createSummaryRepository } from '@infrastructure/persistence/summary-repository.js';
 import { createTicketRepository } from '@infrastructure/persistence/ticket-repository.js';
 import { createAutomationRuleRepository } from '@infrastructure/persistence/automation-repository.js';
 import { createPromptTemplateRepository } from '@infrastructure/persistence/prompt-template-repository.js';
@@ -23,7 +22,6 @@ import { createVaultWriter } from '@infrastructure/vault/writer.js';
 import { createVaultProvisioner } from '@infrastructure/vault/provisioner.js';
 import { slugifyTrackName } from '@infrastructure/vault/utils.js';
 import { createScheduledTaskRepository, createScheduledTaskRunRepository } from '@infrastructure/persistence/scheduled-task-repository.js';
-import { createSummaryGenerationService } from '@application/summary-generation/service.js';
 import { interpolateTemplate } from '@application/track-management/prompt-interpolation.js';
 import { composeVaultContext } from '@application/vault/compose-vault-context.js';
 import type { AutomationEngine } from '@application/automation-engine/engine.js';
@@ -104,7 +102,6 @@ export function createApiRouter(deps: ApiRouterDeps = {}): Router {
   const router = Router();
   const tracks = createTrackRepository();
   const sessions = createSessionRepository();
-  const summaries = createSummaryRepository();
   const tickets = createTicketRepository();
   const automationRules = createAutomationRuleRepository();
   const promptTemplates = createPromptTemplateRepository();
@@ -229,12 +226,6 @@ export function createApiRouter(deps: ApiRouterDeps = {}): Router {
   const vaultWriter = createVaultWriter(VAULT_ROOT);
   const vaultProvisioner = createVaultProvisioner(VAULT_ROOT);
   vaultProvisioner.seedPlaybookPatterns();
-  const summaryGeneration = createSummaryGenerationService({
-    trackRepo: tracks,
-    ticketRepo: tickets,
-    summaryRepo: summaries,
-    gitAdapter,
-  });
   const settingsRepo = createSettingsRepository();
 
   // PR monitor infrastructure — wired before the todo router so todo updates
@@ -270,7 +261,6 @@ export function createApiRouter(deps: ApiRouterDeps = {}): Router {
     todos,
     tracks,
     sessions,
-    summaries,
     tickets,
     promptTemplates,
     agents,
@@ -334,7 +324,6 @@ export function createApiRouter(deps: ApiRouterDeps = {}): Router {
     runs: scheduledTaskRuns,
     tracks,
     sessions,
-    summaries,
     tickets,
     promptTemplates,
     agents,
@@ -391,7 +380,6 @@ export function createApiRouter(deps: ApiRouterDeps = {}): Router {
     engine: workflowEngine,
     tickets: workflowTickets,
     tracks,
-    summaries,
     terminal,
     topologyLoader,
   });
@@ -400,7 +388,6 @@ export function createApiRouter(deps: ApiRouterDeps = {}): Router {
   const agentDispatcher = createAgentDispatcher({
     tickets: workflowTickets,
     tracks,
-    summaries,
     terminal,
     topologyLoader,
     agentRoles: workflowAgentRoles,
@@ -526,7 +513,6 @@ export function createApiRouter(deps: ApiRouterDeps = {}): Router {
     filesystemScanner,
     sessions,
     tracks,
-    summaries,
     terminal,
     projectRoot,
     broadcast: broadcast as (type: string, id: string) => void,
@@ -606,7 +592,6 @@ export function createApiRouter(deps: ApiRouterDeps = {}): Router {
   const matrixRouter = createMatrixRouter({
     tracks,
     sessions,
-    summaries,
     tickets,
     promptTemplates,
     terminal,
@@ -906,7 +891,7 @@ export function createApiRouter(deps: ApiRouterDeps = {}): Router {
 
       const agentId = shell ? undefined : ((req.body?.agentId as AgentId | undefined) ?? undefined);
 
-      // Auto-compose system prompt from track context + summary + template
+      // Auto-compose system prompt from track context + template
       let systemPrompt = shell ? undefined : req.body?.systemPrompt;
       if (!shell && !systemPrompt) {
         const parts: string[] = [];
@@ -931,13 +916,7 @@ export function createApiRouter(deps: ApiRouterDeps = {}): Router {
           parts.push(vaultContext);
         }
 
-        // 3. Latest summary
-        const summary = summaries.findLatest(trackId);
-        if (summary) {
-          parts.push(`## Current Status\n\n${summary.content}`);
-        }
-
-        // 4. Interpolated prompt template
+        // 3. Interpolated prompt template
         let templateHasRepos = false;
         let templateHasTask = false;
         if (track.defaultPromptTemplateId) {
@@ -1192,35 +1171,6 @@ export function createApiRouter(deps: ApiRouterDeps = {}): Router {
     } catch (err) {
       console.error('Failed to open in editor:', err);
       res.status(500).json({ error: 'Failed to open in editor' });
-    }
-  });
-
-  // --- Summary ---
-
-  router.get('/tracks/:id/summary', (req, res) => {
-    const summary = summaries.findLatest(req.params.id as TrackId);
-    if (!summary) {
-      res.status(404).json({ error: 'No summary yet' });
-      return;
-    }
-    res.json(summary);
-  });
-
-  router.post('/tracks/:id/summary/refresh', async (req, res) => {
-    try {
-      const trackId = req.params.id as TrackId;
-      const track = tracks.findById(trackId);
-      if (!track) {
-        res.status(404).json({ error: 'Track not found' });
-        return;
-      }
-      const summary = await summaryGeneration.generateSummary(trackId);
-      broadcast('summary:updated', trackId);
-      res.json(summary);
-    } catch (err) {
-      console.error('Failed to generate summary:', err);
-      const message = err instanceof Error ? err.message : 'Failed to generate summary';
-      res.status(500).json({ error: message });
     }
   });
 

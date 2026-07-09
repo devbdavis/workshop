@@ -4,7 +4,6 @@ import { resolveSessionProvider } from '@foundation/types.js';
 import type { TodoRepository } from '@domain/todo/repository';
 import type { TrackRepository } from '@domain/track/repository';
 import type { SessionRepository } from '@domain/session/repository';
-import type { SummaryRepository } from '@domain/summary/repository';
 import type { TicketRepository } from '@domain/ticket/repository';
 import type { PromptTemplateRepository } from '@domain/prompt-template/repository';
 import type { AgentRepository } from '@domain/agent/repository';
@@ -21,7 +20,6 @@ export interface TodoRouterDeps {
   todos: TodoRepository;
   tracks: TrackRepository;
   sessions: SessionRepository;
-  summaries: SummaryRepository;
   tickets: TicketRepository;
   promptTemplates: PromptTemplateRepository;
   agents: AgentRepository;
@@ -51,7 +49,6 @@ export function createTodoRouter(deps: TodoRouterDeps): Router {
     todos,
     tracks,
     sessions,
-    summaries,
     tickets,
     promptTemplates,
     agents,
@@ -258,7 +255,7 @@ export function createTodoRouter(deps: TodoRouterDeps): Router {
       // model (default opus). Empty setting disables the --model flag.
       const model: string | undefined = (settings.get('dispatch_model') ?? 'opus').trim() || undefined;
 
-      // Compose system prompt: agent + track context + summary + template + repos + todo task
+      // Compose system prompt: agent + track context + template + repos + todo task
       const parts: string[] = [];
       const repos = tracks.findReposByTrack(todo.trackId);
 
@@ -283,11 +280,6 @@ export function createTodoRouter(deps: TodoRouterDeps): Router {
       const vaultContext = composeVaultContext(vaultReader, trackSlug);
       if (vaultContext) {
         parts.push(vaultContext);
-      }
-
-      const summary = summaries.findLatest(todo.trackId);
-      if (summary) {
-        parts.push(`## Current Status\n\n${summary.content}`);
       }
 
       let templateHasRepos = false;

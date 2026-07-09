@@ -111,11 +111,6 @@ function createMockDeps(): DiscussionServiceDeps {
       setTerminalLayout: vi.fn(),
       setDefaultPromptTemplate: vi.fn(),
     } as any,
-    summaries: {
-      findLatest: vi.fn().mockReturnValue(null),
-      findByTrack: vi.fn().mockReturnValue([]),
-      create: vi.fn(),
-    } as any,
     terminal: {
       createSession: vi.fn().mockResolvedValue({
         id: 'session-1' as SessionId,

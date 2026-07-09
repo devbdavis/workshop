@@ -7,7 +7,6 @@ import type { DiscussionState } from './discussion-service.js';
 export function buildActOnConsensusPrompt(
   state: DiscussionState,
   trackContext?: string,
-  summary?: string,
 ): string {
   const parts: string[] = [];
 
@@ -16,10 +15,6 @@ export function buildActOnConsensusPrompt(
 
   if (trackContext) {
     parts.push(`## Project Context\n\n${trackContext}`);
-  }
-
-  if (summary) {
-    parts.push(`## Current Project Status\n\n${summary}`);
   }
 
   parts.push(buildStrategyGuidance());
