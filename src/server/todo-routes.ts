@@ -11,6 +11,7 @@ import type { AgentRepository } from '@domain/agent/repository';
 import type { SettingsRepository } from '@domain/repo/repository';
 import type { FilesystemAgentScanner } from '@infrastructure/agents/filesystem-scanner.js';
 import type { VaultReader } from '@infrastructure/vault/reader.js';
+import type { PrMonitorRegistrar } from '@application/pr-monitor/registrar.js';
 import { slugifyTrackName } from '@infrastructure/vault/utils.js';
 import { interpolateTemplate } from '@application/track-management/prompt-interpolation.js';
 import { composeVaultContext } from '@application/vault/compose-vault-context.js';
@@ -30,12 +31,18 @@ export interface TodoRouterDeps {
   terminal: {
     createSession: (
       trackId: TrackId,
-      opts?: { systemPrompt?: string; workingDirectory?: string; background?: boolean; todoId?: string; initialPrompt?: string; provider?: SessionProvider; name?: string; worktreeMode?: boolean; repos?: TrackRepo[]; issueKey?: string; dangerouslySkipPermissions?: boolean; skipBackgroundInstructions?: boolean; onReady?: (session: { id: SessionId }) => void },
+      opts?: { systemPrompt?: string; workingDirectory?: string; background?: boolean; todoId?: string; initialPrompt?: string; provider?: SessionProvider; model?: string; name?: string; worktreeMode?: boolean; repos?: TrackRepo[]; issueKey?: string; dangerouslySkipPermissions?: boolean; skipBackgroundInstructions?: boolean; onReady?: (session: { id: SessionId }) => void },
     ) => Promise<{ id: SessionId; trackId: TrackId; tmuxSession: string; state: string }>;
     destroySession: (sessionId: SessionId) => Promise<void>;
     softDeleteSession: (sessionId: SessionId) => Promise<void>;
   };
   vaultReader: VaultReader;
+  /**
+   * Optional — when provided, the todo update endpoint reconciles PR monitor
+   * rows against the new `pullRequests` list so submit-for-review et al don't
+   * need a separate API call to register monitoring.
+   */
+  prMonitorRegistrar?: PrMonitorRegistrar;
 }
 
 export function createTodoRouter(deps: TodoRouterDeps): Router {
@@ -53,6 +60,7 @@ export function createTodoRouter(deps: TodoRouterDeps): Router {
     projectRoot,
     terminal,
     vaultReader,
+    prMonitorRegistrar,
   } = deps;
 
   // --- List all todos (with optional filters) ---
@@ -180,6 +188,21 @@ export function createTodoRouter(deps: TodoRouterDeps): Router {
       }
     }
 
+    // Reconcile PR monitor rows when pullRequests changed (or the todo moved to done).
+    // The registrar is idempotent — calling it on every update is cheap.
+    if (prMonitorRegistrar) {
+      try {
+        if (isMovingToDone) {
+          // Closing out the todo — stop tracking its PRs entirely.
+          prMonitorRegistrar.removeAllForTodo(todo.id);
+        } else if (pullRequests !== undefined) {
+          prMonitorRegistrar.reconcile(todo);
+        }
+      } catch (err) {
+        console.error('Failed to reconcile PR monitors for todo:', err);
+      }
+    }
+
     broadcast('todo:updated', todo.trackId);
     res.json(todo);
   });
@@ -191,6 +214,15 @@ export function createTodoRouter(deps: TodoRouterDeps): Router {
     if (!todo) {
       res.status(404).json({ error: 'Todo not found' });
       return;
+    }
+    // Drop PR monitors before deleting the todo so the ON DELETE CASCADE doesn't
+    // sweep them silently — we want explicit unregister behaviour for observability.
+    if (prMonitorRegistrar) {
+      try {
+        prMonitorRegistrar.removeAllForTodo(todo.id);
+      } catch (err) {
+        console.error('Failed to remove PR monitors for deleted todo:', err);
+      }
     }
     todos.delete(todo.id);
     broadcast('todo:deleted', todo.trackId);
@@ -221,6 +253,10 @@ export function createTodoRouter(deps: TodoRouterDeps): Router {
         settings.get('default_ai_cli'),
       );
       const dangerouslySkipPermissions: boolean = req.body?.dangerouslySkipPermissions === true;
+
+      // Dispatched sessions are orchestrators — run them on the configured
+      // model (default opus). Empty setting disables the --model flag.
+      const model: string | undefined = (settings.get('dispatch_model') ?? 'opus').trim() || undefined;
 
       // Compose system prompt: agent + track context + summary + template + repos + todo task
       const parts: string[] = [];
@@ -314,7 +350,10 @@ export function createTodoRouter(deps: TodoRouterDeps): Router {
 
       const systemPrompt = parts.join('\n\n---\n\n');
 
-      const taskPrompt = `Complete the following task:\n\n**${todo.title}**\n\n${todo.description || 'No additional details provided.'}`;
+      const prLines = (todo.pullRequests ?? [])
+        .map((pr) => `- ${pr.title ? `${pr.title}: ` : ''}${pr.url}`)
+        .join('\n');
+      const taskPrompt = `Complete the following task:\n\n**${todo.title}**\n\n${todo.description || 'No additional details provided.'}${prLines ? `\n\nAssociated pull requests:\n${prLines}` : ''}`;
 
       const session = await terminal.createSession(todo.trackId, {
         systemPrompt,
@@ -323,6 +362,7 @@ export function createTodoRouter(deps: TodoRouterDeps): Router {
         todoId: todo.id,
         initialPrompt: taskPrompt,
         provider,
+        model,
         name: todo.title,
         worktreeMode: track.worktreeMode && repos.length > 0,
         repos: track.worktreeMode ? repos : undefined,

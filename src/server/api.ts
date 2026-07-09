@@ -2,7 +2,7 @@ import { existsSync, readFileSync, writeFileSync } from 'fs';
 import { homedir } from 'os';
 import path from 'path';
 import { Router } from 'express';
-import type { TrackId, SessionId, SessionProvider, RepoId, PathId, AgentId, AutomationRuleId, TemplateId, TerminalLayout, WorkflowTicket } from '@foundation/types';
+import type { TrackId, SessionId, SessionProvider, RepoId, PathId, AgentId, AutomationRuleId, TemplateId, TerminalLayout, TodoId, WorkflowTicket } from '@foundation/types';
 import { resolveSessionProvider } from '@foundation/types.js';
 import { VAULT_ROOT } from '@foundation/config.js';
 import { createTrackRepository } from '@infrastructure/persistence/track-repository.js';
@@ -16,6 +16,7 @@ import { createAgentRepository } from '@infrastructure/persistence/agent-reposit
 import { createTerminalManager } from '@infrastructure/terminal/manager.js';
 import { createGitAdapter } from '@infrastructure/git/git-adapter.js';
 import { createFilesystemAgentScanner } from '@infrastructure/agents/filesystem-scanner.js';
+import { ensureAutoInstallAgents } from '@infrastructure/agents/template-installer.js';
 import { createFilesystemSkillScanner } from '@infrastructure/skills/filesystem-scanner.js';
 import { createVaultReader } from '@infrastructure/vault/reader.js';
 import { createVaultWriter } from '@infrastructure/vault/writer.js';
@@ -59,6 +60,9 @@ import { createMatrixRouter } from '@application/matrix-router/router.js';
 import { createDiscussionRouter } from './discussion-routes.js';
 import { createMcpServerConfigRepository } from '@infrastructure/persistence/mcp-config-repository.js';
 import { createMcpConfigRouter } from './mcp-config-routes.js';
+import { createPluginRouter } from './plugin-routes.js';
+import { createPluginRepository } from '@infrastructure/persistence/plugin-repository.js';
+import { ensureRegisteredPluginsInstalled } from '@infrastructure/plugins/ensure-installed.js';
 import { createGlobalRepoRepository, createSettingsRepository } from '@infrastructure/persistence/repo-repository.js';
 import { createRepoRouter } from './repo-routes.js';
 import { createUserRepository } from '@infrastructure/persistence/user-repository.js';
@@ -72,7 +76,16 @@ import { createClaudeAdapter } from '@infrastructure/mcp-tools/claude-adapter.js
 import { createCodexAdapter } from '@infrastructure/mcp-tools/codex-adapter.js';
 import { createGeminiAdapter } from '@infrastructure/mcp-tools/gemini-adapter.js';
 import { createSoulLoader } from '@infrastructure/soul/soul-loader.js';
-import { ensureDefaultTodoTemplate } from '@infrastructure/persistence/database.js';
+import { ensureDefaultTodoTemplate, ensureSystemPromptTemplates } from '@infrastructure/persistence/database.js';
+import { createPrMonitorRepository } from '@infrastructure/persistence/pr-monitor-repository.js';
+import { createGhAdapter } from '@infrastructure/github/gh-adapter.js';
+import { createPrMonitorPoller } from '@application/pr-monitor/poller.js';
+import { createPrMonitorRegistrar } from '@application/pr-monitor/registrar.js';
+import { createPrMonitorRouter } from './pr-monitor-routes.js';
+import { createPrReviewRepository } from '@infrastructure/persistence/pr-review-repository.js';
+import { createGhReviewAdapter } from '@infrastructure/github/gh-review-adapter.js';
+import { createPrReviewDiscoveryPoller } from '@application/pr-review/discovery-poller.js';
+import { createPrReviewRouter } from './pr-review-routes.js';
 import {
   detectAvailability,
   parseEditorChoice,
@@ -101,10 +114,33 @@ export function createApiRouter(deps: ApiRouterDeps = {}): Router {
   const filesystemScanner = createFilesystemAgentScanner();
   const projectRoot = process.cwd();
   const soulLoader = createSoulLoader(projectRoot);
-  const terminal = createTerminalManager(sessions, soulLoader, todos);
+  const plugins = createPluginRepository();
+  const terminal = createTerminalManager(sessions, soulLoader, todos, plugins);
+
+  // Ensure registered marketplace plugins are installed across AI CLIs.
+  // Fire-and-forget — network/git work must never block server boot.
+  ensureRegisteredPluginsInstalled(plugins)
+    .then((results) => {
+      const failures = results.filter((r) => !r.success);
+      if (failures.length > 0) {
+        console.warn('[plugins] Startup sync completed with failures:', failures.map((f) => `${f.provider}:${f.pluginName} — ${f.message}`).join('; '));
+      } else {
+        console.log(`[plugins] Startup sync complete (${results.length} step(s))`);
+      }
+    })
+    .catch((err) => console.error('[plugins] Startup sync failed:', err));
 
   // Ensure the default todo template exists and is assigned to all tracks
   ensureDefaultTodoTemplate();
+  // Ensure system templates for PR build-fix + comment-response exist (idempotent).
+  ensureSystemPromptTemplates();
+
+  // Install repo-committed agent templates flagged autoInstall into ~/.claude/agents
+  try {
+    ensureAutoInstallAgents(projectRoot);
+  } catch (err) {
+    console.warn('[agents] Auto-install of template agents failed:', err);
+  }
 
   // Sync session states on startup and periodically (every 30s).
   // Dead tmux sessions are removed from the DB (or suspended if resumable).
@@ -202,6 +238,32 @@ export function createApiRouter(deps: ApiRouterDeps = {}): Router {
   });
   const settingsRepo = createSettingsRepository();
 
+  // PR monitor infrastructure — wired before the todo router so todo updates
+  // can reconcile monitors as part of their normal flow.
+  const prMonitors = createPrMonitorRepository();
+  const ghAdapter = createGhAdapter();
+  const prRegistrar = createPrMonitorRegistrar(prMonitors);
+  const prPoller = createPrMonitorPoller({
+    monitors: prMonitors,
+    gh: ghAdapter,
+    broadcast: (type, trackId, payload) => broadcast(type, trackId, payload),
+  });
+  prPoller.start();
+  process.on('SIGINT', () => prPoller.stop());
+  process.on('SIGTERM', () => prPoller.stop());
+
+  // PR Review dashboard — incoming review requests + agent findings.
+  const prReviews = createPrReviewRepository();
+  const ghReviewAdapter = createGhReviewAdapter();
+  const prReviewDiscovery = createPrReviewDiscoveryPoller({
+    reviews: prReviews,
+    gh: ghReviewAdapter,
+    broadcast: (type, trackId, payload) => broadcast(type, trackId, payload),
+  });
+  prReviewDiscovery.start();
+  process.on('SIGINT', () => prReviewDiscovery.stop());
+  process.on('SIGTERM', () => prReviewDiscovery.stop());
+
   // Mount todo sub-router
   const todoRouter = createTodoRouter({
     todos,
@@ -216,8 +278,43 @@ export function createApiRouter(deps: ApiRouterDeps = {}): Router {
     projectRoot,
     terminal,
     vaultReader,
+    prMonitorRegistrar: prRegistrar,
   });
   router.use(todoRouter);
+
+  // Mount PR-monitor sub-router (action dispatch + status queries)
+  const prMonitorRouter = createPrMonitorRouter({
+    monitors: prMonitors,
+    registrar: prRegistrar,
+    poller: prPoller,
+    todos,
+    tracks,
+    summaries,
+    tickets,
+    promptTemplates,
+    agents,
+    filesystemScanner,
+    settings: settingsRepo,
+    projectRoot,
+    terminal,
+  });
+  router.use(prMonitorRouter);
+
+  // Mount PR-review dashboard sub-router
+  const prReviewRouter = createPrReviewRouter({
+    reviews: prReviews,
+    discovery: prReviewDiscovery,
+    gh: ghAdapter,
+    ghReview: ghReviewAdapter,
+    sessions,
+    tracks,
+    agents,
+    filesystemScanner,
+    settings: settingsRepo,
+    projectRoot,
+    terminal,
+  });
+  router.use(prReviewRouter);
 
   // Mount agent sub-router
   const agentRouter = createAgentRouter({ agents, filesystemScanner, projectRoot });
@@ -475,6 +572,10 @@ export function createApiRouter(deps: ApiRouterDeps = {}): Router {
   });
   router.use(ticketImportRouter);
 
+  // Mount marketplace plugin sub-router
+  const pluginRouter = createPluginRouter({ plugins });
+  router.use(pluginRouter);
+
   // Mount MCP config sub-router
   const mcpConfigs = createMcpServerConfigRepository();
   const mcpConfigRouter = createMcpConfigRouter({
@@ -568,7 +669,13 @@ export function createApiRouter(deps: ApiRouterDeps = {}): Router {
       res.status(400).json({ error: 'name is required' });
       return;
     }
-    const track = tracks.create({ name, description, status: 'active' });
+    // New tracks default to the Orchestrator agent (auto-installed from
+    // templates/agents/orchestrator.md) so dispatched todos follow the
+    // standard plan → execute → self-review → PR flow out of the box.
+    const orchestratorId = 'global:orchestrator' as AgentId;
+    const defaultAgentId = filesystemScanner.findById(orchestratorId, projectRoot) ? orchestratorId : undefined;
+
+    const track = tracks.create({ name, description, status: 'active', defaultAgentId });
 
     // Auto-assign the default todo template to newly created tracks
     const defaultTemplate = promptTemplates.findDefault();
@@ -778,10 +885,29 @@ export function createApiRouter(deps: ApiRouterDeps = {}): Router {
         return;
       }
 
+      // Optional todo link — the session works on this task and the todo is
+      // marked in-progress once the session exists.
+      const todoId = req.body?.todoId as TodoId | undefined;
+      const todo = todoId ? todos.findById(todoId) : undefined;
+      if (todoId && !todo) {
+        res.status(404).json({ error: 'Todo not found' });
+        return;
+      }
+
+      const agentId = (req.body?.agentId as AgentId | undefined) ?? undefined;
+
       // Auto-compose system prompt from track context + summary + template
       let systemPrompt = req.body?.systemPrompt;
       if (!systemPrompt) {
         const parts: string[] = [];
+
+        // 0. Agent role prompt (workshop DB first, then filesystem agents)
+        if (agentId) {
+          const agent = agents.findById(agentId) ?? filesystemScanner.findById(agentId, projectRoot);
+          if (agent) {
+            parts.push(`## Agent: ${agent.name}\n\n${agent.systemPrompt}`);
+          }
+        }
 
         // 1. Track context (freeform user-provided context)
         if (track.context) {
@@ -831,15 +957,33 @@ export function createApiRouter(deps: ApiRouterDeps = {}): Router {
           parts.push(`## Track Paths\n\n${pathLines}`);
         }
 
+        // 7. The task, when the session is linked to a todo
+        if (todo) {
+          parts.push(`## Task\n\n**${todo.title}**\n\n${todo.description || ''}`);
+        }
+
         if (parts.length > 0) {
           systemPrompt = parts.join('\n\n---\n\n');
         }
       }
 
+      // Initial prompt: explicit body value wins; a linked todo supplies a
+      // task prompt as fallback (cursor requires a non-empty prompt).
+      const bodyPrompt = typeof req.body?.initialPrompt === 'string' ? req.body.initialPrompt.trim() : '';
+      const initialPrompt = bodyPrompt
+        || (todo ? `Complete the following task:\n\n**${todo.title}**\n\n${todo.description || 'No additional details provided.'}` : undefined);
+
       const provider: SessionProvider = resolveSessionProvider(
         req.body?.provider,
         settingsRepo.get('default_ai_cli'),
       );
+
+      // Task-bearing sessions (linked todo or an initial prompt) are
+      // orchestrators — run them on the configured dispatch model (default
+      // opus). Plain interactive terminals keep the CLI's own default.
+      const model: string | undefined = todo || initialPrompt
+        ? (settingsRepo.get('dispatch_model') ?? 'opus').trim() || undefined
+        : undefined;
 
       // worktreeMode: explicit request body takes precedence, then track-level default
       const requestWorktreeMode = req.body?.worktreeMode;
@@ -853,12 +997,27 @@ export function createApiRouter(deps: ApiRouterDeps = {}): Router {
       const session = await terminal.createSession(trackId, {
         systemPrompt,
         provider,
+        model,
+        initialPrompt,
+        todoId: todo?.id,
+        name: typeof req.body?.name === 'string' && req.body.name.trim() ? req.body.name.trim() : todo?.title,
+        issueKey: todo?.issueKey,
         workingDirectory: repos[0]?.path,
         worktreeMode: worktreeMode && repos.length > 0,
         repos: worktreeMode ? repos : undefined,
         additionalDirs: trackPaths.length > 0 ? trackPaths.map((p) => p.path) : undefined,
         onReady: (s) => broadcast('session:ready', trackId, { sessionId: s.id }),
       });
+
+      if (todo) {
+        todos.update(todo.id, {
+          status: 'in-progress',
+          sessionId: session.id as SessionId,
+          agentId,
+        });
+        broadcast('todo:updated', trackId);
+      }
+
       broadcast('session:created', trackId, { sessionId: session.id });
       res.status(201).json(session);
     } catch (err) {

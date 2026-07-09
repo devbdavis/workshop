@@ -270,6 +270,92 @@ export interface Todo {
   updatedAt: string;
 }
 
+// PR Monitor — tracks status checks and unresolved comments on PRs linked to todos.
+// Polled in the background (capped at a handful of requests per cycle) so the
+// UI can surface "needs attention" affordances without spamming GitHub.
+
+/** Lifecycle state of the PR itself. */
+export type PrState = 'open' | 'draft' | 'merged' | 'closed' | 'unknown';
+
+/** Rolled-up status-check verdict across all checks/statuses on the PR head. */
+export type PrCheckStatus = 'none' | 'pending' | 'passing' | 'failing' | 'error';
+
+/** A single failing check surfaced to the UI. */
+export interface PrCheckSummary {
+  /** Display name (workflow / context). */
+  name: string;
+  /** GitHub conclusion (SUCCESS, FAILURE, CANCELLED, TIMED_OUT, ...) when COMPLETED. */
+  conclusion?: string;
+  /** GitHub status (QUEUED, IN_PROGRESS, COMPLETED, ...). */
+  status?: string;
+  /** Link the user can click to inspect the failure. */
+  detailsUrl?: string;
+  /** Short text the checker provided (truncated by the poller). */
+  summary?: string;
+}
+
+/** A single PR comment surfaced to the UI as "needs attention". */
+export interface PrComment {
+  /** GitHub node ID — used so the UI can dispatch a response for a single comment. */
+  id: string;
+  author: string;
+  body: string;
+  createdAt: string;
+  url?: string;
+  /** `issue` = PR-level comment; `review` = inline review comment. */
+  kind: 'issue' | 'review';
+  /** For review comments only: the file path being reviewed. */
+  path?: string;
+  /** For review comments only: the diff line. */
+  line?: number;
+}
+
+/**
+ * Reason the poller flipped `monitoring` off:
+ * - `finished`: PR was merged or closed
+ * - `stale`: PR has had no push in the configured cutoff window
+ * - `user`: user paused it manually via the UI (reserved for future)
+ * `undefined` means the monitor is still active or was never paused.
+ */
+export type PrPauseReason = 'finished' | 'stale' | 'user';
+
+/** A PR being polled by the background monitor. */
+export interface PrMonitor {
+  /** Canonical PR URL (https://github.com/owner/repo/pull/N). Primary key. */
+  prUrl: string;
+  todoId: TodoId;
+  trackId: TrackId;
+  repoOwner: string;
+  repoName: string;
+  prNumber: number;
+  prTitle?: string;
+  /** Head ref name (the branch the PR is merging from), captured on each poll. */
+  prBranch?: string;
+  /** SHA of the PR head commit. Used to detect new pushes → resets `lastPushAt`. */
+  headRefOid?: string;
+  state: PrState;
+  checkStatus: PrCheckStatus;
+  failingChecks: PrCheckSummary[];
+  unresolvedComments: PrComment[];
+  /** ISO timestamp when the PR first started "needing attention" in the current cycle. */
+  needsAttentionSince?: string;
+  /** When we last finished a poll for this PR (success or failure). */
+  lastPolledAt?: string;
+  /** When the last meaningful change was observed (new comment, status flip). */
+  lastEventAt?: string;
+  /** When we last saw a push (headRefOid change). Seeded on first poll. */
+  lastPushAt?: string;
+  /** False once the PR is merged or closed OR the poller auto-paused it as stale. */
+  monitoring: boolean;
+  /** Set alongside `monitoring=false` so the UI can explain why polling stopped. */
+  pauseReason?: PrPauseReason;
+  createdAt: string;
+  updatedAt: string;
+}
+
+/** What the UI/API surface as "this PR wants you to look at it". */
+export type PrAttentionReason = 'failing-checks' | 'unresolved-comments' | 'both' | 'none';
+
 // Terminal layout (recursive split tree)
 export type LayoutNodeId = string & { readonly __brand: 'LayoutNodeId' };
 
@@ -299,12 +385,24 @@ export interface TerminalLayout {
 }
 
 // Prompt template
+/**
+ * Reserved system templates that the app maintains itself.
+ * - `todo`: the default dispatched-todo template (also flagged via legacy `is_default = 1`).
+ * - `pr-build-fix`: the prompt sent to a sub-agent when a monitored PR has failing CI checks.
+ * - `pr-comment-response`: the prompt sent to a sub-agent when a monitored PR has unresolved comments.
+ *
+ * User-created templates leave `systemKind` undefined.
+ */
+export type PromptTemplateSystemKind = 'todo' | 'pr-build-fix' | 'pr-comment-response';
+
 export interface PromptTemplate {
   id: TemplateId;
   name: string;
   description?: string;
   content: string;
   isDefault: boolean;
+  /** Non-empty for the small set of templates Workshop manages itself. */
+  systemKind?: PromptTemplateSystemKind;
   createdAt: string;
   updatedAt: string;
 }
@@ -539,6 +637,43 @@ export interface McpInstallResult {
   message: string;
 }
 
+// Marketplace Plugin
+export type PluginId = string & { readonly __brand: 'PluginId' };
+
+/** Which AI CLIs a plugin's repo can reach, detected from repo contents at sync */
+export interface PluginProviders {
+  /** Repo ships .claude-plugin/ — installable via claude plugin CLI */
+  claude?: boolean;
+  /** Repo ships gemini-extension.json — installable via gemini extensions */
+  gemini?: boolean;
+  /** Repo ships AGENTS.md — rules injectable for Codex */
+  codex?: boolean;
+  /** Repo ships AGENTS.md — rules injectable for Cursor (worktree workspaces) */
+  cursor?: boolean;
+}
+
+export interface Plugin {
+  id: PluginId;
+  /** Marketplace GitHub repo, e.g. 'DietrichGebert/ponytail' */
+  marketplaceRepo: string;
+  /** Claude Code plugin identifier, e.g. 'ponytail@ponytail' */
+  pluginName: string;
+  description?: string;
+  enabled: boolean;
+  /** Detected provider coverage — undefined until first sync */
+  providers?: PluginProviders;
+  createdAt: string;
+  updatedAt: string;
+}
+
+/** Result of one provider-adapter step during plugin sync */
+export interface PluginSyncResult {
+  pluginName: string;
+  provider: 'clone' | 'claude' | 'gemini' | 'codex-rules';
+  success: boolean;
+  message: string;
+}
+
 // Skill
 export type SkillId = string & { readonly __brand: 'SkillId' };
 export type SkillSource = 'global' | 'project';
@@ -559,4 +694,66 @@ export interface Skill {
   templateContent?: string;
   createdAt: string;
   updatedAt: string;
+}
+
+// PR Review Dashboard — incoming review requests + agent findings
+export type PrReviewId = string & { readonly __brand: 'PrReviewId' };
+export type PrReviewFindingId = string & { readonly __brand: 'PrReviewFindingId' };
+
+/** Lifecycle: discovered/added → agent dispatched → findings in → review posted.
+ *  `removed` rows are hidden everywhere and block re-discovery (the poller's
+ *  upsert-by-URL finds them and leaves them alone). */
+export type PrReviewState = 'incoming' | 'analyzing' | 'ready' | 'submitted' | 'dismissed' | 'removed';
+export type PrReviewVerdict = 'approve' | 'request_changes' | 'comment';
+export type PrReviewDiscoveredVia = 'poll' | 'manual';
+
+/** A PR the user has been asked to review (or added by hand). */
+export interface PrReview {
+  id: PrReviewId;
+  /** Canonical PR URL (https://github.com/owner/repo/pull/N). Unique. */
+  prUrl: string;
+  repoOwner: string;
+  repoName: string;
+  prNumber: number;
+  prTitle?: string;
+  prAuthor?: string;
+  prBranch?: string;
+  /** PR description (markdown), clamped at fetch time. */
+  prBody?: string;
+  /** Head SHA at the time the agent reported findings — drives the "PR changed since analysis" warning. */
+  headSha?: string;
+  state: PrReviewState;
+  discoveredVia: PrReviewDiscoveredVia;
+  /** Background session running (or that ran) the analysis. */
+  sessionId?: SessionId;
+  /** Agent-drafted overall review comment, editable by the user before submit. */
+  draftSummary?: string;
+  suggestedVerdict?: PrReviewVerdict;
+  submittedAt?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export type PrReviewFindingStatus = 'open' | 'dismissed' | 'posted';
+
+/** One piece of agent feedback on a PR, GitHub-inline-comment shaped. */
+export interface PrReviewFinding {
+  id: PrReviewFindingId;
+  reviewId: PrReviewId;
+  /** Repo-relative file path. */
+  file: string;
+  /** Line in the PR head version of the file. */
+  line?: number;
+  side: 'LEFT' | 'RIGHT';
+  category?: string;
+  summary: string;
+  failureScenario?: string;
+  /** The text that becomes the inline GitHub comment if kept. */
+  suggestedComment: string;
+  /** Diff hunk excerpt around the line, extracted server-side at report time. */
+  codeContext?: string;
+  /** True when file+line lands on a diff line — eligible for a true inline comment. */
+  anchored: boolean;
+  status: PrReviewFindingStatus;
+  createdAt: string;
 }

@@ -1,6 +1,6 @@
-import { useEffect, useState, useCallback, useRef } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import { useParams, Link } from 'react-router-dom';
-import type { Track, Session, SessionId, SessionProvider, TrackSummary, ExternalTicket, Todo, DefaultAiCli } from '@foundation/types';
+import type { Track, Session, SessionId, TrackSummary, ExternalTicket, Todo, DefaultAiCli, PrMonitor, TodoId } from '@foundation/types';
 import type { DispatchOptions } from './DispatchDropdown';
 import { SummaryPanel } from './SummaryPanel';
 import { ContextPanel } from './ContextPanel';
@@ -8,17 +8,9 @@ import { TicketPanel } from './TicketPanel';
 import { TodoPanel } from './TodoPanel';
 import { TrackConfig } from './TrackConfig';
 import { SessionPanel } from './SessionPanel';
+import { NewSessionModal, type NewSessionOptions } from './NewSessionModal';
 import { TodoDetailModal } from '../kanban/TodoDetailModal';
 import { TerminalArea } from '../terminal-panel/TerminalArea';
-import { useAvailableClis } from '../hooks/useAvailableClis';
-
-/** Display metadata for the New Session provider menu, keyed by provider id. */
-const PROVIDER_META: Record<SessionProvider, { label: string; color: string }> = {
-  claude: { label: 'Claude', color: 'bg-orange-400' },
-  cursor: { label: 'Cursor CLI', color: 'bg-violet-400' },
-  codex: { label: 'Codex', color: 'bg-emerald-400' },
-  gemini: { label: 'Gemini', color: 'bg-blue-400' },
-};
 
 interface IdleAlert {
   id: string;
@@ -34,6 +26,7 @@ export function TrackView() {
   const [summary, setSummary] = useState<TrackSummary | null>(null);
   const [tickets, setTickets] = useState<ExternalTicket[]>([]);
   const [todos, setTodos] = useState<Todo[]>([]);
+  const [prMonitors, setPrMonitors] = useState<PrMonitor[]>([]);
   const [deletedSessions, setDeletedSessions] = useState<Session[]>([]);
   const [activeSessionIds, setActiveSessionIds] = useState<SessionId[]>([]);
   const [loading, setLoading] = useState(true);
@@ -48,17 +41,19 @@ export function TrackView() {
   // Session IDs that have been created but whose tmux/CLI init is still in progress.
   // Cleared when session:ready arrives for that session.
   const [startingSessions, setStartingSessions] = useState<Set<string>>(new Set());
+  const [showNewSession, setShowNewSession] = useState(false);
 
   const loadTrack = useCallback(async () => {
     if (!trackId) return;
     try {
-      const [trackRes, sessionsRes, summaryRes, ticketsRes, todosRes, deletedRes] = await Promise.all([
+      const [trackRes, sessionsRes, summaryRes, ticketsRes, todosRes, deletedRes, prMonitorsRes] = await Promise.all([
         fetch(`/api/tracks/${trackId}`),
         fetch(`/api/tracks/${trackId}/sessions`),
         fetch(`/api/tracks/${trackId}/summary`),
         fetch(`/api/tracks/${trackId}/tickets`),
         fetch(`/api/tracks/${trackId}/todos`),
         fetch(`/api/tracks/${trackId}/sessions/deleted`),
+        fetch(`/api/tracks/${trackId}/pr-monitors`),
       ]);
       if (trackRes.ok) setTrack(await trackRes.json());
       if (sessionsRes.ok) {
@@ -69,6 +64,7 @@ export function TrackView() {
       if (ticketsRes.ok) setTickets(await ticketsRes.json());
       if (todosRes.ok) setTodos(await todosRes.json());
       if (deletedRes.ok) setDeletedSessions(await deletedRes.json());
+      if (prMonitorsRes.ok) setPrMonitors(await prMonitorsRes.json());
     } catch (err) {
       console.error('Failed to load track:', err);
     } finally {
@@ -167,13 +163,13 @@ export function TrackView() {
     };
   }, [trackId, loadTrack]);
 
-  async function createSession(provider: SessionProvider = defaultAiCli, worktreeMode?: boolean): Promise<Session | null> {
+  async function createSession(opts: NewSessionOptions): Promise<Session | null> {
     if (!trackId) return null;
     try {
       const res = await fetch(`/api/tracks/${trackId}/sessions`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ provider, ...(worktreeMode !== undefined ? { worktreeMode } : {}) }),
+        body: JSON.stringify(opts),
       });
       if (res.ok) {
         const session: Session = await res.json();
@@ -330,7 +326,12 @@ export function TrackView() {
         )}
         <span className="text-xs text-gray-500 bg-gray-800 px-2 py-0.5 rounded">{track.status}</span>
         <div className="ml-auto">
-          <NewSessionButton defaultProvider={defaultAiCli} onCreateSession={createSession} />
+          <button
+            onClick={() => setShowNewSession(true)}
+            className="px-3 py-1.5 text-sm bg-blue-600 hover:bg-blue-500 rounded-lg transition-colors"
+          >
+            New Session
+          </button>
         </div>
       </header>
 
@@ -373,7 +374,9 @@ export function TrackView() {
             <SessionPanel
               sessions={activeSessionIds.length > 0 ? sessions.filter((s) => activeSessionIds.includes(s.id)) : sessions.slice(0, 1)}
               todos={todos}
+              prMonitors={prMonitors}
               onOpenTodo={setSelectedTodo}
+              onRefresh={loadTrack}
             />
           ) : sidebarTab === 'todos' ? (
             <TodoPanel track={track} todos={todos} sessions={sessions} onUpdate={loadTrack} />
@@ -407,6 +410,17 @@ export function TrackView() {
           </div>
         </main>
       </div>
+
+      {showNewSession && (
+        <NewSessionModal
+          track={track}
+          todos={todos}
+          defaultProvider={defaultAiCli}
+          onClose={() => setShowNewSession(false)}
+          onCreate={createSession}
+          onTodosChanged={loadTrack}
+        />
+      )}
 
       {selectedTodo !== null && (
         <TodoDetailModal
@@ -451,92 +465,3 @@ export function TrackView() {
   );
 }
 
-function NewSessionButton({
-  defaultProvider,
-  onCreateSession,
-}: {
-  defaultProvider: DefaultAiCli;
-  onCreateSession: (provider: SessionProvider, worktreeMode?: boolean) => Promise<Session | null>;
-}) {
-  const [open, setOpen] = useState(false);
-  const [creating, setCreating] = useState(false);
-  const ref = useRef<HTMLDivElement>(null);
-  const { clis } = useAvailableClis();
-
-  // Offer only enabled agents (gated via Settings → Available CLIs).
-  const enabledProviders = clis
-    .filter((c) => c.kind === 'agent' && c.enabled)
-    .map((c) => c.provider as SessionProvider);
-
-  // Close dropdown when clicking outside
-  useEffect(() => {
-    if (!open) return;
-    function handleClick(e: MouseEvent) {
-      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
-    }
-    document.addEventListener('mousedown', handleClick);
-    return () => document.removeEventListener('mousedown', handleClick);
-  }, [open]);
-
-  async function create(provider: SessionProvider, worktreeMode?: boolean): Promise<void> {
-    if (creating) return;
-    setCreating(true);
-    setOpen(false);
-    try {
-      await onCreateSession(provider, worktreeMode);
-    } finally {
-      setCreating(false);
-    }
-  }
-
-  return (
-    <div ref={ref} className="relative inline-flex">
-      <button
-        onClick={() => create(defaultProvider, true)}
-        disabled={creating}
-        className="px-3 py-1.5 text-sm bg-blue-600 hover:bg-blue-500 disabled:opacity-70 disabled:cursor-not-allowed rounded-l-lg transition-colors flex items-center gap-1.5"
-      >
-        {creating && (
-          <svg className="w-3 h-3 animate-spin" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="2">
-            <path d="M6 1v2M6 9v2M1 6h2M9 6h2" strokeLinecap="round" />
-          </svg>
-        )}
-        {creating ? 'Starting…' : 'New Session'}
-      </button>
-      <button
-        onClick={() => setOpen(!open)}
-        disabled={creating}
-        className="px-1.5 py-1.5 text-sm bg-blue-600 hover:bg-blue-500 disabled:opacity-70 disabled:cursor-not-allowed rounded-r-lg border-l border-blue-500 transition-colors"
-      >
-        <svg className="w-3 h-3" viewBox="0 0 12 12" fill="currentColor">
-          <path d="M3 5l3 3 3-3H3z" />
-        </svg>
-      </button>
-      {open && (
-        <div className="absolute right-0 top-full mt-1 bg-gray-800 border border-gray-700 rounded-lg shadow-lg py-1 z-50 min-w-[160px]">
-          {enabledProviders.map((p) => {
-            const meta = PROVIDER_META[p];
-            return (
-              <div key={p}>
-                <button
-                  onClick={() => create(p, true)}
-                  className="w-full text-left px-3 py-1.5 text-sm hover:bg-gray-700 flex items-center gap-2"
-                >
-                  <span className={`w-2 h-2 rounded-full ${meta.color}`} />
-                  <span>{meta.label} <span className="text-[10px] text-gray-500 ml-0.5">(worktree)</span></span>
-                </button>
-                <button
-                  onClick={() => create(p, false)}
-                  className="w-full text-left px-3 py-1.5 text-sm hover:bg-gray-700 flex items-center gap-2"
-                >
-                  <span className={`w-2 h-2 rounded-full ${meta.color}`} />
-                  {meta.label}
-                </button>
-              </div>
-            );
-          })}
-        </div>
-      )}
-    </div>
-  );
-}
