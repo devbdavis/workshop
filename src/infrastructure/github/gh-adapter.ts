@@ -2,6 +2,7 @@ import { execFile } from 'child_process';
 import { promisify } from 'util';
 import type { PrCheckStatus, PrCheckSummary, PrComment, PrState } from '@foundation/types';
 import { parsePrUrl } from '@infrastructure/forge/pr-url.js';
+import { stripHtmlNoise } from '@foundation/strip-html.js';
 
 const execFileAsync = promisify(execFile);
 
@@ -186,7 +187,7 @@ function deriveComments(raw: GhPrJson, ignoredAuthors: readonly string[]): PrCom
     out.push({
       id: c.id,
       author,
-      body: clampString(c.body, COMMENT_BODY_MAX) ?? '',
+      body: clampString(stripHtmlNoise(c.body), COMMENT_BODY_MAX) ?? '',
       createdAt: c.createdAt ?? new Date().toISOString(),
       url: c.url,
       kind: 'issue',
@@ -208,7 +209,7 @@ function deriveComments(raw: GhPrJson, ignoredAuthors: readonly string[]): PrCom
       out.push({
         id: review.id ?? `${reviewAuthor}-${review.createdAt ?? ''}`,
         author: reviewAuthor,
-        body: clampString(review.body, COMMENT_BODY_MAX) ?? '',
+        body: clampString(stripHtmlNoise(review.body), COMMENT_BODY_MAX) ?? '',
         createdAt: review.createdAt ?? new Date().toISOString(),
         url: review.url,
         kind: 'review',
@@ -222,7 +223,7 @@ function deriveComments(raw: GhPrJson, ignoredAuthors: readonly string[]): PrCom
       out.push({
         id: rc.id,
         author: rcAuthor,
-        body: clampString(rc.body, COMMENT_BODY_MAX) ?? '',
+        body: clampString(stripHtmlNoise(rc.body), COMMENT_BODY_MAX) ?? '',
         createdAt: rc.createdAt ?? new Date().toISOString(),
         url: rc.url,
         kind: 'review',
