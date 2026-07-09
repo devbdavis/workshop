@@ -1,15 +1,23 @@
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useMemo } from 'react';
+import {
+  applyPathRemaps,
+  parsePathRemaps,
+  remapTextFromSettings,
+  EDITOR_URI_PREFIX_KEY,
+} from '@foundation/path-remap';
 
-/** Per-user editor-launch settings (keys live in user_settings). */
-export const EDITOR_URI_PREFIX_KEY = 'editor_uri_prefix';
-export const EDITOR_PATH_FROM_KEY = 'editor_path_from';
-export const EDITOR_PATH_TO_KEY = 'editor_path_to';
+export {
+  EDITOR_URI_PREFIX_KEY,
+  EDITOR_PATH_REMAPS_KEY,
+  EDITOR_PATH_FROM_KEY,
+  EDITOR_PATH_TO_KEY,
+} from '@foundation/path-remap';
 
 interface EditorLaunch {
   /** When set, "Open in Editor" builds `prefix + remappedPath` and opens it client-side. */
   uriPrefix: string;
-  pathFrom: string;
-  pathTo: string;
+  /** The profile's `<from> -> <to>` remap rules, as saved text. */
+  remapText: string;
   loaded: boolean;
   /** Open `path` in the user's editor — remote URI when configured, else host launch. */
   openInEditor: (path: string, sessionId?: string) => Promise<void>;
@@ -33,8 +41,8 @@ export function useEditorLaunch(): EditorLaunch {
   }, []);
 
   const uriPrefix = settings[EDITOR_URI_PREFIX_KEY] ?? '';
-  const pathFrom = settings[EDITOR_PATH_FROM_KEY] ?? '';
-  const pathTo = settings[EDITOR_PATH_TO_KEY] ?? '';
+  const remapText = remapTextFromSettings(settings);
+  const remaps = useMemo(() => parsePathRemaps(remapText), [remapText]);
 
   const openInEditor = useCallback(
     async (path: string, sessionId?: string) => {
@@ -51,10 +59,7 @@ export function useEditorLaunch(): EditorLaunch {
         } catch {
           // Fall back to the raw path if resolution fails.
         }
-        if (pathFrom && target.startsWith(pathFrom)) {
-          target = pathTo + target.slice(pathFrom.length);
-        }
-        window.location.href = uriPrefix + target;
+        window.location.href = uriPrefix + applyPathRemaps(target, remaps);
         return;
       }
       // Fallback: launch on the host (only meaningful for non-Docker native runs).
@@ -64,8 +69,8 @@ export function useEditorLaunch(): EditorLaunch {
         body: JSON.stringify({ path, sessionId }),
       });
     },
-    [uriPrefix, pathFrom, pathTo],
+    [uriPrefix, remaps],
   );
 
-  return { uriPrefix, pathFrom, pathTo, loaded, openInEditor };
+  return { uriPrefix, remapText, loaded, openInEditor };
 }

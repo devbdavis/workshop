@@ -70,6 +70,33 @@ to run as root.
 
 3. Start the container and open `http://<unraid-ip>:3002`.
 
+## Getting a terminal inside the container
+
+Start a session with the **Shell** CLI option (New Session → CLI tool → Shell). It
+opens a tmux pane at the session's working directory with no AI CLI attached —
+`nix`, `direnv`, `git`, and `gh` are all on `$PATH`, and it streams to the browser
+over the same WebSocket every other session uses.
+
+No `sshd`, no `docker exec`, no Docker socket mount. The "Open in Terminal" button
+in the pane header is a *host*-side launcher (iTerm/Konsole/Windows Terminal) and
+is only useful for native, non-Docker installs.
+
+## Per-user editor paths
+
+"Open in Editor" hands `<uri prefix><path>` to your local editor. If you SSH into
+the **container**, the container paths are already correct and no remapping is
+needed. If you SSH into the **host**, set path remaps in Settings → Profile — one
+`<container> -> <editor>` rule per line, longest matching prefix wins:
+
+```
+/repos -> /mnt/user/repos
+/config -> /mnt/user/appdata/workshop
+```
+
+`/repos` and `/config` come from different host locations (bind mount vs. named
+volume), so they need separate rules. A catch-all `/ -> /mnt/host` line can sit
+alongside more specific rules.
+
 ## Notes & caveats
 
 - **Auth token**: a Workshop API auth-token is generated on first request under
