@@ -125,6 +125,7 @@ function createMockDeps(): DiscussionServiceDeps {
       }),
       destroySession: vi.fn().mockResolvedValue(undefined),
       isSessionAlive: vi.fn().mockReturnValue(true),
+      sendInput: vi.fn().mockResolvedValue(true),
     },
     projectRoot: '/tmp/test',
     broadcast: vi.fn(),

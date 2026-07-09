@@ -5,6 +5,7 @@ import { PrCommentList } from './PrCommentList';
 interface Props {
   todo: Todo;
   monitor: PrMonitor;
+  sessionActive: boolean;
   onRefresh: () => void;
 }
 
@@ -24,7 +25,7 @@ const CHECK_BADGE: Record<PrCheckStatus, { label: string; className: string }> =
   error: { label: 'CI error', className: 'text-orange-300 bg-orange-900/40' },
 };
 
-export function PrAttentionPanel({ todo, monitor, onRefresh }: Props) {
+export function PrAttentionPanel({ todo, monitor, sessionActive, onRefresh }: Props) {
   const [dispatching, setDispatching] = useState<string | null>(null);
   const [dismissing, setDismissing] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -85,28 +86,26 @@ export function PrAttentionPanel({ todo, monitor, onRefresh }: Props) {
     }
   }
 
-  async function dispatchComments(commentIds: string[] | undefined) {
+  async function sendComments(commentIds: string[] | undefined) {
     setError(null);
     setSuccess(null);
     const key = commentIds ? `comment-${commentIds[0]}` : 'all-comments';
     setDispatching(key);
     try {
-      const res = await fetch(`/api/todos/${todo.id}/pr-actions/dispatch-comments`, {
+      const res = await fetch(`/api/todos/${todo.id}/pr-actions/send-comments`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ prUrl: monitor.prUrl, commentIds }),
       });
+      const data = await res.json().catch(() => ({}));
       if (!res.ok) {
-        const data = await res.json().catch(() => ({}));
         throw new Error(typeof data.error === 'string' ? data.error : `HTTP ${res.status}`);
       }
-      const label = commentIds && commentIds.length > 0
-        ? `Dispatched a sub-agent to address ${commentIds.length} comment(s).`
-        : `Dispatched a sub-agent to review all ${monitor.unresolvedComments.length} comment(s).`;
-      setSuccess(label);
+      const n = commentIds && commentIds.length > 0 ? commentIds.length : monitor.unresolvedComments.length;
+      setSuccess(`Sent ${n} comment(s) to the session.`);
       onRefresh();
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to dispatch comment response');
+      setError(err instanceof Error ? err.message : 'Failed to send comment feedback');
     } finally {
       setDispatching(null);
     }
@@ -216,9 +215,10 @@ export function PrAttentionPanel({ todo, monitor, onRefresh }: Props) {
           comments={monitor.unresolvedComments}
           dispatching={dispatching}
           dismissing={dismissing}
+          sessionActive={sessionActive}
           expandedCommentIds={expandedCommentIds}
           onToggleExpand={toggleCommentExpansion}
-          onDispatch={dispatchComments}
+          onSend={sendComments}
           onDismiss={dismissComments}
         />
       )}

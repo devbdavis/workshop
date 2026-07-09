@@ -22,7 +22,7 @@ import type { FilesystemAgentScanner } from '@infrastructure/agents/filesystem-s
 import type { SummaryRepository } from '@domain/summary/repository';
 import type { TicketRepository } from '@domain/ticket/repository';
 import { interpolateTemplate } from '@application/track-management/prompt-interpolation.js';
-import { interpolatePrTemplate } from '@application/pr-monitor/prompt-interpolation.js';
+import { interpolatePrTemplate, formatComments } from '@application/pr-monitor/prompt-interpolation.js';
 import { broadcast } from './events.js';
 
 export interface PrMonitorRouterDeps {
@@ -56,6 +56,7 @@ export interface PrMonitorRouterDeps {
         onReady?: (session: { id: SessionId }) => void;
       },
     ) => Promise<{ id: SessionId; trackId: TrackId; tmuxSession: string; state: string }>;
+    sendInput: (sessionId: SessionId, text: string) => Promise<boolean>;
   };
 }
 
@@ -226,7 +227,7 @@ export function createPrMonitorRouter(deps: PrMonitorRouterDeps): Router {
     }
   });
 
-  router.post('/todos/:todoId/pr-actions/dispatch-comments', async (req, res) => {
+  router.post('/todos/:todoId/pr-actions/send-comments', async (req, res) => {
     try {
       const body = (req.body ?? {}) as DispatchBody;
       const todo = todos.findById(req.params.todoId as TodoId);
@@ -234,43 +235,30 @@ export function createPrMonitorRouter(deps: PrMonitorRouterDeps): Router {
         res.status(404).json({ error: 'Todo not found' });
         return;
       }
-      const track = tracks.findById(todo.trackId);
-      if (!track) {
-        res.status(404).json({ error: 'Track not found' });
-        return;
-      }
-      const todoMonitors = monitors.findByTodo(todo.id);
-      const monitor = pickMonitorForDispatch(todoMonitors, body.prUrl);
+      const monitor = pickMonitorForDispatch(monitors.findByTodo(todo.id), body.prUrl);
       if (!monitor) {
         res.status(404).json({ error: 'No PR monitor available for this todo' });
         return;
       }
-      const commentsForTemplate = selectComments(monitor, body.commentIds);
-      if (commentsForTemplate.length === 0) {
+      const comments = selectComments(monitor, body.commentIds);
+      if (comments.length === 0) {
         res.status(400).json({ error: 'No matching comments to address' });
         return;
       }
-      const template = promptTemplates.findBySystemKind('pr-comment-response');
-      if (!template) {
-        res.status(500).json({ error: 'PR comment-response template missing — restart the server to reseed system templates' });
+      if (!todo.sessionId) {
+        res.status(409).json({ error: 'This todo has no linked session to send feedback to.' });
         return;
       }
-      const labelSuffix = commentsForTemplate.length === 1 ? '1 comment' : `${commentsForTemplate.length} comments`;
-      const session = await dispatchPrSession({
-        body,
-        todo,
-        track,
-        monitor,
-        templateContent: template.content,
-        commentsForTemplate,
-        sessionLabel: `Address ${labelSuffix} on PR #${monitor.prNumber}`,
-        deps: { tracks, summaries, tickets, agents, filesystemScanner, settings, projectRoot, terminal },
-      });
-      broadcast('session:created', track.id, { sessionId: session.id });
-      res.status(201).json({ session, monitor, addressedCommentIds: commentsForTemplate.map((c) => c.id) });
+      const message = `Please address the following review feedback on PR #${monitor.prNumber} (${monitor.prUrl}):\n\n${formatComments(comments)}`;
+      const ok = await terminal.sendInput(todo.sessionId, message);
+      if (!ok) {
+        res.status(409).json({ error: 'The linked session is not running — start or resume it, then try again.' });
+        return;
+      }
+      res.json({ ok: true, sessionId: todo.sessionId, addressedCommentIds: comments.map((c) => c.id) });
     } catch (err) {
-      console.error('Failed to dispatch PR comment response:', err);
-      res.status(500).json({ error: err instanceof Error ? err.message : 'Failed to dispatch comment response' });
+      console.error('Failed to send PR comment feedback:', err);
+      res.status(500).json({ error: err instanceof Error ? err.message : 'Failed to send comment feedback' });
     }
   });
 
@@ -291,8 +279,8 @@ export function createPrMonitorRouter(deps: PrMonitorRouterDeps): Router {
         res.status(400).json({ error: 'commentIds must be a non-empty array of strings' });
         return;
       }
-      // Scope the monitor to this todo (mirrors dispatch-comments) so a mismatched
-      // todoId/prUrl pair can't dismiss comments on an unrelated PR.
+      // Scope the monitor to this todo (as the dispatch/send routes do) so a
+      // mismatched todoId/prUrl pair can't dismiss comments on an unrelated PR.
       const target = pickMonitorForDispatch(monitors.findByTodo(todo.id), body.prUrl);
       if (!target) {
         res.status(404).json({ error: 'No PR monitor available for this todo' });
