@@ -188,7 +188,7 @@ export function PrReviewDetail({ reviewId, refreshKey, onChanged }: Props) {
             Description
           </button>
           {showDescription && (
-            <div className="px-3 pb-3 text-xs text-gray-400 prose prose-invert prose-sm max-w-none max-h-80 overflow-y-auto">
+            <div className="px-3 pb-3 text-sm text-gray-300 markdown-body max-h-80 overflow-y-auto">
               <Markdown>{review.prBody}</Markdown>
             </div>
           )}
