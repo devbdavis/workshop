@@ -1,19 +1,40 @@
 import { describe, expect, it } from 'vitest';
-import { createGhAdapter, snapshotFromGhJson } from '@infrastructure/github/gh-adapter';
+import { createGhAdapter, parseInlineComments, snapshotFromGhJson } from '@infrastructure/github/gh-adapter';
+import type { PrComment } from '@foundation/types';
+
+/** Build an inline review comment as it arrives from `parseInlineComments`. */
+const inline = (over: Partial<PrComment> = {}): PrComment => ({
+  id: 'rc1',
+  author: 'reviewer',
+  body: 'rename foo',
+  createdAt: '2026-05-01',
+  kind: 'review',
+  path: 'src/foo.ts',
+  line: 12,
+  ...over,
+});
+
+/** Wrap thread nodes in the `gh api graphql` reviewThreads response envelope. */
+const reviewThreadsResp = (nodes: unknown[]) => ({
+  data: { repository: { pullRequest: { reviewThreads: { nodes } } } },
+});
 
 describe('snapshotFromGhJson', () => {
   it('flags merged PRs as finished and clears working state', () => {
-    const snap = snapshotFromGhJson({
-      state: 'MERGED',
-      mergedAt: '2026-05-01T00:00:00Z',
-      isDraft: false,
-      title: 'Add widgets',
-      headRefName: 'add-widgets',
-      statusCheckRollup: [
-        { name: 'ci', status: 'COMPLETED', conclusion: 'FAILURE', description: 'broken' },
-      ],
-      comments: [{ id: 'c1', author: { login: 'reviewer' }, body: 'fix this', createdAt: '2026-05-01' }],
-    });
+    const snap = snapshotFromGhJson(
+      {
+        state: 'MERGED',
+        mergedAt: '2026-05-01T00:00:00Z',
+        isDraft: false,
+        title: 'Add widgets',
+        headRefName: 'add-widgets',
+        statusCheckRollup: [
+          { name: 'ci', status: 'COMPLETED', conclusion: 'FAILURE', description: 'broken' },
+        ],
+        reviews: [{ id: 'r1', author: { login: 'rev' }, state: 'CHANGES_REQUESTED', body: 'fix' }],
+      },
+      [inline()],
+    );
     expect(snap.state).toBe('merged');
     expect(snap.finished).toBe(true);
     expect(snap.checkStatus).toBe('none');
@@ -68,141 +89,172 @@ describe('snapshotFromGhJson', () => {
     expect(snap.finished).toBe(false);
   });
 
-  it('surfaces issue comments + unresolved review-thread comments and drops resolved ones', () => {
-    const snap = snapshotFromGhJson({
-      state: 'OPEN',
-      comments: [{ id: 'i1', author: { login: 'bot' }, body: 'top-level comment', createdAt: '2026-05-01' }],
-      reviews: [
-        {
-          id: 'r1',
-          author: { login: 'reviewer' },
-          state: 'CHANGES_REQUESTED',
-          body: 'overall: please address inline',
-          comments: [
-            {
-              id: 'rc1',
-              author: { login: 'reviewer' },
-              body: 'rename foo',
-              createdAt: '2026-05-01',
-              path: 'src/foo.ts',
-              line: 12,
-              isResolved: false,
-            },
-            {
-              id: 'rc2',
-              author: { login: 'reviewer' },
-              body: 'old — resolved',
-              createdAt: '2026-05-01',
-              path: 'src/bar.ts',
-              line: 99,
-              isResolved: true,
-            },
-          ],
-        },
-      ],
-    });
-    expect(snap.unresolvedComments.map((c) => c.id)).toEqual(['i1', 'rc1']);
-    const review = snap.unresolvedComments.find((c) => c.id === 'rc1')!;
-    expect(review.kind).toBe('review');
-    expect(review.path).toBe('src/foo.ts');
-    expect(review.line).toBe(12);
+  it('surfaces only CHANGES_REQUESTED summaries + inline comments, dropping other reviews', () => {
+    const snap = snapshotFromGhJson(
+      {
+        state: 'OPEN',
+        reviews: [
+          { id: 'r1', author: { login: 'reviewer' }, state: 'CHANGES_REQUESTED', body: 'please address inline' },
+          { id: 'r2', author: { login: 'other' }, state: 'COMMENTED', body: 'just a thought' },
+          { id: 'r3', author: { login: 'rev3' }, state: 'APPROVED', body: 'lgtm' },
+        ],
+      },
+      [inline({ id: 'rc1', path: 'src/foo.ts', line: 12 })],
+    );
+    expect(snap.unresolvedComments.map((c) => c.id)).toEqual(['r1', 'rc1']);
+    const summary = snap.unresolvedComments.find((c) => c.id === 'r1')!;
+    expect(summary.kind).toBe('review');
+    expect(summary.path).toBeUndefined();
+    const il = snap.unresolvedComments.find((c) => c.id === 'rc1')!;
+    expect(il.path).toBe('src/foo.ts');
+    expect(il.line).toBe(12);
   });
 
   it('filters comments whose author login matches an ignored substring (case-insensitive)', () => {
     const snap = snapshotFromGhJson(
       {
         state: 'OPEN',
-        comments: [
-          { id: 'i1', author: { login: 'trunk-io' }, body: 'merged', createdAt: '2026-05-01' },
-          { id: 'i2', author: { login: 'Klaviyo-Code-Delivery' }, body: 'coverage', createdAt: '2026-05-01' },
-          { id: 'i3', author: { login: 'coderabbitai' }, body: 'suggestion', createdAt: '2026-05-01' },
-          { id: 'i4', author: { login: 'a-human' }, body: 'please fix', createdAt: '2026-05-01' },
-        ],
         reviews: [
-          {
-            id: 'r1',
-            author: { login: 'wiz-inc-abc123' },
-            state: 'CHANGES_REQUESTED',
-            comments: [
-              { id: 'rc1', author: { login: 'wiz-inc-abc123' }, body: 'scan', createdAt: '2026-05-01', isResolved: false },
-              { id: 'rc2', author: { login: 'cursor' }, body: 'bug', createdAt: '2026-05-01', isResolved: false },
-            ],
-          },
+          { id: 'r1', author: { login: 'wiz-inc-abc123' }, state: 'CHANGES_REQUESTED', body: 'scan' },
+          { id: 'r2', author: { login: 'A-Human' }, state: 'CHANGES_REQUESTED', body: 'please fix' },
         ],
       },
+      [inline({ id: 'rc1', author: 'Klaviyo-Code-Delivery' }), inline({ id: 'rc2', author: 'cursor' })],
       ['trunk-io', 'klaviyo-code-delivery', 'wiz-inc'],
     );
-    // Ignored bots dropped; humans + unlisted bots (coderabbitai, cursor) kept.
-    expect(snap.unresolvedComments.map((c) => c.id).sort()).toEqual(['i3', 'i4', 'rc2']);
+    // Ignored bots (wiz-inc review, klaviyo inline) dropped; human review + unlisted bot (cursor) kept.
+    expect(snap.unresolvedComments.map((c) => c.id).sort()).toEqual(['r2', 'rc2']);
   });
 
-  it('strips HTML comments and tags (Cursor Bugbot noise) but keeps the real text and markdown autolinks', () => {
-    const body = [
-      '<!-- BUGBOT_REVIEW -->',
-      'Bugbot found 1 potential issue.',
-      '',
-      '<a href="https://cursor.com/open?link=eyJ2ZXJ"><picture><img alt="Fix All" src="x.png"></picture></a>',
-      '',
-      '<sup>Autofix is OFF.</sup> See <https://example.com>',
-    ].join('\n');
-    const snap = snapshotFromGhJson({
-      state: 'OPEN',
-      comments: [{ id: 'i1', author: { login: 'cursor' }, body, createdAt: '2026-05-01' }],
-    });
-    const rendered = snap.unresolvedComments[0].body;
-    expect(rendered).not.toContain('<!--');
-    expect(rendered).not.toContain('<a ');
-    expect(rendered).not.toContain('<sup>');
-    expect(rendered).toContain('Bugbot found 1 potential issue.');
-    expect(rendered).toContain('Autofix is OFF.');
-    expect(rendered).toContain('<https://example.com>');
+  it('keeps comments when the ignore list is empty (default)', () => {
+    const snap = snapshotFromGhJson({ state: 'OPEN' }, [inline({ id: 'rc1', author: 'trunk-io' })]);
+    expect(snap.unresolvedComments.map((c) => c.id)).toEqual(['rc1']);
   });
 
-  it('keeps every comment when the ignore list is empty (default)', () => {
-    const snap = snapshotFromGhJson({
-      state: 'OPEN',
-      comments: [{ id: 'i1', author: { login: 'trunk-io' }, body: 'merged', createdAt: '2026-05-01' }],
-    });
-    expect(snap.unresolvedComments.map((c) => c.id)).toEqual(['i1']);
-  });
-
-  it('skips empty review bodies and approved reviews', () => {
+  it('skips empty review bodies and non-changes-requested reviews', () => {
     const snap = snapshotFromGhJson({
       state: 'OPEN',
       reviews: [
         { id: 'r1', author: { login: 'rev' }, state: 'APPROVED', body: 'lgtm' },
-        { id: 'r2', author: { login: 'rev' }, state: 'CHANGES_REQUESTED', body: '' },
+        { id: 'r2', author: { login: 'rev' }, state: 'COMMENTED', body: 'nit' },
+        { id: 'r3', author: { login: 'rev' }, state: 'CHANGES_REQUESTED', body: '' },
       ],
     });
     expect(snap.unresolvedComments).toEqual([]);
   });
 });
 
+describe('parseInlineComments', () => {
+  it('returns the root comment of each unresolved thread, dropping resolved ones', () => {
+    const out = parseInlineComments(
+      reviewThreadsResp([
+        {
+          isResolved: false,
+          comments: {
+            nodes: [
+              { id: 'rc1', author: { login: 'reviewer' }, body: 'rename foo', path: 'src/foo.ts', line: 12, url: 'u1', createdAt: '2026-05-01' },
+            ],
+          },
+        },
+        {
+          isResolved: true,
+          comments: { nodes: [{ id: 'rc2', author: { login: 'reviewer' }, body: 'old', path: 'src/bar.ts', line: 99 }] },
+        },
+      ]),
+    );
+    expect(out.map((c) => c.id)).toEqual(['rc1']);
+    expect(out[0]).toMatchObject({ kind: 'review', path: 'src/foo.ts', line: 12, author: 'reviewer', url: 'u1' });
+  });
+
+  it('falls back to originalLine when line is null (outdated comment)', () => {
+    const out = parseInlineComments(
+      reviewThreadsResp([
+        { isResolved: false, comments: { nodes: [{ id: 'rc1', author: { login: 'r' }, body: 'x', path: 'p', line: null, originalLine: 7 }] } },
+      ]),
+    );
+    expect(out[0].line).toBe(7);
+  });
+
+  it('strips HTML noise (Bugbot markup) but keeps the real text and markdown autolinks', () => {
+    const body = [
+      '<!-- BUGBOT_REVIEW -->',
+      'Bugbot found 1 potential issue.',
+      '<a href="https://cursor.com/open?link=eyJ2ZXJ"><picture><img alt="Fix" src="x.png"></picture></a>',
+      'See <https://example.com>',
+    ].join('\n');
+    const out = parseInlineComments(
+      reviewThreadsResp([
+        { isResolved: false, comments: { nodes: [{ id: 'rc1', author: { login: 'cursor' }, body, path: 'p', line: 1 }] } },
+      ]),
+    );
+    const rendered = out[0].body;
+    expect(rendered).not.toContain('<!--');
+    expect(rendered).not.toContain('<a ');
+    expect(rendered).toContain('Bugbot found 1 potential issue.');
+    expect(rendered).toContain('<https://example.com>');
+  });
+
+  it('tolerates empty or malformed responses', () => {
+    expect(parseInlineComments({})).toEqual([]);
+    expect(parseInlineComments(reviewThreadsResp([{ isResolved: false, comments: { nodes: [] } }]))).toEqual([]);
+  });
+});
+
 describe('createGhAdapter', () => {
-  it('invokes gh with --json fields and parses the result', async () => {
-    let receivedArgs: string[] = [];
-    const adapter = createGhAdapter({
-      ghBinary: 'gh-fake',
-      exec: async (binary, args) => {
-        expect(binary).toBe('gh-fake');
-        receivedArgs = args;
-        return {
-          stdout: JSON.stringify({ state: 'OPEN', title: 'hi', headRefName: 'feat' }),
-          stderr: '',
-        };
-      },
-    });
+  function fakeExec(prJson: unknown, threadsJson?: unknown) {
+    const calls: string[][] = [];
+    const exec = async (_binary: string, args: string[]) => {
+      calls.push(args);
+      if (args[0] === 'pr') return { stdout: JSON.stringify(prJson), stderr: '' };
+      if (args[0] === 'api') return { stdout: JSON.stringify(threadsJson ?? reviewThreadsResp([])), stderr: '' };
+      return { stdout: '{}', stderr: '' };
+    };
+    return { exec, calls };
+  }
+
+  it('fetches PR state via `gh pr view` and inline comments via graphql', async () => {
+    const { exec, calls } = fakeExec(
+      { state: 'OPEN', title: 'hi', headRefName: 'feat' },
+      reviewThreadsResp([
+        { isResolved: false, comments: { nodes: [{ id: 'rc1', author: { login: 'rev' }, body: 'inline note', path: 'a.ts', line: 3 }] } },
+      ]),
+    );
+    const adapter = createGhAdapter({ ghBinary: 'gh-fake', exec });
     const snap = await adapter.fetchPrSnapshot('https://github.com/acme/widgets/pull/7');
     expect(snap.state).toBe('open');
     expect(snap.prTitle).toBe('hi');
-    expect(snap.headRefName).toBe('feat');
-    expect(receivedArgs).toEqual([
+    expect(snap.unresolvedComments.map((c) => c.id)).toEqual(['rc1']);
+    expect(calls[0]).toEqual([
       'pr',
       'view',
       'https://github.com/acme/widgets/pull/7',
       '--json',
       expect.stringContaining('statusCheckRollup'),
     ]);
+    expect(calls[1][0]).toBe('api');
+    expect(calls[1]).toContain('owner=acme');
+    expect(calls[1]).toContain('name=widgets');
+    expect(calls[1]).toContain('number=7');
+  });
+
+  it('skips the graphql inline-comment call for finished PRs', async () => {
+    const { exec, calls } = fakeExec({ state: 'MERGED', mergedAt: '2026-05-01T00:00:00Z' });
+    const adapter = createGhAdapter({ ghBinary: 'gh-fake', exec });
+    const snap = await adapter.fetchPrSnapshot('https://github.com/acme/widgets/pull/7');
+    expect(snap.finished).toBe(true);
+    expect(calls).toHaveLength(1);
+    expect(calls[0][0]).toBe('pr');
+  });
+
+  it('still returns a snapshot when the graphql inline-comment call fails', async () => {
+    const exec = async (_binary: string, args: string[]) => {
+      if (args[0] === 'pr') return { stdout: JSON.stringify({ state: 'OPEN', title: 'hi' }), stderr: '' };
+      throw new Error('graphql boom');
+    };
+    const adapter = createGhAdapter({ ghBinary: 'gh-fake', exec });
+    const snap = await adapter.fetchPrSnapshot('https://github.com/acme/widgets/pull/7');
+    expect(snap.state).toBe('open');
+    expect(snap.unresolvedComments).toEqual([]);
   });
 
   it('rejects invalid PR URLs without shelling out', async () => {
