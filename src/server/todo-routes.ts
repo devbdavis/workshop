@@ -380,5 +380,55 @@ export function createTodoRouter(deps: TodoRouterDeps): Router {
     }
   });
 
+  // --- Create a Linear ticket from a todo (one-shot background agent) ---
+
+  router.post('/todos/:todoId/create-linear-ticket', async (req, res) => {
+    try {
+      const todo = todos.findById(req.params.todoId as TodoId);
+      if (!todo) {
+        res.status(404).json({ error: 'Todo not found' });
+        return;
+      }
+
+      const model: string | undefined = (settings.get('dispatch_model') ?? 'opus').trim() || undefined;
+
+      const prompt = [
+        'Turn this Workshop todo into a Linear ticket.',
+        '',
+        `Todo title: ${todo.title}`,
+        '',
+        'Todo details:',
+        todo.description?.trim() || '(no description provided)',
+        '',
+        'Do the following:',
+        '1. Expand the todo into a well-structured ticket body — a brief Description, concrete Implementation Details, and Acceptance Criteria — inferred from the todo above. This is not a full implementation plan; stay within the scope the todo implies and do not invent extra work.',
+        '2. Use the /linear skill to create the ticket in the ASY backlog with that content.',
+        `3. Once the ticket exists, call the workshop_update_todo MCP tool to set issueKey on todo "${todo.id}" to the new ticket's key (e.g. "ASY-1234") so the todo links to the ticket.`,
+        '',
+        'Report the created ticket key and URL when done.',
+      ].join('\n');
+
+      // One-shot background session: no todoId → runs with --print and auto-exits
+      // (mirrors the PR-review analyze dispatch). Claude-only because /linear is a
+      // Claude skill. Deliberately does NOT change the todo's status.
+      const session = await terminal.createSession(todo.trackId, {
+        background: true,
+        initialPrompt: prompt,
+        provider: 'claude',
+        model,
+        name: `Linear: ${todo.title}`,
+        worktreeMode: false,
+        dangerouslySkipPermissions: true,
+        onReady: (s) => broadcast('session:ready', todo.trackId, { sessionId: s.id }),
+      });
+
+      broadcast('session:created', todo.trackId, { sessionId: session.id });
+      res.status(201).json({ session });
+    } catch (err) {
+      console.error('Failed to create Linear ticket from todo:', err);
+      res.status(500).json({ error: 'Failed to dispatch Linear ticket session' });
+    }
+  });
+
   return router;
 }
