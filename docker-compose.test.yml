@@ -1,0 +1,50 @@
+# Workshop — ISOLATED test instance.
+#
+# Runs a second container alongside your production Workshop without touching it:
+# different port, a SEPARATE state volume (its own SQLite DB + its own auth token),
+# and its own Docker Compose project. Your prod sessions are never rehydrated.
+#
+# Quick start:
+#   docker compose -f docker-compose.test.yml up -d --build
+#   docker exec workshop-test cat /config/.workshop/auth-token   # grab the test token
+#   open http://<host>:3003  and log in with that token
+#
+# Iterate after code changes (prod container untouched):
+#   docker compose -f docker-compose.test.yml up -d --build
+#
+# Throw it all away (wipes ONLY the test volume — prod's workshop-state is separate):
+#   docker compose -f docker-compose.test.yml down -v
+#
+# Override defaults with a .env file next to this compose file, e.g.:
+#   TEST_REPOS_DIR=/mnt/user/code         # same repos as prod → same /repos→host remap
+#   CLAUDE_CONFIG_DIR=/mnt/user/appdata/workshop/claude
+name: workshop-test
+
+services:
+  workshop-test:
+    build: .
+    image: workshop:test
+    container_name: workshop-test
+    # A test box — don't resurrect it on reboot the way prod does.
+    restart: "no"
+    ports:
+      - "3003:3003"
+    environment:
+      PORT: "3003"
+      NODE_ENV: production
+      PUID: "${PUID:-99}"
+      PGID: "${PGID:-100}"
+      WORKSHOP_VAULT_ROOT: /config/.workshop/vault
+    volumes:
+      # DEDICATED state volume → fresh DB + its own auth token. This is the isolation.
+      - workshop-test-state:/config
+      # Reuse your Claude login (read/write). Point CLAUDE_CONFIG_DIR elsewhere if you
+      # don't want the test instance sharing ~/.claude with prod.
+      - ${CLAUDE_CONFIG_DIR:-${HOME}/.claude}:/config/.claude
+      # Repos. Default to the SAME host dir as prod so the editor path-remap you
+      # configure (/repos → host path) matches reality. Set TEST_REPOS_DIR to a
+      # scratch dir if you'd rather agents never touch your real repos.
+      - ${TEST_REPOS_DIR:-${REPOS_DIR:-./repos}}:/repos
+
+volumes:
+  workshop-test-state:

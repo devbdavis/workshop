@@ -65,6 +65,9 @@ import { createPluginRepository } from '@infrastructure/persistence/plugin-repos
 import { ensureRegisteredPluginsInstalled } from '@infrastructure/plugins/ensure-installed.js';
 import { createGlobalRepoRepository, createSettingsRepository } from '@infrastructure/persistence/repo-repository.js';
 import { createRepoRouter } from './repo-routes.js';
+import { createUserRepository } from '@infrastructure/persistence/user-repository.js';
+import { createUserRouter } from './user-routes.js';
+import { getProfileId } from './profile.js';
 import { createBackupRouter } from './backup-routes.js';
 import { createBackupScheduler } from '@application/backup/backup-scheduler.js';
 import { createTicketImportIgnoreRepository } from '@infrastructure/persistence/ticket-import-ignore-repository.js';
@@ -547,6 +550,10 @@ export function createApiRouter(deps: ApiRouterDeps = {}): Router {
   const repoRouter = createRepoRouter({ repos: globalRepos, settings: settingsRepo });
   router.use(repoRouter);
 
+  // Mount profiles + per-user settings sub-router (lightweight multi-user layer)
+  const users = createUserRepository();
+  router.use(createUserRouter({ users, tracks }));
+
   // Encrypted backups — daily to a cloud-synced directory, scrypt-derived AES-256-GCM.
   const backupScheduler = createBackupScheduler({ settings: settingsRepo });
   backupScheduler.start();
@@ -618,8 +625,21 @@ export function createApiRouter(deps: ApiRouterDeps = {}): Router {
 
   // --- Tracks ---
 
-  router.get('/tracks', (_req, res) => {
-    res.json(tracks.findAll());
+  router.get('/tracks', (req, res) => {
+    const all = tracks.findAll();
+    // Enrich with the active profile's favorite/hidden prefs (if a profile is selected).
+    const profileId = getProfileId(req);
+    if (!profileId) {
+      res.json(all);
+      return;
+    }
+    const prefs = new Map(users.getTrackPrefs(profileId).map((p) => [p.trackId, p]));
+    res.json(
+      all.map((t) => {
+        const p = prefs.get(t.id);
+        return { ...t, favorite: p?.isFavorite ?? false, hidden: p?.isHidden ?? false };
+      }),
+    );
   });
 
   /**
@@ -1086,6 +1106,19 @@ export function createApiRouter(deps: ApiRouterDeps = {}): Router {
   });
 
   // --- Open in editor ---
+
+  // Resolve the editor target path (prefers a .code-workspace file) WITHOUT launching.
+  // Used by the client when a per-user editor URI prefix is configured: the browser
+  // builds `<prefix><path>` itself and hands off to the local editor (Remote-SSH).
+  router.get('/shell/resolve-editor-target', (req, res) => {
+    const targetPath = typeof req.query.path === 'string' ? req.query.path : '';
+    if (!targetPath || targetPath.includes('..')) {
+      res.status(400).json({ error: 'valid path is required' });
+      return;
+    }
+    const sessionId = typeof req.query.sessionId === 'string' ? req.query.sessionId : undefined;
+    res.json({ path: resolveEditorTarget(targetPath, sessionId) });
+  });
 
   router.post('/shell/open-in-editor', (req, res) => {
     const { path: targetPath, app, sessionId } = req.body;

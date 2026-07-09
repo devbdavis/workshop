@@ -1,4 +1,4 @@
-import type { Track, TrackId, TrackRepo, TrackPath, RepoId, PathId, AgentId, TemplateId, TerminalLayout, GlobalRepoId } from '@foundation/types';
+import type { Track, TrackId, TrackRepo, TrackPath, RepoId, PathId, AgentId, TemplateId, TerminalLayout, GlobalRepoId, UserId } from '@foundation/types';
 
 export interface TrackRepository {
   findAll(): Track[];
@@ -13,6 +13,9 @@ export interface TrackRepository {
 
   // Default agent association
   setDefaultAgent(trackId: TrackId, agentId: AgentId | null): boolean;
+
+  // Owner tag (which user this track belongs to; null clears it)
+  setOwner(trackId: TrackId, userId: UserId | null): boolean;
 
   // Terminal layout
   getTerminalLayout(trackId: TrackId): TerminalLayout | null;

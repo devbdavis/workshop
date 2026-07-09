@@ -5,6 +5,7 @@ import { TrackOfficeStrip } from './TrackOfficeStrip';
 import { RecentlyDeletedPanel } from './RecentlyDeletedPanel';
 import { SessionLinkButtons } from './SessionLinkButtons';
 import { useLaunchApps, editorLabel, terminalLabel } from '@ui/hooks/useLaunchApps';
+import { useEditorLaunch } from '@ui/hooks/useEditorLaunch';
 
 interface Props {
   trackId: string;
@@ -208,7 +209,8 @@ function TerminalPane({ trackId, session, todos, onDestroy, onRename, defaultOpe
   const [editValue, setEditValue] = useState('');
   const inputRef = useRef<HTMLInputElement>(null);
   const launchApps = useLaunchApps();
-  const editorName = editorLabel(launchApps);
+  const editor = useEditorLaunch();
+  const editorName = editor.uriPrefix ? 'Editor' : editorLabel(launchApps);
   const terminalName = terminalLabel(launchApps);
 
   const displayName = session.name || `session:${session.id.slice(0, 8)}`;
@@ -268,11 +270,7 @@ function TerminalPane({ trackId, session, todos, onDestroy, onRename, defaultOpe
           {editorPath && (
             <>
               <button
-                onClick={() => fetch('/api/shell/open-in-editor', {
-                  method: 'POST',
-                  headers: { 'Content-Type': 'application/json' },
-                  body: JSON.stringify({ path: editorPath, sessionId: session.id }),
-                })}
+                onClick={() => editor.openInEditor(editorPath, session.id)}
                 className="flex items-center gap-0.5 text-[10px] text-gray-500 hover:text-blue-400 px-1"
                 title={`Open in ${editorName}: ${editorPath}`}
               >
@@ -283,17 +281,21 @@ function TerminalPane({ trackId, session, todos, onDestroy, onRename, defaultOpe
                 </svg>
                 <span>{editorName}</span>
               </button>
-              <button
-                onClick={() => fetch('/api/shell/open-in-editor', {
-                  method: 'POST',
-                  headers: { 'Content-Type': 'application/json' },
-                  body: JSON.stringify({ path: terminalPath, app: 'terminal' }),
-                })}
-                className="text-[10px] text-gray-500 hover:text-green-400 px-1 font-mono"
-                title={`Open in ${terminalName}: ${terminalPath}`}
-              >
-                &gt;_
-              </button>
+              {/* Host-side terminal launch is meaningless when the editor opens remotely
+                  (Docker host) — the in-app terminal already serves that role. */}
+              {!editor.uriPrefix && (
+                <button
+                  onClick={() => fetch('/api/shell/open-in-editor', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ path: terminalPath, app: 'terminal' }),
+                  })}
+                  className="text-[10px] text-gray-500 hover:text-green-400 px-1 font-mono"
+                  title={`Open in ${terminalName}: ${terminalPath}`}
+                >
+                  &gt;_
+                </button>
+              )}
             </>
           )}
           <button

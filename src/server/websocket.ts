@@ -30,8 +30,19 @@ export function setupWebSocket(server: HttpServer): void {
   const wss = new WebSocketServer({ noServer: true });
   const sessions = createSessionRepository();
 
-  // Map from sessionId to the active pty connection
-  const activePtys = new Map<string, PtyConnection>();
+  // Map from connKey (sessionId or `auth:<id>`) to the active pty connections.
+  // A list, not a single entry: tmux mirrors all attached clients, so two browsers
+  // can co-view/co-type the same session — each gets its own pty + WebSocket.
+  const activePtys = new Map<string, PtyConnection[]>();
+
+  /** Remove a single connection from its connKey bucket, dropping the bucket when empty. */
+  function removePtyConnection(connKey: string, conn: PtyConnection): void {
+    const list = activePtys.get(connKey);
+    if (!list) return;
+    const idx = list.indexOf(conn);
+    if (idx !== -1) list.splice(idx, 1);
+    if (list.length === 0) activePtys.delete(connKey);
+  }
 
   const eventsWss = new WebSocketServer({ noServer: true });
 
@@ -130,19 +141,15 @@ export function setupWebSocket(server: HttpServer): void {
    * activePtys map (a sessionId, or `auth:<authId>`).
    */
   async function attachTmux(ws: WebSocket, tmuxSession: string, connKey: string): Promise<void> {
-    // If there's already an active pty for this key, clean it up first.
-    // The old WebSocket may have disconnected without proper cleanup.
-    const existing = activePtys.get(connKey);
-    if (existing) {
-      try {
-        existing.pty.kill();
-      } catch {
-        // pty may already be dead
-      }
-      if (existing.ws.readyState === WebSocket.OPEN) {
-        existing.ws.close(1000, 'Replaced by new connection');
-      }
-      activePtys.delete(connKey);
+    // Co-view: we do NOT evict existing clients. tmux mirrors output to every
+    // attached client, so multiple browsers can watch and type in the same session.
+    // With >1 client, tmux otherwise pins the window to the smallest client's size;
+    // `window-size latest` makes the most-recently-active client drive the size,
+    // which matches the natural co-view expectation.
+    try {
+      execSync(`tmux set-window-option -t ${tmuxSession} window-size latest`, { stdio: 'pipe' });
+    } catch {
+      // Non-fatal: session may not exist yet (we poll for it below) or option unsupported.
     }
 
     // The client's ws.onopen fires as soon as the upgrade completes and
@@ -291,7 +298,9 @@ export function setupWebSocket(server: HttpServer): void {
       ws,
       tmuxSession,
     };
-    activePtys.set(connKey, connection);
+    const bucket = activePtys.get(connKey);
+    if (bucket) bucket.push(connection);
+    else activePtys.set(connKey, [connection]);
 
     // Pipe pty output to WebSocket
     const dataDisposable = ptyProcess.onData((data: string) => {
@@ -307,7 +316,7 @@ export function setupWebSocket(server: HttpServer): void {
     // produces a spurious EPIPE.
     const exitDisposable = ptyProcess.onExit(() => {
       dataDisposable.dispose();
-      activePtys.delete(connKey);
+      removePtyConnection(connKey, connection);
       if (ws.readyState !== WebSocket.CLOSED) {
         ws.terminate();
       }
@@ -326,7 +335,7 @@ export function setupWebSocket(server: HttpServer): void {
       } catch {
         // pty may already be dead
       }
-      activePtys.delete(connKey);
+      removePtyConnection(connKey, connection);
     });
 
     // Handle WebSocket errors — EPIPE and ECONNRESET are expected whenever the
@@ -343,7 +352,7 @@ export function setupWebSocket(server: HttpServer): void {
       } catch {
         // pty may already be dead
       }
-      activePtys.delete(connKey);
+      removePtyConnection(connKey, connection);
     });
   }
 }
