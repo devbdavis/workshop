@@ -14,11 +14,13 @@ import { PrReviewSettings } from './PrReviewSettings';
 import { AvailableClisSettings } from './AvailableClisSettings';
 import { BackupSettings } from './BackupSettings';
 import { LaunchAppsSettings } from './LaunchAppsSettings';
+import { ProfileSettings } from './ProfileSettings';
 
-type Tab = 'general' | 'repositories' | 'mcp' | 'plugins' | 'templates' | 'agents' | 'skills' | 'issue-tracking';
+type Tab = 'general' | 'profile' | 'repositories' | 'mcp' | 'plugins' | 'templates' | 'agents' | 'skills' | 'issue-tracking';
 
 const TABS: { id: Tab; label: string }[] = [
   { id: 'general', label: 'General' },
+  { id: 'profile', label: 'Profile' },
   { id: 'agents', label: 'Agents' },
   { id: 'skills', label: 'Skills' },
   { id: 'mcp', label: 'MCP' },
@@ -89,6 +91,14 @@ export function Settings() {
 
           <section className="bg-gray-900 border border-gray-800 rounded-lg p-6">
             <LaunchAppsSettings />
+          </section>
+        </div>
+      )}
+
+      {activeTab === 'profile' && (
+        <div className="space-y-6">
+          <section className="bg-gray-900 border border-gray-800 rounded-lg p-6">
+            <ProfileSettings />
           </section>
         </div>
       )}

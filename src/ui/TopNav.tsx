@@ -1,5 +1,6 @@
 import { useEffect, useState, useCallback } from 'react';
 import { NavLink, useMatch } from 'react-router-dom';
+import { useProfile } from './hooks/useProfile';
 
 const LAST_TRACK_KEY = 'workshop:last-track';
 
@@ -20,6 +21,7 @@ const navItems = [
 
 export function TopNav() {
   const trackMatch = useMatch('/tracks/:trackId');
+  const { user } = useProfile();
   const [pendingCount, setPendingCount] = useState(0);
   const [lastTrack, setLastTrack] = useState<LastTrack | null>(() => {
     try {
@@ -116,8 +118,23 @@ export function TopNav() {
         )}
       </div>
 
-      {/* Notification bell — pushed to the right */}
-      <div className="ml-auto">
+      {/* Profile chip + notification bell — pushed to the right */}
+      <div className="ml-auto flex items-center gap-1">
+        {user && (
+          <NavLink
+            to="/settings/profile"
+            title={`Profile: ${user.name}`}
+            className="flex items-center gap-1.5 px-2 py-1 text-xs font-medium text-gray-400 hover:text-gray-200 hover:bg-gray-900 rounded transition-colors"
+          >
+            <span
+              className="w-4 h-4 rounded-full shrink-0 flex items-center justify-center text-[9px] font-semibold text-white"
+              style={{ backgroundColor: user.color || '#3b82f6' }}
+            >
+              {user.name.charAt(0).toUpperCase()}
+            </span>
+            <span className="hidden sm:inline">{user.name}</span>
+          </NavLink>
+        )}
         <NavLink
           to="/notifications"
           className={({ isActive }) =>

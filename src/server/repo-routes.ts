@@ -1,9 +1,10 @@
 import { Router } from 'express';
-import { execSync } from 'child_process';
+import { execSync, execFile as execFileCb } from 'child_process';
+import { promisify } from 'util';
 import { homedir } from 'os';
 import path from 'path';
 import { readdirSync, statSync, existsSync } from 'fs';
-import type { GlobalRepoId, SessionProvider } from '@foundation/types';
+import type { GlobalRepo, GlobalRepoId, SessionProvider } from '@foundation/types';
 import { parseDefaultAiCli, isDefaultAiCli } from '@foundation/types.js';
 import {
   CLI_REGISTRY,
@@ -26,6 +27,9 @@ import {
   startAuthTerminal,
   stopAuthTerminal,
 } from '@infrastructure/terminal/auth-terminal.js';
+import { resolveCloneTarget, buildCloneCommand } from '@server/repo-clone.js';
+
+const execFile = promisify(execFileCb);
 
 /** Every agent CLI whose binary is present on this host. */
 function installedAgents(): SessionProvider[] {
@@ -102,6 +106,22 @@ function expandHome(p: string): string {
   return p;
 }
 
+/** Resolve the configured repos-root directory, expanding a leading `~`. */
+function resolveRepoRoot(settings: SettingsRepository): string {
+  const repoRoot = settings.get('repo_root') || '~/repos';
+  return expandHome(repoRoot);
+}
+
+/**
+ * Register a repo at an already-resolved absolute path: detect its main branch
+ * and persist it. Shared by `POST /repos` and `POST /repos/clone`.
+ */
+function registerRepo(repos: GlobalRepoRepository, repoPath: string): GlobalRepo {
+  const name = path.basename(repoPath);
+  const mainBranch = detectMainBranch(repoPath);
+  return repos.create({ path: repoPath, name, mainBranch });
+}
+
 export function createRepoRouter(deps: RepoRouterDeps): Router {
   const router = Router();
   const { repos, settings } = deps;
@@ -117,8 +137,7 @@ export function createRepoRouter(deps: RepoRouterDeps): Router {
 
   router.get('/repos/suggestions', (_req, res) => {
     try {
-      const repoRoot = settings.get('repo_root') || '~/repos';
-      const expanded = expandHome(repoRoot);
+      const expanded = resolveRepoRoot(settings);
       if (!existsSync(expanded)) {
         res.json([]);
         return;
@@ -156,9 +175,52 @@ export function createRepoRouter(deps: RepoRouterDeps): Router {
       return;
     }
 
-    const name = path.basename(expanded);
-    const mainBranch = detectMainBranch(expanded);
-    const repo = repos.create({ path: expanded, name, mainBranch });
+    const repo = registerRepo(repos, expanded);
+    res.status(201).json(repo);
+  });
+
+  // --- Clone a repo from a URL and register it ---
+  //
+  // Picks the clone CLI by provider: GitHub URLs use `gh` (its stored auth),
+  // everything else uses `tea`. Runs async via execFile — execSync would block
+  // the event loop and stall this server's live terminal WebSockets.
+
+  router.post('/repos/clone', async (req, res) => {
+    const { url } = req.body as { url?: unknown };
+    if (!url || typeof url !== 'string') {
+      res.status(400).json({ error: 'url is required' });
+      return;
+    }
+
+    let target;
+    try {
+      target = resolveCloneTarget(url);
+    } catch {
+      res.status(400).json({ error: 'Invalid repository URL' });
+      return;
+    }
+
+    const destDir = path.join(resolveRepoRoot(settings), target.repo);
+    if (existsSync(destDir) || repos.findByPath(destDir)) {
+      res.status(409).json({ error: `A repo already exists at ${destDir}` });
+      return;
+    }
+
+    const { cmd, args } = buildCloneCommand(target, destDir);
+    try {
+      await execFile(cmd, args, { timeout: 120000 });
+    } catch (err) {
+      // Surface the CLI's stderr so the UI can guide the user (e.g. to run
+      // `gh auth login` in the auth terminal when authentication failed).
+      const stderr =
+        typeof err === 'object' && err !== null && 'stderr' in err
+          ? String((err as { stderr: unknown }).stderr).trim()
+          : '';
+      res.status(400).json({ error: stderr || `Failed to clone with ${cmd}` });
+      return;
+    }
+
+    const repo = registerRepo(repos, destDir);
     res.status(201).json(repo);
   });
 
