@@ -53,7 +53,7 @@ describe('GhReviewAdapter', () => {
       },
     });
 
-    await adapter.submitPrReview('acme', 'widgets', 9, {
+    await adapter.submitPrReview('https://github.com/acme/widgets/pull/9', {
       body: 'Nice work overall!',
       verdict: 'request_changes',
       comments: [{ path: 'src/a.ts', line: 12, side: 'RIGHT', body: 'off-by-one here' }],
@@ -73,7 +73,7 @@ describe('GhReviewAdapter', () => {
       },
     });
     await expect(
-      adapter.submitPrReview('acme', 'widgets', 9, { body: 'x', verdict: 'comment', comments: [] }),
+      adapter.submitPrReview('https://github.com/acme/widgets/pull/9', { body: 'x', verdict: 'comment', comments: [] }),
     ).rejects.toThrow('422');
   });
 });
