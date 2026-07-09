@@ -7,20 +7,13 @@ import type {
   TodoId,
   TrackId,
   TrackRepo,
-  AgentId,
 } from '@foundation/types';
-import { resolveSessionProvider } from '@foundation/types.js';
 import type { PrMonitorRepository } from '@domain/pr-monitor/repository';
 import type { PrMonitorPoller } from '@application/pr-monitor/poller';
 import type { PrMonitorRegistrar } from '@application/pr-monitor/registrar';
 import type { TodoRepository } from '@domain/todo/repository';
 import type { TrackRepository } from '@domain/track/repository';
 import type { PromptTemplateRepository } from '@domain/prompt-template/repository';
-import type { AgentRepository } from '@domain/agent/repository';
-import type { SettingsRepository } from '@domain/repo/repository';
-import type { FilesystemAgentScanner } from '@infrastructure/agents/filesystem-scanner.js';
-import type { SummaryRepository } from '@domain/summary/repository';
-import type { TicketRepository } from '@domain/ticket/repository';
 import { interpolateTemplate } from '@application/track-management/prompt-interpolation.js';
 import { interpolatePrTemplate } from '@application/pr-monitor/prompt-interpolation.js';
 import { broadcast } from './events.js';
@@ -31,13 +24,7 @@ export interface PrMonitorRouterDeps {
   poller: PrMonitorPoller;
   todos: TodoRepository;
   tracks: TrackRepository;
-  summaries: SummaryRepository;
-  tickets: TicketRepository;
   promptTemplates: PromptTemplateRepository;
-  agents: AgentRepository;
-  filesystemScanner: FilesystemAgentScanner;
-  settings: SettingsRepository;
-  projectRoot: string;
   terminal: {
     createSession: (
       trackId: TrackId,
@@ -97,13 +84,7 @@ export function createPrMonitorRouter(deps: PrMonitorRouterDeps): Router {
     poller,
     todos,
     tracks,
-    summaries,
-    tickets,
     promptTemplates,
-    agents,
-    filesystemScanner,
-    settings,
-    projectRoot,
     terminal,
   } = deps;
 
@@ -185,7 +166,10 @@ export function createPrMonitorRouter(deps: PrMonitorRouterDeps): Router {
     }
   });
 
-  router.post('/todos/:todoId/pr-actions/dispatch-fix', async (req, res) => {
+  // Send the failing-check summary into the todo's already-running session,
+  // mirroring send-comments (no fresh sub-agent). Send-only: 409 if the linked
+  // session isn't running.
+  router.post('/todos/:todoId/pr-actions/send-fix', async (req, res) => {
     try {
       const body = (req.body ?? {}) as DispatchBody;
       const todo = todos.findById(req.params.todoId as TodoId);
@@ -193,15 +177,17 @@ export function createPrMonitorRouter(deps: PrMonitorRouterDeps): Router {
         res.status(404).json({ error: 'Todo not found' });
         return;
       }
-      const track = tracks.findById(todo.trackId);
-      if (!track) {
-        res.status(404).json({ error: 'Track not found' });
-        return;
-      }
-      const todoMonitors = monitors.findByTodo(todo.id);
-      const monitor = pickMonitorForDispatch(todoMonitors, body.prUrl);
+      const monitor = pickMonitorForDispatch(monitors.findByTodo(todo.id), body.prUrl);
       if (!monitor) {
         res.status(404).json({ error: 'No PR monitor available for this todo' });
+        return;
+      }
+      if (monitor.checkStatus !== 'failing' && monitor.checkStatus !== 'error') {
+        res.status(400).json({ error: 'This PR has no failing checks to send.' });
+        return;
+      }
+      if (!todo.sessionId) {
+        res.status(409).json({ error: 'This todo has no linked session to send feedback to.' });
         return;
       }
       const template = promptTemplates.findBySystemKind('pr-build-fix');
@@ -209,21 +195,27 @@ export function createPrMonitorRouter(deps: PrMonitorRouterDeps): Router {
         res.status(500).json({ error: 'PR build-fix template missing — restart the server to reseed system templates' });
         return;
       }
-      const session = await dispatchPrSession({
-        body,
-        todo,
+      const track = tracks.findById(todo.trackId);
+      if (!track) {
+        res.status(404).json({ error: 'Track not found' });
+        return;
+      }
+      // Two-stage interpolation mirrors send-comments: {{track.*}}/{{todo.*}}
+      // first, then {{pr.*}} (which renders the failing-check list).
+      const stage1 = interpolateTemplate(template.content, {
         track,
-        monitor,
-        templateContent: template.content,
-        commentsForTemplate: undefined,
-        sessionLabel: `Fix PR #${monitor.prNumber}: ${monitor.prTitle ?? ''}`.trim(),
-        deps: { tracks, summaries, tickets, agents, filesystemScanner, settings, projectRoot, terminal },
+        todo: { id: todo.id, title: todo.title, description: todo.description ?? '' },
       });
-      broadcast('session:created', track.id, { sessionId: session.id });
-      res.status(201).json({ session, monitor });
+      const message = interpolatePrTemplate(stage1, { monitor });
+      const ok = await terminal.sendInput(todo.sessionId, message);
+      if (!ok) {
+        res.status(409).json({ error: 'The linked session is not running — start or resume it, then try again.' });
+        return;
+      }
+      res.json({ ok: true, sessionId: todo.sessionId });
     } catch (err) {
-      console.error('Failed to dispatch PR fix:', err);
-      res.status(500).json({ error: err instanceof Error ? err.message : 'Failed to dispatch PR fix' });
+      console.error('Failed to send PR build-fix feedback:', err);
+      res.status(500).json({ error: err instanceof Error ? err.message : 'Failed to send build-fix feedback' });
     }
   });
 
@@ -323,99 +315,5 @@ export function createPrMonitorRouter(deps: PrMonitorRouterDeps): Router {
   });
 
   return router;
-}
-
-// --- Dispatch helper ---
-
-interface DispatchPrSessionParams {
-  body: DispatchBody;
-  todo: { id: TodoId; trackId: TrackId; title: string; description?: string; issueKey?: string };
-  track: import('@foundation/types').Track;
-  monitor: PrMonitor;
-  templateContent: string;
-  commentsForTemplate?: PrComment[];
-  sessionLabel: string;
-  deps: {
-    tracks: TrackRepository;
-    summaries: SummaryRepository;
-    tickets: TicketRepository;
-    agents: AgentRepository;
-    filesystemScanner: FilesystemAgentScanner;
-    settings: SettingsRepository;
-    projectRoot: string;
-    terminal: PrMonitorRouterDeps['terminal'];
-  };
-}
-
-async function dispatchPrSession(params: DispatchPrSessionParams) {
-  const { body, todo, track, monitor, templateContent, commentsForTemplate, sessionLabel, deps } = params;
-  const { tracks, summaries, tickets, agents, filesystemScanner, settings, projectRoot, terminal } = deps;
-
-  // Compose system prompt: agent + track context + summary + repos + PR-specific template
-  const parts: string[] = [];
-
-  const agentId = (body.agentId as AgentId | undefined) ?? track.defaultAgentId;
-  if (agentId) {
-    let agent = agents.findById(agentId);
-    if (!agent) {
-      agent = filesystemScanner.findById(agentId, projectRoot);
-    }
-    if (agent) {
-      parts.push(`## Agent: ${agent.name}\n\n${agent.systemPrompt}`);
-    }
-  }
-
-  if (track.context) parts.push(track.context);
-
-  const summary = summaries.findLatest(todo.trackId);
-  if (summary) parts.push(`## Current Status\n\n${summary.content}`);
-
-  // Materialise track tickets so {{track.tickets}} resolves
-  track.tickets = tickets.findByTrack(todo.trackId);
-
-  const repos = tracks.findReposByTrack(todo.trackId);
-
-  // Two-stage interpolation: standard track/todo first, then PR-specific vars.
-  const stage1 = interpolateTemplate(templateContent, {
-    track,
-    todo: { id: todo.id, title: todo.title, description: todo.description ?? '' },
-  });
-  const stage2 = interpolatePrTemplate(stage1, { monitor, comments: commentsForTemplate });
-  parts.push(stage2);
-
-  if (repos.length > 0 && !templateContent.includes('{{track.repos')) {
-    const repoLines = repos
-      .map((r) => `- ${r.path}${r.remoteUrl ? ` (${r.remoteUrl})` : ''}`)
-      .join('\n');
-    parts.push(`## Repositories\n\n${repoLines}`);
-  }
-
-  const systemPrompt = parts.join('\n\n---\n\n');
-
-  const initialPrompt = commentsForTemplate
-    ? `Address review feedback on PR #${monitor.prNumber} (${monitor.prUrl}). See the system prompt for the comment list and procedure.`
-    : `Investigate the failing CI checks on PR #${monitor.prNumber} (${monitor.prUrl}) and push a fix to the same branch. See the system prompt for the failing checks and procedure.`;
-
-  const provider: SessionProvider = resolveSessionProvider(
-    body.provider,
-    settings.get('default_ai_cli'),
-  );
-
-  // We deliberately do NOT enable worktree mode for PR action sessions: the
-  // sub-agent needs to operate on the PR's existing head branch (via
-  // `gh pr checkout`), not in a fresh workshop-managed branch. Running in the
-  // primary repo path lets the agent check out and push to the PR branch
-  // without extra setup.
-  return terminal.createSession(track.id, {
-    systemPrompt,
-    workingDirectory: repos[0]?.path,
-    background: true,
-    initialPrompt,
-    provider,
-    name: sessionLabel,
-    worktreeMode: false,
-    issueKey: todo.issueKey,
-    dangerouslySkipPermissions: body.dangerouslySkipPermissions === true,
-  });
 }
 

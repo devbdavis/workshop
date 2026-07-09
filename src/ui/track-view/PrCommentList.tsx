@@ -1,3 +1,4 @@
+import Markdown from 'react-markdown';
 import type { PrComment } from '@foundation/types';
 
 interface Props {
@@ -9,12 +10,6 @@ interface Props {
   onToggleExpand: (id: string) => void;
   onSend: (commentIds: string[] | undefined) => void;
   onDismiss: (commentIds: string[]) => void;
-}
-
-function shorten(body: string, max = 240): string {
-  const trimmed = body.trim();
-  if (trimmed.length <= max) return trimmed;
-  return `${trimmed.slice(0, max)}…`;
 }
 
 export function PrCommentList({
@@ -76,9 +71,11 @@ export function PrCommentList({
                   {expanded ? 'Less' : 'More'}
                 </button>
               </div>
-              <p className={`mt-1 text-gray-300 whitespace-pre-wrap ${expanded ? '' : 'line-clamp-3'}`}>
-                {expanded ? c.body : shorten(c.body)}
-              </p>
+              <div
+                className={`mt-1 text-gray-300 prose prose-invert prose-sm max-w-none prose-p:my-1 prose-pre:my-1 prose-headings:my-1 ${expanded ? '' : 'max-h-20 overflow-hidden'}`}
+              >
+                <Markdown>{c.body}</Markdown>
+              </div>
               <div className="flex items-center justify-between mt-2 gap-2">
                 {c.url ? (
                   <a
