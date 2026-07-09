@@ -8,7 +8,6 @@
 import type { Track, TrackId, SessionId, SessionProvider } from '@foundation/types';
 import type { TrackRepository } from '@domain/track/repository';
 import type { SessionRepository } from '@domain/session/repository';
-import type { SummaryRepository } from '@domain/summary/repository';
 import type { TicketRepository } from '@domain/ticket/repository';
 import type { PromptTemplateRepository } from '@domain/prompt-template/repository';
 import type { TerminalManager } from '@domain/terminal/manager.js';
@@ -30,7 +29,6 @@ const DEFAULT_POLL_INTERVAL_MS = 30_000;
 export interface MatrixRouterDeps {
   tracks: TrackRepository;
   sessions: SessionRepository;
-  summaries: SummaryRepository;
   tickets: TicketRepository;
   promptTemplates: PromptTemplateRepository;
   terminal: TerminalManager;
@@ -78,12 +76,6 @@ export function createMatrixRouter(deps: MatrixRouterDeps): MatrixRouter {
     const vaultCtx = composeVaultContext(deps.vaultReader, trackSlug);
     if (vaultCtx) {
       parts.push(vaultCtx);
-    }
-
-    // Latest summary
-    const summary = deps.summaries.findLatest(track.id);
-    if (summary) {
-      parts.push(`## Current Status\n\n${summary.content}`);
     }
 
     // Interpolated template

@@ -159,7 +159,7 @@ export function NewDiscussionModal({ teams, tracks, onSubmit, onClose }: Props) 
                 ))}
               </select>
               <p className="text-[11px] text-gray-600 mt-1">
-                Binding to a track gives agents extra context (summary, context field)
+                Binding to a track gives agents extra context (context field)
               </p>
             </div>
 

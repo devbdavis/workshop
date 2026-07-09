@@ -2,7 +2,6 @@
 export type TrackId = string & { readonly __brand: 'TrackId' };
 export type SessionId = string & { readonly __brand: 'SessionId' };
 export type TicketId = string & { readonly __brand: 'TicketId' };
-export type SummaryId = string & { readonly __brand: 'SummaryId' };
 export type AutomationRuleId = string & { readonly __brand: 'AutomationRuleId' };
 export type RepoId = string & { readonly __brand: 'RepoId' };
 export type PathId = string & { readonly __brand: 'PathId' };
@@ -206,18 +205,9 @@ export interface ImportableIssue {
   importedTodoId?: TodoId;
 }
 
-// Summary
-export interface TrackSummary {
-  id: SummaryId;
-  trackId: TrackId;
-  content: string;
-  version: number;
-  createdAt: string;
-}
-
 // Automation
 export type TriggerType = 'schedule' | 'git-change' | 'ticket-status-change' | 'session-end' | 'manual';
-export type ActionType = 'regenerate-summary' | 'run-agent-prompt' | 'sync-tickets';
+export type ActionType = 'run-agent-prompt' | 'sync-tickets';
 
 export interface AutomationRule {
   id: AutomationRuleId;
