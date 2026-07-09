@@ -142,10 +142,13 @@ export function createRepoRouter(deps: RepoRouterDeps): Router {
         res.json([]);
         return;
       }
+      const registered = new Set(repos.findAll().map((r) => expandHome(r.path)));
       const entries = readdirSync(expanded);
       const folders = entries.filter((entry) => {
+        const full = path.join(expanded, entry);
+        if (registered.has(full)) return false;
         try {
-          return statSync(path.join(expanded, entry)).isDirectory();
+          return statSync(full).isDirectory();
         } catch {
           return false;
         }
