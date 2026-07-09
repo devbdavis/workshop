@@ -2,6 +2,7 @@ import { execFile } from 'child_process';
 import { promisify } from 'util';
 import type { PrCheckStatus, PrCheckSummary, PrComment, PrState } from '@foundation/types';
 import { parsePrUrl } from '@infrastructure/forge/pr-url.js';
+import { stripHtmlNoise } from '@foundation/strip-html.js';
 
 const execFileAsync = promisify(execFile);
 
@@ -35,24 +36,6 @@ export function clampString(value: string | null | undefined, max: number): stri
   const trimmed = value.trim();
   if (trimmed.length === 0) return undefined;
   return trimmed.length > max ? `${trimmed.slice(0, max)}…` : trimmed;
-}
-
-/**
- * Strip HTML comments and tags from a comment body. Bot reviewers (Cursor
- * Bugbot, etc.) embed `<!-- … -->` markers and `<a>/<picture>/<img>` markup;
- * react-markdown escapes rather than removes those, so they'd render as visible
- * `&lt;!-- … --&gt;` noise. Run this BEFORE clamping so the length budget is
- * spent on real text, not multi-KB base64 "fix-in-cursor" link blobs. The tag
- * regex intentionally requires a letter/`/` after `<` so markdown autolinks
- * like `<https://example.com>` survive.
- */
-export function stripHtmlNoise(value: string | null | undefined): string | undefined {
-  if (!value) return undefined;
-  return value
-    .replace(/<!--[\s\S]*?-->/g, '')
-    .replace(/<\/?[a-zA-Z][a-zA-Z0-9-]*(?:\s[^>]*)?>/g, '')
-    .replace(/[ \t]+$/gm, '')
-    .replace(/\n{3,}/g, '\n\n');
 }
 
 interface GhCheckRollupNode {
