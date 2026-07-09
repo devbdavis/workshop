@@ -53,21 +53,6 @@ interface GhCheckRollupNode {
   workflowName?: string;
 }
 
-interface GhCommentNode {
-  id?: string;
-  author?: { login?: string };
-  body?: string;
-  createdAt?: string;
-  url?: string;
-}
-
-interface GhReviewCommentNode extends GhCommentNode {
-  path?: string;
-  line?: number;
-  originalLine?: number;
-  isResolved?: boolean;
-}
-
 interface GhReviewNode {
   id?: string;
   author?: { login?: string };
@@ -75,7 +60,6 @@ interface GhReviewNode {
   createdAt?: string;
   url?: string;
   state?: string;
-  comments?: GhReviewCommentNode[];
 }
 
 interface GhPrJson {
@@ -89,8 +73,35 @@ interface GhPrJson {
   mergedAt?: string | null;
   closed?: boolean;
   statusCheckRollup?: GhCheckRollupNode[];
-  comments?: GhCommentNode[];
   reviews?: GhReviewNode[];
+}
+
+/** A single inline review comment from the `gh api graphql` reviewThreads query. */
+interface GhGraphqlInlineComment {
+  id?: string;
+  author?: { login?: string };
+  body?: string;
+  createdAt?: string;
+  url?: string;
+  path?: string;
+  line?: number | null;
+  originalLine?: number | null;
+}
+
+/** Shape of the `gh api graphql` reviewThreads response. */
+interface GhReviewThreadsResponse {
+  data?: {
+    repository?: {
+      pullRequest?: {
+        reviewThreads?: {
+          nodes?: Array<{
+            isResolved?: boolean;
+            comments?: { nodes?: GhGraphqlInlineComment[] };
+          }>;
+        };
+      };
+    };
+  };
 }
 
 function deriveState(raw: GhPrJson): PrState {
@@ -159,8 +170,8 @@ function deriveCheckStatus(rollup: GhCheckRollupNode[] | undefined): { status: P
 }
 
 /**
- * `gh pr view --json comments,reviews` reports every comment author as a bare
- * `{ login }` with no bot flag — bots (trunk-io, spacelift, etc.)
+ * `gh` reports every comment author as a bare `{ login }` with no bot flag —
+ * bots (trunk-io, spacelift, etc.)
  * are indistinguishable from humans except by login string. Filtering is
  * therefore a case-insensitive substring match against the caller-supplied
  * ignore list rather than any bot-detection heuristic.
@@ -171,75 +182,81 @@ function isIgnoredAuthor(login: string, ignoredAuthors: readonly string[]): bool
 }
 
 /**
- * Reviews and review-thread comments come back as one stream per review. The
- * resolution flag tells us whether a thread is still open. PR-level comments
- * (issue comments) don't have a resolution concept — we surface all of them
- * that arrived after the last polled-at timestamp; for the first poll we include
- * all of them. The caller distinguishes which to act on via the `kind` field.
+ * Extract the unresolved inline review comments from a `gh api graphql`
+ * reviewThreads response. Inline comments are NOT returned by `gh pr view`, so
+ * they're fetched separately. We surface the root comment of each *unresolved*
+ * thread — replies are usually the PR author's own responses, and resolving the
+ * thread on GitHub clears it from this list.
  */
-function deriveComments(raw: GhPrJson, ignoredAuthors: readonly string[]): PrComment[] {
+export function parseInlineComments(json: GhReviewThreadsResponse): PrComment[] {
+  const threads = json.data?.repository?.pullRequest?.reviewThreads?.nodes ?? [];
+  const out: PrComment[] = [];
+  for (const thread of threads) {
+    if (thread.isResolved) continue;
+    const root = thread.comments?.nodes?.[0];
+    if (!root?.id) continue;
+    out.push({
+      id: root.id,
+      author: root.author?.login ?? 'unknown',
+      body: clampString(stripHtmlNoise(root.body), COMMENT_BODY_MAX) ?? '',
+      createdAt: root.createdAt ?? new Date().toISOString(),
+      url: root.url,
+      kind: 'review',
+      path: root.path,
+      line: root.line ?? root.originalLine ?? undefined,
+    });
+  }
+  return out;
+}
+
+/**
+ * Build the "needs attention" comment list. We deliberately surface only what a
+ * reviewer must act on:
+ *   - unresolved inline review-thread comments (`inlineComments`, incl. bots like
+ *     Bugbot), fetched separately via GraphQL; and
+ *   - the top-level summary of a review that explicitly *requested changes*.
+ * PR-level (issue) comments and plain "Commented"/"Approved" review summaries are
+ * dropped as noise. Inline comments carry `path`/`line`; summaries don't.
+ */
+function deriveComments(
+  raw: GhPrJson,
+  inlineComments: PrComment[],
+  ignoredAuthors: readonly string[],
+): PrComment[] {
   const out: PrComment[] = [];
 
-  for (const c of raw.comments ?? []) {
-    if (!c.id) continue;
-    const author = c.author?.login ?? 'unknown';
+  for (const review of raw.reviews ?? []) {
+    if (review.state !== 'CHANGES_REQUESTED') continue;
+    const author = review.author?.login ?? 'unknown';
     if (isIgnoredAuthor(author, ignoredAuthors)) continue;
+    const body = clampString(stripHtmlNoise(review.body), COMMENT_BODY_MAX);
+    if (!body) continue;
     out.push({
-      id: c.id,
+      id: review.id ?? `${author}-${review.createdAt ?? ''}`,
       author,
-      body: clampString(stripHtmlNoise(c.body), COMMENT_BODY_MAX) ?? '',
-      createdAt: c.createdAt ?? new Date().toISOString(),
-      url: c.url,
-      kind: 'issue',
+      body,
+      createdAt: review.createdAt ?? new Date().toISOString(),
+      url: review.url,
+      kind: 'review',
     });
   }
 
-  for (const review of raw.reviews ?? []) {
-    const reviewAuthor = review.author?.login ?? 'unknown';
-    // Top-level review body (the "Changes requested" summary). Only surface it
-    // if the review carries no inline thread comments — otherwise it's noise.
-    const hasInline = (review.comments ?? []).length > 0;
-    if (
-      !hasInline &&
-      review.body &&
-      review.body.trim().length > 0 &&
-      review.state !== 'APPROVED' &&
-      !isIgnoredAuthor(reviewAuthor, ignoredAuthors)
-    ) {
-      out.push({
-        id: review.id ?? `${reviewAuthor}-${review.createdAt ?? ''}`,
-        author: reviewAuthor,
-        body: clampString(stripHtmlNoise(review.body), COMMENT_BODY_MAX) ?? '',
-        createdAt: review.createdAt ?? new Date().toISOString(),
-        url: review.url,
-        kind: 'review',
-      });
-    }
-    for (const rc of review.comments ?? []) {
-      if (rc.isResolved) continue;
-      if (!rc.id) continue;
-      const rcAuthor = rc.author?.login ?? 'unknown';
-      if (isIgnoredAuthor(rcAuthor, ignoredAuthors)) continue;
-      out.push({
-        id: rc.id,
-        author: rcAuthor,
-        body: clampString(stripHtmlNoise(rc.body), COMMENT_BODY_MAX) ?? '',
-        createdAt: rc.createdAt ?? new Date().toISOString(),
-        url: rc.url,
-        kind: 'review',
-        path: rc.path,
-        line: rc.line ?? rc.originalLine,
-      });
-    }
+  for (const c of inlineComments) {
+    if (isIgnoredAuthor(c.author, ignoredAuthors)) continue;
+    out.push(c);
   }
 
   return out;
 }
 
-export function snapshotFromGhJson(raw: GhPrJson, ignoredCommentAuthors: readonly string[] = []): GhPrSnapshot {
+export function snapshotFromGhJson(
+  raw: GhPrJson,
+  inlineComments: PrComment[] = [],
+  ignoredCommentAuthors: readonly string[] = [],
+): GhPrSnapshot {
   const state = deriveState(raw);
   const checks = deriveCheckStatus(raw.statusCheckRollup);
-  const comments = deriveComments(raw, ignoredCommentAuthors);
+  const comments = deriveComments(raw, inlineComments, ignoredCommentAuthors);
   const finished = state === 'merged' || state === 'closed';
   return {
     state,
@@ -271,9 +288,13 @@ const GH_PR_VIEW_FIELDS = [
   'mergedAt',
   'closed',
   'statusCheckRollup',
-  'comments',
   'reviews',
 ].join(',');
+
+// Inline review comments aren't returned by `gh pr view`; fetch them (and their
+// resolution state) via GraphQL. One root comment per thread is enough context.
+const REVIEW_THREADS_QUERY =
+  'query($owner:String!,$name:String!,$number:Int!){repository(owner:$owner,name:$name){pullRequest(number:$number){reviewThreads(first:100){nodes{isResolved comments(first:1){nodes{id author{login} body path line originalLine url createdAt}}}}}}}';
 
 export interface CreateGhAdapterOptions {
   /** Override for tests — defaults to the real `gh` binary on PATH. */
@@ -311,7 +332,34 @@ export function createGhAdapter(opts: CreateGhAdapterOptions = {}): GhAdapter {
       } catch (err) {
         throw new Error(`gh pr view returned unparseable JSON for ${prUrl}: ${(err as Error).message}`);
       }
-      return snapshotFromGhJson(raw, getIgnoredCommentAuthors());
+
+      let inlineComments: PrComment[] = [];
+      const state = deriveState(raw);
+      const finished = state === 'merged' || state === 'closed';
+      if (!finished) {
+        try {
+          const { stdout: gql } = await exec(ghBinary, [
+            'api',
+            'graphql',
+            '-f',
+            `query=${REVIEW_THREADS_QUERY}`,
+            '-f',
+            `owner=${parsed.owner}`,
+            '-f',
+            `name=${parsed.repo}`,
+            '-F',
+            `number=${parsed.number}`,
+          ]);
+          inlineComments = parseInlineComments(JSON.parse(gql) as GhReviewThreadsResponse);
+        } catch {
+          // ponytail: inline-comment fetch is best-effort — a flaky graphql call
+          // shouldn't drop the whole snapshot (state/checks still update from `gh
+          // pr view`). Next poll retries.
+          inlineComments = [];
+        }
+      }
+
+      return snapshotFromGhJson(raw, inlineComments, getIgnoredCommentAuthors());
     },
   };
 }
