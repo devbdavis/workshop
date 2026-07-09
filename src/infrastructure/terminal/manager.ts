@@ -13,7 +13,7 @@ import type { PluginRepository } from '@domain/plugin/repository';
 import { toEnabledPluginsMap } from '@domain/plugin/repository.js';
 import { readAgentsRules } from '@infrastructure/plugins/rules-writer.js';
 import {
-  capturePane, isSessionIdle, isSessionNeedsInput, isSessionLoggedOut, isSessionExited,
+  capturePaneLines, isSessionIdle, isSessionNeedsInput, isSessionLoggedOut, isSessionExited,
 } from './pane-detection.js';
 import {
   buildClaudeLauncher, buildGeminiLauncher, buildCodexLauncher, buildCursorLauncher,
@@ -1012,11 +1012,7 @@ export function createTerminalManager(
         if (!alive) continue;
 
         // --- Shared pane capture for alive sessions ---
-        // Capture with ANSI codes preserved so predicates can distinguish
-        // user-typed text from Claude's dim ghost-suggestion overlay
-        // (the greyed-out tab-to-accept text under the ❯ prompt).
-        const captured = capturePane(session.tmuxSession, 20);
-        const capturedLines = captured.text;
+        const capturedLines = capturePaneLines(session.tmuxSession, 20);
 
         // Activity hash comparison
         const contentStr = capturedLines.join('\n');
@@ -1032,12 +1028,12 @@ export function createTerminalManager(
         // --- Activity status tracking (all alive sessions) ---
         // needs-input takes priority: check before idle to catch question prompts
         const prevStatus = activityStatusMap.get(session.id);
-        if (isSessionNeedsInput(session, capturedLines, captured.raw)) {
+        if (isSessionNeedsInput(session, capturedLines)) {
           consecutiveIdleObs.delete(session.id);
           firstIdledAt.delete(session.id);
           notifiedIdle.delete(session.id);
           activityStatusMap.set(session.id, 'needs-input');
-        } else if (isSessionIdle(session, capturedLines, captured.raw)) {
+        } else if (isSessionIdle(session, capturedLines)) {
           // Require IDLE_CONSECUTIVE_THRESHOLD consecutive idle observations
           // before reporting idle. This prevents brief clean-state windows
           // (e.g. the moment between a thinking phase and the next tool call)
