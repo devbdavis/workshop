@@ -19,7 +19,6 @@ import { resetDatabase } from '@infrastructure/persistence/database';
 import type { WorkflowTicket, SessionId, TrackId, Session } from '@foundation/types';
 import type { TerminalManager } from '@infrastructure/terminal/manager';
 import type { TrackRepository } from '@domain/track/repository';
-import type { SummaryRepository } from '@domain/summary/repository';
 import type { TopologyLoader } from '@application/workflow/topology-loader';
 import type { StageDefinition } from '@domain/workflow/types';
 
@@ -181,14 +180,6 @@ function createMockTracks(): TrackRepository {
   } as unknown as TrackRepository;
 }
 
-function createMockSummaries(): SummaryRepository {
-  return {
-    findLatest: vi.fn().mockReturnValue(null),
-    findAll: vi.fn().mockReturnValue([]),
-    create: vi.fn(),
-  } as unknown as SummaryRepository;
-}
-
 describe('ExecutionDispatcher', () => {
   const trackRepo = createTrackRepository();
   const tickets = createWorkflowTicketRepository();
@@ -228,7 +219,6 @@ describe('ExecutionDispatcher', () => {
         engine,
         tickets,
         tracks: createMockTracks(),
-        summaries: createMockSummaries(),
         terminal: mockTerminal,
         topologyLoader,
       });
@@ -251,7 +241,6 @@ describe('ExecutionDispatcher', () => {
         engine,
         tickets,
         tracks: createMockTracks(),
-        summaries: createMockSummaries(),
         terminal: mockTerminal,
         topologyLoader,
       });
@@ -267,7 +256,6 @@ describe('ExecutionDispatcher', () => {
         engine,
         tickets,
         tracks: createMockTracks(),
-        summaries: createMockSummaries(),
         terminal: createMockTerminal(),
         topologyLoader,
       });
@@ -288,7 +276,6 @@ describe('ExecutionDispatcher', () => {
         engine,
         tickets,
         tracks: mockTracks,
-        summaries: createMockSummaries(),
         terminal: createMockTerminal(),
         topologyLoader,
       });
@@ -307,7 +294,6 @@ describe('ExecutionDispatcher', () => {
         engine,
         tickets,
         tracks: createMockTracks(),
-        summaries: createMockSummaries(),
         terminal: createMockTerminal(),
         topologyLoader,
       });

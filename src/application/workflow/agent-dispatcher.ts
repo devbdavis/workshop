@@ -16,7 +16,6 @@ import type {
 } from '@foundation/types.js';
 import type { WorkflowTicketRepository } from '@domain/workflow/ticket-repository.js';
 import type { TrackRepository } from '@domain/track/repository.js';
-import type { SummaryRepository } from '@domain/summary/repository.js';
 import type { TerminalManager } from '@domain/terminal/manager.js';
 import type { TopologyLoader } from './topology-loader.js';
 import type { AgentRoleRepository, AgentRoleRow } from '@domain/workflow/agent-role-repository.js';
@@ -39,7 +38,6 @@ export interface AgentDispatcher {
 export interface AgentDispatcherDeps {
   tickets: WorkflowTicketRepository;
   tracks: TrackRepository;
-  summaries: SummaryRepository;
   terminal: TerminalManager;
   topologyLoader: TopologyLoader;
   agentRoles: AgentRoleRepository;
@@ -73,7 +71,7 @@ function isExecutionStage(
 // ---------------------------------------------------------------------------
 
 export function createAgentDispatcher(deps: AgentDispatcherDeps): AgentDispatcher {
-  const { tickets, tracks, summaries, terminal, topologyLoader, agentRoles } = deps;
+  const { tickets, tracks, terminal, topologyLoader, agentRoles } = deps;
 
   /** Lazily find-or-create a _Workflow track for tickets without a track */
   let workflowTrackId: TrackId | null = null;
@@ -156,10 +154,6 @@ export function createAgentDispatcher(deps: AgentDispatcherDeps): AgentDispatche
       const track = tracks.findById(trackId);
       if (track?.context) {
         ctx.trackContext = track.context;
-      }
-      const summary = summaries.findLatest(trackId);
-      if (summary) {
-        ctx.summary = summary.content;
       }
     }
 

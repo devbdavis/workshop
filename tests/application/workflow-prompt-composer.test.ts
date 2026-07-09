@@ -255,32 +255,9 @@ describe('composeWorkflowPrompt', () => {
       expect(prompt).toContain('This project uses Express and PostgreSQL');
     });
 
-    it('should append summary when provided', () => {
-      const prompt = composeWorkflowPrompt('triage', makeTicket(), {
-        summary: 'Auth module is 60% complete',
-      });
-      expect(prompt).toContain('## Current Status');
-      expect(prompt).toContain('Auth module is 60% complete');
-    });
-
-    it('should append both context and summary separated by dividers', () => {
-      const prompt = composeWorkflowPrompt('triage', makeTicket(), {
-        trackContext: 'Context here',
-        summary: 'Summary here',
-      });
-      expect(prompt).toContain('---');
-      expect(prompt).toContain('## Track Context');
-      expect(prompt).toContain('## Current Status');
-      // Verify ordering: track context before summary
-      const contextIdx = prompt.indexOf('## Track Context');
-      const summaryIdx = prompt.indexOf('## Current Status');
-      expect(contextIdx).toBeLessThan(summaryIdx);
-    });
-
     it('should not append context sections when not provided', () => {
       const prompt = composeWorkflowPrompt('triage', makeTicket());
       expect(prompt).not.toContain('## Track Context');
-      expect(prompt).not.toContain('## Current Status');
       expect(prompt).not.toContain('---');
     });
   });

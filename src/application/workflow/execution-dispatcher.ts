@@ -11,7 +11,6 @@ import type {
 } from '@foundation/types.js';
 import type { WorkflowTicketRepository } from '@domain/workflow/ticket-repository.js';
 import type { TrackRepository } from '@domain/track/repository.js';
-import type { SummaryRepository } from '@domain/summary/repository.js';
 import type { TerminalManager } from '@domain/terminal/manager.js';
 import type { WorkflowEngine } from './engine.js';
 import type { TopologyLoader } from './topology-loader.js';
@@ -34,7 +33,6 @@ export interface ExecutionDispatcherDeps {
   engine: WorkflowEngine;
   tickets: WorkflowTicketRepository;
   tracks: TrackRepository;
-  summaries: SummaryRepository;
   terminal: TerminalManager;
   topologyLoader: TopologyLoader;
 }
@@ -90,7 +88,7 @@ function findTransitionTarget(
 export function createExecutionDispatcher(
   deps: ExecutionDispatcherDeps,
 ): ExecutionDispatcher {
-  const { engine, tickets, tracks, summaries, terminal, topologyLoader } = deps;
+  const { engine, tickets, tracks, terminal, topologyLoader } = deps;
 
   /** Lazily find-or-create a _Workflow track for tickets without a track */
   let workflowTrackId: TrackId | null = null;
@@ -215,7 +213,7 @@ function composeExecutionPrompt(
   ticket: WorkflowTicket,
   deps: ExecutionDispatcherDeps,
 ): string {
-  const { tracks, summaries } = deps;
+  const { tracks } = deps;
   const parts: string[] = [];
 
   parts.push(
@@ -263,11 +261,6 @@ function composeExecutionPrompt(
             (p) => `- ${p.path}${p.label ? ` (${p.label})` : ''}`,
           ),
         );
-      }
-
-      const summary = summaries.findLatest(ticket.trackId);
-      if (summary) {
-        parts.push('', '## Current Project Status', '', summary.content);
       }
     }
   }

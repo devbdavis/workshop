@@ -13,7 +13,6 @@ import type {
 import type { ScheduledTaskRepository, ScheduledTaskRunRepository } from '@domain/scheduled-task/repository';
 import type { TrackRepository } from '@domain/track/repository';
 import type { SessionRepository } from '@domain/session/repository';
-import type { SummaryRepository } from '@domain/summary/repository';
 import type { TicketRepository } from '@domain/ticket/repository';
 import type { PromptTemplateRepository } from '@domain/prompt-template/repository';
 import type { AgentRepository } from '@domain/agent/repository';
@@ -26,7 +25,6 @@ export interface TaskSchedulerDeps {
   runs: ScheduledTaskRunRepository;
   tracks: TrackRepository;
   sessions: SessionRepository;
-  summaries: SummaryRepository;
   tickets: TicketRepository;
   promptTemplates: PromptTemplateRepository;
   agents: AgentRepository;
@@ -148,11 +146,6 @@ export function createTaskScheduler(deps: TaskSchedulerDeps): TaskScheduler {
       if (track) {
         if (track.context) {
           parts.push(track.context);
-        }
-
-        const summary = deps.summaries.findLatest(task.trackId);
-        if (summary) {
-          parts.push(`## Current Status\n\n${summary.content}`);
         }
 
         let templateHasRepos = false;
