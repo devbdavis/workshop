@@ -58,8 +58,9 @@ function parseAvailableAgents(raw: string | null): SessionProvider[] {
 
 /**
  * Author-login substrings hidden from the PR-monitor (outgoing PRs) comment
- * feed by default. Bots (and only bots, hopefully) match these; humans,
- * CodeRabbit, and Cursor/bugbot don't.
+ * feed by default. Bots (and only bots, hopefully) match these; humans and
+ * Cursor/bugbot don't. CodeRabbit is filtered for now (its comments are
+ * summary-only noise) — drop it from the list to bring those back.
  */
 export const DEFAULT_PR_MONITOR_IGNORED_AUTHORS: readonly string[] = [
   'trunk-io',
@@ -67,6 +68,7 @@ export const DEFAULT_PR_MONITOR_IGNORED_AUTHORS: readonly string[] = [
   'spacelift',
   'wiz-inc',
   'linear-code',
+  'coderabbitai',
 ];
 
 /**

@@ -1093,7 +1093,20 @@ export function ensureDefaultTodoTemplate(): void {
   ).run(templateId, new Date().toISOString());
 }
 
-const DEFAULT_PR_BUILD_FIX_TEMPLATE_CONTENT = `## PR Build Fix
+// Sent as a message INTO the todo's already-running session (not a fresh
+// sub-agent), so it stays short and assumes the agent already has context.
+const DEFAULT_PR_BUILD_FIX_TEMPLATE_CONTENT = `The CI checks on PR #{{pr.number}} ({{pr.url}}) are failing:
+
+{{pr.failing_checks}}
+
+Read the linked check logs, fix the underlying issue (don't paper over it — no skipping tests or lowering thresholds unless asked), then commit and push to the PR branch. Briefly report what was wrong and what you changed.
+`;
+
+// Prior default shipped as a full stand-alone sub-agent prompt. Any row still
+// holding it verbatim (i.e. the user never edited it) is upgraded in place to
+// the shorter send-to-session template above; edited rows are left untouched.
+export const LEGACY_PR_BUILD_FIX_CONTENTS: string[] = [
+  `## PR Build Fix
 
 You are running as a background sub-agent dispatched to investigate and fix a failing CI build on a pull request.
 
@@ -1114,7 +1127,8 @@ You are running as a background sub-agent dispatched to investigate and fix a fa
 5. Briefly report what was wrong and what you changed.
 
 If you cannot determine the cause from the logs alone, stop and report what you tried and what's needed to proceed.
-`;
+`,
+];
 
 // Sent as a message INTO the todo's already-running session (not a fresh
 // sub-agent), so it stays short and assumes the agent already has context.
@@ -1166,8 +1180,9 @@ const SYSTEM_TEMPLATE_SPECS: SystemTemplateSpec[] = [
   {
     systemKind: 'pr-build-fix',
     name: 'PR Build Fix',
-    description: 'Prompt sent to a sub-agent when a monitored PR has failing CI checks. Editable.',
+    description: 'Message sent into the todo\'s running session when a monitored PR has failing CI checks. Editable.',
     content: DEFAULT_PR_BUILD_FIX_TEMPLATE_CONTENT,
+    legacyContents: LEGACY_PR_BUILD_FIX_CONTENTS,
   },
   {
     systemKind: 'pr-comment-response',
