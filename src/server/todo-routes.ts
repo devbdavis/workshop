@@ -17,6 +17,18 @@ import { interpolateTemplate } from '@application/track-management/prompt-interp
 import { composeVaultContext } from '@application/vault/compose-vault-context.js';
 import { broadcast } from './events.js';
 
+/** Settings key caching the dedicated system track that hosts ticket-drafting sessions. */
+const LINEAR_TICKET_TRACK_SETTING = 'linear_ticket_track_id';
+
+/** Result of a "create Linear ticket" agent run, surfaced to the modal. */
+interface LinearTicketJob {
+  status: 'pending' | 'done';
+  issueKey?: string;
+  url?: string;
+  title?: string;
+  body?: string;
+}
+
 export interface TodoRouterDeps {
   todos: TodoRepository;
   tracks: TrackRepository;
@@ -62,6 +74,24 @@ export function createTodoRouter(deps: TodoRouterDeps): Router {
     vaultReader,
     prMonitorRegistrar,
   } = deps;
+
+  // Ephemeral results of "create Linear ticket" runs, keyed by todoId. In-memory
+  // on purpose — a transient aid for the modal, fine to lose on server restart.
+  const linearTicketJobs = new Map<string, LinearTicketJob>();
+
+  /** The dedicated system track that hosts ticket-drafting sessions (lazily created, id cached in settings). */
+  function ensureLinearTicketTrack(): TrackId {
+    const cached = settings.get(LINEAR_TICKET_TRACK_SETTING);
+    if (cached && tracks.findById(cached as TrackId)) return cached as TrackId;
+    const track = tracks.create({
+      name: 'Linear Tickets',
+      description: 'Background sessions that draft and file Linear tickets from todos.',
+      label: 'system',
+      status: 'active',
+    });
+    settings.set(LINEAR_TICKET_TRACK_SETTING, track.id);
+    return track.id;
+  }
 
   // --- List all todos (with optional filters) ---
 
@@ -410,16 +440,16 @@ export function createTodoRouter(deps: TodoRouterDeps): Router {
         '',
         'Do the following:',
         '1. Expand the todo into a well-structured ticket body — a brief Description, concrete Implementation Details, and Acceptance Criteria — inferred from the todo above. This is not a full implementation plan; stay within the scope the todo implies and do not invent extra work.',
-        '2. Use the /linear skill to create the ticket in the ASY backlog with that content.',
-        `3. Once the ticket exists, call the workshop_update_todo MCP tool to set issueKey on todo "${todo.id}" to the new ticket's key (e.g. "ASY-1234") so the todo links to the ticket.`,
-        '',
-        'Report the created ticket key and URL when done.',
+        '2. Use the /linear skill to create the ticket for team ASY with that content.',
+        `3. After the ticket is filed, call the workshop_report_linear_ticket MCP tool with todoId "${todo.id}", the resulting issueKey (e.g. "ASY-1234"), the ticket url, the title, and the full body. This links the ticket to the todo and lets Workshop show it.`,
       ].join('\n');
 
-      // One-shot background session: no todoId → runs with --print and auto-exits
-      // (mirrors the PR-review analyze dispatch). Claude-only because /linear is a
-      // Claude skill. Deliberately does NOT change the todo's status.
-      const session = await terminal.createSession(todo.trackId, {
+      // One-shot background session on a dedicated system track: no todoId → runs
+      // with --print and auto-exits (mirrors the PR-review analyze dispatch).
+      // Claude-only because /linear is a Claude skill. Does NOT change the todo's status.
+      const trackId = ensureLinearTicketTrack();
+      linearTicketJobs.set(todo.id, { status: 'pending' });
+      const session = await terminal.createSession(trackId, {
         background: true,
         initialPrompt: prompt,
         provider: 'claude',
@@ -427,15 +457,50 @@ export function createTodoRouter(deps: TodoRouterDeps): Router {
         name: `Linear: ${todo.title}`,
         worktreeMode: false,
         dangerouslySkipPermissions: true,
-        onReady: (s) => broadcast('session:ready', todo.trackId, { sessionId: s.id }),
+        onReady: (s) => broadcast('session:ready', trackId, { sessionId: s.id }),
       });
 
-      broadcast('session:created', todo.trackId, { sessionId: session.id });
+      broadcast('session:created', trackId, { sessionId: session.id });
       res.status(201).json({ session });
     } catch (err) {
       console.error('Failed to create Linear ticket from todo:', err);
       res.status(500).json({ error: 'Failed to dispatch Linear ticket session' });
     }
+  });
+
+  // --- Poll the result of a "create Linear ticket" run (drives the modal) ---
+
+  router.get('/todos/:todoId/linear-ticket-status', (req, res) => {
+    res.json(linearTicketJobs.get(req.params.todoId) ?? { status: 'pending' });
+  });
+
+  // --- Ticket result arrives here (via the workshop_report_linear_ticket MCP tool) ---
+
+  router.post('/todos/report-linear-ticket', (req, res) => {
+    const { todoId, issueKey, url, title, body } = (req.body ?? {}) as Record<string, unknown>;
+    if (typeof todoId !== 'string') {
+      res.status(400).json({ error: 'todoId is required' });
+      return;
+    }
+    const todo = todos.findById(todoId as TodoId);
+    if (!todo) {
+      res.status(404).json({ error: 'Todo not found' });
+      return;
+    }
+    const key = typeof issueKey === 'string' && issueKey.trim() ? issueKey.trim() : undefined;
+    linearTicketJobs.set(todoId, {
+      status: 'done',
+      issueKey: key,
+      url: typeof url === 'string' ? url : undefined,
+      title: typeof title === 'string' ? title : undefined,
+      body: typeof body === 'string' ? body : undefined,
+    });
+    // Link the ticket to the todo so it shows in the Issue field.
+    if (key) {
+      todos.update(todo.id, { issueKey: key });
+      broadcast('todo:updated', todo.trackId);
+    }
+    res.json({ ok: true });
   });
 
   return router;
