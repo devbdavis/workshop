@@ -890,6 +890,15 @@ export function createApiRouter(deps: ApiRouterDeps = {}): Router {
       // prompt, or model.
       const shell = req.body?.shell === true;
 
+      // A shell session may pin its own cwd — "Open in Terminal" opens one at the
+      // pane's working directory rather than the track's first repo.
+      const rawCwd = shell && typeof req.body?.cwd === 'string' ? req.body.cwd : '';
+      if (rawCwd && (!rawCwd.startsWith('/') || rawCwd.includes('..') || !existsSync(rawCwd))) {
+        res.status(400).json({ error: 'cwd must be an absolute path that exists' });
+        return;
+      }
+      const shellCwd = rawCwd || undefined;
+
       // Optional todo link — the session works on this task and the todo is
       // marked in-progress once the session exists.
       const todoId = shell ? undefined : (req.body?.todoId as TodoId | undefined);
@@ -990,11 +999,14 @@ export function createApiRouter(deps: ApiRouterDeps = {}): Router {
         ? (settingsRepo.get('dispatch_model') ?? 'opus').trim() || undefined
         : undefined;
 
-      // worktreeMode: explicit request body takes precedence, then track-level default
+      // worktreeMode: explicit request body takes precedence, then track-level default.
+      // A shell never gets its own worktree — it opens where you asked it to.
       const requestWorktreeMode = req.body?.worktreeMode;
-      const worktreeMode = typeof requestWorktreeMode === 'boolean'
-        ? requestWorktreeMode
-        : (track.worktreeMode ?? false);
+      const worktreeMode = shell
+        ? false
+        : typeof requestWorktreeMode === 'boolean'
+          ? requestWorktreeMode
+          : (track.worktreeMode ?? false);
 
       const repos = tracks.findReposByTrack(trackId);
       const trackPaths = tracks.findPathsByTrack(trackId);
@@ -1010,7 +1022,7 @@ export function createApiRouter(deps: ApiRouterDeps = {}): Router {
           ? req.body.name.trim()
           : (todo?.title ?? (shell ? 'Shell' : undefined)),
         issueKey: todo?.issueKey,
-        workingDirectory: repos[0]?.path,
+        workingDirectory: shellCwd ?? repos[0]?.path,
         worktreeMode: worktreeMode && repos.length > 0,
         repos: worktreeMode ? repos : undefined,
         additionalDirs: trackPaths.length > 0 ? trackPaths.map((p) => p.path) : undefined,
