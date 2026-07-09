@@ -121,7 +121,7 @@ export function createPrReviewRouter(deps: PrReviewRouterDeps): Router {
     res.json(rows);
   });
 
-  router.get('/pr-reviews/:id', (req, res) => {
+  router.get('/pr-reviews/:id', async (req, res) => {
     const review = reviews.findById(req.params.id as PrReviewId);
     if (!review) {
       res.status(404).json({ error: 'PR review not found' });
@@ -129,9 +129,22 @@ export function createPrReviewRouter(deps: PrReviewRouterDeps): Router {
     }
     // Session info lets the UI open a terminal to converse with the review agent.
     const session = review.sessionId ? sessions.findById(review.sessionId) : null;
+    // Live head vs analyzed head → drives the "PR updated since analysis" hint and
+    // the offer to re-analyze (incl. after a review was already submitted). Best-effort:
+    // only pay the gh call once there is an analyzed head to compare against.
+    let currentHeadSha: string | undefined;
+    if (review.headSha && (review.state === 'ready' || review.state === 'submitted')) {
+      try {
+        currentHeadSha = (await gh.fetchPrSnapshot(review.prUrl)).headRefOid;
+      } catch (err) {
+        console.warn('[pr-review] head check failed:', err instanceof Error ? err.message : err);
+      }
+    }
     res.json({
       ...review,
       findings: reviews.findingsByReview(review.id),
+      currentHeadSha,
+      prChangedSinceAnalysis: currentHeadSha != null && currentHeadSha !== review.headSha,
       session: session
         ? { id: session.id, trackId: session.trackId, name: session.name, state: session.state }
         : null,
@@ -240,6 +253,19 @@ export function createPrReviewRouter(deps: PrReviewRouterDeps): Router {
         settings.get('default_ai_cli'),
       );
       const model = settings.get(MODEL_SETTING_KEY)?.trim() || undefined;
+
+      // Re-analysis: hand the agent the findings it already reported so it deduplicates
+      // against them instead of re-flagging the same issues. (replaceFindings wipes the
+      // old set when the new report lands, so this prompt is the only carry-over.)
+      const priorFindings = reviews.findingsByReview(review.id).filter((f) => f.status !== 'dismissed');
+      const dedupSection =
+        priorFindings.length > 0
+          ? [
+              `This PR was already analyzed. The following ${priorFindings.length} finding(s) were reported previously${review.state === 'submitted' ? ' and posted to GitHub' : ''}. Do NOT report any of these again unless the surrounding code has materially changed — deduplicate against them and surface only NEW issues (typically in code changed since the last analysis):`,
+              ...priorFindings.map((f, i) => `${i + 1}. ${f.file}${f.line ? `:${f.line}` : ''} — ${f.summary}`),
+            ].join('\n')
+          : null;
+
       const session = await terminal.createSession(trackId, {
         systemPrompt: `## Agent: ${agent.name}\n\n${agent.systemPrompt}`,
         provider,
@@ -247,6 +273,7 @@ export function createPrReviewRouter(deps: PrReviewRouterDeps): Router {
         background: true,
         initialPrompt: [
           `Review the pull request at ${review.prUrl}.`,
+          ...(dedupSection ? [dedupSection] : []),
           `When done, report your structured findings, draft summary, and suggested verdict via the workshop_report_pr_review MCP tool (prUrl: ${review.prUrl}). Do not post anything to the forge.`,
         ].join('\n\n'),
         name: `Review PR #${review.prNumber}: ${review.prTitle ?? ''}`.trim(),
