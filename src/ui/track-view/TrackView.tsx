@@ -163,7 +163,12 @@ export function TrackView() {
     };
   }, [trackId, loadTrack]);
 
-  async function createSession(opts: NewSessionOptions): Promise<Session | null> {
+  /**
+   * `select` drives whether the new session takes over the pane selection. A
+   * terminal opened into the floating modal must not — it only becomes a pane
+   * once the user docks it.
+   */
+  async function createSession(opts: NewSessionOptions, select = true): Promise<Session | null> {
     if (!trackId) return null;
     try {
       const res = await fetch(`/api/tracks/${trackId}/sessions`, {
@@ -176,7 +181,7 @@ export function TrackView() {
         setSessions((prev) => [...prev, session]);
         // Mark as starting immediately — cleared when session:ready arrives.
         setStartingSessions((prev) => new Set([...prev, session.id]));
-        setPendingSelectSessionId(session.id);
+        if (select) setPendingSelectSessionId(session.id);
         return session;
       }
     } catch (err) {
@@ -406,6 +411,9 @@ export function TrackView() {
               onPurgeSession={purgeSession}
               defaultOpenPath={track.repos?.[0]?.path}
               onSelectionChange={setActiveSessionIds}
+              onOpenShell={(cwd, name) =>
+                createSession({ provider: 'claude', shell: true, worktreeMode: false, cwd, name }, false)
+              }
             />
           </div>
         </main>
