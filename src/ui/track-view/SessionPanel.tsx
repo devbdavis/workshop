@@ -168,6 +168,23 @@ function SessionCard({
               )}
             </div>
 
+            {todo.status === 'review' && (
+              <button
+                onClick={async () => {
+                  if (!window.confirm(`Mark "${todo.title}" as done?`)) return;
+                  await fetch(`/api/todos/${todo.id}`, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ status: 'done' }),
+                  });
+                  onRefresh();
+                }}
+                className="w-full text-xs text-center text-emerald-400 hover:text-emerald-300 py-1.5 border border-emerald-800 hover:border-emerald-600 rounded transition-colors"
+              >
+                ✓ Mark Done
+              </button>
+            )}
+
             <button
               onClick={() => onOpenTodo(todo)}
               className="w-full text-xs text-center text-gray-500 hover:text-gray-300 py-1.5 border border-gray-700 hover:border-gray-600 rounded transition-colors"
