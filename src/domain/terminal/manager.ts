@@ -73,6 +73,9 @@ export interface TerminalManager {
   /** Hard-delete any sessions whose deleted_at is older than retentionDays (default 7). */
   purgeExpiredSessions(retentionDays?: number): number;
   isSessionAlive(session: Session): boolean;
+  /** Inject text into a live session's tmux pane and submit it (Enter).
+   *  Resolves false if the session is unknown or not running. */
+  sendInput(sessionId: SessionId, text: string): Promise<boolean>;
   syncSessionStates(): SyncResult;
   /** Resume all sessions marked 'suspended' that have a Claude resume ID. */
   resumeSuspendedSessions(): Promise<Session[]>;

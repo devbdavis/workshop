@@ -1,4 +1,4 @@
-import { execSync, exec } from 'child_process';
+import { execSync, execFileSync, exec } from 'child_process';
 import { promisify } from 'util';
 import { writeFileSync, readFileSync, mkdirSync, rmSync, existsSync, chmodSync, symlinkSync } from 'fs';
 
@@ -880,6 +880,27 @@ export function createTerminalManager(
     isSessionAlive(session: Session): boolean {
       try {
         execSync(`tmux has-session -t ${session.tmuxSession}`, { stdio: 'pipe' });
+        return true;
+      } catch {
+        return false;
+      }
+    },
+
+    async sendInput(sessionId: SessionId, text: string): Promise<boolean> {
+      const session = sessionRepo.findById(sessionId);
+      if (!session || !this.isSessionAlive(session)) return false;
+
+      const bufName = `ws-input-${sessionId}`;
+
+      try {
+        // Pipe text straight to tmux's buffer via stdin — no temp file to leave behind.
+        execFileSync('tmux', ['load-buffer', '-b', bufName, '-'], { input: text, stdio: 'pipe' });
+        execFileSync('tmux', ['paste-buffer', '-t', session.tmuxSession, '-b', bufName, '-d'], { stdio: 'pipe' });
+        // Let the TUI ingest the (possibly multi-line) paste before the submitting
+        // Enter — otherwise Enter can race the paste and split the message. Async so
+        // the delay never blocks the event loop (WebSocket terminal streaming etc.).
+        await new Promise((resolve) => setTimeout(resolve, 400));
+        execFileSync('tmux', ['send-keys', '-t', session.tmuxSession, 'Enter'], { stdio: 'pipe' });
         return true;
       } catch {
         return false;

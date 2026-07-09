@@ -18,7 +18,7 @@ function formatChecks(checks: PrCheckSummary[]): string {
     .join('\n');
 }
 
-function formatComments(comments: PrComment[]): string {
+export function formatComments(comments: PrComment[]): string {
   if (comments.length === 0) return '_(no unresolved comments)_';
   return comments
     .map((c) => {
