@@ -14,11 +14,18 @@ export function capturePaneLines(tmuxSession: string, count = 20): string[] {
   }
 }
 
-/** Indicators that Claude is actively working (spinner/thinking/interruptible,
- *  or a sub-Agent still running after control was handed back). While any of
- *  these are showing, the session is WORKING — text sitting in the composer is
- *  queued input, not a prompt blocking on the user. */
+/** Indicators that a session is not idle: the main thread is working
+ *  (spinner/interruptible) OR a sub-Agent is still running after control was
+ *  handed back. Used to keep a session with async work from being reaped. */
 const ACTIVE_WORK_RE = /Running…|Thinking|esc to interrupt|local agents? still running/i;
+
+/** Indicators that Claude's MAIN thread is actively producing output right now.
+ *  Narrower than ACTIVE_WORK_RE on purpose: it deliberately excludes
+ *  `local agents? still running` (a permission dialog CAN appear on the main
+ *  thread while a background Agent runs — suppressing needs-input there would
+ *  lose the RED prompt) and the unanchored word `Thinking` (matches prose like
+ *  "here's my thinking"). `esc to interrupt` is the reliable spinner anchor. */
+const MAIN_THREAD_BUSY_RE = /Running…|esc to interrupt/i;
 
 /** True if `line` is the Claude composer prompt — a bare `❯`/`>`, a `…❯`, or a
  *  `❯` followed by draft/ghost text the user (or Claude's auto-suggestion) has
@@ -28,6 +35,9 @@ function isComposerPrompt(line: string): boolean {
   const t = line.trim();
   if (t === '>' || t.endsWith('❯')) return true; // bare prompt (covers plain `❯`)
   if (/^❯\s*\d+\.\s/.test(t)) return false; // numbered menu option, not a draft
+  // ponytail: only numbered menus (Claude Code's shape) are excluded. A
+  // non-numbered `❯ Yes, proceed` select (older/other CLIs) would read as a
+  // draft and lose RED — add its shape here if a supported CLI renders one.
   return /^❯\s+\S/.test(t); // ❯ with a draft — `>` excluded so scrollback quotes don't match
 }
 
@@ -59,8 +69,10 @@ export function isSessionNeedsInput(session: Session, preCapture?: string[]): bo
   const lines = preCapture ?? capturePaneLines(session.tmuxSession, 15);
   if (lines.length === 0) return false;
   const tail = lines.slice(-15);
-  // Actively working — composer text is queued input, not a block.
-  if (ACTIVE_WORK_RE.test(tail.join(' '))) return false;
+  // Main thread actively producing output — composer text is queued input,
+  // not a block. (Queued text is also caught by the composer bail below; this
+  // guard covers the moment before the draft renders.)
+  if (MAIN_THREAD_BUSY_RE.test(tail.join(' '))) return false;
   // Sitting at the composer prompt (bare or draft, but not a numbered menu) —
   // any question text is scrollback or the user's own unsubmitted draft.
   if (tail.slice(-8).some(isComposerPrompt)) return false;
