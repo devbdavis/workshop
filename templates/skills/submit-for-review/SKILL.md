@@ -53,12 +53,19 @@ Construct the PR body:
   🤖 Generated with [Claude Code](https://claude.com/claude-code)
   ```
 
-Create the PR:
-```
-gh pr create --draft --title "<title>" --body "<body>"
-```
+Create the PR against whichever forge the `origin` remote points at:
 
-**`--draft` is mandatory. Never omit it.**
+- **GitHub**:
+  ```
+  gh pr create --draft --title "<title>" --body "<body>"
+  ```
+  **`--draft` is mandatory. Never omit it.**
+
+- **Gitea / Forgejo** (any host in `~/.config/tea/config.yml`):
+  ```
+  tea pulls create --title "WIP: <title>" --description "<body>"
+  ```
+  `tea` has no `--draft` flag — Gitea derives draft status from a `WIP:` title prefix. **The prefix is mandatory.** Print the PR URL from the command output.
 
 If the user supplied a PR title as an argument, use it. Otherwise derive a short title (≤ 70 chars) from the commit message or branch name.
 
@@ -68,7 +75,7 @@ After the PR URL is confirmed:
 
 - If Workshop MCP tools are available:
   - Move any matching in-progress todos to a **ready-for-review** state via `workshop_update_todo` — never mark them `done`. Marking a todo done closes out the session, and the work isn't done until review passes. Record the PR URL in the todo's **resolution** field so the link is preserved.
-  - **Also pass `pullRequests: [{ url, title }]`** on the same `workshop_update_todo` call. Workshop's server automatically registers the PR with its background monitor as soon as that field is set — there is no separate call to make. The monitor polls GitHub (via your existing `gh` CLI auth) every couple of minutes, surfaces failing CI checks and unresolved review comments in the Session view, and offers one-click sub-agent dispatch for "fix the build" or "address comment N". Skipping this means the user loses the post-submit feedback loop.
+  - **Also pass `pullRequests: [{ url, title }]`** on the same `workshop_update_todo` call. Workshop's server automatically registers the PR with its background monitor as soon as that field is set — there is no separate call to make. The monitor polls the forge (GitHub via your `gh` CLI auth; Gitea/Forgejo via your `tea` login) every couple of minutes, surfaces failing CI checks and unresolved review comments in the Session view, and offers one-click sub-agent dispatch for "fix the build" or "address comment N". Skipping this means the user loses the post-submit feedback loop.
   - If working within a workflow ticket, transition it to `integration-review` via `workshop_transition_ticket` and include the PR URL in the transition data
 - If no Workshop tools are available, skip this step silently
 

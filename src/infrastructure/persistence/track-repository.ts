@@ -1,7 +1,7 @@
 import { v4 as uuid } from 'uuid';
 import { getDatabase } from './database.js';
 import type { TrackRepository } from '@domain/track/repository';
-import type { Track, TrackId, TrackRepo, TrackPath, RepoId, PathId, AgentId, TemplateId, TerminalLayout, GlobalRepoId } from '@foundation/types';
+import type { Track, TrackId, TrackRepo, TrackPath, RepoId, PathId, AgentId, TemplateId, TerminalLayout, GlobalRepoId, UserId } from '@foundation/types';
 
 export function createTrackRepository(): TrackRepository {
   const db = getDatabase();
@@ -22,6 +22,9 @@ export function createTrackRepository(): TrackRepository {
   );
   const setDefaultAgentStmt = db.prepare(
     'UPDATE tracks SET default_agent_id = ?, updated_at = ? WHERE id = ?',
+  );
+  const setOwnerStmt = db.prepare(
+    'UPDATE tracks SET owner_user_id = ?, updated_at = ? WHERE id = ?',
   );
   const insertRepoStmt = db.prepare(
     'INSERT INTO track_repos (id, track_id, path, remote_url, repo_id, created_at) VALUES (?, ?, ?, ?, ?, ?)',
@@ -102,6 +105,11 @@ export function createTrackRepository(): TrackRepository {
       return result.changes > 0;
     },
 
+    setOwner(trackId: TrackId, userId: UserId | null): boolean {
+      const result = setOwnerStmt.run(userId, new Date().toISOString(), trackId);
+      return result.changes > 0;
+    },
+
     addRepo(trackId: TrackId, path: string, remoteUrl?: string, repoId?: GlobalRepoId): TrackRepo {
       const id = uuid() as RepoId;
       const now = new Date().toISOString();
@@ -168,6 +176,7 @@ interface TrackRow {
   status: string;
   default_prompt_template_id: string | null;
   terminal_layout: string | null;
+  owner_user_id: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -210,6 +219,7 @@ function rowToTrack(row: TrackRow): Track {
     status: row.status as Track['status'],
     defaultPromptTemplateId: (row.default_prompt_template_id as TemplateId) || undefined,
     terminalLayout,
+    ownerUserId: (row.owner_user_id as UserId) || undefined,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };

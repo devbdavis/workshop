@@ -743,6 +743,45 @@ function runMigrations(db: Database.Database): void {
       AND last_session_id IS NOT NULL;
   `);
 
+  // Migration: multi-user profiles. Profiles are *identity, not security* — the
+  // shared auth token is still the access boundary. These tables let two people
+  // sharing one Workshop server keep per-user favorites/hidden/theme/editor settings.
+  try {
+    db.exec(`
+      CREATE TABLE users (
+        id TEXT PRIMARY KEY,
+        name TEXT NOT NULL,
+        color TEXT,
+        created_at TEXT NOT NULL
+      );
+
+      CREATE TABLE user_settings (
+        user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        key TEXT NOT NULL,
+        value TEXT NOT NULL,
+        PRIMARY KEY (user_id, key)
+      );
+
+      CREATE TABLE user_track_prefs (
+        user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        track_id TEXT NOT NULL REFERENCES tracks(id) ON DELETE CASCADE,
+        is_favorite INTEGER NOT NULL DEFAULT 0,
+        is_hidden INTEGER NOT NULL DEFAULT 0,
+        updated_at TEXT NOT NULL,
+        PRIMARY KEY (user_id, track_id)
+      );
+    `);
+  } catch {
+    // Tables already exist — safe to ignore
+  }
+
+  // Migration: add owner_user_id column to tracks (shared "owner tag", nullable).
+  try {
+    db.exec(`ALTER TABLE tracks ADD COLUMN owner_user_id TEXT;`);
+  } catch {
+    // Column already exists — safe to ignore
+  }
+
   // Migration: create plugins table — workshop-global registry of AI-CLI
   // marketplace plugins (e.g. Claude Code plugins) ensured-installed at server
   // startup and enabled per-session at launch time.
@@ -1068,7 +1107,7 @@ You are running as a background sub-agent dispatched to investigate and fix a fa
 
 ### Your task
 
-1. Check out the PR branch locally (\`gh pr checkout {{pr.number}}\`) or work in the existing worktree.
+1. Check out the PR branch locally (\`gh pr checkout {{pr.number}}\` on GitHub, \`tea pulls checkout {{pr.number}}\` on Gitea/Forgejo) or work in the existing worktree.
 2. Reproduce the failure locally where possible — read the linked check logs first.
 3. Fix the underlying issue. Do not paper over the symptom (skipping tests, lowering thresholds, etc.) unless the user explicitly asks.
 4. Commit and push the fix to the same branch. Do NOT open a new PR.
@@ -1091,9 +1130,9 @@ You are running as a background sub-agent dispatched to address review feedback 
 
 ### Your task
 
-1. Read each comment carefully. If a comment is asking a question, you may answer it directly via \`gh pr comment\` rather than changing code.
-2. For code-change requests, check out the PR branch (\`gh pr checkout {{pr.number}}\`), make the change, commit, and push to the same branch.
-3. Reply to each comment so the reviewer knows it's been addressed — use \`gh api\` to post threaded review-comment replies or \`gh pr comment\` for issue-level comments.
+1. Read each comment carefully. If a comment is asking a question, you may answer it directly with a PR comment rather than changing code.
+2. For code-change requests, check out the PR branch (\`gh pr checkout {{pr.number}}\` on GitHub, \`tea pulls checkout {{pr.number}}\` on Gitea/Forgejo), make the change, commit, and push to the same branch.
+3. Reply to each comment so the reviewer knows it's been addressed — \`gh api\` / \`gh pr comment\` on GitHub, \`tea comment\` (or the Gitea API) on Gitea/Forgejo.
 4. Briefly report which comments you handled and how.
 
 If a comment is unclear or you genuinely disagree, leave a reply explaining your reasoning rather than making the change.

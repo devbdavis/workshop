@@ -1,34 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import {
-  createGhAdapter,
-  parsePrUrl,
-  snapshotFromGhJson,
-} from '@infrastructure/github/gh-adapter';
-
-describe('parsePrUrl', () => {
-  it('parses canonical PR URLs', () => {
-    expect(parsePrUrl('https://github.com/acme/widgets/pull/42')).toEqual({
-      owner: 'acme',
-      repo: 'widgets',
-      number: 42,
-    });
-  });
-
-  it('tolerates trailing path segments', () => {
-    expect(parsePrUrl('https://github.com/acme/widgets/pull/42/files')).toEqual({
-      owner: 'acme',
-      repo: 'widgets',
-      number: 42,
-    });
-  });
-
-  it('rejects non-PR URLs', () => {
-    expect(parsePrUrl('https://github.com/acme/widgets/issues/42')).toBeNull();
-    expect(parsePrUrl('https://example.com/acme/widgets/pull/42')).toBeNull();
-    expect(parsePrUrl('not-a-url')).toBeNull();
-    expect(parsePrUrl('https://github.com/acme')).toBeNull();
-  });
-});
+import { createGhAdapter, snapshotFromGhJson } from '@infrastructure/github/gh-adapter';
 
 describe('snapshotFromGhJson', () => {
   it('flags merged PRs as finished and clears working state', () => {

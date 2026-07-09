@@ -1,14 +1,22 @@
 import type { PrReviewRepository } from '@domain/pr-review/repository';
-import type { DiscoveredPr } from '@infrastructure/github/gh-review-adapter';
+import type { ReviewRequestDiscovery } from '@infrastructure/forge/forge-adapter';
 
 /** Non-track event channel — the dashboard listens on event type, not trackId. */
 const EVENT_TRACK = 'pr-reviews';
 
 const DEFAULT_INTERVAL_MS = 5 * 60_000;
 
+function hostOf(url: string): string {
+  try {
+    return new URL(url).hostname;
+  } catch {
+    return '';
+  }
+}
+
 export interface PrReviewDiscoveryPollerDeps {
   reviews: PrReviewRepository;
-  gh: { searchReviewRequestedPrs(): Promise<DiscoveredPr[]> };
+  forge: { discoverReviewRequests(): Promise<ReviewRequestDiscovery> };
   broadcast: (type: 'pr-review:updated', trackId: string, payload?: Record<string, unknown>) => void;
   intervalMs?: number;
 }
@@ -21,7 +29,7 @@ export interface PrReviewDiscoveryPoller {
 }
 
 export function createPrReviewDiscoveryPoller(deps: PrReviewDiscoveryPollerDeps): PrReviewDiscoveryPoller {
-  const { reviews, gh, broadcast } = deps;
+  const { reviews, forge, broadcast } = deps;
   const intervalMs = Math.max(60_000, deps.intervalMs ?? DEFAULT_INTERVAL_MS);
   let timer: ReturnType<typeof setInterval> | null = null;
   let polling = false;
@@ -30,7 +38,7 @@ export function createPrReviewDiscoveryPoller(deps: PrReviewDiscoveryPollerDeps)
     if (polling) return 0;
     polling = true;
     try {
-      const discovered = await gh.searchReviewRequestedPrs();
+      const { prs: discovered, hosts } = await forge.discoverReviewRequests();
       let added = 0;
       for (const pr of discovered) {
         if (reviews.findByUrl(pr.url)) continue;
@@ -50,14 +58,18 @@ export function createPrReviewDiscoveryPoller(deps: PrReviewDiscoveryPollerDeps)
       // Prune poll-discovered rows the user never touched (still 'incoming')
       // whose review request has vanished from search — PR closed, request
       // withdrawn, or reviewed elsewhere. Rows with user investment
-      // (analyzing/ready/submitted) and manual adds are never pruned.
+      // (analyzing/ready/submitted) and manual adds are never pruned. Only hosts
+      // that answered this pass are eligible: a forge that failed to respond
+      // reports zero PRs, which must not be read as "everything went away".
       const liveUrls = new Set(discovered.map((pr) => pr.url));
+      const searched = new Set(hosts);
       let pruned = 0;
       for (const row of reviews.findAll()) {
-        if (row.state === 'incoming' && row.discoveredVia === 'poll' && !liveUrls.has(row.prUrl)) {
-          reviews.delete(row.id);
-          pruned++;
-        }
+        if (row.state !== 'incoming' || row.discoveredVia !== 'poll') continue;
+        if (!searched.has(hostOf(row.prUrl))) continue;
+        if (liveUrls.has(row.prUrl)) continue;
+        reviews.delete(row.id);
+        pruned++;
       }
 
       if (added > 0 || pruned > 0) {

@@ -24,6 +24,9 @@ export function Repositories() {
   const [showAdd, setShowAdd] = useState(false);
   const [newPath, setNewPath] = useState('');
   const [addError, setAddError] = useState('');
+  const [cloneUrl, setCloneUrl] = useState('');
+  const [cloneError, setCloneError] = useState('');
+  const [cloning, setCloning] = useState(false);
   const [loading, setLoading] = useState(true);
 
   async function load() {
@@ -89,6 +92,30 @@ export function Repositories() {
     await load();
   }
 
+  async function cloneRepo(url: string) {
+    setCloneError('');
+    setCloning(true);
+    try {
+      const res = await fetch('/api/repos/clone', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ url }),
+      });
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        setCloneError(body.error || 'Failed to clone repo');
+        return;
+      }
+      setShowAdd(false);
+      setCloneUrl('');
+      await load();
+    } catch {
+      setCloneError('Failed to clone repo');
+    } finally {
+      setCloning(false);
+    }
+  }
+
   async function deleteRepo(id: string) {
     if (!confirm('Remove this repo from the global registry?')) return;
     await fetch(`/api/repos/${id}`, { method: 'DELETE' });
@@ -99,6 +126,8 @@ export function Repositories() {
     setShowAdd(true);
     setAddError('');
     setNewPath('');
+    setCloneError('');
+    setCloneUrl('');
     loadSuggestions();
   }
 
@@ -151,7 +180,37 @@ export function Repositories() {
 
       {/* Add repo form */}
       {showAdd && (
-        <div className="p-3 bg-gray-800/50 rounded space-y-2">
+        <div className="p-3 bg-gray-800/50 rounded space-y-4">
+          {/* Clone from URL */}
+          <div className="space-y-2">
+            <p className="text-xs font-semibold text-gray-300">Clone from URL</p>
+            <input
+              value={cloneUrl}
+              onChange={(e) => setCloneUrl(e.target.value)}
+              placeholder="https://github.com/owner/repo"
+              disabled={cloning}
+              className="block w-full px-2 py-1 bg-gray-800 border border-gray-700 rounded text-xs font-mono disabled:opacity-50"
+            />
+            <p className="text-[10px] text-gray-600 leading-relaxed">
+              e.g. <span className="font-mono">https://github.com/devbdavis/workshop</span> or{' '}
+              <span className="font-mono">https://git.example.com/team/repo.git</span>. Private repos require{' '}
+              <span className="font-mono">gh</span>/<span className="font-mono">tea</span> to be logged in (via the auth terminals).
+            </p>
+            {cloneError && <p className="text-xs text-red-400">{cloneError}</p>}
+            <button
+              onClick={() => cloneUrl.trim() && cloneRepo(cloneUrl.trim())}
+              disabled={cloning || !cloneUrl.trim()}
+              className="text-xs text-blue-400 hover:text-blue-300 disabled:opacity-50 disabled:hover:text-blue-400"
+            >
+              {cloning ? 'Cloning… (this can take a while)' : 'Clone'}
+            </button>
+          </div>
+
+          <div className="border-t border-gray-700/60" />
+
+          {/* Add existing path */}
+          <div className="space-y-2">
+          <p className="text-xs font-semibold text-gray-300">Add existing path</p>
           <p className="text-xs text-gray-400">Enter an absolute path or choose a subfolder of the repo root:</p>
           {suggestions.length > 0 && (
             <select
@@ -193,6 +252,7 @@ export function Repositories() {
             >
               Cancel
             </button>
+          </div>
           </div>
         </div>
       )}
