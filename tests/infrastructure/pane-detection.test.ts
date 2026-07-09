@@ -19,8 +19,14 @@ function makeSession(tmux = 'ws-test'): Session {
 describe('isSessionIdle (preCapture)', () => {
   const session = makeSession();
 
-  it('returns true when prompt marker is present', () => {
+  it('returns true when a bare prompt marker is present', () => {
     expect(isSessionIdle(session, ['some output', '❯'])).toBe(true);
+  });
+
+  it('returns true when the composer holds an unsubmitted draft', () => {
+    // A ❯ prompt with typed-but-not-sent text means Claude is done and waiting
+    // for the user to hit enter — that's idle, not working, and not red.
+    expect(isSessionIdle(session, ['some prior output', '❯ mark the todo ready for review'])).toBe(true);
   });
 
   it('returns false when Thinking indicator is present despite prompt', () => {
@@ -61,22 +67,6 @@ describe('isSessionIdle (preCapture)', () => {
   it('returns false for empty capture', () => {
     expect(isSessionIdle(session, [])).toBe(false);
   });
-
-  it('returns true when ❯ is followed by a dim ghost suggestion (raw provided)', () => {
-    // Claude's TUI renders the tab-to-accept ghost suggestion in dim styling
-    // (`\x1b[2m...\x1b[0m`). The stripped text reads `❯ commit this` — which
-    // textually looks like user-typed input, but raw ANSI tells the real story:
-    // the user is idle and Claude is just suggesting a prompt.
-    const text = ['some prior output', '❯ commit this'];
-    const raw = ['some prior output', '\x1b[39m❯ \x1b[2mcommit\x1b[0m \x1b[2mthis\x1b[0m'];
-    expect(isSessionIdle(session, text, raw)).toBe(true);
-  });
-
-  it('returns true for ghost suggestion styled with grey 256-colour fg', () => {
-    const text = ['❯ try this prompt'];
-    const raw = ['❯ \x1b[38;5;240mtry this prompt\x1b[39m'];
-    expect(isSessionIdle(session, text, raw)).toBe(true);
-  });
 });
 
 describe('isSessionNeedsInput (preCapture)', () => {
@@ -86,21 +76,60 @@ describe('isSessionNeedsInput (preCapture)', () => {
     expect(isSessionNeedsInput(session, ['Delete all files? [y/n]'])).toBe(true);
   });
 
-  it('returns true for a question line without an idle prompt', () => {
+  it('returns true for a raw question line without a composer prompt', () => {
     expect(isSessionNeedsInput(session, ['Should I proceed with the rename?'])).toBe(true);
   });
 
-  it('returns true when Claude prompt has typed but unsubmitted text', () => {
-    expect(isSessionNeedsInput(session, ['some prior output', '❯ implement the foo feature'])).toBe(true);
+  it('returns true for the Claude permission dialog', () => {
+    // Claude Code renders "Do you want to…" with numbered ❯ options below.
+    const lines = [
+      'Do you want to make this edit to pane-detection.ts?',
+      '❯ 1. Yes',
+      '  2. No, and tell Claude what to do differently',
+    ];
+    expect(isSessionNeedsInput(session, lines)).toBe(true);
+  });
+
+  it('still detects a permission dialog below a markdown blockquote line', () => {
+    // A `> quoted` scrollback line must NOT count as the composer prompt and
+    // suppress a real block sitting below it.
+    const lines = [
+      "I'll apply this change:",
+      '> const x = 1',
+      'Do you want to make this edit to file.ts?',
+      '❯ 1. Yes',
+      '  2. No',
+    ];
+    expect(isSessionNeedsInput(session, lines)).toBe(true);
+  });
+
+  it('returns false when the composer holds a draft (NOT a block)', () => {
+    // The whole point: typed-but-unsubmitted text is a draft, not Claude
+    // waiting on the user. Must not flip the orb red.
+    expect(isSessionNeedsInput(session, ['some prior output', '❯ implement the foo feature'])).toBe(false);
+  });
+
+  it('returns false for placeholder/sample text in the composer', () => {
+    expect(isSessionNeedsInput(session, ['recap: fixed the thing', '❯ Try "edit <filepath>"'])).toBe(false);
+  });
+
+  it('returns false while Claude is working even with queued composer text', () => {
+    // User submitted text while a background agent was running; Claude hasn't
+    // read it yet. Active-work indicator must win — this is working, not red.
+    const lines = [
+      'Crunching… (esc to interrupt)',
+      '❯ mark the todo ready for review',
+    ];
+    expect(isSessionNeedsInput(session, lines)).toBe(false);
   });
 
   it('returns false for a bare ❯ prompt with no typed text', () => {
     expect(isSessionNeedsInput(session, ['some prior output', '❯'])).toBe(false);
   });
 
-  it('returns false when terminal is at an idle ❯ prompt, even if scroll history has ?', () => {
+  it('returns false when at a composer prompt, even if scroll history has ?', () => {
     // User's input text visible in scroll history should not trigger needs-input
-    // when the session is already showing the idle Claude prompt.
+    // when the session is already showing the Claude composer prompt.
     const lines = [
       '> is it still in ready state?',
       '',
@@ -110,38 +139,16 @@ describe('isSessionNeedsInput (preCapture)', () => {
     expect(isSessionNeedsInput(session, lines)).toBe(false);
   });
 
+  it('returns false when a draft composer sits below a scrollback question', () => {
+    const lines = [
+      '> is it still in ready state?',
+      'PR #31 is open and in draft state.',
+      '❯ yes please continue',
+    ];
+    expect(isSessionNeedsInput(session, lines)).toBe(false);
+  });
+
   it('returns false for empty capture', () => {
     expect(isSessionNeedsInput(session, [])).toBe(false);
-  });
-
-  it('returns false when ❯ is followed by a dim ghost suggestion (raw provided)', () => {
-    // Without ghost detection, `❯ commit this` looks identical to user-typed
-    // text and would flip the orb to needs-input (RED). When raw ANSI is
-    // available, the dim styling reveals this as Claude's auto-suggestion.
-    const text = ['some prior output', '❯ commit this'];
-    const raw = ['some prior output', '\x1b[39m❯ \x1b[2mcommit\x1b[0m \x1b[2mthis\x1b[0m'];
-    expect(isSessionNeedsInput(session, text, raw)).toBe(false);
-  });
-
-  it('still treats user-typed text after ❯ as needs-input (raw has no dim)', () => {
-    const text = ['❯ implement the foo feature'];
-    const raw = ['❯ implement the foo feature'];
-    expect(isSessionNeedsInput(session, text, raw)).toBe(true);
-  });
-
-  it('treats typed-then-ghost (`❯ commit\\x1b[2m this fix`) as needs-input', () => {
-    // User typed "commit" and Claude appended a ghost completion. Because
-    // the first visible character after ❯ is normal-intensity, this is
-    // genuine user input mid-composition.
-    const text = ['❯ commit this fix'];
-    const raw = ['❯ commit\x1b[2m this fix\x1b[0m'];
-    expect(isSessionNeedsInput(session, text, raw)).toBe(true);
-  });
-
-  it('falls back to current behavior when raw is not provided', () => {
-    // Backward-compatible: old callers pass only stripped text and get the
-    // pre-ghost-fix classification. We accept the false positive in this
-    // path because no production caller relies on it anymore.
-    expect(isSessionNeedsInput(session, ['❯ commit this'])).toBe(true);
   });
 });
