@@ -103,6 +103,18 @@ describe('isSessionNeedsInput (preCapture)', () => {
     expect(isSessionNeedsInput(session, lines)).toBe(true);
   });
 
+  it('still detects a permission dialog while a background agent is running', () => {
+    // A permission dialog can appear on the main thread while a sub-Agent runs.
+    // "N local agent still running" must NOT suppress the RED prompt.
+    const lines = [
+      'Do you want to run this command?',
+      '❯ 1. Yes',
+      '  2. No',
+      '1 local agent still running · ↓ to manage',
+    ];
+    expect(isSessionNeedsInput(session, lines)).toBe(true);
+  });
+
   it('returns false when the composer holds a draft (NOT a block)', () => {
     // The whole point: typed-but-unsubmitted text is a draft, not Claude
     // waiting on the user. Must not flip the orb red.
