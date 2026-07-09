@@ -11,6 +11,9 @@ export interface NewSessionOptions {
   initialPrompt?: string;
   /** Start a plain shell instead of an AI CLI — a terminal inside the container. */
   shell?: boolean;
+  /** Shell sessions only: pin the working directory instead of using the track's first repo. */
+  cwd?: string;
+  name?: string;
 }
 
 /** `shell` isn't a SessionProvider — it's the absence of one. */
