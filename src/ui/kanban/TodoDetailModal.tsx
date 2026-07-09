@@ -9,6 +9,7 @@ interface Props {
   onSave: (todoId: string, data: Partial<Todo>) => void;
   onDelete: (todoId: string) => void;
   onDispatch: (todoId: string, opts: DispatchOptions, formData?: Partial<Todo>) => void;
+  onCreateLinearTicket: (todoId: string, formData?: Partial<Todo>) => void;
 }
 
 const STATUSES: { value: TodoStatus; label: string }[] = [
@@ -25,7 +26,7 @@ const PRIORITIES: { value: TodoPriority; label: string }[] = [
   { value: 'low', label: 'Low' },
 ];
 
-export function TodoDetailModal({ todo, tracks, onClose, onSave, onDelete, onDispatch }: Props) {
+export function TodoDetailModal({ todo, tracks, onClose, onSave, onDelete, onDispatch, onCreateLinearTicket }: Props) {
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [resolution, setResolution] = useState('');
@@ -367,6 +368,15 @@ export function TodoDetailModal({ todo, tracks, onClose, onSave, onDelete, onDis
                   />
                 )}
               </div>
+            )}
+            {!issueKey && (
+              <button
+                onClick={() => onCreateLinearTicket(todo.id, { title, description: description || undefined, status, priority, refined })}
+                className="px-3 py-1.5 text-xs bg-indigo-700 hover:bg-indigo-600 text-white rounded-lg transition-colors"
+                title="Dispatch an agent to draft and file a Linear ticket from this todo"
+              >
+                Create Linear Ticket
+              </button>
             )}
             {status !== 'ready' && status !== 'done' && status !== 'in-progress' && (
               <button
