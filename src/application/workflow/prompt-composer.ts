@@ -31,7 +31,6 @@ export interface PromptContext {
   /** Human answers from triage Q&A — these override the original spec */
   answers?: TriageAnswer[];
   trackContext?: string;
-  summary?: string;
 }
 
 /**
@@ -201,12 +200,9 @@ export function composeDataDrivenPrompt(
     parts.push('## Completion\n\n' + agentRole.promptBlock.completionInstructions);
   }
 
-  // 8. Track context and summary
+  // 8. Track context
   if (context?.trackContext) {
     parts.push(`## Track Context\n\n${context.trackContext}`);
-  }
-  if (context?.summary) {
-    parts.push(`## Current Status\n\n${context.summary}`);
   }
 
   return parts.join('\n\n---\n\n');
@@ -236,11 +232,6 @@ export function composeWorkflowPrompt(
   // Append track context when available
   if (context?.trackContext) {
     parts.push(`## Track Context\n\n${context.trackContext}`);
-  }
-
-  // Append current summary when available
-  if (context?.summary) {
-    parts.push(`## Current Status\n\n${context.summary}`);
   }
 
   return parts.join('\n\n---\n\n');
