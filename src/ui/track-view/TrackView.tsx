@@ -277,6 +277,19 @@ export function TrackView() {
     loadTrack();
   }
 
+  async function handleCreateLinearTicket(todoId: string, formData?: Partial<Todo>) {
+    if (formData) {
+      await fetch(`/api/todos/${todoId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(formData),
+      });
+    }
+    await fetch(`/api/todos/${todoId}/create-linear-ticket`, { method: 'POST' });
+    setSelectedTodo(null);
+    loadTrack();
+  }
+
   async function saveTrackName() {
     const trimmed = nameValue.trim();
     if (!trimmed || trimmed === track?.name) { setEditingName(false); return; }
@@ -438,6 +451,7 @@ export function TrackView() {
           onSave={handleSaveTodo}
           onDelete={handleDeleteTodo}
           onDispatch={handleDispatchTodo}
+          onCreateLinearTicket={handleCreateLinearTicket}
         />
       )}
 
