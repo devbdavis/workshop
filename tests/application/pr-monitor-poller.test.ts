@@ -29,6 +29,7 @@ function makeMonitor(overrides: Partial<PrMonitor>): PrMonitor {
 
 function makeFakeRepo(initial: PrMonitor[]): PrMonitorRepository & { all: () => PrMonitor[] } {
   const store = new Map<string, PrMonitor>();
+  const dismissed = new Map<string, Set<string>>();
   for (const m of initial) store.set(m.prUrl, m);
 
   return {
@@ -110,6 +111,17 @@ function makeFakeRepo(initial: PrMonitor[]): PrMonitorRepository & { all: () => 
         pauseReason,
         updatedAt: now,
       };
+      store.set(url, next);
+      return next;
+    },
+    getDismissedCommentIds: (url) => [...(dismissed.get(url) ?? [])],
+    dismissComments: (url, commentIds) => {
+      const m = store.get(url);
+      if (!m) return null;
+      const set = dismissed.get(url) ?? new Set<string>();
+      for (const id of commentIds) set.add(id);
+      dismissed.set(url, set);
+      const next = { ...m, unresolvedComments: m.unresolvedComments.filter((c) => !set.has(c.id)) };
       store.set(url, next);
       return next;
     },
@@ -391,6 +403,58 @@ describe('createPrMonitorPoller', () => {
     // Broadcast should include the pause reason so the UI can react
     expect(events).toHaveLength(1);
     expect(events[0].payload).toMatchObject({ monitoring: false, pauseReason: 'stale' });
+  });
+
+  it('treats a dismissed-but-still-open comment as no attention (allows stale-pause, no repeat events)', async () => {
+    const oldPush = new Date(Date.now() - 90 * 60_000).toISOString();
+    const comment: PrComment = {
+      id: 'C_dismissed',
+      author: 'reviewer',
+      body: 'nit: rename this',
+      createdAt: oldPush,
+      kind: 'issue',
+    };
+    const repo = makeFakeRepo([
+      makeMonitor({
+        prUrl: 'https://github.com/x/y/pull/1',
+        state: 'open',
+        checkStatus: 'passing',
+        headRefOid: 'abc123',
+        lastPushAt: oldPush,
+        unresolvedComments: [comment],
+      }),
+    ]);
+    // User dismisses the only comment; GitHub still reports it on every poll.
+    repo.dismissComments('https://github.com/x/y/pull/1', ['C_dismissed']);
+
+    const gh = makeGh(() => ({
+      state: 'open',
+      checkStatus: 'passing',
+      failingChecks: [],
+      unresolvedComments: [comment],
+      prTitle: undefined,
+      headRefName: 'main',
+      headRefOid: 'abc123',
+      isDraft: false,
+      finished: false,
+    }));
+
+    const poller = createPrMonitorPoller({
+      monitors: repo,
+      gh,
+      broadcast: record,
+      intervalMs: 60_000,
+      maxPerCycle: 5,
+      minPrCooldownMs: 0,
+      perCallStaggerMs: 0,
+      stalePushCutoffMs: 60 * 60_000,
+    });
+
+    const [updated] = await poller.pollNow();
+    // The dismissed comment must not count as attention, so the quiet PR goes stale.
+    expect(updated.pauseReason).toBe('stale');
+    expect(updated.monitoring).toBe(false);
+    expect(updated.unresolvedComments).toHaveLength(0);
   });
 
   it('keeps monitoring a stale PR that still has failing checks', async () => {

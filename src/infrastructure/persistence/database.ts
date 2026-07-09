@@ -870,6 +870,16 @@ function runMigrations(db: Database.Database): void {
     // Column already exists — safe to ignore
   }
 
+  // Migration: dismissed_comment_ids tracks comment node IDs the user chose to
+  // ignore. Persisted separately from unresolved_comments because every poll
+  // replaces that blob wholesale from a fresh `gh` fetch — without this, a
+  // dismissed comment would just reappear on the next poll.
+  try {
+    db.exec(`ALTER TABLE pr_monitors ADD COLUMN dismissed_comment_ids TEXT;`);
+  } catch {
+    // Column already exists — safe to ignore
+  }
+
   // Migration: PR Review Dashboard. pr_reviews holds incoming review requests
   // (discovered by the review-request poller or added by URL); pr_review_findings
   // holds the structured feedback the pr-review agent reports back. Distinct from

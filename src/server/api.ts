@@ -64,7 +64,7 @@ import { createPluginRouter } from './plugin-routes.js';
 import { createPluginRepository } from '@infrastructure/persistence/plugin-repository.js';
 import { ensureRegisteredPluginsInstalled } from '@infrastructure/plugins/ensure-installed.js';
 import { createGlobalRepoRepository, createSettingsRepository } from '@infrastructure/persistence/repo-repository.js';
-import { createRepoRouter } from './repo-routes.js';
+import { createRepoRouter, parsePrMonitorIgnoredAuthors } from './repo-routes.js';
 import { createUserRepository } from '@infrastructure/persistence/user-repository.js';
 import { createUserRouter } from './user-routes.js';
 import { getProfileId } from './profile.js';
@@ -241,7 +241,9 @@ export function createApiRouter(deps: ApiRouterDeps = {}): Router {
   // can reconcile monitors as part of their normal flow.
   const prMonitors = createPrMonitorRepository();
   // One adapter fronting both GitHub (`gh`) and Gitea/Forgejo (`tea` logins).
-  const forgeAdapter = createForgeAdapter();
+  const forgeAdapter = createForgeAdapter({
+    getIgnoredCommentAuthors: () => parsePrMonitorIgnoredAuthors(settingsRepo.get('pr_monitor_ignored_authors')),
+  });
   const prRegistrar = createPrMonitorRegistrar(prMonitors);
   const prPoller = createPrMonitorPoller({
     monitors: prMonitors,

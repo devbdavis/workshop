@@ -156,6 +156,17 @@ export function createPrMonitorRepository(): PrMonitorRepository {
     WHERE pr_url = ?
   `);
   const deleteStmt = db.prepare('DELETE FROM pr_monitors WHERE pr_url = ?');
+  const getDismissedStmt = db.prepare('SELECT dismissed_comment_ids FROM pr_monitors WHERE pr_url = ?');
+  const dismissCommentsStmt = db.prepare(`
+    UPDATE pr_monitors
+    SET dismissed_comment_ids = ?, unresolved_comments = ?, needs_attention_since = ?, updated_at = ?
+    WHERE pr_url = ?
+  `);
+
+  function readDismissedIds(prUrl: string): Set<string> {
+    const row = getDismissedStmt.get(prUrl) as { dismissed_comment_ids: string | null } | undefined;
+    return new Set(parseJsonArray<string>(row?.dismissed_comment_ids ?? null));
+  }
 
   return {
     findByUrl(prUrl: string): PrMonitor | null {
@@ -232,7 +243,17 @@ export function createPrMonitorRepository(): PrMonitorRepository {
       if (!existing) return null;
       const now = new Date().toISOString();
       const eventTimestamp = update.changed ? now : null;
-      const needsAttentionSince = deriveNeedsAttentionSince(existing, update, now);
+
+      // Drop dismissed comments before persisting or computing attention — the
+      // poller's `unresolvedComments` is a fresh, wholesale `gh` fetch that
+      // knows nothing about dismissals, so we re-apply them on every poll.
+      const dismissedIds = readDismissedIds(prUrl);
+      const filteredComments = update.unresolvedComments.filter((c) => !dismissedIds.has(c.id));
+      const needsAttentionSince = deriveNeedsAttentionSince(
+        existing,
+        { state: update.state, checkStatus: update.checkStatus, unresolvedComments: filteredComments },
+        now,
+      );
 
       // Push detection: if a new oid appeared, bump last_push_at.
       // First-ever poll (existing.headRefOid missing) also seeds last_push_at.
@@ -251,7 +272,7 @@ export function createPrMonitorRepository(): PrMonitorRepository {
         update.state,
         update.checkStatus,
         update.failingChecks.length > 0 ? JSON.stringify(update.failingChecks) : null,
-        update.unresolvedComments.length > 0 ? JSON.stringify(update.unresolvedComments) : null,
+        filteredComments.length > 0 ? JSON.stringify(filteredComments) : null,
         update.prTitle ?? null,
         update.prBranch ?? null,
         nextOid ?? null,
@@ -261,6 +282,34 @@ export function createPrMonitorRepository(): PrMonitorRepository {
         seededPushTimestamp,
         monitoring,
         pauseReason,
+        now,
+        prUrl,
+      );
+      return this.findByUrl(prUrl);
+    },
+
+    getDismissedCommentIds(prUrl: string): string[] {
+      return [...readDismissedIds(prUrl)];
+    },
+
+    dismissComments(prUrl: string, commentIds: string[]): PrMonitor | null {
+      const existing = this.findByUrl(prUrl);
+      if (!existing) return null;
+      const now = new Date().toISOString();
+
+      const dismissed = readDismissedIds(prUrl);
+      for (const id of commentIds) dismissed.add(id);
+      const remainingComments = existing.unresolvedComments.filter((c) => !dismissed.has(c.id));
+      const needsAttentionSince = deriveNeedsAttentionSince(
+        existing,
+        { state: existing.state, checkStatus: existing.checkStatus, unresolvedComments: remainingComments },
+        now,
+      );
+
+      dismissCommentsStmt.run(
+        JSON.stringify([...dismissed]),
+        remainingComments.length > 0 ? JSON.stringify(remainingComments) : null,
+        needsAttentionSince,
         now,
         prUrl,
       );
