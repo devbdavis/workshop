@@ -483,3 +483,64 @@ button:focus-visible {
 .office-desk-unit {
   animation: office-desk-enter 0.3s ease-out both;
 }
+
+/* ═══════════════════════════════════════════════════
+   MARKDOWN — GitHub-ish spacing for rendered markdown.
+   Tailwind's preflight strips element margins/list styles;
+   restore them here (used by the PR review description, etc.).
+   ═══════════════════════════════════════════════════ */
+.markdown-body {
+  line-height: 1.6;
+  word-wrap: break-word;
+}
+.markdown-body > *:first-child { margin-top: 0; }
+.markdown-body > *:last-child { margin-bottom: 0; }
+.markdown-body p,
+.markdown-body ul,
+.markdown-body ol,
+.markdown-body blockquote,
+.markdown-body pre,
+.markdown-body table { margin: 0 0 0.75em; }
+.markdown-body h1,
+.markdown-body h2,
+.markdown-body h3,
+.markdown-body h4,
+.markdown-body h5,
+.markdown-body h6 { margin: 1.2em 0 0.5em; font-weight: 600; line-height: 1.25; }
+.markdown-body h1 { font-size: 1.4em; padding-bottom: 0.3em; border-bottom: 1px solid var(--color-gray-700); }
+.markdown-body h2 { font-size: 1.2em; padding-bottom: 0.3em; border-bottom: 1px solid var(--color-gray-700); }
+.markdown-body h3 { font-size: 1.05em; }
+.markdown-body ul,
+.markdown-body ol { padding-left: 1.5em; }
+.markdown-body ul { list-style: disc; }
+.markdown-body ol { list-style: decimal; }
+.markdown-body li { margin: 0.25em 0; }
+.markdown-body li > ul,
+.markdown-body li > ol { margin: 0.25em 0; }
+.markdown-body a { color: var(--color-blue-400, #60a5fa); text-decoration: underline; }
+.markdown-body code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.9em;
+  padding: 0.15em 0.35em;
+  background: var(--color-gray-800);
+  border-radius: 4px;
+}
+.markdown-body pre {
+  padding: 0.75em 1em;
+  background: var(--color-gray-900);
+  border: 1px solid var(--color-gray-800);
+  border-radius: 6px;
+  overflow-x: auto;
+}
+.markdown-body pre code { padding: 0; background: none; font-size: 0.85em; }
+.markdown-body blockquote {
+  padding-left: 1em;
+  border-left: 3px solid var(--color-gray-700);
+  color: var(--color-gray-400);
+}
+.markdown-body table { border-collapse: collapse; }
+.markdown-body th,
+.markdown-body td { padding: 0.4em 0.75em; border: 1px solid var(--color-gray-700); }
+.markdown-body th { font-weight: 600; }
+.markdown-body hr { margin: 1em 0; border: 0; border-top: 1px solid var(--color-gray-700); }
+.markdown-body img { max-width: 100%; }
