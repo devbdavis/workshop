@@ -136,6 +136,28 @@ describe('snapshotFromGhJson', () => {
     expect(snap.unresolvedComments.map((c) => c.id).sort()).toEqual(['i3', 'i4', 'rc2']);
   });
 
+  it('strips HTML comments and tags (Cursor Bugbot noise) but keeps the real text and markdown autolinks', () => {
+    const body = [
+      '<!-- BUGBOT_REVIEW -->',
+      'Bugbot found 1 potential issue.',
+      '',
+      '<a href="https://cursor.com/open?link=eyJ2ZXJ"><picture><img alt="Fix All" src="x.png"></picture></a>',
+      '',
+      '<sup>Autofix is OFF.</sup> See <https://example.com>',
+    ].join('\n');
+    const snap = snapshotFromGhJson({
+      state: 'OPEN',
+      comments: [{ id: 'i1', author: { login: 'cursor' }, body, createdAt: '2026-05-01' }],
+    });
+    const rendered = snap.unresolvedComments[0].body;
+    expect(rendered).not.toContain('<!--');
+    expect(rendered).not.toContain('<a ');
+    expect(rendered).not.toContain('<sup>');
+    expect(rendered).toContain('Bugbot found 1 potential issue.');
+    expect(rendered).toContain('Autofix is OFF.');
+    expect(rendered).toContain('<https://example.com>');
+  });
+
   it('keeps every comment when the ignore list is empty (default)', () => {
     const snap = snapshotFromGhJson({
       state: 'OPEN',

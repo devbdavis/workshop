@@ -37,6 +37,24 @@ export function clampString(value: string | null | undefined, max: number): stri
   return trimmed.length > max ? `${trimmed.slice(0, max)}…` : trimmed;
 }
 
+/**
+ * Strip HTML comments and tags from a comment body. Bot reviewers (Cursor
+ * Bugbot, etc.) embed `<!-- … -->` markers and `<a>/<picture>/<img>` markup;
+ * react-markdown escapes rather than removes those, so they'd render as visible
+ * `&lt;!-- … --&gt;` noise. Run this BEFORE clamping so the length budget is
+ * spent on real text, not multi-KB base64 "fix-in-cursor" link blobs. The tag
+ * regex intentionally requires a letter/`/` after `<` so markdown autolinks
+ * like `<https://example.com>` survive.
+ */
+export function stripHtmlNoise(value: string | null | undefined): string | undefined {
+  if (!value) return undefined;
+  return value
+    .replace(/<!--[\s\S]*?-->/g, '')
+    .replace(/<\/?[a-zA-Z][a-zA-Z0-9-]*(?:\s[^>]*)?>/g, '')
+    .replace(/[ \t]+$/gm, '')
+    .replace(/\n{3,}/g, '\n\n');
+}
+
 interface GhCheckRollupNode {
   // From `--json statusCheckRollup`: checks come back as an array of mixed objects.
   // We narrow conservatively because the shape varies (CheckRun vs StatusContext).
@@ -186,7 +204,7 @@ function deriveComments(raw: GhPrJson, ignoredAuthors: readonly string[]): PrCom
     out.push({
       id: c.id,
       author,
-      body: clampString(c.body, COMMENT_BODY_MAX) ?? '',
+      body: clampString(stripHtmlNoise(c.body), COMMENT_BODY_MAX) ?? '',
       createdAt: c.createdAt ?? new Date().toISOString(),
       url: c.url,
       kind: 'issue',
@@ -208,7 +226,7 @@ function deriveComments(raw: GhPrJson, ignoredAuthors: readonly string[]): PrCom
       out.push({
         id: review.id ?? `${reviewAuthor}-${review.createdAt ?? ''}`,
         author: reviewAuthor,
-        body: clampString(review.body, COMMENT_BODY_MAX) ?? '',
+        body: clampString(stripHtmlNoise(review.body), COMMENT_BODY_MAX) ?? '',
         createdAt: review.createdAt ?? new Date().toISOString(),
         url: review.url,
         kind: 'review',
@@ -222,7 +240,7 @@ function deriveComments(raw: GhPrJson, ignoredAuthors: readonly string[]): PrCom
       out.push({
         id: rc.id,
         author: rcAuthor,
-        body: clampString(rc.body, COMMENT_BODY_MAX) ?? '',
+        body: clampString(stripHtmlNoise(rc.body), COMMENT_BODY_MAX) ?? '',
         createdAt: rc.createdAt ?? new Date().toISOString(),
         url: rc.url,
         kind: 'review',
