@@ -22,7 +22,7 @@ import type { FilesystemAgentScanner } from '@infrastructure/agents/filesystem-s
 import type { SummaryRepository } from '@domain/summary/repository';
 import type { TicketRepository } from '@domain/ticket/repository';
 import { interpolateTemplate } from '@application/track-management/prompt-interpolation.js';
-import { interpolatePrTemplate, formatComments } from '@application/pr-monitor/prompt-interpolation.js';
+import { interpolatePrTemplate } from '@application/pr-monitor/prompt-interpolation.js';
 import { broadcast } from './events.js';
 
 export interface PrMonitorRouterDeps {
@@ -249,7 +249,23 @@ export function createPrMonitorRouter(deps: PrMonitorRouterDeps): Router {
         res.status(409).json({ error: 'This todo has no linked session to send feedback to.' });
         return;
       }
-      const message = `Please address the following review feedback on PR #${monitor.prNumber} (${monitor.prUrl}):\n\n${formatComments(comments)}`;
+      const template = promptTemplates.findBySystemKind('pr-comment-response');
+      if (!template) {
+        res.status(500).json({ error: 'PR comment-response template missing — restart the server to reseed system templates' });
+        return;
+      }
+      const track = tracks.findById(todo.trackId);
+      if (!track) {
+        res.status(404).json({ error: 'Track not found' });
+        return;
+      }
+      // Two-stage interpolation mirrors the dispatch path: {{track.*}}/{{todo.*}} first,
+      // then {{pr.*}} (which renders the comment list). Keeps the template user-editable.
+      const stage1 = interpolateTemplate(template.content, {
+        track,
+        todo: { id: todo.id, title: todo.title, description: todo.description ?? '' },
+      });
+      const message = interpolatePrTemplate(stage1, { monitor, comments });
       const ok = await terminal.sendInput(todo.sessionId, message);
       if (!ok) {
         res.status(409).json({ error: 'The linked session is not running — start or resume it, then try again.' });

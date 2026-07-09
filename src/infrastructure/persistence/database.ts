@@ -1116,7 +1116,20 @@ You are running as a background sub-agent dispatched to investigate and fix a fa
 If you cannot determine the cause from the logs alone, stop and report what you tried and what's needed to proceed.
 `;
 
-const DEFAULT_PR_COMMENT_RESPONSE_TEMPLATE_CONTENT = `## PR Comment Response
+// Sent as a message INTO the todo's already-running session (not a fresh
+// sub-agent), so it stays short and assumes the agent already has context.
+const DEFAULT_PR_COMMENT_RESPONSE_TEMPLATE_CONTENT = `Please address the following review feedback on PR #{{pr.number}} ({{pr.url}}):
+
+{{pr.comments}}
+
+For each comment: make the change (or reply explaining your reasoning if you disagree), then push to the PR branch and resolve the thread.
+`;
+
+// Prior default(s) shipped as full stand-alone sub-agent prompts. Any row still
+// holding one verbatim (i.e. the user never edited it) is upgraded in place to
+// the shorter send-to-session template above; edited rows are left untouched.
+export const LEGACY_PR_COMMENT_RESPONSE_CONTENTS: string[] = [
+  `## PR Comment Response
 
 You are running as a background sub-agent dispatched to address review feedback on a pull request.
 
@@ -1136,13 +1149,17 @@ You are running as a background sub-agent dispatched to address review feedback 
 4. Briefly report which comments you handled and how.
 
 If a comment is unclear or you genuinely disagree, leave a reply explaining your reasoning rather than making the change.
-`;
+`,
+];
 
 interface SystemTemplateSpec {
   systemKind: 'pr-build-fix' | 'pr-comment-response';
   name: string;
   description: string;
   content: string;
+  /** Superseded default contents. A row whose content matches one exactly is an
+   *  un-edited stock template and gets upgraded in place to `content`. */
+  legacyContents?: string[];
 }
 
 const SYSTEM_TEMPLATE_SPECS: SystemTemplateSpec[] = [
@@ -1155,8 +1172,9 @@ const SYSTEM_TEMPLATE_SPECS: SystemTemplateSpec[] = [
   {
     systemKind: 'pr-comment-response',
     name: 'PR Comment Response',
-    description: 'Prompt sent to a sub-agent when a monitored PR has unresolved comments. Editable.',
+    description: 'Message sent into the todo\'s running session when a monitored PR has unresolved comments. Editable.',
     content: DEFAULT_PR_COMMENT_RESPONSE_TEMPLATE_CONTENT,
+    legacyContents: LEGACY_PR_COMMENT_RESPONSE_CONTENTS,
   },
 ];
 
@@ -1171,13 +1189,17 @@ export function ensureSystemPromptTemplates(): void {
 
   for (const spec of SYSTEM_TEMPLATE_SPECS) {
     const existing = db.prepare(
-      `SELECT id, system_kind FROM prompt_templates WHERE system_kind = ? LIMIT 1`,
-    ).get(spec.systemKind) as { id: string; system_kind: string | null } | undefined;
+      `SELECT id, system_kind, content FROM prompt_templates WHERE system_kind = ? LIMIT 1`,
+    ).get(spec.systemKind) as { id: string; system_kind: string | null; content: string } | undefined;
 
     if (existing) {
       // Heal any missing/empty system_kind flag (shouldn't happen, defensive).
       if (!existing.system_kind) {
         db.prepare(`UPDATE prompt_templates SET system_kind = ? WHERE id = ?`).run(spec.systemKind, existing.id);
+      }
+      // Upgrade an un-edited row still holding a superseded default in place.
+      if (spec.legacyContents?.includes(existing.content)) {
+        db.prepare(`UPDATE prompt_templates SET content = ?, updated_at = ? WHERE id = ?`).run(spec.content, now, existing.id);
       }
       continue;
     }
