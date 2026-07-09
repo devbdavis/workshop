@@ -18,7 +18,12 @@ interface ReviewSessionInfo {
   state: string;
 }
 
-type ReviewWithFindings = PrReview & { findings: PrReviewFinding[]; session: ReviewSessionInfo | null };
+type ReviewWithFindings = PrReview & {
+  findings: PrReviewFinding[];
+  session: ReviewSessionInfo | null;
+  currentHeadSha?: string;
+  prChangedSinceAnalysis?: boolean;
+};
 
 const VERDICT_OPTIONS: Array<{ value: PrReviewVerdict; label: string }> = [
   { value: 'approve', label: 'Approve' },
@@ -87,6 +92,7 @@ export function PrReviewDetail({ reviewId, refreshKey, onChanged }: Props) {
   const badge = STATE_BADGE[review.state];
   const submitted = review.state === 'submitted';
   const analyzing = review.state === 'analyzing';
+  const prChanged = review.prChangedSinceAnalysis === true;
   const prFilesUrl = `${review.prUrl}/files`;
   const openCount = review.findings.filter((f) => f.status === 'open').length;
 
@@ -124,13 +130,17 @@ export function PrReviewDetail({ reviewId, refreshKey, onChanged }: Props) {
           {review.prBranch && <span className="font-mono">{review.prBranch}</span>}
         </div>
         <div className="flex items-center gap-2 pt-1">
-          {!submitted && (
+          {(!submitted || prChanged) && (
             <button
               onClick={analyze}
               disabled={busy !== null}
               className="px-3 py-1 text-xs font-medium rounded bg-blue-900/60 text-blue-200 hover:bg-blue-800/60 disabled:opacity-50"
             >
-              {busy === 'analyze' ? 'Dispatching…' : analyzing ? 'Re-analyze' : review.findings.length > 0 ? 'Re-analyze' : 'Analyze'}
+              {busy === 'analyze'
+                ? 'Dispatching…'
+                : analyzing || submitted || review.findings.length > 0
+                  ? 'Re-analyze'
+                  : 'Analyze'}
             </button>
           )}
           {review.session && (
@@ -177,6 +187,13 @@ export function PrReviewDetail({ reviewId, refreshKey, onChanged }: Props) {
       </header>
 
       {error && <div className="px-3 py-2 text-xs text-red-300 bg-red-900/20 border border-red-900/50 rounded">{error}</div>}
+
+      {prChanged && !analyzing && (
+        <div className="px-3 py-2 text-xs text-yellow-200 bg-yellow-900/20 border border-yellow-900/50 rounded">
+          New commits since the last analysis{submitted ? ' (review already posted)' : ''}. Re-analyze to review the new
+          changes — previously reported findings won't be repeated.
+        </div>
+      )}
 
       {review.prBody && (
         <section className="border border-gray-800 rounded-md bg-gray-900/40">
