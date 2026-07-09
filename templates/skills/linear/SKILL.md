@@ -1,6 +1,6 @@
 ---
 name: linear
-description: Creates or edits Linear issues in the ASY backlog. Use when the user says 'linear issue', 'linear ticket', or asks to create or update a ticket — even if phrasing is informal.
+description: Creates or edits Linear issues for the ASY team. Use when the user says 'linear issue', 'linear ticket', or asks to create or update a ticket — even if phrasing is informal.
 ---
 
 # Linear Ticket Skill
@@ -22,6 +22,7 @@ Triggered by: "linear ticket", "linear issue", "create a ticket", "update the ti
 ## Team defaults
 
 - **Team**: ASY (Core Infrastructure - Async Processing)
+- **Status**: default to **Triage**. Only use Backlog or another state if the user explicitly asks.
 - **Project**: leave unset unless user specifies
 - **Assignee**: leave unset unless user specifies
 - **Priority**: leave unset unless user specifies
