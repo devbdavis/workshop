@@ -78,12 +78,11 @@ import { createGeminiAdapter } from '@infrastructure/mcp-tools/gemini-adapter.js
 import { createSoulLoader } from '@infrastructure/soul/soul-loader.js';
 import { ensureDefaultTodoTemplate, ensureSystemPromptTemplates } from '@infrastructure/persistence/database.js';
 import { createPrMonitorRepository } from '@infrastructure/persistence/pr-monitor-repository.js';
-import { createGhAdapter } from '@infrastructure/github/gh-adapter.js';
+import { createForgeAdapter } from '@infrastructure/forge/forge-adapter.js';
 import { createPrMonitorPoller } from '@application/pr-monitor/poller.js';
 import { createPrMonitorRegistrar } from '@application/pr-monitor/registrar.js';
 import { createPrMonitorRouter } from './pr-monitor-routes.js';
 import { createPrReviewRepository } from '@infrastructure/persistence/pr-review-repository.js';
-import { createGhReviewAdapter } from '@infrastructure/github/gh-review-adapter.js';
 import { createPrReviewDiscoveryPoller } from '@application/pr-review/discovery-poller.js';
 import { createPrReviewRouter } from './pr-review-routes.js';
 import {
@@ -241,11 +240,12 @@ export function createApiRouter(deps: ApiRouterDeps = {}): Router {
   // PR monitor infrastructure — wired before the todo router so todo updates
   // can reconcile monitors as part of their normal flow.
   const prMonitors = createPrMonitorRepository();
-  const ghAdapter = createGhAdapter();
+  // One adapter fronting both GitHub (`gh`) and Gitea/Forgejo (`tea` logins).
+  const forgeAdapter = createForgeAdapter();
   const prRegistrar = createPrMonitorRegistrar(prMonitors);
   const prPoller = createPrMonitorPoller({
     monitors: prMonitors,
-    gh: ghAdapter,
+    gh: forgeAdapter,
     broadcast: (type, trackId, payload) => broadcast(type, trackId, payload),
   });
   prPoller.start();
@@ -254,10 +254,9 @@ export function createApiRouter(deps: ApiRouterDeps = {}): Router {
 
   // PR Review dashboard — incoming review requests + agent findings.
   const prReviews = createPrReviewRepository();
-  const ghReviewAdapter = createGhReviewAdapter();
   const prReviewDiscovery = createPrReviewDiscoveryPoller({
     reviews: prReviews,
-    gh: ghReviewAdapter,
+    forge: forgeAdapter,
     broadcast: (type, trackId, payload) => broadcast(type, trackId, payload),
   });
   prReviewDiscovery.start();
@@ -304,8 +303,8 @@ export function createApiRouter(deps: ApiRouterDeps = {}): Router {
   const prReviewRouter = createPrReviewRouter({
     reviews: prReviews,
     discovery: prReviewDiscovery,
-    gh: ghAdapter,
-    ghReview: ghReviewAdapter,
+    gh: forgeAdapter,
+    ghReview: forgeAdapter,
     sessions,
     tracks,
     agents,

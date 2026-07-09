@@ -34,7 +34,6 @@ export function NewSessionModal({ track, todos, defaultProvider, onClose, onCrea
   const [agentId, setAgentId] = useState<string>(track.defaultAgentId ?? '');
   const [selectedTodoId, setSelectedTodoId] = useState<string | null>(null);
   const [prompt, setPrompt] = useState('');
-  const [createTodo, setCreateTodo] = useState(false);
   const [agents, setAgents] = useState<Agent[]>([]);
   const [showImport, setShowImport] = useState(false);
   const [starting, setStarting] = useState(false);
@@ -76,8 +75,8 @@ export function NewSessionModal({ track, todos, defaultProvider, onClose, onCrea
     try {
       let todoId = selectedTodoId ?? undefined;
 
-      // Ad-hoc prompt the user wants tracked → create a todo first.
-      if (!todoId && trimmedPrompt && createTodo) {
+      // Ad-hoc prompt → always create a todo so the work is tracked.
+      if (!todoId && trimmedPrompt) {
         const res = await fetch(`/api/tracks/${track.id}/todos`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -185,15 +184,7 @@ export function NewSessionModal({ track, todos, defaultProvider, onClose, onCrea
               className="w-full px-3 py-2 bg-gray-800 border border-gray-700 rounded-lg text-sm text-gray-200 placeholder-gray-600 outline-none focus:border-blue-500 resize-y"
             />
             {!selectedTodoId && trimmedPrompt && (
-              <label className="flex items-center gap-2 mt-1.5 text-xs text-gray-400 cursor-pointer select-none">
-                <input
-                  type="checkbox"
-                  checked={createTodo}
-                  onChange={(e) => setCreateTodo(e.target.checked)}
-                  className="rounded border-gray-600 bg-gray-800"
-                />
-                Create a todo so this work is tracked
-              </label>
+              <p className="mt-1.5 text-xs text-gray-500">A todo will be created so this work is tracked.</p>
             )}
           </div>
 

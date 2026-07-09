@@ -1,6 +1,7 @@
 import { execFile } from 'child_process';
 import { promisify } from 'util';
 import type { PrCheckStatus, PrCheckSummary, PrComment, PrState } from '@foundation/types';
+import { parsePrUrl } from '@infrastructure/forge/pr-url.js';
 
 const execFileAsync = promisify(execFile);
 
@@ -22,35 +23,14 @@ export interface GhPrSnapshot {
   finished: boolean;
 }
 
-/**
- * Parse a GitHub PR URL (https://github.com/owner/repo/pull/123) into its
- * components. Returns null when the URL doesn't look like a PR link so callers
- * can decline to register a monitor (rather than registering a bogus row).
- */
-export function parsePrUrl(url: string): { owner: string; repo: string; number: number } | null {
-  try {
-    const parsed = new URL(url);
-    if (parsed.hostname !== 'github.com' && parsed.hostname !== 'www.github.com') return null;
-    const segments = parsed.pathname.split('/').filter(Boolean);
-    if (segments.length < 4) return null;
-    const [owner, repo, kind, numberRaw] = segments;
-    if (kind !== 'pull' && kind !== 'pulls') return null;
-    const prNumber = Number.parseInt(numberRaw, 10);
-    if (!Number.isFinite(prNumber) || prNumber <= 0) return null;
-    return { owner, repo, number: prNumber };
-  } catch {
-    return null;
-  }
-}
-
 /** Maximum body length we cache per comment — UI shows a truncated preview anyway. */
-const COMMENT_BODY_MAX = 1200;
+export const COMMENT_BODY_MAX = 1200;
 /** Maximum length of a check summary blob — kept short so the DB row stays small. */
-const CHECK_SUMMARY_MAX = 400;
+export const CHECK_SUMMARY_MAX = 400;
 /** Maximum stored PR description length (PR review dashboard). */
-const PR_BODY_MAX_LENGTH = 5_000;
+export const PR_BODY_MAX_LENGTH = 5_000;
 
-function clampString(value: string | null | undefined, max: number): string | undefined {
+export function clampString(value: string | null | undefined, max: number): string | undefined {
   if (!value) return undefined;
   const trimmed = value.trim();
   if (trimmed.length === 0) return undefined;

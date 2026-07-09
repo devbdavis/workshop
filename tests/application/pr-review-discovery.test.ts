@@ -46,7 +46,7 @@ describe('PR review discovery poller', () => {
     const broadcast = vi.fn();
     const poller = createPrReviewDiscoveryPoller({
       reviews,
-      gh: { searchReviewRequestedPrs: async () => [discovered(1), discovered(2)] },
+      forge: { discoverReviewRequests: async () => ({ prs: [discovered(1), discovered(2)], hosts: ['github.com'] }) },
       broadcast,
     });
 
@@ -61,7 +61,7 @@ describe('PR review discovery poller', () => {
     const reviews = createPrReviewRepository();
     const poller = createPrReviewDiscoveryPoller({
       reviews,
-      gh: { searchReviewRequestedPrs: async () => [discovered(1)] },
+      forge: { discoverReviewRequests: async () => ({ prs: [discovered(1)], hosts: ['github.com'] }) },
       broadcast: vi.fn(),
     });
     await poller.pollNow();
@@ -79,7 +79,7 @@ describe('PR review discovery poller', () => {
     const results: DiscoveredPr[][] = [[discovered(1), discovered(2)], []];
     const poller = createPrReviewDiscoveryPoller({
       reviews,
-      gh: { searchReviewRequestedPrs: async () => results.shift() ?? [] },
+      forge: { discoverReviewRequests: async () => ({ prs: results.shift() ?? [], hosts: ['github.com'] }) },
       broadcast: vi.fn(),
     });
     await poller.pollNow();
@@ -103,7 +103,7 @@ describe('PR review discovery poller', () => {
     const reviews = createPrReviewRepository();
     const poller = createPrReviewDiscoveryPoller({
       reviews,
-      gh: { searchReviewRequestedPrs: async () => [discovered(1)] },
+      forge: { discoverReviewRequests: async () => ({ prs: [discovered(1)], hosts: ['github.com'] }) },
       broadcast: vi.fn(),
     });
     await poller.pollNow();
@@ -116,7 +116,7 @@ describe('PR review discovery poller', () => {
     expect(reviews.findAll()).toHaveLength(1);
   });
 
-  it('swallows gh failures without touching stored rows', async () => {
+  it('swallows discovery failures without touching stored rows', async () => {
     const reviews = createPrReviewRepository();
     reviews.upsertIncoming({
       prUrl: 'https://github.com/acme/widgets/pull/1',
@@ -127,14 +127,34 @@ describe('PR review discovery poller', () => {
     });
     const poller = createPrReviewDiscoveryPoller({
       reviews,
-      gh: {
-        searchReviewRequestedPrs: async () => {
+      forge: {
+        discoverReviewRequests: async () => {
           throw new Error('gh: not logged in');
         },
       },
       broadcast: vi.fn(),
     });
     expect(await poller.pollNow()).toBe(0);
+    expect(reviews.findAll()).toHaveLength(1);
+  });
+
+  // A forge that didn't answer reports zero PRs — that must not read as
+  // "every PR on that host went away".
+  it('never prunes rows on a host that was not successfully searched', async () => {
+    const reviews = createPrReviewRepository();
+    reviews.upsertIncoming({
+      prUrl: 'https://git.example.com/acme/widgets/pulls/7',
+      repoOwner: 'acme',
+      repoName: 'widgets',
+      prNumber: 7,
+      discoveredVia: 'poll',
+    });
+    const poller = createPrReviewDiscoveryPoller({
+      reviews,
+      forge: { discoverReviewRequests: async () => ({ prs: [], hosts: ['github.com'] }) },
+      broadcast: vi.fn(),
+    });
+    await poller.pollNow();
     expect(reviews.findAll()).toHaveLength(1);
   });
 });
