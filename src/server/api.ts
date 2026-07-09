@@ -939,12 +939,17 @@ export function createApiRouter(deps: ApiRouterDeps = {}): Router {
 
         // 4. Interpolated prompt template
         let templateHasRepos = false;
+        let templateHasTask = false;
         if (track.defaultPromptTemplateId) {
           const template = promptTemplates.findById(track.defaultPromptTemplateId);
           if (template) {
-            templateHasRepos = template.content.includes('{{track.repos}}');
+            templateHasRepos = template.content.includes('{{track.repos');
+            templateHasTask = template.content.includes('{{todo.title}}');
             track.tickets = tickets.findByTrack(trackId);
-            const interpolated = interpolateTemplate(template.content, { track });
+            const interpolated = interpolateTemplate(template.content, {
+              track,
+              todo: todo ? { id: todo.id, title: todo.title, description: todo.description ?? '' } : undefined,
+            });
             parts.push(interpolated);
           }
         }
@@ -968,7 +973,8 @@ export function createApiRouter(deps: ApiRouterDeps = {}): Router {
         }
 
         // 7. The task, when the session is linked to a todo
-        if (todo) {
+        // (unless the template already rendered it via {{todo.title}})
+        if (todo && !templateHasTask) {
           parts.push(`## Task\n\n**${todo.title}**\n\n${todo.description || ''}`);
         }
 
