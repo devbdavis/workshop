@@ -62,7 +62,7 @@ export function TrackConfig({ track, onUpdate }: Props) {
     await fetch(`/api/tracks/${track.id}`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ name, description: description || undefined }),
+      body: JSON.stringify({ name, description: description.trim() }),
     });
     setEditingName(false);
     onUpdate();
