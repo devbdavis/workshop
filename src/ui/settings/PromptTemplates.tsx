@@ -135,11 +135,25 @@ export function PromptTemplates() {
           <p>{'{{todo.id}}'} &mdash; Todo ID (dispatch only)</p>
           <p>{'{{todo.title}}'} &mdash; Todo title (dispatch only)</p>
           <p>{'{{todo.description}}'} &mdash; Todo description (dispatch only)</p>
+          <p className="text-gray-600 pt-1">PR templates (build-fix / comment-response):</p>
+          <p>{'{{pr.url}}'} &mdash; PR URL</p>
+          <p>{'{{pr.title}}'} &mdash; PR title</p>
+          <p>{'{{pr.number}}'} &mdash; PR number</p>
+          <p>{'{{pr.branch}}'} &mdash; PR head branch</p>
+          <p>{'{{pr.repo}}'} &mdash; owner/name</p>
+          <p>{'{{pr.failing_checks}}'} &mdash; markdown list of failing checks</p>
+          <p>{'{{pr.comments}}'} &mdash; markdown list of comments to address</p>
         </div>
       </div>
     </div>
   );
 }
+
+const SYSTEM_KIND_LABEL: Record<string, string> = {
+  todo: 'Todo dispatch',
+  'pr-build-fix': 'PR build fix',
+  'pr-comment-response': 'PR comment response',
+};
 
 function TemplateCard({
   template,
@@ -151,12 +165,21 @@ function TemplateCard({
   onDelete: () => void;
 }) {
   const [expanded, setExpanded] = useState(false);
+  const systemKind = template.systemKind;
+  const isSystem = !!systemKind;
 
   return (
     <div className="bg-gray-800 border border-gray-700 rounded-lg p-4">
       <div className="flex items-start justify-between">
         <div className="flex-1 min-w-0">
-          <h3 className="text-sm font-semibold text-gray-200">{template.name}</h3>
+          <div className="flex items-center gap-2 flex-wrap">
+            <h3 className="text-sm font-semibold text-gray-200">{template.name}</h3>
+            {isSystem && (
+              <span className="text-[10px] uppercase tracking-wide px-1.5 py-0.5 rounded bg-purple-900/40 text-purple-300">
+                System · {SYSTEM_KIND_LABEL[systemKind] ?? systemKind}
+              </span>
+            )}
+          </div>
           {template.description && (
             <p className="text-xs text-gray-400 mt-0.5">{template.description}</p>
           )}
@@ -171,9 +194,11 @@ function TemplateCard({
           <button onClick={onEdit} className="text-xs text-blue-400 hover:text-blue-300">
             Edit
           </button>
-          <button onClick={onDelete} className="text-xs text-red-500 hover:text-red-400">
-            Delete
-          </button>
+          {!isSystem && (
+            <button onClick={onDelete} className="text-xs text-red-500 hover:text-red-400">
+              Delete
+            </button>
+          )}
         </div>
       </div>
       {expanded && (

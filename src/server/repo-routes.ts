@@ -31,12 +31,24 @@ import { resolveCloneTarget, buildCloneCommand } from '@server/repo-clone.js';
 
 const execFile = promisify(execFileCb);
 
+/** Every agent CLI whose binary is present on this host. */
+function installedAgents(): SessionProvider[] {
+  return CLI_REGISTRY
+    .filter((c) => c.kind === 'agent' && hasCli(c.binary))
+    .map((c) => c.provider as SessionProvider);
+}
+
 /**
  * Read the stored list of enabled agents. Stored as a comma-joined string
- * under `available_clis`; filtered to valid agent ids; defaults when unset.
+ * under `available_clis`; filtered to valid agent ids. When the user has
+ * never customised the list, every *installed* agent CLI is enabled — an
+ * explicit Settings → Available CLIs save takes over from there.
  */
 function parseAvailableAgents(raw: string | null): SessionProvider[] {
-  if (!raw) return [...DEFAULT_AVAILABLE_AGENTS];
+  if (!raw) {
+    const installed = installedAgents();
+    return installed.length > 0 ? installed : [...DEFAULT_AVAILABLE_AGENTS];
+  }
   const ids = raw
     .split(',')
     .map((s) => s.trim())
@@ -300,6 +312,23 @@ export function createRepoRouter(deps: RepoRouterDeps): Router {
     }
     settings.set('default_ai_cli', provider);
     res.json({ provider });
+  });
+
+  // Which model dispatched (orchestrator) sessions run on. Applies to claude
+  // sessions via `--model`; other providers ignore it. Unset defaults to
+  // "opus"; an explicit empty string disables the flag entirely.
+  router.get('/settings/dispatch-model', (_req, res) => {
+    res.json({ model: settings.get('dispatch_model') ?? 'opus' });
+  });
+
+  router.put('/settings/dispatch-model', (req, res) => {
+    const { model } = req.body as { model: unknown };
+    if (typeof model !== 'string') {
+      res.status(400).json({ error: 'model must be a string' });
+      return;
+    }
+    settings.set('dispatch_model', model.trim());
+    res.json({ model: model.trim() });
   });
 
   // --- CLI availability + auth ---

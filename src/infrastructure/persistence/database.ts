@@ -775,10 +775,152 @@ function runMigrations(db: Database.Database): void {
     // Tables already exist — safe to ignore
   }
 
-  // Migration: add owner_user_id column to tracks (shared "owner tag", nullable —
-  // drives the Mine/Theirs dashboard filter).
+  // Migration: add owner_user_id column to tracks (shared "owner tag", nullable).
   try {
     db.exec(`ALTER TABLE tracks ADD COLUMN owner_user_id TEXT;`);
+  } catch {
+    // Column already exists — safe to ignore
+  }
+
+  // Migration: create plugins table — workshop-global registry of AI-CLI
+  // marketplace plugins (e.g. Claude Code plugins) ensured-installed at server
+  // startup and enabled per-session at launch time.
+  try {
+    db.exec(`
+      CREATE TABLE plugins (
+        id TEXT PRIMARY KEY,
+        marketplace_repo TEXT NOT NULL,
+        plugin_name TEXT NOT NULL UNIQUE,
+        description TEXT,
+        enabled INTEGER NOT NULL DEFAULT 1,
+        providers TEXT,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      );
+    `);
+  } catch {
+    // Table already exists — safe to ignore
+  }
+
+  // Migration: add system_kind column to prompt_templates so we can recognise
+  // app-managed templates (todo dispatch, PR build-fix, PR comment-response)
+  // and ensure they always exist. User-created templates leave this NULL.
+  try {
+    db.exec(`ALTER TABLE prompt_templates ADD COLUMN system_kind TEXT;`);
+  } catch {
+    // Column already exists — safe to ignore
+  }
+
+  // Migration: create pr_monitors table. The poller in src/application/pr-monitor
+  // walks rows where monitoring=1 ordered by last_polled_at and refreshes a small
+  // batch on each tick. PR URL is the natural key — one row per PR.
+  try {
+    db.exec(`
+      CREATE TABLE pr_monitors (
+        pr_url TEXT PRIMARY KEY,
+        todo_id TEXT NOT NULL REFERENCES todos(id) ON DELETE CASCADE,
+        track_id TEXT NOT NULL REFERENCES tracks(id) ON DELETE CASCADE,
+        repo_owner TEXT NOT NULL,
+        repo_name TEXT NOT NULL,
+        pr_number INTEGER NOT NULL,
+        pr_title TEXT,
+        pr_branch TEXT,
+        state TEXT NOT NULL DEFAULT 'unknown',
+        check_status TEXT NOT NULL DEFAULT 'none',
+        failing_checks TEXT,
+        unresolved_comments TEXT,
+        needs_attention_since TEXT,
+        last_polled_at TEXT,
+        last_event_at TEXT,
+        monitoring INTEGER NOT NULL DEFAULT 1,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      );
+    `);
+    db.exec(`CREATE INDEX idx_pr_monitors_todo ON pr_monitors(todo_id);`);
+    db.exec(`CREATE INDEX idx_pr_monitors_polling ON pr_monitors(monitoring, last_polled_at);`);
+  } catch {
+    // Table already exists — safe to ignore
+  }
+
+  // Migration: back-fill pr_branch on pr_monitors for installs that ran the
+  // earlier schema (no-op when the table is fresh).
+  try {
+    db.exec(`ALTER TABLE pr_monitors ADD COLUMN pr_branch TEXT;`);
+  } catch {
+    // Column already exists — safe to ignore
+  }
+
+  // Migration: track head_ref_oid so we can detect pushes, remember the
+  // timestamp of the last push, and record why the monitor was paused
+  // (merged/closed vs. stale-since-last-push).
+  try {
+    db.exec(`ALTER TABLE pr_monitors ADD COLUMN head_ref_oid TEXT;`);
+  } catch {
+    // Column already exists — safe to ignore
+  }
+  try {
+    db.exec(`ALTER TABLE pr_monitors ADD COLUMN last_push_at TEXT;`);
+  } catch {
+    // Column already exists — safe to ignore
+  }
+  try {
+    db.exec(`ALTER TABLE pr_monitors ADD COLUMN pause_reason TEXT;`);
+  } catch {
+    // Column already exists — safe to ignore
+  }
+
+  // Migration: PR Review Dashboard. pr_reviews holds incoming review requests
+  // (discovered by the review-request poller or added by URL); pr_review_findings
+  // holds the structured feedback the pr-review agent reports back. Distinct from
+  // pr_monitors, which tracks the user's own outgoing PRs per todo.
+  try {
+    db.exec(`
+      CREATE TABLE pr_reviews (
+        id TEXT PRIMARY KEY,
+        pr_url TEXT NOT NULL UNIQUE,
+        repo_owner TEXT NOT NULL,
+        repo_name TEXT NOT NULL,
+        pr_number INTEGER NOT NULL,
+        pr_title TEXT,
+        pr_author TEXT,
+        pr_branch TEXT,
+        head_sha TEXT,
+        state TEXT NOT NULL DEFAULT 'incoming',
+        discovered_via TEXT NOT NULL DEFAULT 'poll',
+        session_id TEXT,
+        draft_summary TEXT,
+        suggested_verdict TEXT,
+        submitted_at TEXT,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      );
+    `);
+    db.exec(`
+      CREATE TABLE pr_review_findings (
+        id TEXT PRIMARY KEY,
+        review_id TEXT NOT NULL REFERENCES pr_reviews(id) ON DELETE CASCADE,
+        file TEXT NOT NULL,
+        line INTEGER,
+        side TEXT NOT NULL DEFAULT 'RIGHT',
+        category TEXT,
+        summary TEXT NOT NULL,
+        failure_scenario TEXT,
+        suggested_comment TEXT NOT NULL,
+        code_context TEXT,
+        anchored INTEGER NOT NULL DEFAULT 0,
+        status TEXT NOT NULL DEFAULT 'open',
+        created_at TEXT NOT NULL
+      );
+    `);
+    db.exec(`CREATE INDEX idx_pr_review_findings_review ON pr_review_findings(review_id);`);
+  } catch {
+    // Tables already exist — safe to ignore
+  }
+
+  // Migration: PR description on pr_reviews (no-op when the table is fresh).
+  try {
+    db.exec(`ALTER TABLE pr_reviews ADD COLUMN pr_body TEXT;`);
   } catch {
     // Column already exists — safe to ignore
   }
@@ -788,6 +930,17 @@ function runMigrations(db: Database.Database): void {
 
   // Seed default prompt templates if the table is empty
   seedDefaultTemplates(db);
+
+  // Seed default plugins (ponytail) if not present
+  seedDefaultPlugins(db);
+}
+
+function seedDefaultPlugins(db: Database.Database): void {
+  const now = new Date().toISOString();
+  db.prepare(
+    `INSERT OR IGNORE INTO plugins (id, marketplace_repo, plugin_name, description, enabled, created_at, updated_at)
+     VALUES (?, 'DietrichGebert/ponytail', 'ponytail@ponytail', 'Lazy senior dev discipline — YAGNI ladder + /ponytail-review over-engineering review', 1, ?, ?)`,
+  ).run(uuid(), now, now);
 }
 
 function seedDefaultTemplates(db: Database.Database): void {
@@ -904,8 +1057,10 @@ export function ensureDefaultTodoTemplate(): void {
 
   if (existing) {
     templateId = existing.id;
-    // Replace old soul-based content or templates that still include the /exit instruction
-    if (existing.content.includes('Workshop Agent Soul') || existing.content.includes('You are Jeeves') || existing.content.includes('Use /exit to close your session')) {
+    // Replace old soul-based content, templates that still include the /exit
+    // instruction, or templates referencing the retired orchestrate skill
+    // (the flow now lives in the Orchestrator agent's prompt).
+    if (existing.content.includes('Workshop Agent Soul') || existing.content.includes('You are Jeeves') || existing.content.includes('Use /exit to close your session') || existing.content.includes('skill "orchestrate"')) {
       db.prepare(`UPDATE prompt_templates SET content = ?, updated_at = ? WHERE id = ?`).run(
         DEFAULT_TODO_TEMPLATE_CONTENT, new Date().toISOString(), templateId,
       );
@@ -914,13 +1069,120 @@ export function ensureDefaultTodoTemplate(): void {
     templateId = uuid();
     const now = new Date().toISOString();
     db.prepare(
-      `INSERT INTO prompt_templates (id, name, description, content, is_default, created_at, updated_at)
-       VALUES (?, ?, ?, ?, 1, ?, ?)`,
+      `INSERT INTO prompt_templates (id, name, description, content, is_default, system_kind, created_at, updated_at)
+       VALUES (?, ?, ?, ?, 1, 'todo', ?, ?)`,
     ).run(templateId, 'Todo Prompt Template', 'Default system prompt for dispatched todos', DEFAULT_TODO_TEMPLATE_CONTENT, now, now);
   }
+
+  // Stamp system_kind='todo' on the legacy default row if it predates the column.
+  db.prepare(`UPDATE prompt_templates SET system_kind = 'todo' WHERE id = ? AND (system_kind IS NULL OR system_kind = '')`).run(templateId);
 
   // Back-fill all tracks that have no default template assigned
   db.prepare(
     `UPDATE tracks SET default_prompt_template_id = ?, updated_at = ? WHERE default_prompt_template_id IS NULL`,
   ).run(templateId, new Date().toISOString());
+}
+
+const DEFAULT_PR_BUILD_FIX_TEMPLATE_CONTENT = `## PR Build Fix
+
+You are running as a background sub-agent dispatched to investigate and fix a failing CI build on a pull request.
+
+**PR:** [{{pr.title}}]({{pr.url}})
+**Branch:** \`{{pr.branch}}\`
+**Repository:** {{pr.repo}}
+
+### Failing checks
+
+{{pr.failing_checks}}
+
+### Your task
+
+1. Check out the PR branch locally (\`gh pr checkout {{pr.number}}\`) or work in the existing worktree.
+2. Reproduce the failure locally where possible — read the linked check logs first.
+3. Fix the underlying issue. Do not paper over the symptom (skipping tests, lowering thresholds, etc.) unless the user explicitly asks.
+4. Commit and push the fix to the same branch. Do NOT open a new PR.
+5. Briefly report what was wrong and what you changed.
+
+If you cannot determine the cause from the logs alone, stop and report what you tried and what's needed to proceed.
+`;
+
+const DEFAULT_PR_COMMENT_RESPONSE_TEMPLATE_CONTENT = `## PR Comment Response
+
+You are running as a background sub-agent dispatched to address review feedback on a pull request.
+
+**PR:** [{{pr.title}}]({{pr.url}})
+**Branch:** \`{{pr.branch}}\`
+**Repository:** {{pr.repo}}
+
+### Comments to address
+
+{{pr.comments}}
+
+### Your task
+
+1. Read each comment carefully. If a comment is asking a question, you may answer it directly via \`gh pr comment\` rather than changing code.
+2. For code-change requests, check out the PR branch (\`gh pr checkout {{pr.number}}\`), make the change, commit, and push to the same branch.
+3. Reply to each comment so the reviewer knows it's been addressed — use \`gh api\` to post threaded review-comment replies or \`gh pr comment\` for issue-level comments.
+4. Briefly report which comments you handled and how.
+
+If a comment is unclear or you genuinely disagree, leave a reply explaining your reasoning rather than making the change.
+`;
+
+interface SystemTemplateSpec {
+  systemKind: 'pr-build-fix' | 'pr-comment-response';
+  name: string;
+  description: string;
+  content: string;
+}
+
+const SYSTEM_TEMPLATE_SPECS: SystemTemplateSpec[] = [
+  {
+    systemKind: 'pr-build-fix',
+    name: 'PR Build Fix',
+    description: 'Prompt sent to a sub-agent when a monitored PR has failing CI checks. Editable.',
+    content: DEFAULT_PR_BUILD_FIX_TEMPLATE_CONTENT,
+  },
+  {
+    systemKind: 'pr-comment-response',
+    name: 'PR Comment Response',
+    description: 'Prompt sent to a sub-agent when a monitored PR has unresolved comments. Editable.',
+    content: DEFAULT_PR_COMMENT_RESPONSE_TEMPLATE_CONTENT,
+  },
+];
+
+/**
+ * Ensure each well-known system template row exists. Idempotent — runs on every
+ * startup. If the row already exists the user's edits are preserved; only the
+ * `system_kind` flag is healed when missing.
+ */
+export function ensureSystemPromptTemplates(): void {
+  const db = getDatabase();
+  const now = new Date().toISOString();
+
+  for (const spec of SYSTEM_TEMPLATE_SPECS) {
+    const existing = db.prepare(
+      `SELECT id, system_kind FROM prompt_templates WHERE system_kind = ? LIMIT 1`,
+    ).get(spec.systemKind) as { id: string; system_kind: string | null } | undefined;
+
+    if (existing) {
+      // Heal any missing/empty system_kind flag (shouldn't happen, defensive).
+      if (!existing.system_kind) {
+        db.prepare(`UPDATE prompt_templates SET system_kind = ? WHERE id = ?`).run(spec.systemKind, existing.id);
+      }
+      continue;
+    }
+
+    // Also tolerate older installs that created the row by name but never set
+    // system_kind. Find by exact name as a fallback.
+    const byName = db.prepare(`SELECT id FROM prompt_templates WHERE name = ? LIMIT 1`).get(spec.name) as { id: string } | undefined;
+    if (byName) {
+      db.prepare(`UPDATE prompt_templates SET system_kind = ? WHERE id = ?`).run(spec.systemKind, byName.id);
+      continue;
+    }
+
+    db.prepare(
+      `INSERT INTO prompt_templates (id, name, description, content, is_default, system_kind, created_at, updated_at)
+       VALUES (?, ?, ?, ?, 0, ?, ?, ?)`,
+    ).run(uuid(), spec.name, spec.description, spec.content, spec.systemKind, now, now);
+  }
 }

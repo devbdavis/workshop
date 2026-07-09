@@ -1,10 +1,15 @@
 import { useState } from 'react';
-import type { Session, Todo } from '@foundation/types';
+import type { PrMonitor, Session, Todo } from '@foundation/types';
+import { PrAttentionPanel } from './PrAttentionPanel';
 
 interface Props {
   sessions: Session[];
   todos: Todo[];
+  /** Optional — current PR monitor rows for the track. */
+  prMonitors?: PrMonitor[];
   onOpenTodo: (todo: Todo) => void;
+  /** Triggers a parent reload (used after dispatching a PR action). */
+  onRefresh?: () => void;
 }
 
 const PROVIDER_COLORS: Record<string, string> = {
@@ -59,11 +64,15 @@ function TodoStatusBadge({ status }: { status: Todo['status'] }) {
 function SessionCard({
   session,
   todo,
+  prMonitors,
   onOpenTodo,
+  onRefresh,
 }: {
   session: Session;
   todo: Todo | null;
+  prMonitors: PrMonitor[];
   onOpenTodo: (todo: Todo) => void;
+  onRefresh: () => void;
 }) {
   const providerLabel = session.provider.charAt(0).toUpperCase() + session.provider.slice(1);
   const providerColor = PROVIDER_COLORS[session.provider] ?? 'bg-gray-400';
@@ -111,7 +120,7 @@ function SessionCard({
                 </div>
               )}
 
-              {todo.pullRequests !== undefined && todo.pullRequests.length > 0 && (
+              {todo.pullRequests !== undefined && todo.pullRequests.length > 0 && prMonitors.length === 0 && (
                 <div className="flex items-start gap-2">
                   <span className="text-[10px] text-gray-500 uppercase tracking-wide w-10 shrink-0 pt-0.5">
                     PRs
@@ -130,6 +139,19 @@ function SessionCard({
                       </a>
                     ))}
                   </div>
+                </div>
+              )}
+
+              {prMonitors.length > 0 && (
+                <div className="space-y-2 pt-1">
+                  {prMonitors.map((m) => (
+                    <PrAttentionPanel
+                      key={m.prUrl}
+                      todo={todo}
+                      monitor={m}
+                      onRefresh={onRefresh}
+                    />
+                  ))}
                 </div>
               )}
 
@@ -162,7 +184,7 @@ function SessionCard({
   );
 }
 
-export function SessionPanel({ sessions, todos, onOpenTodo }: Props) {
+export function SessionPanel({ sessions, todos, prMonitors = [], onOpenTodo, onRefresh }: Props) {
   const [activeIdx, setActiveIdx] = useState(0);
 
   if (sessions.length === 0) {
@@ -178,6 +200,9 @@ export function SessionPanel({ sessions, todos, onOpenTodo }: Props) {
   const clampedIdx = Math.min(activeIdx, sessions.length - 1);
   const session = sessions[clampedIdx];
   const linkedTodo = todos.find((t) => t.sessionId === session.id) ?? null;
+  const todoMonitors = linkedTodo
+    ? prMonitors.filter((m) => m.todoId === linkedTodo.id)
+    : [];
 
   return (
     <div>
@@ -186,6 +211,13 @@ export function SessionPanel({ sessions, todos, onOpenTodo }: Props) {
         <div className="flex border-b border-gray-800 overflow-x-auto">
           {sessions.map((s, i) => {
             const dotColor = PROVIDER_COLORS[s.provider] ?? 'bg-gray-400';
+            const linkedT = todos.find((t) => t.sessionId === s.id);
+            const sessionMonitors = linkedT ? prMonitors.filter((m) => m.todoId === linkedT.id) : [];
+            const sessionNeedsAttention = sessionMonitors.some(
+              (m) =>
+                (m.state === 'open' || m.state === 'draft') &&
+                (m.checkStatus === 'failing' || m.checkStatus === 'error' || m.unresolvedComments.length > 0),
+            );
             return (
               <button
                 key={s.id}
@@ -198,13 +230,22 @@ export function SessionPanel({ sessions, todos, onOpenTodo }: Props) {
               >
                 <span className={`w-1.5 h-1.5 rounded-full ${dotColor}`} />
                 {s.name !== undefined ? s.name.slice(0, 18) : s.id.slice(0, 8)}
+                {sessionNeedsAttention && (
+                  <span className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse" title="PR needs attention" />
+                )}
               </button>
             );
           })}
         </div>
       )}
 
-      <SessionCard session={session} todo={linkedTodo} onOpenTodo={onOpenTodo} />
+      <SessionCard
+        session={session}
+        todo={linkedTodo}
+        prMonitors={todoMonitors}
+        onOpenTodo={onOpenTodo}
+        onRefresh={onRefresh ?? (() => {})}
+      />
     </div>
   );
 }

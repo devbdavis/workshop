@@ -10,6 +10,8 @@ export interface CreateSessionOptions {
   workingDirectory?: string;
   /** Which AI CLI to use. Defaults to 'claude'. */
   provider?: SessionProvider;
+  /** Model override passed to the AI CLI (claude: `--model`, e.g. "opus"). Ignored by other providers. */
+  model?: string;
   /** If true, do not start the AI CLI in the tmux session. Defaults to false. */
   skipClaude?: boolean;
   /** If true, the session runs as a background agent. Defaults to false. */
@@ -28,6 +30,12 @@ export interface CreateSessionOptions {
   claudeResumeId?: string;
   /** Per-session MCP server configs to inject into the session's settings.json */
   mcpServers?: Record<string, unknown>;
+  /**
+   * Per-session Claude Code plugin enablement map (pluginName → enabled),
+   * written into the session's settings.json. Injected by the terminal
+   * manager from the plugin registry — callers should not set this.
+   */
+  enabledPlugins?: Record<string, boolean>;
   /** If true, pass --dangerously-skip-permissions to Claude so it runs without permission prompts. */
   dangerouslySkipPermissions?: boolean;
   /** If true, skip the automatic background agent instructions appended to the system prompt. */
