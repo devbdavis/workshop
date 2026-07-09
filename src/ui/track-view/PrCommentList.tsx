@@ -4,9 +4,10 @@ interface Props {
   comments: PrComment[];
   dispatching: string | null;
   dismissing: string | null;
+  sessionActive: boolean;
   expandedCommentIds: Set<string>;
   onToggleExpand: (id: string) => void;
-  onDispatch: (commentIds: string[] | undefined) => void;
+  onSend: (commentIds: string[] | undefined) => void;
   onDismiss: (commentIds: string[]) => void;
 }
 
@@ -20,12 +21,14 @@ export function PrCommentList({
   comments,
   dispatching,
   dismissing,
+  sessionActive,
   expandedCommentIds,
   onToggleExpand,
-  onDispatch,
+  onSend,
   onDismiss,
 }: Props) {
   const busy = dispatching !== null || dismissing !== null;
+  const addressDisabled = busy || comments.length === 0 || !sessionActive;
 
   return (
     <div className="space-y-2">
@@ -40,14 +43,17 @@ export function PrCommentList({
             {dismissing === 'all-comments' ? 'Dismissing…' : 'Dismiss all'}
           </button>
           <button
-            onClick={() => onDispatch(undefined)}
-            disabled={busy || comments.length === 0}
+            onClick={() => onSend(undefined)}
+            disabled={addressDisabled}
             className="text-[11px] px-2 py-0.5 rounded bg-pink-700/70 hover:bg-pink-700 disabled:opacity-50 text-pink-50 transition-colors"
           >
-            {dispatching === 'all-comments' ? 'Dispatching…' : 'Address all'}
+            {dispatching === 'all-comments' ? 'Sending…' : 'Address all'}
           </button>
         </div>
       </div>
+      {!sessionActive && (
+        <p className="text-[11px] text-gray-500">Session not running — start or resume it to send feedback.</p>
+      )}
       <ul className="space-y-2">
         {comments.map((c) => {
           const expanded = expandedCommentIds.has(c.id);
@@ -95,11 +101,11 @@ export function PrCommentList({
                     {dismissing === `comment-${c.id}` ? 'Dismissing…' : 'Dismiss'}
                   </button>
                   <button
-                    onClick={() => onDispatch([c.id])}
-                    disabled={busy}
+                    onClick={() => onSend([c.id])}
+                    disabled={busy || !sessionActive}
                     className="text-[11px] px-2 py-0.5 rounded bg-pink-700/70 hover:bg-pink-700 disabled:opacity-50 text-pink-50 transition-colors"
                   >
-                    {dispatching === `comment-${c.id}` ? 'Dispatching…' : 'Address this'}
+                    {dispatching === `comment-${c.id}` ? 'Sending…' : 'Address this'}
                   </button>
                 </div>
               </div>

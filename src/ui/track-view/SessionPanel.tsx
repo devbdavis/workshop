@@ -149,6 +149,7 @@ function SessionCard({
                       key={m.prUrl}
                       todo={todo}
                       monitor={m}
+                      sessionActive={session.state === 'active'}
                       onRefresh={onRefresh}
                     />
                   ))}
