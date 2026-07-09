@@ -1,5 +1,6 @@
 import Markdown from 'react-markdown';
 import type { PrComment } from '@foundation/types';
+import { stripHtmlNoise } from '@foundation/strip-html';
 
 interface Props {
   comments: PrComment[];
@@ -74,7 +75,7 @@ export function PrCommentList({
               <div
                 className={`mt-1 text-gray-300 prose prose-invert prose-sm max-w-none prose-p:my-1 prose-pre:my-1 prose-headings:my-1 ${expanded ? '' : 'max-h-20 overflow-hidden'}`}
               >
-                <Markdown>{c.body}</Markdown>
+                <Markdown>{stripHtmlNoise(c.body)}</Markdown>
               </div>
               <div className="flex items-center justify-between mt-2 gap-2">
                 {c.url ? (
