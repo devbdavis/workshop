@@ -1,6 +1,7 @@
 import { execFile, spawn } from 'child_process';
 import { promisify } from 'util';
 import type { PrReviewVerdict } from '@foundation/types';
+import { parsePrUrl } from '@infrastructure/forge/pr-url.js';
 
 const execFileAsync = promisify(execFile);
 
@@ -45,8 +46,8 @@ export interface GhReviewAdapter {
   searchReviewRequestedPrs(): Promise<DiscoveredPr[]>;
   /** Raw unified diff of the PR (`gh pr diff`). */
   fetchPrDiff(prUrl: string): Promise<string>;
-  /** Posts ONE review (body + verdict + inline comments) via the GitHub reviews API. */
-  submitPrReview(owner: string, repo: string, prNumber: number, submission: GhReviewSubmission): Promise<void>;
+  /** Posts ONE review (body + verdict + inline comments) via the forge's reviews API. */
+  submitPrReview(prUrl: string, submission: GhReviewSubmission): Promise<void>;
 }
 
 interface GhSearchPrNode {
@@ -154,7 +155,10 @@ export function createGhReviewAdapter(opts: CreateGhReviewAdapterOptions = {}): 
       return stdout;
     },
 
-    async submitPrReview(owner: string, repo: string, prNumber: number, submission: GhReviewSubmission): Promise<void> {
+    async submitPrReview(prUrl: string, submission: GhReviewSubmission): Promise<void> {
+      const parsed = parsePrUrl(prUrl);
+      if (!parsed) throw new Error(`Invalid PR URL: ${prUrl}`);
+      const { owner, repo, number: prNumber } = parsed;
       const payload = JSON.stringify({
         body: submission.body,
         event: VERDICT_TO_EVENT[submission.verdict],

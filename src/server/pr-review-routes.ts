@@ -19,7 +19,7 @@ import type { SettingsRepository } from '@domain/repo/repository';
 import type { FilesystemAgentScanner } from '@infrastructure/agents/filesystem-scanner.js';
 import type { GhAdapter } from '@infrastructure/github/gh-adapter';
 import type { GhReviewAdapter } from '@infrastructure/github/gh-review-adapter';
-import { parsePrUrl } from '@infrastructure/github/gh-adapter.js';
+import { parsePrUrl } from '@infrastructure/forge/pr-url.js';
 import { parseUnifiedDiff, isAnchorable, extractHunkForLine } from '@infrastructure/github/diff-utils.js';
 import { broadcast } from './events.js';
 
@@ -36,7 +36,7 @@ export interface PrReviewRouterDeps {
   reviews: PrReviewRepository;
   discovery: PrReviewDiscoveryPoller;
   gh: GhAdapter;
-  ghReview: GhReviewAdapter;
+  ghReview: Pick<GhReviewAdapter, 'fetchPrDiff' | 'submitPrReview'>;
   sessions: SessionRepository;
   tracks: TrackRepository;
   agents: AgentRepository;
@@ -180,7 +180,9 @@ export function createPrReviewRouter(deps: PrReviewRouterDeps): Router {
       const url = typeof req.body?.url === 'string' ? req.body.url.trim() : '';
       const parsed = parsePrUrl(url);
       if (!parsed) {
-        res.status(400).json({ error: 'Not a GitHub PR URL (expected https://github.com/owner/repo/pull/N)' });
+        res.status(400).json({
+          error: 'Not a recognised PR URL (expected https://github.com/owner/repo/pull/N, or a Gitea host configured in tea)',
+        });
         return;
       }
       const existing = reviews.findByUrl(url);
@@ -245,7 +247,7 @@ export function createPrReviewRouter(deps: PrReviewRouterDeps): Router {
         background: true,
         initialPrompt: [
           `Review the pull request at ${review.prUrl}.`,
-          `When done, report your structured findings, draft summary, and suggested verdict via the workshop_report_pr_review MCP tool (prUrl: ${review.prUrl}). Do not post anything to GitHub.`,
+          `When done, report your structured findings, draft summary, and suggested verdict via the workshop_report_pr_review MCP tool (prUrl: ${review.prUrl}). Do not post anything to the forge.`,
         ].join('\n\n'),
         name: `Review PR #${review.prNumber}: ${review.prTitle ?? ''}`.trim(),
         worktreeMode: false,
@@ -405,7 +407,7 @@ export function createPrReviewRouter(deps: PrReviewRouterDeps): Router {
           : []),
       ].join('\n');
 
-      await ghReview.submitPrReview(review.repoOwner, review.repoName, review.prNumber, {
+      await ghReview.submitPrReview(review.prUrl, {
         body: fullBody,
         verdict,
         comments: inline.map((f) => ({ path: f.file, line: f.line!, side: f.side, body: f.suggestedComment })),
@@ -422,7 +424,7 @@ export function createPrReviewRouter(deps: PrReviewRouterDeps): Router {
       res.json({ review: updated, inlineCount: inline.length, bodyCount: unanchored.length });
     } catch (err) {
       console.error('Failed to submit PR review:', err);
-      res.status(502).json({ error: err instanceof Error ? err.message : 'GitHub review submission failed' });
+      res.status(502).json({ error: err instanceof Error ? err.message : 'Review submission failed' });
     }
   });
 
