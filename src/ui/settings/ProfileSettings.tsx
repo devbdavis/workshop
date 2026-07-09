@@ -2,9 +2,11 @@ import { useEffect, useState } from 'react';
 import { useProfile } from '../hooks/useProfile';
 import {
   EDITOR_URI_PREFIX_KEY,
+  EDITOR_PATH_REMAPS_KEY,
   EDITOR_PATH_FROM_KEY,
   EDITOR_PATH_TO_KEY,
 } from '../hooks/useEditorLaunch';
+import { remapTextFromSettings } from '@foundation/path-remap';
 
 const PREFIX_SAMPLES = [
   { label: 'VSCode Remote-SSH', value: 'vscode://vscode-remote/ssh-remote+<your-ssh-host>' },
@@ -22,8 +24,7 @@ export function ProfileSettings() {
 
   const [name, setName] = useState(user?.name ?? '');
   const [prefix, setPrefix] = useState('');
-  const [pathFrom, setPathFrom] = useState('');
-  const [pathTo, setPathTo] = useState('');
+  const [remaps, setRemaps] = useState('');
   const [savedAt, setSavedAt] = useState<string | null>(null);
 
   useEffect(() => {
@@ -31,8 +32,7 @@ export function ProfileSettings() {
       .then((r) => r.json() as Promise<Record<string, string>>)
       .then((s) => {
         setPrefix(s[EDITOR_URI_PREFIX_KEY] ?? '');
-        setPathFrom(s[EDITOR_PATH_FROM_KEY] ?? '');
-        setPathTo(s[EDITOR_PATH_TO_KEY] ?? '');
+        setRemaps(remapTextFromSettings(s));
       })
       .catch(() => {});
   }, []);
@@ -48,8 +48,11 @@ export function ProfileSettings() {
   async function saveEditor() {
     await Promise.all([
       setSetting(EDITOR_URI_PREFIX_KEY, prefix.trim()),
-      setSetting(EDITOR_PATH_FROM_KEY, pathFrom.trim()),
-      setSetting(EDITOR_PATH_TO_KEY, pathTo.trim()),
+      setSetting(EDITOR_PATH_REMAPS_KEY, remaps.trim()),
+      // Retire the legacy pair on save. Without this, clearing the textarea to
+      // disable remapping would silently fall back to the old from/to values.
+      setSetting(EDITOR_PATH_FROM_KEY, ''),
+      setSetting(EDITOR_PATH_TO_KEY, ''),
     ]);
     setSavedAt(new Date().toLocaleTimeString());
   }
@@ -136,30 +139,22 @@ export function ProfileSettings() {
         </div>
 
         <p className="text-xs text-gray-500 mb-2">
-          Optional path remap — only needed when your SSH-side path differs from the
-          container path (e.g. SSH into the host where <code className="text-gray-400">/repos</code>
-          is mounted elsewhere). Leave blank if you SSH into the container.
+          Optional path remaps — only needed when your SSH-side paths differ from the
+          container paths (e.g. you SSH into the host, where{' '}
+          <code className="text-gray-400">/repos</code> and{' '}
+          <code className="text-gray-400">/config</code> come from different places). One{' '}
+          <code className="text-gray-400">{'<container> -> <editor>'}</code> rule per line;
+          the longest matching prefix wins. Leave blank if you SSH into the container.
         </p>
-        <div className="grid grid-cols-2 gap-2 mb-4">
-          <div>
-            <label className="block text-xs text-gray-400 mb-1">Container path prefix</label>
-            <input
-              value={pathFrom}
-              onChange={(e) => setPathFrom(e.target.value)}
-              placeholder="/repos"
-              className="w-full px-3 py-2 bg-gray-800 border border-gray-700 rounded text-sm text-gray-100 font-mono placeholder-gray-600 focus:outline-none focus:border-blue-500"
-            />
-          </div>
-          <div>
-            <label className="block text-xs text-gray-400 mb-1">Editor-side path prefix</label>
-            <input
-              value={pathTo}
-              onChange={(e) => setPathTo(e.target.value)}
-              placeholder="/mnt/user/repos"
-              className="w-full px-3 py-2 bg-gray-800 border border-gray-700 rounded text-sm text-gray-100 font-mono placeholder-gray-600 focus:outline-none focus:border-blue-500"
-            />
-          </div>
-        </div>
+        <label className="block text-xs text-gray-400 mb-1">Path remaps</label>
+        <textarea
+          value={remaps}
+          onChange={(e) => setRemaps(e.target.value)}
+          rows={3}
+          spellCheck={false}
+          placeholder={'/repos -> /mnt/user/repos\n/config -> /mnt/user/appdata/workshop'}
+          className="w-full px-3 py-2 mb-4 bg-gray-800 border border-gray-700 rounded text-sm text-gray-100 font-mono placeholder-gray-600 focus:outline-none focus:border-blue-500 resize-y"
+        />
 
         <div className="flex items-center gap-3">
           <button
