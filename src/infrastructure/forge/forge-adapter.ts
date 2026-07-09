@@ -26,6 +26,9 @@ export type ForgeAdapter = PrSource & {
 export interface CreateForgeAdapterOptions {
   github?: GhAdapter & GhReviewAdapter;
   gitea?: ForgeAdapter;
+  /** Forwarded to the default GitHub adapter so PR-monitor comments from these
+   *  author-login substrings are filtered out. Ignored when `github` is supplied. */
+  getIgnoredCommentAuthors?: () => string[];
 }
 
 const GITHUB_HOST = 'github.com';
@@ -37,7 +40,9 @@ const GITHUB_HOST = 'github.com';
  * search is isolated and only answering hosts are reported back.
  */
 export function createForgeAdapter(opts: CreateForgeAdapterOptions = {}): ForgeAdapter {
-  const github = opts.github ?? { ...createGhAdapter(), ...createGhReviewAdapter() };
+  const github =
+    opts.github ??
+    { ...createGhAdapter({ getIgnoredCommentAuthors: opts.getIgnoredCommentAuthors }), ...createGhReviewAdapter() };
   const gitea = opts.gitea ?? createGiteaAdapter();
   const giteaConfigured = opts.gitea !== undefined || loadGiteaLogins().length > 0;
 
