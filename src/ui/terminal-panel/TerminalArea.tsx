@@ -5,7 +5,7 @@ import { TrackOfficeStrip } from './TrackOfficeStrip';
 import { RecentlyDeletedPanel } from './RecentlyDeletedPanel';
 import { SessionLinkButtons } from './SessionLinkButtons';
 import { TerminalModal } from '../track-view/TerminalModal';
-import { useLaunchApps, editorLabel } from '@ui/hooks/useLaunchApps';
+import { useLaunchApps, editorLabel, terminalLabel } from '@ui/hooks/useLaunchApps';
 import { useEditorLaunch } from '@ui/hooks/useEditorLaunch';
 
 interface Props {
@@ -336,11 +336,25 @@ function TerminalPane({ trackId, session, todos, onDestroy, onRename, defaultOpe
               </button>
             </>
           )}
-          {/* Opens a shell session at this pane's cwd in a floating, dockable
-              terminal — inside the container, so it works under Docker too.
-              Gated on terminalPath, not editorPath: a session can have a working
-              directory without the track exposing an editor root. */}
-          {onOpenTerminal && terminalPath && (
+          {/* Native install (a host terminal is detected and no remote editor
+              URI prefix is configured) → open the local terminal emulator, as it
+              worked before the in-app shell landed. Otherwise (Docker / remote
+              host) fall back to the in-app dockable shell, which runs inside the
+              container. Gated on terminalPath, not editorPath: a session can have
+              a working directory without the track exposing an editor root. */}
+          {terminalPath && launchApps?.resolvedTerminal && !editor.uriPrefix ? (
+            <button
+              onClick={() => fetch('/api/shell/open-in-editor', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ path: terminalPath, app: 'terminal', sessionId: session.id }),
+              })}
+              className="text-[10px] text-gray-500 hover:text-green-400 px-1 font-mono"
+              title={`Open in ${terminalLabel(launchApps)}: ${terminalPath}`}
+            >
+              &gt;_
+            </button>
+          ) : onOpenTerminal && terminalPath ? (
             <button
               onClick={() => onOpenTerminal(terminalPath)}
               className="text-[10px] text-gray-500 hover:text-green-400 px-1 font-mono"
@@ -348,7 +362,7 @@ function TerminalPane({ trackId, session, todos, onDestroy, onRename, defaultOpe
             >
               &gt;_
             </button>
-          )}
+          ) : null}
           <button
             onClick={onDestroy}
             className="text-xs text-gray-500 hover:text-red-400 px-1"
