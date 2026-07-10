@@ -64,7 +64,6 @@ function makeTodo(prs: { url: string; title?: string }[]): Todo {
     title: 't',
     status: 'review',
     priority: 'medium',
-    refined: true,
     sortOrder: 0,
     createdAt: '2026-05-01',
     updatedAt: '2026-05-01',

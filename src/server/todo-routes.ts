@@ -121,7 +121,7 @@ export function createTodoRouter(deps: TodoRouterDeps): Router {
       return;
     }
 
-    const { title, description, priority, refined, status } = req.body;
+    const { title, description, priority, status } = req.body;
     if (!title || typeof title !== 'string') {
       res.status(400).json({ error: 'title is required' });
       return;
@@ -133,7 +133,6 @@ export function createTodoRouter(deps: TodoRouterDeps): Router {
       description,
       status: status || 'backlog',
       priority: priority || 'medium',
-      refined: refined ?? false,
       sortOrder: 0,
     });
     broadcast('todo:created', trackId);
@@ -171,7 +170,7 @@ export function createTodoRouter(deps: TodoRouterDeps): Router {
   // --- Update todo ---
 
   router.put('/todos/:todoId', async (req, res) => {
-    const { title, description, resolution, issueKey, pullRequests, status, priority, refined, sessionId, sortOrder } = req.body;
+    const { title, description, resolution, issueKey, pullRequests, status, priority, sessionId, sortOrder } = req.body;
 
     // If transitioning to done, check for an active session to clean up
     const existing = todos.findById(req.params.todoId as TodoId);
@@ -195,7 +194,6 @@ export function createTodoRouter(deps: TodoRouterDeps): Router {
       pullRequests,
       status,
       priority,
-      refined,
       sessionId: resolvedSessionId,
       agentId: resolvedAgentId,
       sortOrder,

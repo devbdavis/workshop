@@ -16,7 +16,6 @@ const todo = {
   description: 'do the thing',
   status: 'backlog',
   priority: 'medium',
-  refined: true,
   sortOrder: 0,
   createdAt: '',
   updatedAt: '',

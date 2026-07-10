@@ -69,11 +69,6 @@ export function KanbanCard({ todo, trackName, onClick }: Props) {
             {todo.issueKey}
           </span>
         )}
-        {todo.refined && (
-          <span className="text-[10px] px-1.5 py-0.5 rounded bg-blue-900/50 text-blue-300">
-            Refined
-          </span>
-        )}
         {todo.sessionId && (
           <span className="text-[10px] px-1.5 py-0.5 rounded bg-emerald-900/50 text-emerald-300 flex items-center gap-1">
             <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />

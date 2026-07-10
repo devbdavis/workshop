@@ -164,7 +164,7 @@ export function TodoPanel({ track, todos, sessions, onUpdate }: Props) {
                     >
                       {STATUS_LABELS[todo.status]}
                     </button>
-                    {todo.refined && todo.status === 'ready' && (
+                    {(todo.status === 'ready' || todo.status === 'backlog') && (
                       <div className="relative">
                         <button
                           onClick={() => setDispatchingTodoId(dispatchingTodoId === todo.id ? null : todo.id)}
