@@ -1,10 +1,11 @@
 import { useCallback, useEffect, useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
-import type { PrMonitor, Session, SessionId, Todo, Track } from '@foundation/types';
+import { useNavigate } from 'react-router-dom';
+import type { DefaultAiCli, PrMonitor, Session, SessionId, Todo, Track } from '@foundation/types';
 import { TerminalPane } from '../terminal-panel/TerminalPane';
 import { SessionPanel } from '../track-view/SessionPanel';
+import { NewSessionModal, type NewSessionOptions } from '../track-view/NewSessionModal';
 import { groupSessionsByTrack } from './group-sessions';
-import { SessionRow } from './SessionRow';
+import { TrackNavigator } from './TrackNavigator';
 
 const SELECTED_KEY = 'workshop:overview-selected';
 
@@ -28,6 +29,9 @@ export function SessionOverview() {
   const [trackRepoPaths, setTrackRepoPaths] = useState<Record<string, string | undefined>>({});
   const [issueBaseUrl, setIssueBaseUrl] = useState<string | undefined>(undefined);
   const [selectedIds, setSelectedIds] = useState<SessionId[]>(loadSelected);
+  // Full track (repos populated) for the New Session modal — fetched on "+" click.
+  const [modalTrack, setModalTrack] = useState<Track | null>(null);
+  const [defaultAiCli, setDefaultAiCli] = useState<DefaultAiCli>('claude');
 
   const loadSessions = useCallback(async () => {
     try {
@@ -70,6 +74,13 @@ export function SessionOverview() {
         }
       })
       .catch(() => { /* silently skip — no issue tracker configured */ });
+  }, []);
+
+  useEffect(() => {
+    fetch('/api/settings/default-ai-cli')
+      .then((r) => r.json())
+      .then((d: { provider: DefaultAiCli }) => setDefaultAiCli(d.provider))
+      .catch(() => { /* keep default */ });
   }, []);
 
   // Reuses the same inline WebSocket-subscription pattern every other page in
@@ -189,47 +200,58 @@ export function SessionOverview() {
     }
   }
 
+  async function openNewSession(trackId: string) {
+    try {
+      const res = await fetch(`/api/tracks/${trackId}`);
+      if (res.ok) setModalTrack(await res.json());
+    } catch (err) {
+      console.error('Failed to load track:', err);
+    }
+  }
+
+  async function createSession(opts: NewSessionOptions): Promise<Session | null> {
+    if (!modalTrack) return null;
+    try {
+      const res = await fetch(`/api/tracks/${modalTrack.id}/sessions`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(opts),
+      });
+      if (res.ok) {
+        const session: Session = await res.json();
+        setSelectedIds([session.id]);
+        loadSessions();
+        return session;
+      }
+    } catch (err) {
+      console.error('Failed to create session:', err);
+    }
+    return null;
+  }
+
   return (
     <div className="h-full flex">
       <aside className="w-80 border-r border-gray-800 overflow-y-auto shrink-0">
-        {selectedSessions.length > 0 ? (
-          <SessionPanel
-            sessions={selectedSessions}
-            todos={todos}
-            prMonitors={prMonitors}
-            onOpenTodo={(todo) => navigate(`/tracks/${todo.trackId}`)}
-            onRefresh={reload}
-          />
-        ) : (
-          <p className="p-4 text-xs text-gray-600 italic">Select a session below</p>
-        )}
+        {/* Navigator first — fixed position so click targets don't shift when the
+            variable-height session panel below changes with each selection. */}
+        <TrackNavigator
+          groups={groups}
+          selectedIds={selectedIds}
+          onSelect={handleSelect}
+          onNewSession={openNewSession}
+        />
 
-        <div className="border-t border-gray-800 px-3 py-3 space-y-3">
-          {groups.length === 0 ? (
-            <p className="text-xs text-gray-600 italic">No active sessions.</p>
-          ) : (
-            groups.map(({ track, sessions: trackSessions }) => (
-              <div key={track.id}>
-                <Link
-                  to={`/tracks/${track.id}`}
-                  className="text-xs font-medium text-gray-400 hover:text-blue-300 transition-colors"
-                >
-                  {track.name}
-                </Link>
-                <div className="flex flex-col gap-1 pt-1.5">
-                  {trackSessions.map((session) => (
-                    <SessionRow
-                      key={session.id}
-                      session={session}
-                      selected={selectedIds.includes(session.id)}
-                      onSelect={handleSelect}
-                    />
-                  ))}
-                </div>
-              </div>
-            ))
-          )}
-        </div>
+        {selectedSessions.length > 0 && (
+          <div className="border-t border-gray-800">
+            <SessionPanel
+              sessions={selectedSessions}
+              todos={todos}
+              prMonitors={prMonitors}
+              onOpenTodo={(todo) => navigate(`/tracks/${todo.trackId}`)}
+              onRefresh={reload}
+            />
+          </div>
+        )}
       </aside>
 
       <main className="flex-1 overflow-hidden flex">
@@ -257,6 +279,17 @@ export function SessionOverview() {
           ))
         )}
       </main>
+
+      {modalTrack && (
+        <NewSessionModal
+          track={modalTrack}
+          todos={todos.filter((t) => t.trackId === modalTrack.id)}
+          defaultProvider={defaultAiCli}
+          onClose={() => setModalTrack(null)}
+          onCreate={createSession}
+          onTodosChanged={loadTodos}
+        />
+      )}
     </div>
   );
 }
