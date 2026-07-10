@@ -4,7 +4,7 @@ import type { DefaultAiCli, PrMonitor, Session, SessionId, Todo, Track } from '@
 import { TerminalPane } from '../terminal-panel/TerminalPane';
 import { SessionPanel } from '../track-view/SessionPanel';
 import { NewSessionModal, type NewSessionOptions } from '../track-view/NewSessionModal';
-import { groupSessionsByTrack } from './group-sessions';
+import { groupSessionsByTrack, isVisibleTrack, sortTracks } from './group-sessions';
 import { TrackNavigator } from './TrackNavigator';
 import { NewSessionPicker } from './NewSessionPicker';
 
@@ -235,7 +235,7 @@ export function SessionOverview() {
       <aside className="w-80 border-r border-gray-800 overflow-y-auto shrink-0">
         <div className="flex items-center justify-between px-3 pt-3">
           <span className="text-xs font-semibold text-gray-300">Sessions</span>
-          <NewSessionPicker tracks={tracks.filter((t) => !t.hidden)} onPick={openNewSession} />
+          <NewSessionPicker tracks={sortTracks(tracks.filter(isVisibleTrack))} onPick={openNewSession} />
         </div>
         {/* Navigator first — fixed position so click targets don't shift when the
             variable-height session panel below changes with each selection. */}
