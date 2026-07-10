@@ -192,12 +192,16 @@ export function buildClaudeLauncher(
   }
 
   // Scheduled background sessions (no todoId) use --print so Claude auto-exits.
-  // Todo-dispatched background sessions run the interactive TUI so the user can
-  // watch progress — the server retires them when the todo is moved to "review".
+  // Todo-dispatched background sessions — and any session opting into
+  // `interactive` (e.g. PR-review analyze) — run the interactive TUI so the
+  // user can watch progress and chat afterward. Resuming (`claudeResumeId`) is
+  // always an interactive reattachment, never --print.
   // Bash stays alive (no exec) for scheduled sessions so the tmux pane remains
   // open long enough for the SessionEnd hook to capture output before cleanup.
-  const isScheduled = options?.background && !options?.todoId;
-  const useExec = !options?.background || !!options?.todoId;
+  const isScheduled =
+    options?.background && !options?.todoId && !options?.interactive && !options?.claudeResumeId;
+  const useExec =
+    !options?.background || !!options?.todoId || !!options?.interactive || !!options?.claudeResumeId;
   const cmdPrefix = useExec ? 'exec ' : '';
 
   if (isScheduled) {
@@ -247,7 +251,7 @@ export function buildCursorLauncher(
   options?: CreateSessionOptions,
 ): void {
   const promptFile = path.join(sessionDir, 'system-prompt.md');
-  const isScheduled = options?.background && !options?.todoId;
+  const isScheduled = options?.background && !options?.todoId && !options?.interactive;
 
   if (isScheduled) {
     let fullPrompt = '';
