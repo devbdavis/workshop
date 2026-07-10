@@ -58,13 +58,16 @@ export function TopNav() {
 
   const loadAttentionCount = useCallback(async () => {
     try {
-      const res = await fetch('/api/sessions');
-      if (res.ok) {
-        const sessions: Session[] = await res.json();
-        // Same visibility filter as the Sessions page — don't count unread
-        // highlights the user can't see or clear there.
-        setAttentionCount(sessions.filter((s) => isVisibleSession(s) && s.attentionSince).length);
-      }
+      const [sessRes, trackRes] = await Promise.all([fetch('/api/sessions'), fetch('/api/tracks')]);
+      if (!sessRes.ok || !trackRes.ok) return;
+      const sessions: Session[] = await sessRes.json();
+      const tracks: { id: string; hidden?: boolean }[] = await trackRes.json();
+      const hiddenTracks = new Set(tracks.filter((t) => t.hidden).map((t) => t.id));
+      // Same visibility rules as the Sessions page — don't count unread
+      // highlights the user can't see or clear there.
+      setAttentionCount(
+        sessions.filter((s) => isVisibleSession(s) && !hiddenTracks.has(s.trackId) && s.attentionSince).length,
+      );
     } catch { /* ignore */ }
   }, []);
 

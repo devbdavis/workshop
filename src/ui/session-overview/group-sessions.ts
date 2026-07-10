@@ -21,7 +21,7 @@ export function sortSessions(sessions: Session[]): Session[] {
   });
 }
 
-/** Groups visible sessions by track, preserving track order, omitting empty tracks. */
+/** Groups visible sessions by track, preserving track order, omitting empty and profile-hidden tracks. */
 export function groupSessionsByTrack(sessions: Session[], tracks: Track[]): TrackSessionGroup[] {
   const byTrack = new Map<string, Session[]>();
   for (const session of sessions) {
@@ -33,6 +33,7 @@ export function groupSessionsByTrack(sessions: Session[], tracks: Track[]): Trac
 
   const groups: TrackSessionGroup[] = [];
   for (const track of tracks) {
+    if (track.hidden) continue;
     const list = byTrack.get(track.id);
     if (!list || list.length === 0) continue;
     groups.push({ track, sessions: sortSessions(list) });

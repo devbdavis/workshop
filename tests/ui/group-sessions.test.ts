@@ -39,6 +39,16 @@ describe('groupSessionsByTrack', () => {
     expect(groups[0].sessions.map((s) => s.id)).toEqual(['alive']);
   });
 
+  it('omits tracks the profile has hidden', () => {
+    const sessions = [
+      session({ id: 'a' as Session['id'], trackId: 't1' as Session['trackId'] }),
+      session({ id: 'b' as Session['id'], trackId: 't2' as Session['trackId'] }),
+    ];
+    const hidden = { ...track('t1'), hidden: true };
+    const groups = groupSessionsByTrack(sessions, [hidden, track('t2')]);
+    expect(groups.map((g) => g.track.id)).toEqual(['t2']);
+  });
+
   it('sorts attention-needing sessions first, then by most recent activity', () => {
     const sessions = [
       session({ id: 'stale' as Session['id'], trackId: 't1' as Session['trackId'], lastActivityAt: '2026-01-01T00:00:00.000Z' }),
