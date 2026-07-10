@@ -284,7 +284,12 @@ export function createPrReviewRouter(deps: PrReviewRouterDeps): Router {
         ].join('\n\n'),
         name: `Review PR #${review.prNumber}: ${review.prTitle ?? ''}`.trim(),
         worktreeMode: false,
-        dangerouslySkipPermissions: req.body?.dangerouslySkipPermissions === true,
+        // The review agent is a trusted template agent doing read-only review in
+        // a dedicated system track (instructed not to post to the forge), so it
+        // runs without permission prompts by default — otherwise the now-visible
+        // interactive session would stall waiting for the user to approve every
+        // gh/read/MCP call. Callers can still opt out with an explicit `false`.
+        dangerouslySkipPermissions: req.body?.dangerouslySkipPermissions !== false,
       });
       const updated = reviews.update(review.id, { state: 'analyzing', sessionId: session.id });
       broadcast('pr-review:updated', EVENT_TRACK, { reviewId: review.id });
