@@ -10,6 +10,7 @@ import { TrackConfig } from './TrackConfig';
 import { SessionPanel } from './SessionPanel';
 import { NewSessionModal, type NewSessionOptions } from './NewSessionModal';
 import { TodoDetailModal } from '../kanban/TodoDetailModal';
+import { LinearTicketModal } from '../kanban/LinearTicketModal';
 import { TerminalArea } from '../terminal-panel/TerminalArea';
 
 interface IdleAlert {
@@ -32,6 +33,7 @@ export function TrackView() {
   const [loading, setLoading] = useState(true);
   const [sidebarTab, setSidebarTab] = useState<'session' | 'todos' | 'config'>('session');
   const [selectedTodo, setSelectedTodo] = useState<Todo | null>(null);
+  const [linearTicketTodoId, setLinearTicketTodoId] = useState<string | null>(null);
   const [editingName, setEditingName] = useState(false);
   const [nameValue, setNameValue] = useState('');
   const [idleAlerts, setIdleAlerts] = useState<IdleAlert[]>([]);
@@ -438,7 +440,12 @@ export function TrackView() {
           onSave={handleSaveTodo}
           onDelete={handleDeleteTodo}
           onDispatch={handleDispatchTodo}
+          onTicketCreationStarted={setLinearTicketTodoId}
         />
+      )}
+
+      {linearTicketTodoId && (
+        <LinearTicketModal todoId={linearTicketTodoId} onClose={() => setLinearTicketTodoId(null)} />
       )}
 
       {/* Idle alert toasts — bottom-right, auto-dismiss */}
