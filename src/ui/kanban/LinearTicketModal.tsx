@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import Markdown from 'react-markdown';
 
 interface TicketStatus {
   status: 'pending' | 'done';
@@ -115,9 +116,9 @@ export function LinearTicketModal({ todoId, onClose }: { todoId: string; onClose
               {result.body && (
                 <div>
                   <label className="text-xs text-gray-500 block mb-1">Body</label>
-                  <pre className="text-xs text-gray-300 bg-gray-800 border border-gray-700 rounded-lg p-3 whitespace-pre-wrap font-mono">
-                    {result.body}
-                  </pre>
+                  <div className="text-sm text-gray-300 bg-gray-800 border border-gray-700 rounded-lg p-3 markdown-body">
+                    <Markdown>{result.body}</Markdown>
+                  </div>
                 </div>
               )}
             </div>
