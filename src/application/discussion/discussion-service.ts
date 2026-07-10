@@ -18,7 +18,6 @@ import type {
 } from '@domain/discussion/repository';
 import type { AgentRepository } from '@domain/agent/repository';
 import type { TrackRepository } from '@domain/track/repository';
-import type { SummaryRepository } from '@domain/summary/repository';
 import type { SessionRepository } from '@domain/session/repository';
 import type { AgentScanner as FilesystemAgentScanner } from '@domain/agent/scanner.js';
 import { buildGovernancePrompt } from './governance-prompt.js';
@@ -35,7 +34,6 @@ export interface DiscussionServiceDeps {
   filesystemScanner: FilesystemAgentScanner;
   sessions: SessionRepository;
   tracks: TrackRepository;
-  summaries: SummaryRepository;
   terminal: {
     createSession: (
       trackId: TrackId,
@@ -218,10 +216,6 @@ export function createDiscussionService(deps: DiscussionServiceDeps): Discussion
             const boundTrack = deps.tracks.findById(data.trackId);
             if (boundTrack?.context) {
               parts.push(boundTrack.context);
-            }
-            const summary = deps.summaries.findLatest(data.trackId);
-            if (summary) {
-              parts.push(`## Current Status\n\n${summary.content}`);
             }
           }
 
@@ -409,10 +403,6 @@ export function createDiscussionService(deps: DiscussionServiceDeps): Discussion
             if (boundTrack?.context) {
               parts.push(boundTrack.context);
             }
-            const summary = deps.summaries.findLatest(discussion.trackId);
-            if (summary) {
-              parts.push(`## Current Status\n\n${summary.content}`);
-            }
           }
 
           parts.push(buildGovernancePrompt(discussion, agentId, agent.name));
@@ -464,21 +454,17 @@ export function createDiscussionService(deps: DiscussionServiceDeps): Discussion
         : getOrCreateDiscussionsTrack();
 
       let trackContext: string | undefined;
-      let summaryContent: string | undefined;
       let workingDir: string | undefined;
 
       if (discussion.trackId) {
         const track = deps.tracks.findById(discussion.trackId as TrackId);
         if (track?.context) trackContext = track.context;
 
-        const summary = deps.summaries.findLatest(discussion.trackId as TrackId);
-        if (summary) summaryContent = summary.content;
-
         const repos = deps.tracks.findReposByTrack(discussion.trackId as TrackId);
         if (repos.length > 0) workingDir = repos[0].path;
       }
 
-      const systemPrompt = buildActOnConsensusPrompt(state, trackContext, summaryContent);
+      const systemPrompt = buildActOnConsensusPrompt(state, trackContext);
 
       const initialPrompt = [
         `The discussion "${discussion.title}" has reached consensus.`,

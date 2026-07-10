@@ -1,8 +1,7 @@
 import { useEffect, useState, useCallback } from 'react';
 import { useParams, Link } from 'react-router-dom';
-import type { Track, Session, SessionId, TrackSummary, ExternalTicket, Todo, DefaultAiCli, PrMonitor, TodoId } from '@foundation/types';
+import type { Track, Session, SessionId, ExternalTicket, Todo, DefaultAiCli, PrMonitor, TodoId } from '@foundation/types';
 import type { DispatchOptions } from './DispatchDropdown';
-import { SummaryPanel } from './SummaryPanel';
 import { ContextPanel } from './ContextPanel';
 import { TicketPanel } from './TicketPanel';
 import { TodoPanel } from './TodoPanel';
@@ -24,7 +23,6 @@ export function TrackView() {
   const { trackId } = useParams<{ trackId: string }>();
   const [track, setTrack] = useState<Track | null>(null);
   const [sessions, setSessions] = useState<Session[]>([]);
-  const [summary, setSummary] = useState<TrackSummary | null>(null);
   const [tickets, setTickets] = useState<ExternalTicket[]>([]);
   const [todos, setTodos] = useState<Todo[]>([]);
   const [prMonitors, setPrMonitors] = useState<PrMonitor[]>([]);
@@ -48,10 +46,9 @@ export function TrackView() {
   const loadTrack = useCallback(async () => {
     if (!trackId) return;
     try {
-      const [trackRes, sessionsRes, summaryRes, ticketsRes, todosRes, deletedRes, prMonitorsRes] = await Promise.all([
+      const [trackRes, sessionsRes, ticketsRes, todosRes, deletedRes, prMonitorsRes] = await Promise.all([
         fetch(`/api/tracks/${trackId}`),
         fetch(`/api/tracks/${trackId}/sessions`),
-        fetch(`/api/tracks/${trackId}/summary`),
         fetch(`/api/tracks/${trackId}/tickets`),
         fetch(`/api/tracks/${trackId}/todos`),
         fetch(`/api/tracks/${trackId}/sessions/deleted`),
@@ -62,7 +59,6 @@ export function TrackView() {
         const loadedSessions: Session[] = await sessionsRes.json();
         setSessions(loadedSessions);
       }
-      if (summaryRes.ok) setSummary(await summaryRes.json());
       if (ticketsRes.ok) setTickets(await ticketsRes.json());
       if (todosRes.ok) setTodos(await todosRes.json());
       if (deletedRes.ok) setDeletedSessions(await deletedRes.json());
@@ -344,8 +340,6 @@ export function TrackView() {
 
       <div className="flex flex-1 overflow-hidden">
         <aside className="w-80 border-r border-gray-800 overflow-y-auto shrink-0">
-          <SummaryPanel summary={summary} trackId={track.id} onRefresh={loadTrack} />
-
           <div className="flex border-b border-gray-800">
             <button
               onClick={() => setSidebarTab('session')}

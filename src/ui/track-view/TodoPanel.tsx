@@ -3,6 +3,7 @@ import type { Todo, TodoPriority, TodoStatus, Session, Agent, Track } from '@fou
 import { TerminalModal } from './TerminalModal';
 import { TodoDetailModal } from '../kanban/TodoDetailModal';
 import { LinearTicketModal } from '../kanban/LinearTicketModal';
+import { ImportFromLinearModal } from '../kanban/ImportFromLinearModal';
 import { DispatchDropdown, type DispatchOptions } from './DispatchDropdown';
 
 interface Props {
@@ -37,6 +38,7 @@ const PRIORITY_COLORS: Record<TodoPriority, string> = {
 export function TodoPanel({ track, todos, sessions, onUpdate }: Props) {
   const trackId = track.id;
   const [showAdd, setShowAdd] = useState(false);
+  const [showImport, setShowImport] = useState(false);
   const [terminalSessionId, setTerminalSessionId] = useState<string | null>(null);
   const [terminalTodoTitle, setTerminalTodoTitle] = useState('');
   const [agents, setAgents] = useState<Agent[]>([]);
@@ -122,9 +124,14 @@ export function TodoPanel({ track, todos, sessions, onUpdate }: Props) {
             <span className="ml-1.5 text-xs font-normal text-gray-500">({activeTodos.length})</span>
           )}
         </h3>
-        <button onClick={() => setShowAdd(!showAdd)} className="text-xs text-blue-400 hover:text-blue-300">
-          + Add
-        </button>
+        <div className="flex items-center gap-2">
+          <button onClick={() => setShowImport(true)} className="text-xs text-blue-400 hover:text-blue-300">
+            Import from Linear
+          </button>
+          <button onClick={() => setShowAdd(!showAdd)} className="text-xs text-blue-400 hover:text-blue-300">
+            + Add
+          </button>
+        </div>
       </div>
 
       {showAdd && <AddTodoForm onAdd={addTodo} onCancel={() => setShowAdd(false)} />}
@@ -230,6 +237,14 @@ export function TodoPanel({ track, todos, sessions, onUpdate }: Props) {
           sessionId={terminalSessionId}
           title={`Agent: ${terminalTodoTitle}`}
           onClose={() => setTerminalSessionId(null)}
+        />
+      )}
+
+      {showImport && (
+        <ImportFromLinearModal
+          tracks={[track]}
+          onClose={() => setShowImport(false)}
+          onImported={onUpdate}
         />
       )}
 
