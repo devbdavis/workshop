@@ -49,6 +49,7 @@ export interface PrReviewRouterDeps {
       opts?: {
         systemPrompt?: string;
         background?: boolean;
+        interactive?: boolean;
         initialPrompt?: string;
         provider?: SessionProvider;
         model?: string;
@@ -271,6 +272,11 @@ export function createPrReviewRouter(deps: PrReviewRouterDeps): Router {
         provider,
         model,
         background: true,
+        // Run the review as a live, watchable TUI (not headless --print) so the
+        // user can see the analysis happen and chat with the agent afterward —
+        // e.g. to ask why a flagged change matters. The session stays alive at
+        // its prompt once the report lands.
+        interactive: true,
         initialPrompt: [
           `Review the pull request at ${review.prUrl}.`,
           ...(dedupSection ? [dedupSection] : []),
