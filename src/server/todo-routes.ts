@@ -41,7 +41,7 @@ export interface TodoRouterDeps {
   terminal: {
     createSession: (
       trackId: TrackId,
-      opts?: { systemPrompt?: string; workingDirectory?: string; background?: boolean; todoId?: string; initialPrompt?: string; provider?: SessionProvider; model?: string; name?: string; worktreeMode?: boolean; repos?: TrackRepo[]; issueKey?: string; dangerouslySkipPermissions?: boolean; skipBackgroundInstructions?: boolean; onReady?: (session: { id: SessionId }) => void },
+      opts?: { systemPrompt?: string; workingDirectory?: string; background?: boolean; todoId?: string; initialPrompt?: string; provider?: SessionProvider; model?: string; name?: string; worktreeMode?: boolean; repos?: TrackRepo[]; additionalDirs?: string[]; issueKey?: string; dangerouslySkipPermissions?: boolean; skipBackgroundInstructions?: boolean; onReady?: (session: { id: SessionId }) => void },
     ) => Promise<{ id: SessionId; trackId: TrackId; tmuxSession: string; state: string }>;
     destroySession: (sessionId: SessionId) => Promise<void>;
     softDeleteSession: (sessionId: SessionId) => Promise<void>;
@@ -422,6 +422,10 @@ export function createTodoRouter(deps: TodoRouterDeps): Router {
 
       const model: string | undefined = (settings.get('dispatch_model') ?? 'opus').trim() || undefined;
 
+      // Canonical (non-worktree) repo clones from the todo's track, so the agent
+      // can deep-dive into the code while drafting the ticket. Read-only by intent.
+      const repoPaths = (tracks.findById(todo.trackId)?.repos ?? []).map((r) => r.path);
+
       const prompt = [
         'Turn this Workshop todo into a Linear ticket.',
         '',
@@ -430,6 +434,13 @@ export function createTodoRouter(deps: TodoRouterDeps): Router {
         'Todo details:',
         todo.description?.trim() || '(no description provided)',
         '',
+        ...(repoPaths.length > 0
+          ? [
+              'Relevant repositories (read-only — investigate code here as needed to write an accurate ticket, but do NOT modify anything):',
+              ...repoPaths.map((p) => `- ${p}`),
+              '',
+            ]
+          : []),
         'Do the following:',
         '1. Expand the todo into a well-structured ticket body — a brief Description, concrete Implementation Details, and Acceptance Criteria — inferred from the todo above. This is not a full implementation plan; stay within the scope the todo implies and do not invent extra work.',
         '2. Use the /linear skill to create the ticket for team ASY with that content.',
@@ -448,6 +459,7 @@ export function createTodoRouter(deps: TodoRouterDeps): Router {
         model,
         name: `Linear: ${todo.title}`,
         worktreeMode: false,
+        additionalDirs: repoPaths,
         dangerouslySkipPermissions: true,
         onReady: (s) => broadcast('session:ready', trackId, { sessionId: s.id }),
       });
