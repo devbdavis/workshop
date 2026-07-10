@@ -21,7 +21,7 @@ export function registerPrReviewTools(server: McpServer, api: (path: string, opt
         .describe('All findings from both review passes. Empty array when the PR is clean.'),
       draftSummary: z
         .string()
-        .describe('Draft overall review comment — positive and supportive of the author; confirm what was tested, call out anything untested or missed'),
+        .describe('Draft overall review comment addressed to the PR author — one or two kind sentences matching the verdict (e.g. "Looks good to me!" or "This looks good, but see my inline comments"). Never a summary or description of the changes.'),
       suggestedVerdict: z.enum(['approve', 'request_changes', 'comment']).describe('Suggested review verdict'),
     },
     async (args) => {
