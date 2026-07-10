@@ -1,10 +1,10 @@
 import { useCallback, useEffect, useState } from 'react';
-import { Link } from 'react-router-dom';
-import type { Session, SessionId, Track } from '@foundation/types';
-import { TerminalPanel } from '../terminal-panel/TerminalPanel';
-import { ActivityDot } from '@ui/shared/ActivityDot';
+import { Link, useNavigate } from 'react-router-dom';
+import type { PrMonitor, Session, SessionId, Todo, Track } from '@foundation/types';
+import { TerminalPane } from '../terminal-panel/TerminalPane';
+import { SessionPanel } from '../track-view/SessionPanel';
 import { groupSessionsByTrack } from './group-sessions';
-import { SessionTile } from './SessionTile';
+import { SessionRow } from './SessionRow';
 
 const SELECTED_KEY = 'workshop:overview-selected';
 
@@ -18,8 +18,15 @@ function loadSelected(): SessionId[] {
 }
 
 export function SessionOverview() {
+  const navigate = useNavigate();
   const [sessions, setSessions] = useState<Session[]>([]);
   const [tracks, setTracks] = useState<Track[]>([]);
+  const [todos, setTodos] = useState<Todo[]>([]);
+  const [prMonitors, setPrMonitors] = useState<PrMonitor[]>([]);
+  // trackId → first repo path. GET /api/tracks doesn't populate `repos`, only
+  // GET /api/tracks/:id does, so these come from per-track detail fetches.
+  const [trackRepoPaths, setTrackRepoPaths] = useState<Record<string, string | undefined>>({});
+  const [issueBaseUrl, setIssueBaseUrl] = useState<string | undefined>(undefined);
   const [selectedIds, setSelectedIds] = useState<SessionId[]>(loadSelected);
 
   const loadSessions = useCallback(async () => {
@@ -31,13 +38,39 @@ export function SessionOverview() {
     }
   }, []);
 
+  const loadTodos = useCallback(async () => {
+    try {
+      const res = await fetch('/api/todos');
+      if (res.ok) setTodos(await res.json());
+    } catch (err) {
+      console.error('Failed to load todos:', err);
+    }
+  }, []);
+
   useEffect(() => {
     loadSessions();
+    loadTodos();
     fetch('/api/tracks')
       .then((r) => (r.ok ? r.json() : []))
       .then(setTracks)
       .catch((err) => console.error('Failed to load tracks:', err));
-  }, [loadSessions]);
+  }, [loadSessions, loadTodos]);
+
+  // Same issue-tracker settings source TrackView uses for its pane link buttons.
+  useEffect(() => {
+    fetch('/api/settings/issue-tracker')
+      .then((r) => r.json())
+      .then(({ tracker, orgName }: { tracker: string; orgName: string }) => {
+        if (tracker === 'linear' && orgName.trim()) {
+          setIssueBaseUrl(`https://linear.app/${orgName.trim()}/issue/`);
+        } else if (tracker === 'jira' && orgName.trim()) {
+          setIssueBaseUrl(`https://${orgName.trim()}.atlassian.net/browse/`);
+        } else {
+          setIssueBaseUrl(undefined);
+        }
+      })
+      .catch(() => { /* silently skip — no issue tracker configured */ });
+  }, []);
 
   // Reuses the same inline WebSocket-subscription pattern every other page in
   // this app uses (TrackView, Dashboard, TopNav) — there is no shared hook to
@@ -49,10 +82,11 @@ export function SessionOverview() {
       try {
         const event = JSON.parse(evt.data) as { type: string };
         if (event.type?.startsWith('session:')) loadSessions();
+        if (event.type?.startsWith('todo:')) loadTodos();
       } catch { /* ignore */ }
     };
     return () => ws.close();
-  }, [loadSessions]);
+  }, [loadSessions, loadTodos]);
 
   // Drop selected IDs that no longer exist (session deleted/purged elsewhere).
   useEffect(() => {
@@ -88,38 +122,117 @@ export function SessionOverview() {
     .map((id) => sessions.find((s) => s.id === id))
     .filter((s): s is Session => s !== undefined);
 
-  return (
-    <div className="h-full flex flex-col">
-      {/* Tile strip — compact, scrolls vertically when many tracks are active */}
-      <div className="shrink-0 max-h-64 overflow-y-auto border-b border-gray-800 px-4 py-3 space-y-3">
-        {groups.length === 0 ? (
-          <p className="text-xs text-gray-600 italic">No active sessions.</p>
-        ) : (
-          groups.map(({ track, sessions: trackSessions }) => (
-            <div key={track.id}>
-              <Link
-                to={`/tracks/${track.id}`}
-                className="text-xs font-medium text-gray-400 hover:text-blue-300 transition-colors"
-              >
-                {track.name}
-              </Link>
-              <div className="flex gap-2 overflow-x-auto pt-1.5 pb-1">
-                {trackSessions.map((session) => (
-                  <SessionTile
-                    key={session.id}
-                    session={session}
-                    selected={selectedIds.includes(session.id)}
-                    onSelect={handleSelect}
-                  />
-                ))}
-              </div>
-            </div>
-          ))
-        )}
-      </div>
+  // PR monitors + repo paths for the distinct tracks among selected sessions (max 2 requests each).
+  // Keyed on the derived track IDs, not selectedIds: on first mount the selection is restored from
+  // localStorage before /api/sessions resolves, so a selectedIds-keyed callback would capture an
+  // empty selectedSessions and never refetch once the sessions arrive.
+  const selectedTrackKey = [...new Set(selectedSessions.map((s) => s.trackId))].sort().join(',');
+  const loadSelectedTrackData = useCallback(async () => {
+    const trackIds = selectedTrackKey ? selectedTrackKey.split(',') : [];
+    if (trackIds.length === 0) {
+      setPrMonitors([]);
+      return;
+    }
+    try {
+      const [monitorResults, trackResults] = await Promise.all([
+        Promise.all(
+          trackIds.map((trackId): Promise<PrMonitor[]> =>
+            fetch(`/api/tracks/${trackId}/pr-monitors`).then((r) => (r.ok ? r.json() : [])),
+          ),
+        ),
+        Promise.all(
+          trackIds.map((trackId): Promise<Track | null> =>
+            fetch(`/api/tracks/${trackId}`).then((r) => (r.ok ? r.json() : null)),
+          ),
+        ),
+      ]);
+      setPrMonitors(monitorResults.flat());
+      setTrackRepoPaths(
+        Object.fromEntries(
+          trackResults.filter((t): t is Track => t !== null).map((t) => [t.id, t.repos?.[0]?.path]),
+        ),
+      );
+    } catch (err) {
+      console.error('Failed to load track data:', err);
+    }
+  }, [selectedTrackKey]);
 
-      {/* Focused panes — up to 2 live terminals side by side */}
-      <div className="flex-1 min-h-0 flex">
+  useEffect(() => {
+    loadSelectedTrackData();
+  }, [loadSelectedTrackData]);
+
+  const reload = useCallback(() => {
+    loadTodos();
+    loadSelectedTrackData();
+  }, [loadTodos, loadSelectedTrackData]);
+
+  async function destroySession(session: Session) {
+    try {
+      await fetch(`/api/tracks/${session.trackId}/sessions/${session.id}`, { method: 'DELETE' });
+      setSelectedIds((prev) => prev.filter((id) => id !== session.id));
+      loadSessions();
+    } catch (err) {
+      console.error('Failed to delete session:', err);
+    }
+  }
+
+  async function renameSession(session: Session, name: string) {
+    try {
+      await fetch(`/api/tracks/${session.trackId}/sessions/${session.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name }),
+      });
+      loadSessions();
+    } catch (err) {
+      console.error('Failed to rename session:', err);
+    }
+  }
+
+  return (
+    <div className="h-full flex">
+      <aside className="w-80 border-r border-gray-800 overflow-y-auto shrink-0">
+        {selectedSessions.length > 0 ? (
+          <SessionPanel
+            sessions={selectedSessions}
+            todos={todos}
+            prMonitors={prMonitors}
+            onOpenTodo={(todo) => navigate(`/tracks/${todo.trackId}`)}
+            onRefresh={reload}
+          />
+        ) : (
+          <p className="p-4 text-xs text-gray-600 italic">Select a session below</p>
+        )}
+
+        <div className="border-t border-gray-800 px-3 py-3 space-y-3">
+          {groups.length === 0 ? (
+            <p className="text-xs text-gray-600 italic">No active sessions.</p>
+          ) : (
+            groups.map(({ track, sessions: trackSessions }) => (
+              <div key={track.id}>
+                <Link
+                  to={`/tracks/${track.id}`}
+                  className="text-xs font-medium text-gray-400 hover:text-blue-300 transition-colors"
+                >
+                  {track.name}
+                </Link>
+                <div className="flex flex-col gap-1 pt-1.5">
+                  {trackSessions.map((session) => (
+                    <SessionRow
+                      key={session.id}
+                      session={session}
+                      selected={selectedIds.includes(session.id)}
+                      onSelect={handleSelect}
+                    />
+                  ))}
+                </div>
+              </div>
+            ))
+          )}
+        </div>
+      </aside>
+
+      <main className="flex-1 overflow-hidden flex">
         {selectedSessions.length === 0 ? (
           <div className="flex-1 flex items-center justify-center text-gray-500">
             <p>Select a session to view</p>
@@ -130,17 +243,20 @@ export function SessionOverview() {
               key={session.id}
               className={`min-h-0 min-w-0 overflow-hidden flex flex-col flex-1 ${i > 0 ? 'border-l border-gray-800' : ''}`}
             >
-              <div className="flex items-center gap-1.5 px-2 py-0.5 bg-gray-900 border-b border-gray-800 shrink-0 text-xs text-gray-400 font-mono truncate">
-                <ActivityDot activityStatus={session.activityStatus} className="shrink-0" />
-                {session.name || `session:${session.id.slice(0, 8)}`}
-              </div>
-              <div className="flex-1 min-h-0">
-                <TerminalPanel trackId={session.trackId} sessionId={session.id} autoFocus={i === 0} />
-              </div>
+              <TerminalPane
+                trackId={session.trackId}
+                session={session}
+                todos={todos}
+                onDestroy={() => destroySession(session)}
+                onRename={(name) => renameSession(session, name)}
+                defaultOpenPath={trackRepoPaths[session.trackId]}
+                autoFocus={i === 0}
+                issueBaseUrl={issueBaseUrl}
+              />
             </div>
           ))
         )}
-      </div>
+      </main>
     </div>
   );
 }
