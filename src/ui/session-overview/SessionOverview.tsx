@@ -105,14 +105,16 @@ export function SessionOverview() {
   const groups = groupSessionsByTrack(sessions, tracks);
   const selectedSession = groups.flatMap((g) => g.sessions).find((s) => s.id === selectedId);
 
-  // Drop the selected ID once it no longer resolves to a navigator-visible
-  // session (deleted, died, went background, or its track was hidden) —
-  // validated against the same filtered set the render uses, and only after
-  // both fetches have had a chance to populate.
+  // Keep the selection pointing at a navigator-visible session: if nothing is
+  // selected (or the selected session died / its track was hidden), fall back
+  // to the first visible session. Validated against the same filtered set the
+  // render uses, and only after both fetches have had a chance to populate.
   useEffect(() => {
     if (sessions.length === 0 || tracks.length === 0) return;
-    const visible = new Set(groupSessionsByTrack(sessions, tracks).flatMap((g) => g.sessions.map((s) => s.id)));
-    setSelectedId((prev) => (prev && !visible.has(prev) ? null : prev));
+    const visible = groupSessionsByTrack(sessions, tracks).flatMap((g) => g.sessions);
+    setSelectedId((prev) =>
+      prev && visible.some((s) => s.id === prev) ? prev : (visible[0]?.id ?? null),
+    );
   }, [sessions, tracks]);
 
   useEffect(() => {
@@ -235,7 +237,7 @@ export function SessionOverview() {
       <main className="flex-1 overflow-hidden flex flex-col min-h-0">
         {!selectedSession ? (
           <div className="flex-1 flex items-center justify-center text-gray-500">
-            <p>Select a session to view</p>
+            <p>No active sessions</p>
           </div>
         ) : (
           <TerminalPane
