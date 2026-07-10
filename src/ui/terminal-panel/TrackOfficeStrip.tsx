@@ -2,6 +2,7 @@ import { useState } from 'react';
 import type { Session, SessionId } from '@foundation/types';
 import { CharacterSvg } from '@ui/office/CharacterSvg';
 import { getActivityState, providerColor } from '@ui/office/activity';
+import { ActivityDot } from '@ui/shared/ActivityDot';
 
 const COLLAPSED_KEY = 'workshop:sessions-strip-collapsed';
 
@@ -130,12 +131,6 @@ function TrackDeskUnit({ session, selected, starting }: DeskProps) {
   const activityState = getActivityState(session);
   const displayName = session.name || `session:${session.id.slice(0, 8)}`;
 
-  const statusColor =
-    session.activityStatus === 'needs-input' ? 'bg-red-500' :
-    session.activityStatus === 'working' ? 'bg-green-500' :
-    session.activityStatus === 'idle' ? 'bg-yellow-500' :
-    'bg-gray-600';
-
   return (
     <div
       className={`relative bg-gray-900 border rounded-lg p-2 h-full flex flex-col
@@ -143,7 +138,7 @@ function TrackDeskUnit({ session, selected, starting }: DeskProps) {
         transition-colors`}
     >
       {/* Status dot — top-left */}
-      <span className={`absolute top-1.5 left-1.5 w-1.5 h-1.5 rounded-full ${statusColor}`} />
+      <ActivityDot activityStatus={session.activityStatus} className="absolute top-1.5 left-1.5" />
 
       {/* Provider badge — top-right */}
       <span

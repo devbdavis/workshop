@@ -1,5 +1,7 @@
 import { useEffect, useState, useCallback } from 'react';
 import { NavLink, useMatch } from 'react-router-dom';
+import type { Session } from '@foundation/types';
+import { isVisibleSession } from './session-overview/group-sessions';
 import { useProfile } from './hooks/useProfile';
 
 const LAST_TRACK_KEY = 'workshop:last-track';
@@ -9,8 +11,13 @@ interface LastTrack {
   name: string;
 }
 
+function navLinkClass({ isActive }: { isActive: boolean }): string {
+  return `px-3 py-1 text-xs font-medium rounded transition-colors ${
+    isActive ? 'bg-gray-800 text-gray-100' : 'text-gray-500 hover:text-gray-300 hover:bg-gray-900'
+  }`;
+}
+
 const navItems = [
-  { to: '/', label: 'Tracks', end: true },
   { to: '/kanban', label: 'Kanban', end: false },
 { to: '/scheduled-tasks', label: 'Schedules', end: false },
   { to: '/workflow', label: 'Workflow', end: false },
@@ -23,6 +30,7 @@ export function TopNav() {
   const trackMatch = useMatch('/tracks/:trackId');
   const { user } = useProfile();
   const [pendingCount, setPendingCount] = useState(0);
+  const [attentionCount, setAttentionCount] = useState(0);
   const [lastTrack, setLastTrack] = useState<LastTrack | null>(() => {
     try {
       const raw = localStorage.getItem(LAST_TRACK_KEY);
@@ -48,9 +56,22 @@ export function TopNav() {
     } catch { /* ignore */ }
   }, []);
 
+  const loadAttentionCount = useCallback(async () => {
+    try {
+      const res = await fetch('/api/sessions');
+      if (res.ok) {
+        const sessions: Session[] = await res.json();
+        // Same visibility filter as the Sessions page — don't count unread
+        // highlights the user can't see or clear there.
+        setAttentionCount(sessions.filter((s) => isVisibleSession(s) && s.attentionSince).length);
+      }
+    } catch { /* ignore */ }
+  }, []);
+
   useEffect(() => {
     loadCount();
-  }, [loadCount]);
+    loadAttentionCount();
+  }, [loadCount, loadAttentionCount]);
 
   // Persist last-visited track so the Back button survives navigation away
   useEffect(() => {
@@ -75,10 +96,11 @@ export function TopNav() {
       try {
         const event = JSON.parse(evt.data);
         if (event.type?.startsWith('workflow:')) loadCount();
+        if (['session:updated', 'session:idle-alert', 'session:deleted'].includes(event.type)) loadAttentionCount();
       } catch { /* ignore */ }
     };
     return () => ws.close();
-  }, [loadCount]);
+  }, [loadCount, loadAttentionCount]);
 
   return (
     <nav className="flex items-center gap-1 px-4 py-1.5 bg-gray-950 border-b border-gray-800 shrink-0">
@@ -90,19 +112,19 @@ export function TopNav() {
       </NavLink>
 
       <div className="flex items-center gap-0.5">
+        <NavLink to="/" end className={navLinkClass}>
+          Tracks
+        </NavLink>
+        <NavLink to="/sessions" className={navLinkClass}>
+          Sessions
+          {attentionCount > 0 && (
+            <span className="ml-1.5 min-w-[16px] h-[16px] inline-flex items-center justify-center text-[10px] font-bold bg-amber-600 text-white rounded-full">
+              {attentionCount}
+            </span>
+          )}
+        </NavLink>
         {navItems.map(({ to, label, end }) => (
-          <NavLink
-            key={to}
-            to={to}
-            end={end}
-            className={({ isActive }) =>
-              `px-3 py-1 text-xs font-medium rounded transition-colors ${
-                isActive
-                  ? 'bg-gray-800 text-gray-100'
-                  : 'text-gray-500 hover:text-gray-300 hover:bg-gray-900'
-              }`
-            }
-          >
+          <NavLink key={to} to={to} end={end} className={navLinkClass}>
             {label}
           </NavLink>
         ))}
