@@ -18,6 +18,7 @@ import type { DispatchOptions } from '../track-view/DispatchDropdown';
 import { KanbanColumn } from './KanbanColumn';
 import { KanbanCard } from './KanbanCard';
 import { TodoDetailModal } from './TodoDetailModal';
+import { LinearTicketModal } from './LinearTicketModal';
 import { CreateTodoModal } from './CreateTodoModal';
 import { ImportFromLinearModal } from './ImportFromLinearModal';
 
@@ -48,6 +49,7 @@ export function KanbanBoard() {
   const [searchQuery, setSearchQuery] = useState('');
   const [activeDrag, setActiveDrag] = useState<Todo | null>(null);
   const [selectedTodo, setSelectedTodo] = useState<Todo | null>(null);
+  const [linearTicketTodoId, setLinearTicketTodoId] = useState<string | null>(null);
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [showImportModal, setShowImportModal] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -325,7 +327,12 @@ export function KanbanBoard() {
           onSave={handleSaveTodo}
           onDelete={handleDeleteTodo}
           onDispatch={handleDispatchTodo}
+          onTicketCreationStarted={setLinearTicketTodoId}
         />
+      )}
+
+      {linearTicketTodoId && (
+        <LinearTicketModal todoId={linearTicketTodoId} onClose={() => setLinearTicketTodoId(null)} />
       )}
 
       {showCreateModal && (
