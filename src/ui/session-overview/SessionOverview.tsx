@@ -6,6 +6,7 @@ import { SessionPanel } from '../track-view/SessionPanel';
 import { NewSessionModal, type NewSessionOptions } from '../track-view/NewSessionModal';
 import { groupSessionsByTrack } from './group-sessions';
 import { TrackNavigator } from './TrackNavigator';
+import { NewSessionPicker } from './NewSessionPicker';
 
 const SELECTED_KEY = 'workshop:overview-selected';
 
@@ -232,14 +233,13 @@ export function SessionOverview() {
   return (
     <div className="h-full flex">
       <aside className="w-80 border-r border-gray-800 overflow-y-auto shrink-0">
+        <div className="flex items-center justify-between px-3 pt-3">
+          <span className="text-xs font-semibold text-gray-300">Sessions</span>
+          <NewSessionPicker tracks={tracks.filter((t) => !t.hidden)} onPick={openNewSession} />
+        </div>
         {/* Navigator first — fixed position so click targets don't shift when the
             variable-height session panel below changes with each selection. */}
-        <TrackNavigator
-          groups={groups}
-          selectedIds={selectedIds}
-          onSelect={handleSelect}
-          onNewSession={openNewSession}
-        />
+        <TrackNavigator groups={groups} selectedIds={selectedIds} onSelect={handleSelect} />
 
         {selectedSessions.length > 0 && (
           <div className="border-t border-gray-800">
