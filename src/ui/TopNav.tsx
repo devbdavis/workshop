@@ -1,7 +1,5 @@
 import { useEffect, useState, useCallback } from 'react';
 import { NavLink, useMatch } from 'react-router-dom';
-import type { Session, Track } from '@foundation/types';
-import { isVisibleSession, isVisibleTrack } from './session-overview/group-sessions';
 import { useProfile } from './hooks/useProfile';
 
 const LAST_TRACK_KEY = 'workshop:last-track';
@@ -30,7 +28,6 @@ export function TopNav() {
   const trackMatch = useMatch('/tracks/:trackId');
   const { user } = useProfile();
   const [pendingCount, setPendingCount] = useState(0);
-  const [attentionCount, setAttentionCount] = useState(0);
   const [lastTrack, setLastTrack] = useState<LastTrack | null>(() => {
     try {
       const raw = localStorage.getItem(LAST_TRACK_KEY);
@@ -56,25 +53,9 @@ export function TopNav() {
     } catch { /* ignore */ }
   }, []);
 
-  const loadAttentionCount = useCallback(async () => {
-    try {
-      const [sessRes, trackRes] = await Promise.all([fetch('/api/sessions'), fetch('/api/tracks')]);
-      if (!sessRes.ok || !trackRes.ok) return;
-      const sessions: Session[] = await sessRes.json();
-      const tracks: Track[] = await trackRes.json();
-      const visibleTracks = new Set(tracks.filter(isVisibleTrack).map((t) => t.id));
-      // Same visibility rules as the Sessions page — don't count unread
-      // highlights the user can't see or clear there.
-      setAttentionCount(
-        sessions.filter((s) => isVisibleSession(s) && visibleTracks.has(s.trackId) && s.attentionSince).length,
-      );
-    } catch { /* ignore */ }
-  }, []);
-
   useEffect(() => {
     loadCount();
-    loadAttentionCount();
-  }, [loadCount, loadAttentionCount]);
+  }, [loadCount]);
 
   // Persist last-visited track so the Back button survives navigation away
   useEffect(() => {
@@ -99,11 +80,10 @@ export function TopNav() {
       try {
         const event = JSON.parse(evt.data);
         if (event.type?.startsWith('workflow:')) loadCount();
-        if (['session:updated', 'session:idle-alert', 'session:deleted'].includes(event.type)) loadAttentionCount();
       } catch { /* ignore */ }
     };
     return () => ws.close();
-  }, [loadCount, loadAttentionCount]);
+  }, [loadCount]);
 
   return (
     <nav className="flex items-center gap-1 px-4 py-1.5 bg-gray-950 border-b border-gray-800 shrink-0">
@@ -120,11 +100,6 @@ export function TopNav() {
         </NavLink>
         <NavLink to="/sessions" className={navLinkClass}>
           Sessions
-          {attentionCount > 0 && (
-            <span className="ml-1.5 min-w-[16px] h-[16px] inline-flex items-center justify-center text-[10px] font-bold bg-amber-600 text-white rounded-full">
-              {attentionCount}
-            </span>
-          )}
         </NavLink>
         {navItems.map(({ to, label, end }) => (
           <NavLink key={to} to={to} end={end} className={navLinkClass}>
