@@ -5,9 +5,11 @@ export interface TrackSessionGroup {
   sessions: Session[];
 }
 
-/** Background sessions and dead sessions are never shown on the overview page. */
+/** Dead sessions are never shown on the overview page. Background (dispatched
+    agent) sessions ARE shown — they're most of what the page is for. One-shot
+    system-track background sessions stay hidden via the track filter below. */
 export function isVisibleSession(session: Session): boolean {
-  return !session.background && session.state !== 'dead';
+  return session.state !== 'dead';
 }
 
 /** System tracks and profile-hidden tracks are never shown on the overview page. */

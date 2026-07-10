@@ -5,11 +5,11 @@ import { SessionRow } from './SessionRow';
 
 interface Props {
   groups: TrackSessionGroup[];
-  selectedIds: SessionId[];
-  onSelect: (id: SessionId, additive: boolean) => void;
+  selectedId: SessionId | null;
+  onSelect: (id: SessionId) => void;
 }
 
-export function TrackNavigator({ groups, selectedIds, onSelect }: Props) {
+export function TrackNavigator({ groups, selectedId, onSelect }: Props) {
   if (groups.length === 0) {
     return (
       <div className="px-3 py-3">
@@ -33,7 +33,7 @@ export function TrackNavigator({ groups, selectedIds, onSelect }: Props) {
               <SessionRow
                 key={session.id}
                 session={session}
-                selected={selectedIds.includes(session.id)}
+                selected={session.id === selectedId}
                 onSelect={onSelect}
               />
             ))}

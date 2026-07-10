@@ -27,7 +27,7 @@ function track(id: string): Track {
 }
 
 describe('groupSessionsByTrack', () => {
-  it('omits background and dead sessions, and tracks with nothing visible', () => {
+  it('omits dead sessions and tracks with nothing visible, keeps background sessions', () => {
     const sessions = [
       session({ id: 'bg' as Session['id'], trackId: 't1' as Session['trackId'], background: true }),
       session({ id: 'dead' as Session['id'], trackId: 't1' as Session['trackId'], state: 'dead' }),
@@ -36,7 +36,7 @@ describe('groupSessionsByTrack', () => {
     const groups = groupSessionsByTrack(sessions, [track('t1'), track('t2')]);
     expect(groups).toHaveLength(1);
     expect(groups[0].track.id).toBe('t1');
-    expect(groups[0].sessions.map((s) => s.id)).toEqual(['alive']);
+    expect(groups[0].sessions.map((s) => s.id).sort()).toEqual(['alive', 'bg']);
   });
 
   it('omits profile-hidden and system tracks', () => {
