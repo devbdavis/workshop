@@ -17,7 +17,20 @@ export function capturePaneLines(tmuxSession: string, count = 20): string[] {
 /** Indicators that a session is not idle: the main thread is working
  *  (spinner/interruptible) OR a sub-Agent is still running after control was
  *  handed back. Used to keep a session with async work from being reaped. */
-const ACTIVE_WORK_RE = /Running…|Thinking|esc to interrupt|local agents? still running/i;
+const ACTIVE_WORK_RE = new RegExp(
+  [
+    'Running…',
+    'Thinking',
+    'esc to interrupt',
+    'local agents? still running',
+    // Newer Claude Code TUI: spinner while delegated background agents run
+    String.raw`Waiting for \d+ background (?:agents?|tasks?)`,
+    // Newer Claude Code TUI task panel, e.g. "3 tasks (0 done, 2 in progress, 1 open)"
+    // — a nonzero in-progress count means delegated work is still running.
+    String.raw`\(\d+ done, [1-9]\d* in progress`,
+  ].join('|'),
+  'i',
+);
 
 /** Indicators that Claude's MAIN thread is actively producing output right now.
  *  Narrower than ACTIVE_WORK_RE on purpose: it deliberately excludes

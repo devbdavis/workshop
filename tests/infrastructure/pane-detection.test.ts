@@ -60,6 +60,29 @@ describe('isSessionIdle (preCapture)', () => {
     expect(isSessionIdle(session, ['❯', '2 local agents still running'])).toBe(false);
   });
 
+  it('returns false while waiting for background agents (new TUI spinner)', () => {
+    // Newer Claude Code renders "✳ Waiting for N background agents to finish"
+    // with a task panel, above a bare composer. That is busy, not idle.
+    const lines = [
+      '✳ Waiting for 2 background agents to finish',
+      '3 tasks (0 done, 2 in progress, 1 open)',
+      '■ Server: in-memory session attention state',
+      '■ UI: Session Overview page + nav badge',
+      '□ Self-review, verify, open PR',
+      '❯',
+      '▶▶ auto mode on (shift+tab to cycle) · ctrl+t to hide tasks',
+    ];
+    expect(isSessionIdle(session, lines)).toBe(false);
+  });
+
+  it('returns false when the task panel shows in-progress tasks without a spinner', () => {
+    expect(isSessionIdle(session, ['3 tasks (1 done, 2 in progress, 0 open)', '❯'])).toBe(false);
+  });
+
+  it('returns true when the task panel shows all tasks done', () => {
+    expect(isSessionIdle(session, ['3 tasks (3 done, 0 in progress, 0 open)', '❯'])).toBe(true);
+  });
+
   it('returns false when no prompt marker is present', () => {
     expect(isSessionIdle(session, ['some output', 'more output'])).toBe(false);
   });
