@@ -171,7 +171,6 @@ export function createTicketImportRouter(deps: TicketImportRouterDeps): Router {
         issueKey: issue.identifier,
         status: 'backlog',
         priority: 'medium',
-        refined: false,
         sortOrder: 0,
       });
 

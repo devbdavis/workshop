@@ -38,7 +38,6 @@ describe('Todo Repository', () => {
         title: 'Fix the bug',
         status: 'backlog',
         priority: 'medium',
-        refined: false,
         sortOrder: 0,
       });
 
@@ -48,7 +47,6 @@ describe('Todo Repository', () => {
       expect(todo.title).toBe('Fix the bug');
       expect(todo.status).toBe('backlog');
       expect(todo.priority).toBe('medium');
-      expect(todo.refined).toBe(false);
       expect(todo.createdAt).toBeDefined();
       expect(todo.updatedAt).toBeDefined();
     });
@@ -61,13 +59,11 @@ describe('Todo Repository', () => {
         description: 'Implement the new dashboard widget',
         status: 'ready',
         priority: 'high',
-        refined: true,
         sortOrder: 1,
       });
 
       expect(todo.description).toBe('Implement the new dashboard widget');
       expect(todo.priority).toBe('high');
-      expect(todo.refined).toBe(true);
       expect(todo.sortOrder).toBe(1);
     });
 
@@ -78,7 +74,6 @@ describe('Todo Repository', () => {
         title: 'Todo 1',
         status: 'backlog',
         priority: 'medium',
-        refined: false,
         sortOrder: 0,
       });
       const t2 = todoRepo.create({
@@ -86,7 +81,6 @@ describe('Todo Repository', () => {
         title: 'Todo 2',
         status: 'backlog',
         priority: 'medium',
-        refined: false,
         sortOrder: 0,
       });
 
@@ -102,7 +96,6 @@ describe('Todo Repository', () => {
         title: 'Find me',
         status: 'backlog',
         priority: 'low',
-        refined: false,
         sortOrder: 0,
       });
 
@@ -127,7 +120,6 @@ describe('Todo Repository', () => {
         title: 'Track Todo 1',
         status: 'backlog',
         priority: 'medium',
-        refined: false,
         sortOrder: 0,
       });
       todoRepo.create({
@@ -135,7 +127,6 @@ describe('Todo Repository', () => {
         title: 'Track Todo 2',
         status: 'ready',
         priority: 'high',
-        refined: true,
         sortOrder: 1,
       });
 
@@ -152,7 +143,6 @@ describe('Todo Repository', () => {
         title: 'T1 Todo',
         status: 'backlog',
         priority: 'medium',
-        refined: false,
         sortOrder: 0,
       });
       todoRepo.create({
@@ -160,7 +150,6 @@ describe('Todo Repository', () => {
         title: 'T2 Todo',
         status: 'backlog',
         priority: 'medium',
-        refined: false,
         sortOrder: 0,
       });
 
@@ -178,7 +167,6 @@ describe('Todo Repository', () => {
         title: 'Status test ready',
         status: 'review',
         priority: 'medium',
-        refined: false,
         sortOrder: 0,
       });
 
@@ -203,7 +191,6 @@ describe('Todo Repository', () => {
         title: 'Original',
         status: 'backlog',
         priority: 'medium',
-        refined: false,
         sortOrder: 0,
       });
 
@@ -221,7 +208,6 @@ describe('Todo Repository', () => {
         title: 'Status test',
         status: 'backlog',
         priority: 'low',
-        refined: false,
         sortOrder: 0,
       });
 
@@ -229,21 +215,6 @@ describe('Todo Repository', () => {
 
       expect(updated!.status).toBe('in-progress');
       expect(updated!.priority).toBe('high');
-    });
-
-    it('should update refined flag', () => {
-      const track = createParentTrack();
-      const todo = todoRepo.create({
-        trackId: track.id,
-        title: 'Refine me',
-        status: 'backlog',
-        priority: 'medium',
-        refined: false,
-        sortOrder: 0,
-      });
-
-      const updated = todoRepo.update(todo.id, { refined: true });
-      expect(updated!.refined).toBe(true);
     });
 
     it('should preserve existing fields when updating partially', () => {
@@ -254,7 +225,6 @@ describe('Todo Repository', () => {
         description: 'Keep this',
         status: 'backlog',
         priority: 'high',
-        refined: true,
         sortOrder: 5,
       });
 
@@ -263,7 +233,6 @@ describe('Todo Repository', () => {
       expect(updated!.title).toBe('Partial update');
       expect(updated!.description).toBe('Keep this');
       expect(updated!.priority).toBe('high');
-      expect(updated!.refined).toBe(true);
       expect(updated!.sortOrder).toBe(5);
     });
 
@@ -281,7 +250,6 @@ describe('Todo Repository', () => {
         title: 'Delete me',
         status: 'backlog',
         priority: 'medium',
-        refined: false,
         sortOrder: 0,
       });
 
@@ -304,7 +272,6 @@ describe('Todo Repository', () => {
         title: 'Cascade todo',
         status: 'backlog',
         priority: 'medium',
-        refined: false,
         sortOrder: 0,
       });
 
@@ -328,7 +295,6 @@ describe('Todo Repository', () => {
         title: 'Session todo',
         status: 'in-progress',
         priority: 'medium',
-        refined: true,
         sessionId: session.id,
         sortOrder: 0,
       });
@@ -355,7 +321,6 @@ describe('Todo Repository', () => {
         title: 'Session find todo',
         status: 'in-progress',
         priority: 'medium',
-        refined: true,
         sessionId: session.id,
         sortOrder: 0,
       });

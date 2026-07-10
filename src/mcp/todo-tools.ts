@@ -29,13 +29,11 @@ export function registerTodoTools(server: McpServer, api: (path: string, options
       title: z.string().describe('Short title of the task'),
       description: z.string().optional().describe('Detailed description / prompt for the agent'),
       priority: z.enum(['low', 'medium', 'high']).optional().describe('Priority level (default: medium)'),
-      refined: z.boolean().optional().describe('Whether the todo is refined enough for agent dispatch (default: false)'),
     },
-    async ({ trackId, title, description, priority, refined }) => {
+    async ({ trackId, title, description, priority }) => {
       const body: Record<string, unknown> = { title };
       if (description) body.description = description;
       if (priority) body.priority = priority;
-      if (refined !== undefined) body.refined = refined;
       const todo = await api(`/tracks/${trackId}/todos`, {
         method: 'POST',
         body: JSON.stringify(body),
@@ -46,7 +44,7 @@ export function registerTodoTools(server: McpServer, api: (path: string, options
 
   server.tool(
     'workshop_update_todo',
-    'Update a todo\'s title, description, resolution, status, priority, refined flag, or associated pull requests',
+    'Update a todo\'s title, description, resolution, status, priority, or associated pull requests',
     {
       todoId: z.string().describe('The todo ID'),
       title: z.string().optional().describe('New title'),
@@ -56,7 +54,6 @@ export function registerTodoTools(server: McpServer, api: (path: string, options
       pullRequests: z.array(z.object({ url: z.string(), title: z.string().optional() })).optional().describe('Pull requests associated with this todo. Each entry has a url and optional display title.'),
       status: z.enum(['backlog', 'ready', 'in-progress', 'review', 'done']).optional().describe('New status'),
       priority: z.enum(['low', 'medium', 'high']).optional().describe('New priority'),
-      refined: z.boolean().optional().describe('Whether the todo is refined for agent dispatch'),
     },
     async ({ todoId, ...data }) => {
       const todo = await api(`/todos/${todoId}`, {
