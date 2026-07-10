@@ -49,6 +49,7 @@ export interface PrReviewRouterDeps {
       opts?: {
         systemPrompt?: string;
         background?: boolean;
+        interactive?: boolean;
         initialPrompt?: string;
         provider?: SessionProvider;
         model?: string;
@@ -271,6 +272,11 @@ export function createPrReviewRouter(deps: PrReviewRouterDeps): Router {
         provider,
         model,
         background: true,
+        // Run the review as a live, watchable TUI (not headless --print) so the
+        // user can see the analysis happen and chat with the agent afterward —
+        // e.g. to ask why a flagged change matters. The session stays alive at
+        // its prompt once the report lands.
+        interactive: true,
         initialPrompt: [
           `Review the pull request at ${review.prUrl}.`,
           ...(dedupSection ? [dedupSection] : []),
@@ -278,7 +284,12 @@ export function createPrReviewRouter(deps: PrReviewRouterDeps): Router {
         ].join('\n\n'),
         name: `Review PR #${review.prNumber}: ${review.prTitle ?? ''}`.trim(),
         worktreeMode: false,
-        dangerouslySkipPermissions: req.body?.dangerouslySkipPermissions === true,
+        // The review agent is a trusted template agent doing read-only review in
+        // a dedicated system track (instructed not to post to the forge), so it
+        // runs without permission prompts by default — otherwise the now-visible
+        // interactive session would stall waiting for the user to approve every
+        // gh/read/MCP call. Callers can still opt out with an explicit `false`.
+        dangerouslySkipPermissions: req.body?.dangerouslySkipPermissions !== false,
       });
       const updated = reviews.update(review.id, { state: 'analyzing', sessionId: session.id });
       broadcast('pr-review:updated', EVENT_TRACK, { reviewId: review.id });

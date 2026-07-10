@@ -4,7 +4,7 @@ import path from 'path';
 import fs from 'fs';
 import os from 'os';
 
-import { writeHookSettings } from '@infrastructure/terminal/launcher-builders';
+import { writeHookSettings, buildClaudeLauncher } from '@infrastructure/terminal/launcher-builders';
 
 const testDir = path.join(os.tmpdir(), `workshop-test-launcher-${randomUUID()}`);
 
@@ -52,5 +52,34 @@ describe('writeHookSettings', () => {
     const settings = readSettings(file);
     expect(settings.mcpServers).toEqual({ workshop: { command: 'npx' } });
     expect(settings.enabledPlugins).toEqual({ 'ponytail@ponytail': true });
+  });
+});
+
+describe('buildClaudeLauncher print vs interactive', () => {
+  beforeEach(() => {
+    fs.rmSync(testDir, { recursive: true, force: true });
+    fs.mkdirSync(testDir, { recursive: true });
+  });
+
+  function launch(options: Record<string, unknown>): string {
+    const lines: string[] = [];
+    buildClaudeLauncher(lines, 'sess-1', testDir, 'tmux-1', testDir, options);
+    return lines.join('\n');
+  }
+
+  it('adds --print for scheduled background sessions (no todoId, no interactive)', () => {
+    const script = launch({ background: true, initialPrompt: 'go' });
+    expect(script).toContain('--print');
+  });
+
+  it('omits --print and uses exec when interactive is set on a background session', () => {
+    const script = launch({ background: true, interactive: true, initialPrompt: 'go' });
+    expect(script).not.toContain('--print');
+    expect(script).toContain('exec claude');
+  });
+
+  it('omits --print when resuming a background session', () => {
+    const script = launch({ background: true, claudeResumeId: 'abc-123' });
+    expect(script).not.toContain('--print');
   });
 });
