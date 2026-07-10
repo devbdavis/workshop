@@ -10,12 +10,13 @@ import { NewSessionPicker } from './NewSessionPicker';
 
 const SELECTED_KEY = 'workshop:overview-selected';
 
-function loadSelected(): SessionId[] {
+function loadSelected(): SessionId | null {
   try {
     const raw = localStorage.getItem(SELECTED_KEY);
-    return raw ? (JSON.parse(raw) as SessionId[]) : [];
+    // Ignore the legacy multi-select format (a JSON array of ids).
+    return raw && !raw.startsWith('[') ? (raw as SessionId) : null;
   } catch {
-    return [];
+    return null;
   }
 }
 
@@ -25,11 +26,12 @@ export function SessionOverview() {
   const [tracks, setTracks] = useState<Track[]>([]);
   const [todos, setTodos] = useState<Todo[]>([]);
   const [prMonitors, setPrMonitors] = useState<PrMonitor[]>([]);
-  // trackId → first repo path. GET /api/tracks doesn't populate `repos`, only
-  // GET /api/tracks/:id does, so these come from per-track detail fetches.
-  const [trackRepoPaths, setTrackRepoPaths] = useState<Record<string, string | undefined>>({});
+  // First repo path of the selected session's track. GET /api/tracks doesn't
+  // populate `repos`, only GET /api/tracks/:id does, so this comes from a
+  // per-track detail fetch.
+  const [selectedRepoPath, setSelectedRepoPath] = useState<string | undefined>(undefined);
   const [issueBaseUrl, setIssueBaseUrl] = useState<string | undefined>(undefined);
-  const [selectedIds, setSelectedIds] = useState<SessionId[]>(loadSelected);
+  const [selectedId, setSelectedId] = useState<SessionId | null>(loadSelected);
   // Full track (repos populated) for the New Session modal — fetched on "+" click.
   const [modalTrack, setModalTrack] = useState<Track | null>(null);
   const [defaultAiCli, setDefaultAiCli] = useState<DefaultAiCli>('claude');
@@ -100,74 +102,50 @@ export function SessionOverview() {
     return () => ws.close();
   }, [loadSessions, loadTodos]);
 
-  // Drop selected IDs that no longer exist (session deleted/purged elsewhere).
+  const groups = groupSessionsByTrack(sessions, tracks);
+  const selectedSession = groups.flatMap((g) => g.sessions).find((s) => s.id === selectedId);
+
+  // Drop the selected ID once it no longer resolves to a navigator-visible
+  // session (deleted, died, went background, or its track was hidden) —
+  // validated against the same filtered set the render uses, and only after
+  // both fetches have had a chance to populate.
   useEffect(() => {
-    if (sessions.length === 0) return;
-    const validIds = new Set(sessions.map((s) => s.id));
-    setSelectedIds((prev) => {
-      const valid = prev.filter((id) => validIds.has(id));
-      return valid.length === prev.length ? prev : valid;
-    });
-  }, [sessions]);
+    if (sessions.length === 0 || tracks.length === 0) return;
+    const visible = new Set(groupSessionsByTrack(sessions, tracks).flatMap((g) => g.sessions.map((s) => s.id)));
+    setSelectedId((prev) => (prev && !visible.has(prev) ? null : prev));
+  }, [sessions, tracks]);
 
   useEffect(() => {
     try {
-      localStorage.setItem(SELECTED_KEY, JSON.stringify(selectedIds));
+      if (selectedId) localStorage.setItem(SELECTED_KEY, selectedId);
+      else localStorage.removeItem(SELECTED_KEY);
     } catch { /* ignore */ }
-  }, [selectedIds]);
+  }, [selectedId]);
 
-  // Same click/⌘-click/eviction semantics as TerminalArea's handleSelect —
-  // except there's no auto-pick fallback: an empty selection here is a
-  // legitimate state ("Select a session to view"), not something to correct.
-  const handleSelect = useCallback((id: SessionId, additive: boolean) => {
-    setSelectedIds((prev) => {
-      if (!additive) {
-        return prev.length === 1 && prev[0] === id ? prev : [id];
-      }
-      if (prev.includes(id)) return prev.filter((x) => x !== id);
-      return prev.length >= 2 ? [prev[1], id] : [...prev, id];
-    });
-  }, []);
-
-  const groups = groupSessionsByTrack(sessions, tracks);
-  const selectedSessions = selectedIds
-    .map((id) => sessions.find((s) => s.id === id))
-    .filter((s): s is Session => s !== undefined);
-
-  // PR monitors + repo paths for the distinct tracks among selected sessions (max 2 requests each).
-  // Keyed on the derived track IDs, not selectedIds: on first mount the selection is restored from
-  // localStorage before /api/sessions resolves, so a selectedIds-keyed callback would capture an
-  // empty selectedSessions and never refetch once the sessions arrive.
-  const selectedTrackKey = [...new Set(selectedSessions.map((s) => s.trackId))].sort().join(',');
+  // PR monitors + repo path for the selected session's track. Keyed on the
+  // derived track ID, not selectedId: on first mount the selection is restored
+  // from localStorage before /api/sessions resolves, so a selectedId-keyed
+  // callback would capture an undefined selectedSession and never refetch once
+  // the sessions arrive.
+  const selectedTrackId = selectedSession?.trackId ?? '';
   const loadSelectedTrackData = useCallback(async () => {
-    const trackIds = selectedTrackKey ? selectedTrackKey.split(',') : [];
-    if (trackIds.length === 0) {
+    if (!selectedTrackId) {
       setPrMonitors([]);
+      setSelectedRepoPath(undefined);
       return;
     }
     try {
-      const [monitorResults, trackResults] = await Promise.all([
-        Promise.all(
-          trackIds.map((trackId): Promise<PrMonitor[]> =>
-            fetch(`/api/tracks/${trackId}/pr-monitors`).then((r) => (r.ok ? r.json() : [])),
-          ),
-        ),
-        Promise.all(
-          trackIds.map((trackId): Promise<Track | null> =>
-            fetch(`/api/tracks/${trackId}`).then((r) => (r.ok ? r.json() : null)),
-          ),
-        ),
+      const [monitorRes, trackRes] = await Promise.all([
+        fetch(`/api/tracks/${selectedTrackId}/pr-monitors`),
+        fetch(`/api/tracks/${selectedTrackId}`),
       ]);
-      setPrMonitors(monitorResults.flat());
-      setTrackRepoPaths(
-        Object.fromEntries(
-          trackResults.filter((t): t is Track => t !== null).map((t) => [t.id, t.repos?.[0]?.path]),
-        ),
-      );
+      setPrMonitors(monitorRes.ok ? await monitorRes.json() : []);
+      const track: Track | null = trackRes.ok ? await trackRes.json() : null;
+      setSelectedRepoPath(track?.repos?.[0]?.path);
     } catch (err) {
       console.error('Failed to load track data:', err);
     }
-  }, [selectedTrackKey]);
+  }, [selectedTrackId]);
 
   useEffect(() => {
     loadSelectedTrackData();
@@ -181,7 +159,7 @@ export function SessionOverview() {
   async function destroySession(session: Session) {
     try {
       await fetch(`/api/tracks/${session.trackId}/sessions/${session.id}`, { method: 'DELETE' });
-      setSelectedIds((prev) => prev.filter((id) => id !== session.id));
+      setSelectedId((prev) => (prev === session.id ? null : prev));
       loadSessions();
     } catch (err) {
       console.error('Failed to delete session:', err);
@@ -220,7 +198,7 @@ export function SessionOverview() {
       });
       if (res.ok) {
         const session: Session = await res.json();
-        setSelectedIds([session.id]);
+        setSelectedId(session.id);
         loadSessions();
         return session;
       }
@@ -239,12 +217,12 @@ export function SessionOverview() {
         </div>
         {/* Navigator first — fixed position so click targets don't shift when the
             variable-height session panel below changes with each selection. */}
-        <TrackNavigator groups={groups} selectedIds={selectedIds} onSelect={handleSelect} />
+        <TrackNavigator groups={groups} selectedId={selectedId} onSelect={setSelectedId} />
 
-        {selectedSessions.length > 0 && (
+        {selectedSession && (
           <div className="border-t border-gray-800">
             <SessionPanel
-              sessions={selectedSessions}
+              sessions={[selectedSession]}
               todos={todos}
               prMonitors={prMonitors}
               onOpenTodo={(todo) => navigate(`/tracks/${todo.trackId}`)}
@@ -254,29 +232,23 @@ export function SessionOverview() {
         )}
       </aside>
 
-      <main className="flex-1 overflow-hidden flex">
-        {selectedSessions.length === 0 ? (
+      <main className="flex-1 overflow-hidden flex flex-col min-h-0">
+        {!selectedSession ? (
           <div className="flex-1 flex items-center justify-center text-gray-500">
             <p>Select a session to view</p>
           </div>
         ) : (
-          selectedSessions.map((session, i) => (
-            <div
-              key={session.id}
-              className={`min-h-0 min-w-0 overflow-hidden flex flex-col flex-1 ${i > 0 ? 'border-l border-gray-800' : ''}`}
-            >
-              <TerminalPane
-                trackId={session.trackId}
-                session={session}
-                todos={todos}
-                onDestroy={() => destroySession(session)}
-                onRename={(name) => renameSession(session, name)}
-                defaultOpenPath={trackRepoPaths[session.trackId]}
-                autoFocus={i === 0}
-                issueBaseUrl={issueBaseUrl}
-              />
-            </div>
-          ))
+          <TerminalPane
+            key={selectedSession.id}
+            trackId={selectedSession.trackId}
+            session={selectedSession}
+            todos={todos}
+            onDestroy={() => destroySession(selectedSession)}
+            onRename={(name) => renameSession(selectedSession, name)}
+            defaultOpenPath={selectedRepoPath}
+            autoFocus
+            issueBaseUrl={issueBaseUrl}
+          />
         )}
       </main>
 
