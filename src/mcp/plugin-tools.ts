@@ -30,7 +30,6 @@ export function registerPluginTools(server: McpServer, api: (path: string, optio
           body: JSON.stringify({
             title: `PR Review: ${prUrl}`,
             description: `Review the pull request at ${prUrl}.`,
-            refined: true,
           }),
         });
         effectiveTodoId = todo.id;

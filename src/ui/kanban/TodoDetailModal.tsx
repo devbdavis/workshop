@@ -37,7 +37,6 @@ export function TodoDetailModal({ todo, tracks, onClose, onSave, onDelete, onDis
   const [editingPrIndex, setEditingPrIndex] = useState<number | null>(null);
   const [status, setStatus] = useState<TodoStatus>('backlog');
   const [priority, setPriority] = useState<TodoPriority>('medium');
-  const [refined, setRefined] = useState(false);
   const [agents, setAgents] = useState<Agent[]>([]);
   const [showDispatch, setShowDispatch] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
@@ -54,7 +53,6 @@ export function TodoDetailModal({ todo, tracks, onClose, onSave, onDelete, onDis
       setEditingPrIndex(null);
       setStatus(todo.status);
       setPriority(todo.priority);
-      setRefined(todo.refined);
       setShowDispatch(false);
       setConfirmDelete(false);
       setTicketError(null);
@@ -81,7 +79,7 @@ export function TodoDetailModal({ todo, tracks, onClose, onSave, onDelete, onDis
   if (!todo) return null;
 
   const trackName = tracks.find((t) => t.id === todo.trackId)?.name || 'Unknown';
-  const canDispatch = refined && (status === 'ready' || status === 'backlog');
+  const canDispatch = status === 'ready' || status === 'backlog';
 
   function handleSave() {
     onSave(todo!.id, {
@@ -92,7 +90,6 @@ export function TodoDetailModal({ todo, tracks, onClose, onSave, onDelete, onDis
       pullRequests: pullRequests.length > 0 ? pullRequests : undefined,
       status,
       priority,
-      refined,
     });
   }
 
@@ -102,7 +99,7 @@ export function TodoDetailModal({ todo, tracks, onClose, onSave, onDelete, onDis
     await fetch(`/api/todos/${todo!.id}`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ title, description: description || undefined, status, priority, refined }),
+      body: JSON.stringify({ title, description: description || undefined, status, priority }),
     });
     const res = await fetch(`/api/todos/${todo!.id}/create-linear-ticket`, { method: 'POST' }).catch(() => null);
     if (!res || !res.ok) {
@@ -204,19 +201,6 @@ export function TodoDetailModal({ todo, tracks, onClose, onSave, onDelete, onDis
             </div>
           </div>
 
-          <div className="flex items-center gap-2">
-            <input
-              type="checkbox"
-              id="refined"
-              checked={refined}
-              onChange={(e) => setRefined(e.target.checked)}
-              className="rounded border-gray-600 bg-gray-800"
-            />
-            <label htmlFor="refined" className="text-sm text-gray-300">
-              Refined (ready for agent dispatch)
-            </label>
-          </div>
-
           <div>
             <label className="text-xs text-gray-400 block mb-1">Issue</label>
             <input
@@ -249,7 +233,7 @@ export function TodoDetailModal({ todo, tracks, onClose, onSave, onDelete, onDis
                       </a>
                       <button
                         onClick={() => onDispatch(todo!.id, { agentId: 'global:pr-review' }, {
-                          title, description: description || undefined, status, priority, refined,
+                          title, description: description || undefined, status, priority,
                           pullRequests: pullRequests.length > 0 ? pullRequests : undefined,
                         })}
                         className="opacity-0 group-hover:opacity-100 text-emerald-500 hover:text-emerald-300 text-xs px-1 transition-opacity"
@@ -385,7 +369,7 @@ export function TodoDetailModal({ todo, tracks, onClose, onSave, onDelete, onDis
                     popUp
                     onSelect={(opts) => {
                       setShowDispatch(false);
-                      onDispatch(todo.id, opts, { title, description: description || undefined, status, priority, refined });
+                      onDispatch(todo.id, opts, { title, description: description || undefined, status, priority });
                     }}
                     onClose={() => setShowDispatch(false)}
                   />
@@ -406,7 +390,7 @@ export function TodoDetailModal({ todo, tracks, onClose, onSave, onDelete, onDis
             )}
             {status !== 'ready' && status !== 'done' && status !== 'in-progress' && (
               <button
-                onClick={() => onSave(todo.id, { title, description: description || undefined, status: 'ready', priority, refined: true })}
+                onClick={() => onSave(todo.id, { title, description: description || undefined, status: 'ready', priority })}
                 className="px-3 py-1.5 text-xs bg-blue-700 hover:bg-blue-600 text-white rounded-lg transition-colors"
               >
                 Mark Ready
@@ -414,7 +398,7 @@ export function TodoDetailModal({ todo, tracks, onClose, onSave, onDelete, onDis
             )}
             {status !== 'done' && (
               <button
-                onClick={() => onSave(todo.id, { title, description: description || undefined, status: 'done', priority, refined })}
+                onClick={() => onSave(todo.id, { title, description: description || undefined, status: 'done', priority })}
                 className="px-3 py-1.5 text-xs bg-gray-700 hover:bg-gray-600 text-gray-200 rounded-lg transition-colors"
               >
                 Mark Done
