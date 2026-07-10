@@ -9,8 +9,13 @@ interface LastTrack {
   name: string;
 }
 
+function navLinkClass({ isActive }: { isActive: boolean }): string {
+  return `px-3 py-1 text-xs font-medium rounded transition-colors ${
+    isActive ? 'bg-gray-800 text-gray-100' : 'text-gray-500 hover:text-gray-300 hover:bg-gray-900'
+  }`;
+}
+
 const navItems = [
-  { to: '/', label: 'Tracks', end: true },
   { to: '/kanban', label: 'Kanban', end: false },
 { to: '/scheduled-tasks', label: 'Schedules', end: false },
   { to: '/workflow', label: 'Workflow', end: false },
@@ -90,19 +95,14 @@ export function TopNav() {
       </NavLink>
 
       <div className="flex items-center gap-0.5">
+        <NavLink to="/" end className={navLinkClass}>
+          Tracks
+        </NavLink>
+        <NavLink to="/sessions" className={navLinkClass}>
+          Sessions
+        </NavLink>
         {navItems.map(({ to, label, end }) => (
-          <NavLink
-            key={to}
-            to={to}
-            end={end}
-            className={({ isActive }) =>
-              `px-3 py-1 text-xs font-medium rounded transition-colors ${
-                isActive
-                  ? 'bg-gray-800 text-gray-100'
-                  : 'text-gray-500 hover:text-gray-300 hover:bg-gray-900'
-              }`
-            }
-          >
+          <NavLink key={to} to={to} end={end} className={navLinkClass}>
             {label}
           </NavLink>
         ))}

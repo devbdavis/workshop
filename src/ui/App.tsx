@@ -6,6 +6,7 @@ import { ProfileProvider, useProfile } from './hooks/useProfile';
 import { applyTheme, type ThemeId } from './hooks/useTheme';
 import { Dashboard } from './dashboard/Dashboard';
 import { TrackView } from './track-view/TrackView';
+import { SessionOverview } from './session-overview/SessionOverview';
 import { Settings } from './settings/Settings';
 import { KanbanBoard } from './kanban/KanbanBoard';
 import { ScheduledTasksPage } from './scheduled-tasks/ScheduledTasksPage';
@@ -47,6 +48,7 @@ export function App() {
               <Routes>
                 <Route path="/" element={<Dashboard />} />
                 <Route path="/tracks/:trackId" element={<TrackView />} />
+                <Route path="/sessions" element={<SessionOverview />} />
                 <Route path="/discussions" element={<DiscussionsPage />} />
                 <Route path="/settings" element={<Navigate to="/settings/general" replace />} />
                 <Route path="/settings/:tab" element={<Settings />} />
