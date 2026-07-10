@@ -16,6 +16,14 @@ export interface CreateSessionOptions {
   skipClaude?: boolean;
   /** If true, the session runs as a background agent. Defaults to false. */
   background?: boolean;
+  /**
+   * If true, run the AI CLI as an interactive, watchable TUI that stays alive
+   * for follow-up chat — even when `background` is set — instead of the headless
+   * `--print` mode that produces no visible output and auto-exits. Used by the
+   * PR-review analyze flow so the user can watch the review happen and ask the
+   * agent follow-up questions afterward.
+   */
+  interactive?: boolean;
   /** Todo ID if dispatched from a todo (used in system prompt extension). */
   todoId?: string;
   /** Initial prompt to send to the AI CLI (the task to work on). */
