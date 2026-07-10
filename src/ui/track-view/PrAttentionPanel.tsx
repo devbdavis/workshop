@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import type { PrCheckStatus, PrMonitor, PrState, Todo } from '@foundation/types';
+import { RefreshButton } from '../shared/RefreshButton';
 import { PrCommentList } from './PrCommentList';
 
 interface Props {
@@ -174,6 +175,13 @@ export function PrAttentionPanel({ todo, monitor, sessionActive, onRefresh }: Pr
             {monitor.prTitle ?? monitor.prUrl}
           </a>
         </div>
+        <RefreshButton
+          title="Poll GitHub now"
+          onRefresh={async () => {
+            await fetch('/api/pr-monitors/poll-now', { method: 'POST' }).catch(() => {});
+            onRefresh();
+          }}
+        />
       </div>
 
       {needsFix && (
