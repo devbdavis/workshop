@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import type { PrReview, PrReviewState } from '@foundation/types';
+import { RefreshButton } from '../shared/RefreshButton';
 import { PrReviewDetail } from './PrReviewDetail';
 
 export interface PrReviewListItem extends PrReview {
@@ -128,6 +129,13 @@ export function PrReviewsPage() {
             >
               {adding ? '…' : 'Add'}
             </button>
+            <RefreshButton
+              title="Check for new review requests now"
+              onRefresh={async () => {
+                await fetch('/api/pr-reviews/poll-now', { method: 'POST' }).catch(() => {});
+                setRefreshKey((k) => k + 1);
+              }}
+            />
           </div>
           {addError && <div className="mt-1.5 text-[10px] text-red-400">{addError}</div>}
         </div>
