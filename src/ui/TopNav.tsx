@@ -1,7 +1,7 @@
 import { useEffect, useState, useCallback } from 'react';
 import { NavLink, useMatch } from 'react-router-dom';
-import type { Session } from '@foundation/types';
-import { isVisibleSession } from './session-overview/group-sessions';
+import type { Session, Track } from '@foundation/types';
+import { isVisibleSession, isVisibleTrack } from './session-overview/group-sessions';
 import { useProfile } from './hooks/useProfile';
 
 const LAST_TRACK_KEY = 'workshop:last-track';
@@ -61,12 +61,12 @@ export function TopNav() {
       const [sessRes, trackRes] = await Promise.all([fetch('/api/sessions'), fetch('/api/tracks')]);
       if (!sessRes.ok || !trackRes.ok) return;
       const sessions: Session[] = await sessRes.json();
-      const tracks: { id: string; hidden?: boolean }[] = await trackRes.json();
-      const hiddenTracks = new Set(tracks.filter((t) => t.hidden).map((t) => t.id));
+      const tracks: Track[] = await trackRes.json();
+      const visibleTracks = new Set(tracks.filter(isVisibleTrack).map((t) => t.id));
       // Same visibility rules as the Sessions page — don't count unread
       // highlights the user can't see or clear there.
       setAttentionCount(
-        sessions.filter((s) => isVisibleSession(s) && !hiddenTracks.has(s.trackId) && s.attentionSince).length,
+        sessions.filter((s) => isVisibleSession(s) && visibleTracks.has(s.trackId) && s.attentionSince).length,
       );
     } catch { /* ignore */ }
   }, []);

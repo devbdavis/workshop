@@ -39,14 +39,27 @@ describe('groupSessionsByTrack', () => {
     expect(groups[0].sessions.map((s) => s.id)).toEqual(['alive']);
   });
 
-  it('omits tracks the profile has hidden', () => {
+  it('omits profile-hidden and system tracks', () => {
     const sessions = [
       session({ id: 'a' as Session['id'], trackId: 't1' as Session['trackId'] }),
       session({ id: 'b' as Session['id'], trackId: 't2' as Session['trackId'] }),
+      session({ id: 'c' as Session['id'], trackId: 't3' as Session['trackId'] }),
     ];
     const hidden = { ...track('t1'), hidden: true };
-    const groups = groupSessionsByTrack(sessions, [hidden, track('t2')]);
+    const system = { ...track('t3'), label: 'system' };
+    const groups = groupSessionsByTrack(sessions, [hidden, track('t2'), system]);
     expect(groups.map((g) => g.track.id)).toEqual(['t2']);
+  });
+
+  it('sorts track groups A-Z by name', () => {
+    const sessions = [
+      session({ id: 'a' as Session['id'], trackId: 'zebra' as Session['trackId'] }),
+      session({ id: 'b' as Session['id'], trackId: 'apple' as Session['trackId'] }),
+      session({ id: 'c' as Session['id'], trackId: 'mango' as Session['trackId'] }),
+    ];
+    // Deliberately unsorted input order
+    const groups = groupSessionsByTrack(sessions, [track('zebra'), track('mango'), track('apple')]);
+    expect(groups.map((g) => g.track.name)).toEqual(['apple', 'mango', 'zebra']);
   });
 
   it('sorts attention-needing sessions first, then by most recent activity', () => {
