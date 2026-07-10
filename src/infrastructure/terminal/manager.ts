@@ -547,6 +547,21 @@ export function createTerminalManager(
    *  before we emit an idle alert. */
   const IDLE_NOTIFY_DELAY_MS = 30_000;
 
+  /**
+   * ISO timestamp of when a session most recently "finished" (confirmed idle
+   * or needs-input) and hasn't been viewed since — drives the unread/attention
+   * highlight. Cleared once the session goes back to working, or a client
+   * attaches to its terminal (see websocket.ts).
+   */
+  const attentionMap = new Map<string, string>();
+
+  /**
+   * Refcount of live terminal viewers per session (maintained by websocket.ts
+   * attach/detach). While someone is watching a session, status transitions
+   * don't raise the attention highlight — they're seeing it happen.
+   */
+  const viewerCounts = new Map<string, number>();
+
   /** Clean all in-memory tracking for a session */
   function clearSessionMaps(sessionId: string): void {
     lastPaneHash.delete(sessionId);
@@ -556,6 +571,7 @@ export function createTerminalManager(
     consecutiveIdleObs.delete(sessionId);
     firstIdledAt.delete(sessionId);
     notifiedIdle.delete(sessionId);
+    attentionMap.delete(sessionId);
   }
 
   function getSessionDir(sessionId: string): string {
@@ -919,6 +935,24 @@ export function createTerminalManager(
       return activityStatusMap.get(sessionId);
     },
 
+    getAttentionSince(sessionId: SessionId): string | undefined {
+      return attentionMap.get(sessionId);
+    },
+
+    clearAttention(sessionId: SessionId): boolean {
+      return attentionMap.delete(sessionId);
+    },
+
+    viewerAttached(sessionId: SessionId): void {
+      viewerCounts.set(sessionId, (viewerCounts.get(sessionId) ?? 0) + 1);
+    },
+
+    viewerDetached(sessionId: SessionId): void {
+      const next = (viewerCounts.get(sessionId) ?? 0) - 1;
+      if (next > 0) viewerCounts.set(sessionId, next);
+      else viewerCounts.delete(sessionId);
+    },
+
     syncSessionStates(): SyncResult {
       const allSessions = sessionRepo.findAll();
       const cleaned: SyncResult['cleaned'] = [];
@@ -1032,6 +1066,9 @@ export function createTerminalManager(
           consecutiveIdleObs.delete(session.id);
           firstIdledAt.delete(session.id);
           notifiedIdle.delete(session.id);
+          if (prevStatus !== 'needs-input' && !viewerCounts.has(session.id)) {
+            attentionMap.set(session.id, new Date().toISOString());
+          }
           activityStatusMap.set(session.id, 'needs-input');
         } else if (isSessionIdle(session, capturedLines)) {
           // Require IDLE_CONSECUTIVE_THRESHOLD consecutive idle observations
@@ -1041,6 +1078,13 @@ export function createTerminalManager(
           const count = (consecutiveIdleObs.get(session.id) ?? 0) + 1;
           consecutiveIdleObs.set(session.id, count);
           if (count >= IDLE_CONSECUTIVE_THRESHOLD) {
+            // Raise the attention highlight only on a genuine transition into idle
+            // (prevStatus was 'working' or 'needs-input') — not on the very first
+            // observation of a session that's already idle (e.g. server restart
+            // pickup), which mirrors how firstIdledAt/notifiedIdle avoid alerting.
+            if (prevStatus !== undefined && prevStatus !== 'idle' && !viewerCounts.has(session.id)) {
+              attentionMap.set(session.id, new Date().toISOString());
+            }
             activityStatusMap.set(session.id, 'idle');
             // Record when this working→idle transition first became confirmed idle.
             // Only set on the first confirmation after being in working state.
@@ -1072,7 +1116,16 @@ export function createTerminalManager(
           consecutiveIdleObs.delete(session.id);
           firstIdledAt.delete(session.id);
           notifiedIdle.delete(session.id);
+          attentionMap.delete(session.id);
           activityStatusMap.set(session.id, 'working');
+        }
+
+        // Broadcast status transitions even when pane content didn't change —
+        // the debounce-confirmed idle flip typically lands on a hash-stable
+        // cycle, and clients need the session:updated push to show the new
+        // status/attention highlight promptly.
+        if (activityStatusMap.get(session.id) !== prevStatus) {
+          activityChangedSet.add(session.trackId);
         }
 
         // --- Background session cleanup ---

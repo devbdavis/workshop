@@ -5,9 +5,10 @@ import * as pty from 'node-pty';
 import type { IncomingMessage } from 'http';
 import { createSessionRepository } from '@infrastructure/persistence/session-repository.js';
 import { getAuthTmux } from '@infrastructure/terminal/auth-terminal.js';
-import { addEventClient } from './events.js';
+import { addEventClient, broadcast } from './events.js';
 import { extractToken, validateToken } from './auth-middleware.js';
 import type { SessionId } from '@foundation/types';
+import type { TerminalManager } from '@infrastructure/terminal/manager.js';
 import type { IPty } from 'node-pty';
 
 /** Tracks an active pty connection for a given session. */
@@ -26,7 +27,7 @@ const tmuxPath = (() => {
   }
 })();
 
-export function setupWebSocket(server: HttpServer): void {
+export function setupWebSocket(server: HttpServer, terminal: TerminalManager): void {
   const wss = new WebSocketServer({ noServer: true });
   const sessions = createSessionRepository();
 
@@ -40,7 +41,12 @@ export function setupWebSocket(server: HttpServer): void {
     const list = activePtys.get(connKey);
     if (!list) return;
     const idx = list.indexOf(conn);
-    if (idx !== -1) list.splice(idx, 1);
+    if (idx !== -1) {
+      list.splice(idx, 1);
+      // close/error/exit handlers can each call this; only the first removal
+      // for a given connection decrements the viewer refcount.
+      if (!connKey.startsWith('auth:')) terminal.viewerDetached(connKey as SessionId);
+    }
     if (list.length === 0) activePtys.delete(connKey);
   }
 
@@ -115,6 +121,11 @@ export function setupWebSocket(server: HttpServer): void {
     if (!session) {
       ws.close(1008, 'Session not found');
       return;
+    }
+    // A client is actively looking at this session's terminal — drop the
+    // unread/attention highlight and let other clients know it cleared.
+    if (terminal.clearAttention(sessionId)) {
+      broadcast('session:updated', session.trackId);
     }
     // Wait for the tmux session to appear — it may still be initialising in the
     // background (worktree creation, git fetch, etc.). attachTmux polls for it.
@@ -301,6 +312,7 @@ export function setupWebSocket(server: HttpServer): void {
     const bucket = activePtys.get(connKey);
     if (bucket) bucket.push(connection);
     else activePtys.set(connKey, [connection]);
+    if (!connKey.startsWith('auth:')) terminal.viewerAttached(connKey as SessionId);
 
     // Pipe pty output to WebSocket
     const dataDisposable = ptyProcess.onData((data: string) => {

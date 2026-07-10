@@ -91,4 +91,12 @@ export interface TerminalManager {
   isDying(sessionId: SessionId): boolean;
   /** Get the current activity status of a session based on pane detection */
   getActivityStatus(sessionId: SessionId): 'working' | 'idle' | 'needs-input' | undefined;
+  /** ISO timestamp of when the session raised its unread/attention highlight, or undefined */
+  getAttentionSince(sessionId: SessionId): string | undefined;
+  /** Clear the attention highlight. Returns true if an entry was actually cleared. */
+  clearAttention(sessionId: SessionId): boolean;
+  /** A terminal client attached — while ≥1 viewer is attached, status transitions don't raise attention */
+  viewerAttached(sessionId: SessionId): void;
+  /** A terminal client detached */
+  viewerDetached(sessionId: SessionId): void;
 }

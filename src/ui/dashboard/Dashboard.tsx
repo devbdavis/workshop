@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState, useCallback } from 'react';
 import { Link } from 'react-router-dom';
 import type { Track } from '@foundation/types';
 import { CreateTrackModal } from './CreateTrackModal';
+import { ActivityDot } from '@ui/shared/ActivityDot';
 
 interface TrackActivity {
   working: number;
@@ -273,19 +274,19 @@ function TrackActivityBadges({ activity }: { activity: TrackActivity | undefined
     <span className="flex items-center gap-1.5 ml-auto">
       {activity.needsInput > 0 && (
         <span className="flex items-center gap-0.5 text-red-400" title={`${activity.needsInput} waiting for input`}>
-          <span className="w-1.5 h-1.5 rounded-full bg-red-500 inline-block" />
+          <ActivityDot activityStatus="needs-input" className="inline-block" />
           {activity.needsInput}
         </span>
       )}
       {activity.working > 0 && (
         <span className="flex items-center gap-0.5 text-green-400" title={`${activity.working} working`}>
-          <span className="w-1.5 h-1.5 rounded-full bg-green-500 inline-block" />
+          <ActivityDot activityStatus="working" className="inline-block" />
           {activity.working}
         </span>
       )}
       {activity.idle > 0 && (
         <span className="flex items-center gap-0.5 text-yellow-500" title={`${activity.idle} idle`}>
-          <span className="w-1.5 h-1.5 rounded-full bg-yellow-500 inline-block" />
+          <ActivityDot activityStatus="idle" className="inline-block" />
           {activity.idle}
         </span>
       )}
