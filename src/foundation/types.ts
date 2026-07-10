@@ -155,6 +155,8 @@ export interface Session {
   lastActivityAt?: string;
   /** NOT persisted — enriched at runtime: current agent activity state */
   activityStatus?: 'working' | 'idle' | 'needs-input';
+  /** NOT persisted — set when the session finished work or blocked on input and hasn't been viewed since (unread highlight) */
+  attentionSince?: string;
 }
 
 // External ticket

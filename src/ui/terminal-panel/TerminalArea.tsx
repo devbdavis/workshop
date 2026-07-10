@@ -2,6 +2,7 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import type { Session, SessionId, Todo } from '@foundation/types';
 import { TerminalPanel } from './TerminalPanel';
 import { TrackOfficeStrip } from './TrackOfficeStrip';
+import { ActivityDot } from '@ui/shared/ActivityDot';
 import { RecentlyDeletedPanel } from './RecentlyDeletedPanel';
 import { SessionLinkButtons } from './SessionLinkButtons';
 import { TerminalModal } from '../track-view/TerminalModal';
@@ -282,12 +283,6 @@ function TerminalPane({ trackId, session, todos, onDestroy, onRename, defaultOpe
     setEditing(false);
   }, [editValue, onRename]);
 
-  const statusColor =
-    session.activityStatus === 'needs-input' ? 'bg-red-500' :
-    session.activityStatus === 'working' ? 'bg-green-500' :
-    session.activityStatus === 'idle' ? 'bg-yellow-500' :
-    'bg-gray-600';
-
   return (
     <div className="h-full flex flex-col min-h-0">
       <div className="flex items-center justify-between px-2 py-0.5 bg-gray-900 border-b border-gray-800 shrink-0">
@@ -310,7 +305,7 @@ function TerminalPane({ trackId, session, todos, onDestroy, onRename, defaultOpe
             onDoubleClick={startEditing}
             title="Double-click to rename"
           >
-            <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${statusColor}`} />
+            <ActivityDot activityStatus={session.activityStatus} className="shrink-0" />
             {displayName}
           </span>
         )}

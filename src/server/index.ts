@@ -10,6 +10,11 @@ import { closeDatabase } from '@infrastructure/persistence/database.js';
 import { createAutomationRuleRepository, createAutomationRunRepository } from '@infrastructure/persistence/automation-repository.js';
 import { createAutomationEngine } from '@application/automation-engine/engine.js';
 import { registerActionHandlers } from '@application/automation-engine/action-handlers.js';
+import { createTerminalManager } from '@infrastructure/terminal/manager.js';
+import { createSessionRepository } from '@infrastructure/persistence/session-repository.js';
+import { createSoulLoader } from '@infrastructure/soul/soul-loader.js';
+import { createTodoRepository } from '@infrastructure/persistence/todo-repository.js';
+import { createPluginRepository } from '@infrastructure/persistence/plugin-repository.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PORT = parseInt(process.env.PORT || '3001', 10);
@@ -31,8 +36,18 @@ app.use('/api/auth', createAuthRoutes());
 // Auth middleware (gates all other /api/* routes)
 app.use('/api', createAuthMiddleware());
 
+// Terminal manager is shared between the API router and the terminal WebSocket
+// bridge so in-memory session state (activity status, attention) stays consistent
+// across both — attaching to a terminal must clear attention set by the sync loop.
+const terminal = createTerminalManager(
+  createSessionRepository(),
+  createSoulLoader(process.cwd()),
+  createTodoRepository(),
+  createPluginRepository(),
+);
+
 // API routes
-app.use('/api', createApiRouter({ automationEngine }));
+app.use('/api', createApiRouter({ automationEngine, terminal }));
 
 // Serve static files in production
 if (isProduction) {
@@ -46,7 +61,7 @@ if (isProduction) {
 const server = createServer(app);
 
 // WebSocket for terminal sessions
-setupWebSocket(server);
+setupWebSocket(server, terminal);
 
 server.listen(PORT, '0.0.0.0', () => {
   console.log(`Workshop server running on http://0.0.0.0:${PORT}`);

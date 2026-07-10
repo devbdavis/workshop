@@ -13,6 +13,7 @@ import { createPromptTemplateRepository } from '@infrastructure/persistence/prom
 import { createTodoRepository } from '@infrastructure/persistence/todo-repository.js';
 import { createAgentRepository } from '@infrastructure/persistence/agent-repository.js';
 import { createTerminalManager } from '@infrastructure/terminal/manager.js';
+import type { TerminalManager } from '@infrastructure/terminal/manager.js';
 import { createGitAdapter } from '@infrastructure/git/git-adapter.js';
 import { createFilesystemAgentScanner } from '@infrastructure/agents/filesystem-scanner.js';
 import { ensureAutoInstallAgents } from '@infrastructure/agents/template-installer.js';
@@ -96,6 +97,9 @@ import {
 
 export interface ApiRouterDeps {
   automationEngine?: AutomationEngine;
+  /** Shared terminal manager instance — pass the same one used by setupWebSocket
+   *  so in-memory session state (activity status, attention) stays consistent. */
+  terminal?: TerminalManager;
 }
 
 export function createApiRouter(deps: ApiRouterDeps = {}): Router {
@@ -111,7 +115,7 @@ export function createApiRouter(deps: ApiRouterDeps = {}): Router {
   const projectRoot = process.cwd();
   const soulLoader = createSoulLoader(projectRoot);
   const plugins = createPluginRepository();
-  const terminal = createTerminalManager(sessions, soulLoader, todos, plugins);
+  const terminal = deps.terminal ?? createTerminalManager(sessions, soulLoader, todos, plugins);
 
   // Ensure registered marketplace plugins are installed across AI CLIs.
   // Fire-and-forget — network/git work must never block server boot.
@@ -825,6 +829,7 @@ export function createApiRouter(deps: ApiRouterDeps = {}): Router {
       lastActivityAt: terminal.getLastActivityAt(s.id),
       dying: terminal.isDying(s.id),
       activityStatus: terminal.getActivityStatus(s.id),
+      attentionSince: terminal.getAttentionSince(s.id),
     }));
     res.json(enriched);
   });
@@ -852,6 +857,7 @@ export function createApiRouter(deps: ApiRouterDeps = {}): Router {
       lastActivityAt: terminal.getLastActivityAt(s.id),
       dying: terminal.isDying(s.id),
       activityStatus: terminal.getActivityStatus(s.id),
+      attentionSince: terminal.getAttentionSince(s.id),
     }));
     res.json(enriched);
   });
