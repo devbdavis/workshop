@@ -13,12 +13,13 @@ export function createTodoRepository(): TodoRepository {
   const findByStatusStmt = db.prepare('SELECT * FROM todos WHERE status = ? ORDER BY sort_order ASC, created_at DESC');
   const findBySessionStmt = db.prepare('SELECT * FROM todos WHERE session_id = ?');
   const insertStmt = db.prepare(
-    `INSERT INTO todos (id, track_id, title, description, resolution, issue_key, pull_requests, status, priority, refined, session_id, agent_id, sort_order, created_at, updated_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    // ponytail: `refined` column intentionally omitted; it has DEFAULT 0 and the Refined state was removed.
+    `INSERT INTO todos (id, track_id, title, description, resolution, issue_key, pull_requests, status, priority, session_id, agent_id, sort_order, created_at, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
   );
   const updateStmt = db.prepare(
     `UPDATE todos
-     SET title = ?, description = ?, resolution = ?, issue_key = ?, pull_requests = ?, status = ?, priority = ?, refined = ?, session_id = ?, agent_id = ?, sort_order = ?, updated_at = ?
+     SET title = ?, description = ?, resolution = ?, issue_key = ?, pull_requests = ?, status = ?, priority = ?, session_id = ?, agent_id = ?, sort_order = ?, updated_at = ?
      WHERE id = ?`,
   );
   const deleteStmt = db.prepare('DELETE FROM todos WHERE id = ?');
@@ -63,7 +64,6 @@ export function createTodoRepository(): TodoRepository {
         data.pullRequests?.length ? JSON.stringify(data.pullRequests) : null,
         data.status,
         data.priority,
-        data.refined ? 1 : 0,
         data.sessionId || null,
         data.agentId || null,
         data.sortOrder,
@@ -81,7 +81,6 @@ export function createTodoRepository(): TodoRepository {
         pullRequests: data.pullRequests,
         status: data.status,
         priority: data.priority,
-        refined: data.refined,
         sessionId: data.sessionId,
         agentId: data.agentId,
         sortOrder: data.sortOrder,
@@ -102,7 +101,6 @@ export function createTodoRepository(): TodoRepository {
       const pullRequests = data.pullRequests !== undefined ? data.pullRequests : existing.pullRequests;
       const status = data.status ?? existing.status;
       const priority = data.priority ?? existing.priority;
-      const refined = data.refined !== undefined ? data.refined : existing.refined;
       // null = explicit clear; undefined = preserve existing
       const sessionId = data.sessionId !== undefined ? (data.sessionId ?? undefined) : existing.sessionId;
       const agentId = data.agentId !== undefined ? (data.agentId ?? undefined) : existing.agentId;
@@ -116,7 +114,6 @@ export function createTodoRepository(): TodoRepository {
         pullRequests?.length ? JSON.stringify(pullRequests) : null,
         status,
         priority,
-        refined ? 1 : 0,
         sessionId || null,
         agentId || null,
         sortOrder,
@@ -133,7 +130,6 @@ export function createTodoRepository(): TodoRepository {
         pullRequests,
         status,
         priority,
-        refined,
         sessionId,
         agentId,
         sortOrder,
@@ -160,7 +156,6 @@ interface TodoRow {
   pull_requests: string | null;
   status: string;
   priority: string;
-  refined: number;
   session_id: string | null;
   agent_id: string | null;
   sort_order: number;
@@ -188,7 +183,6 @@ function rowToTodo(row: TodoRow): Todo {
     pullRequests,
     status: row.status as TodoStatus,
     priority: row.priority as Todo['priority'],
-    refined: row.refined === 1,
     sessionId: row.session_id as SessionId | undefined || undefined,
     agentId: row.agent_id as AgentId | undefined || undefined,
     sortOrder: row.sort_order,

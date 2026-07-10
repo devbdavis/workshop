@@ -254,7 +254,6 @@ export interface Todo {
   pullRequests?: PullRequest[];
   status: TodoStatus;
   priority: TodoPriority;
-  refined: boolean;
   sessionId?: SessionId;
   agentId?: AgentId;
   sortOrder: number;
