@@ -1,7 +1,6 @@
 import { useState, useEffect } from 'react';
 import type { Todo, TodoStatus, TodoPriority, Track, Agent, PullRequest } from '@foundation/types';
 import { DispatchDropdown, type DispatchOptions } from '../track-view/DispatchDropdown';
-import { LinearTicketModal } from './LinearTicketModal';
 
 interface Props {
   todo: Todo | null;
@@ -10,6 +9,8 @@ interface Props {
   onSave: (todoId: string, data: Partial<Todo>) => void;
   onDelete: (todoId: string) => void;
   onDispatch: (todoId: string, opts: DispatchOptions, formData?: Partial<Todo>) => void;
+  /** Called after a ticket-drafting session has been dispatched; the parent opens the standalone result modal. */
+  onTicketCreationStarted: (todoId: string) => void;
 }
 
 const STATUSES: { value: TodoStatus; label: string }[] = [
@@ -26,7 +27,7 @@ const PRIORITIES: { value: TodoPriority; label: string }[] = [
   { value: 'low', label: 'Low' },
 ];
 
-export function TodoDetailModal({ todo, tracks, onClose, onSave, onDelete, onDispatch }: Props) {
+export function TodoDetailModal({ todo, tracks, onClose, onSave, onDelete, onDispatch, onTicketCreationStarted }: Props) {
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [resolution, setResolution] = useState('');
@@ -40,7 +41,6 @@ export function TodoDetailModal({ todo, tracks, onClose, onSave, onDelete, onDis
   const [agents, setAgents] = useState<Agent[]>([]);
   const [showDispatch, setShowDispatch] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
-  const [creatingTicket, setCreatingTicket] = useState(false);
   const [ticketError, setTicketError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -57,7 +57,6 @@ export function TodoDetailModal({ todo, tracks, onClose, onSave, onDelete, onDis
       setRefined(todo.refined);
       setShowDispatch(false);
       setConfirmDelete(false);
-      setCreatingTicket(false);
       setTicketError(null);
     }
   }, [todo]);
@@ -110,7 +109,11 @@ export function TodoDetailModal({ todo, tracks, onClose, onSave, onDelete, onDis
       setTicketError('Could not start ticket creation. Try again.');
       return;
     }
-    setCreatingTicket(true);
+    // Hand off to the parent-owned standalone modal, then close this one. The
+    // result modal must NOT be a child of this modal, or closing the todo modal
+    // would tear it down mid-run.
+    onTicketCreationStarted(todo!.id);
+    onClose();
   }
 
   function commitPrDraft() {
@@ -426,10 +429,6 @@ export function TodoDetailModal({ todo, tracks, onClose, onSave, onDelete, onDis
           </div>
         </div>
       </div>
-
-      {creatingTicket && (
-        <LinearTicketModal todoId={todo.id} onClose={() => setCreatingTicket(false)} />
-      )}
     </div>
   );
 }
