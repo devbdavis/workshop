@@ -512,7 +512,7 @@ export function ScheduledTaskForm({ task, tracks, agents, onSave, onClose, onSav
                 ))}
             </select>
             <p className="text-[10px] text-gray-600 mt-0.5">
-              Binding to a track pulls its context, summary, and template into the system prompt.
+              Binding to a track pulls its context and template into the system prompt.
             </p>
           </Field>
 
