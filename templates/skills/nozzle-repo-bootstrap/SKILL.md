@@ -1,25 +1,32 @@
 ---
 name: nozzle-repo-bootstrap
-description: "Bootstraps a new Nozzle Industries repo end to end: creates it under the nozzle-industries org on git.chu.zone (tea/gitea), and scaffolds direnv + a Nix flake (latest-stable Go, current Node Active LTS), a multi-stage Dockerfile, and Forgejo Actions CI that checks every PR, pushes a per-PR beta image, and on merge to main cuts a release and publishes Docker images to docker.chu.zone. Use whenever someone wants to start a new Nozzle Industries service/repo, set up its CI/CD, add a Nix dev shell + direnv, or wire Forgejo Actions + docker.chu.zone publishing - even if they only mention one of those pieces. Tagged: workshop."
+description: "Scaffolds an existing, freshly-created Nozzle Industries repo (already made on git.chu.zone and connected to Workshop) with its standard dev + CI setup: direnv + a Nix flake (latest-stable Go, current Node Active LTS), a multi-stage Dockerfile, and Forgejo Actions that check every PR, push a per-PR beta image, and on merge to main cut a release and publish Docker images to docker.chu.zone - then opens a draft PR. Use whenever someone is setting up / scaffolding a new Nozzle Industries repo, adding its Nix dev shell + direnv, or wiring its Forgejo Actions CI and docker.chu.zone publishing - even if they only mention one of those pieces. This does NOT create the repo (assume it already exists); it fills an empty repo with the house scaffold. Tagged: workshop."
 templateName: nozzle-repo-bootstrap
 ---
 
-# Nozzle Industries Repo Bootstrap
+# Nozzle Industries Repo Scaffold
 
-Stands up a new repo the way Nozzle Industries builds them, so every service
-looks the same and the CI/dev toolchain never drifts. The house reference repos
-are `obs-irl-backstage` and `nozzle-works` (read them under `/repos` if present -
-they are the ground truth this skill was distilled from).
+Fills an already-created Nozzle Industries repo with the standard dev + CI
+setup, so every service looks the same and the toolchain never drifts. Assume
+the repo already exists on `https://git.chu.zone/nozzle-industries/<repo>` and is
+already connected to Workshop - you are running inside its session worktree.
+This skill scaffolds and opens a draft PR; it does not create the repo.
 
-What you produce:
+The house reference repos are `obs-irl-backstage` and `nozzle-works` (read them
+under `/repos` if present - they are the ground truth this was distilled from).
 
-- A repo under **nozzle-industries** on `https://git.chu.zone`.
+What you add:
+
 - **direnv + Nix flake** pinning the toolchain, shared by local dev and CI.
+- A multi-stage **Dockerfile**.
 - **Forgejo Actions** CI: PR checks + per-PR beta image; merge-to-main cuts a
   release and publishes Docker images to **docker.chu.zone**.
 - A **draft PR** with the scaffold.
 
-Everything below is ASCII on purpose - see Conventions. Keep it that way.
+Everything you write is ASCII on purpose - see Conventions. Keep it that way.
+
+Derive the repo name and org from the remote instead of asking:
+`git remote get-url origin` -> `.../nozzle-industries/<repo>.git`.
 
 ## Prerequisites (confirm, do not assume)
 
@@ -31,7 +38,7 @@ working around it - the CI cannot be verified without them.
    persistent nix store keeps the pinned toolchain warm between runs; a
    throwaway `ubuntu-latest` container reinstalls Nix every run.
 2. **`docker.chu.zone` reachable and anonymous** (open pull AND push). Verify:
-   `curl -s -o /dev/null -w '%{http_code}' -X POST https://docker.chu.zone/v2/<repo>/blobs/uploads/`
+   `curl -s -o /dev/null -w '%{http_code}' -X POST https://docker.chu.zone/v2/nozzle-industries/<repo>/blobs/uploads/`
    should return `202`. If it needs auth, add a `docker login` step backed by
    Forgejo Actions secrets - do not hardcode credentials.
 3. **zot retention rules on the registry** (instance-level `config.json`). This
@@ -45,24 +52,16 @@ working around it - the CI cannot be verified without them.
    ```
    `pr-<n>` -> pruned 7 days after last push; `latest` + `release-<version>` ->
    keep the 5 most recent. If the rules differ, adjust tag names to match them.
-4. **`tea` logged in** to `git.chu.zone` (`tea login list` shows it). Note tea
-   cannot run from a git worktree whose `.git` is a file - see Conventions.
+4. **`tea` logged in** to `git.chu.zone` (`tea login list` shows it) - needed to
+   open the PR. Note tea cannot run from a worktree whose `.git` is a file, which
+   is exactly the Workshop session case - see Conventions.
 
-## Step 1 - Gather inputs
-
-Ask only what you cannot infer:
-
-- Repo name (kebab-case) and one-line description.
-- Language shape: **Go**, **Node/TS web**, or **Go backend + web frontend**
-  (the reference shape; the templates below assume it and note how to trim).
-- Private or public repo.
-
-## Step 2 - Pick toolchain versions (latest stable, current LTS)
+## Step 1 - Pick toolchain versions (latest stable, current LTS)
 
 The rule is "latest stable so we are not already behind," with a twist:
 
 - **Go has no LTS.** The Go team supports the latest two majors. Use the
-  **latest stable Go**. In the flake that is simply `pkgs.go`; pin the `go.mod`
+  **latest stable Go**. In the flake that is simply `pkgs.go`; set the `go.mod`
   directive to match its major (`go 1.NN`).
 - **Node has LTS.** Use the **current Active LTS** (an even major). Pin it
   explicitly as `pkgs.nodejs_NN` so you never float onto a non-LTS line.
@@ -79,9 +78,10 @@ If unsure which Node major is the current Active LTS, check
 `https://nodejs.org/en/about/previous-releases` (even major, status "Active
 LTS"). Sibling repos are a good tiebreaker - match what they use.
 
-## Step 3 - Scaffold the files
+## Step 2 - Scaffold the files
 
-Create these at the repo root. Fill in `<repo>` and the version majors you chose.
+Create these at the repo root. Substitute `<repo>` (from the remote) and the
+version majors you chose. Trim whichever language the repo does not use.
 
 ### flake.nix
 
@@ -109,12 +109,13 @@ Create these at the repo root. Fill in `<repo>` and the version majors you chose
 }
 ```
 
-Then generate the lock and validate the shell actually builds the repo:
+Generate the lock and validate the shell actually provides the toolchain
+(Nix needs the file git-tracked first):
 
 ```bash
 git add flake.nix
 nix flake lock
-nix develop -c bash -c 'go version; node --version'   # confirm the versions
+nix develop -c bash -c 'go version; node --version'
 ```
 
 ### .envrc
@@ -139,9 +140,9 @@ node_modules/
 
 ### Dockerfile (Go backend + embedded web frontend)
 
-Multi-stage: build the web assets, build a static Go binary (pure Go, no CGO),
-ship on distroless. For a Go-only repo drop the `web` stage and the `COPY
---from=web`; for a Node-only repo replace stages 2-3 with a node runtime image.
+Multi-stage: build web assets, build a static Go binary (pure Go, no CGO), ship
+on distroless. For a Go-only repo drop the `web` stage and the `COPY --from=web`;
+for a Node-only repo replace stages 2-3 with a node runtime image.
 
 ```dockerfile
 # syntax=docker/dockerfile:1
@@ -154,7 +155,7 @@ RUN npm ci || npm install
 COPY web/ ./
 RUN npm run build
 
-# Stage 2: build the static Go binary (pure Go SQLite, no CGO)
+# Stage 2: build the static Go binary (pure Go, no CGO)
 FROM golang:1.25-alpine AS build
 WORKDIR /src
 COPY go.mod go.sum* ./
@@ -271,8 +272,7 @@ jobs:
       # CalVer + short SHA. This is the knob to change if you want semver or
       # tag-driven releases instead of one-per-merge.
       - name: Compute version
-        run: |
-          echo "VERSION=v$(date -u +%Y.%m.%d)-${GITHUB_SHA:0:7}" >> "$GITHUB_ENV"
+        run: echo "VERSION=v$(date -u +%Y.%m.%d)-${GITHUB_SHA:0:7}" >> "$GITHUB_ENV"
       - name: Build and push images
         run: |
           docker build -t "$IMAGE:latest" -t "$IMAGE:release-$VERSION" .
@@ -292,49 +292,65 @@ jobs:
 For a single-language repo, delete the unused job (`web` in pr.yml) and the
 unused check lines in main.yml.
 
-## Step 4 - Create the repo and push
+## Step 3 - Validate locally before pushing
 
-Do a normal `git init` locally (a fresh checkout has a real `.git` dir, so tea
-works from it):
-
-```bash
-tea repos create --owner nozzle-industries --name <repo> --description "<desc>" [--private]
-git init -b main
-git add -A                      # includes the force-added dist placeholder if any
-git commit -m "Bootstrap <repo>: flake + direnv + Forgejo CI"
-git remote add origin https://git.chu.zone/nozzle-industries/<repo>.git
-git push -u origin main
-```
-
-If `tea repos create` is unavailable, create the repo via the API:
-`POST ${SERVER}/api/v1/orgs/nozzle-industries/repos` with `{"name":"<repo>"}`.
-
-## Step 5 - Open a draft PR
-
-Put the scaffold on a branch and open a **draft** PR (tea has no `--draft`
-flag; a `WIP:` title prefix marks it draft):
+Prove the scaffold builds in the same shell CI will use, so a red pipeline never
+comes as a surprise:
 
 ```bash
-git switch -c feat/bootstrap
-git push -u origin feat/bootstrap
-tea pulls create --head feat/bootstrap --base main --title "WIP: Bootstrap <repo>" --description "..."
+nix develop -c bash -c 'go vet ./... && go test ./... && go build ./...'
+nix develop -c bash -c 'npm --prefix web ci && npm --prefix web run build'
 ```
 
-Then verify like the reference repos do: open the PR, confirm the runner picks
-up `pr.yml` and all jobs go green, and confirm the `pr-<number>` image is
-pullable from docker.chu.zone (`/v2/nozzle-industries/<repo>/tags/list`). Green
-checks are the definitive proof the runner + registry are wired correctly.
+If you rebuilt `web/dist` locally, restore the committed placeholder so real
+build output does not get committed: `git checkout -- web/dist/index.html`.
+
+## Step 4 - Commit and open a draft PR
+
+Stage files explicitly (never `git add -A` - it can sweep in build output).
+Branch `feat/<slug>`, push, and open a **draft** PR. tea has no `--draft` flag;
+a `WIP:` title prefix marks it draft.
+
+```bash
+git switch -c feat/scaffold
+git add flake.nix flake.lock .envrc .gitignore Dockerfile .forgejo/workflows/pr.yml .forgejo/workflows/main.yml
+git commit -m "Scaffold <repo>: flake + direnv + Forgejo CI"
+git push -u origin feat/scaffold
+```
+
+You are in a Workshop session worktree, so `tea` fails here ("local repository
+required"). Run it from the primary checkout - the clone with a real `.git`
+directory (find it with `git worktree list`; it is the non-worktree path). Chain
+the `cd` in one command because the sandbox reverts a bare `cd`:
+
+```bash
+cd /path/to/primary-checkout && tea pulls create --head feat/scaffold --base main \
+  --title "WIP: Scaffold <repo>" --description "..."
+```
+
+(If a `submit-for-review` skill is available, you may hand the PR step to it
+instead; it already encodes the branch + draft-PR flow.)
+
+## Step 5 - Verify it actually works
+
+Green checks are the definitive proof the runner + registry are wired right:
+
+- Poll the run: `GET https://git.chu.zone/api/v1/repos/nozzle-industries/<repo>/actions/tasks`
+  (needs an auth token header) until the jobs finish; confirm `go`, `web`, and
+  `beta-image` all report success.
+- Confirm the beta image is pullable:
+  `curl -s https://docker.chu.zone/v2/nozzle-industries/<repo>/tags/list`
+  should list `pr-<number>`.
 
 ## Conventions and gotchas (learned the hard way)
 
 - **ASCII only, everywhere.** Forgejo flags ambiguous unicode (em dashes,
-  arrows, box-drawing). Use `-`, `->`, `x`, `>=`, `...`, `+-|`. This applies to
-  every file in the target repo.
-- **tea from a worktree fails.** In a Workshop session the workspace is a git
-  worktree whose `.git` is a *file* (gitdir pointer); tea reports "local
-  repository required". Run `tea pulls create` from the primary checkout (the
-  one with a real `.git` directory), or from the fresh `git init` repo. The Bash
-  sandbox also reverts a bare `cd` between calls - chain it:
+  arrows, box-drawing). Use `-`, `->`, `x`, `>=`, `...`, `+-|`. Applies to every
+  file you write in the target repo.
+- **tea from a worktree fails.** A Workshop session workspace is a git worktree
+  whose `.git` is a *file* (gitdir pointer); tea reports "local repository
+  required". Run `tea pulls create` from the primary checkout (real `.git` dir).
+  The Bash sandbox also reverts a bare `cd` between calls - chain it:
   `cd /path/to/primary && tea ...`.
 - **Registry is anonymous** - no `docker login`, no secrets. If that ever
   changes, add the login step backed by Forgejo Actions secrets; never hardcode.
@@ -352,8 +368,7 @@ checks are the definitive proof the runner + registry are wired correctly.
 - **Forgejo API exposes no Actions run/job logs** on the current instance
   (`/actions/runs/...` and `.../logs` 404; the web log route needs a session
   cookie). Debug CI by reasoning from step timing and re-running, not by pulling
-  logs via the API. Poll status with
-  `GET /api/v1/repos/<owner>/<repo>/actions/tasks`.
+  logs via the API.
 
 ## Adapting for existing house repos
 
