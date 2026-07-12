@@ -53,8 +53,7 @@ working around it - the CI cannot be verified without them.
    `pr-<n>` -> pruned 7 days after last push; `latest` + `release-<version>` ->
    keep the 5 most recent. If the rules differ, adjust tag names to match them.
 4. **`tea` logged in** to `git.chu.zone` (`tea login list` shows it) - needed to
-   open the PR. Note tea cannot run from a worktree whose `.git` is a file, which
-   is exactly the Workshop session case - see Conventions.
+   open the PR. It works fine from a Workshop session worktree - see Conventions.
 
 ## Step 1 - Pick toolchain versions (latest stable, current LTS)
 
@@ -318,15 +317,21 @@ git commit -m "Scaffold <repo>: flake + direnv + Forgejo CI"
 git push -u origin feat/scaffold
 ```
 
-You are in a Workshop session worktree, so `tea` fails here ("local repository
-required"). Run it from the primary checkout - the clone with a real `.git`
-directory (find it with `git worktree list`; it is the non-worktree path). Chain
-the `cd` in one command because the sandbox reverts a bare `cd`:
+Open the draft PR with tea. It works from a Workshop session worktree - tea
+reads the repo from the git remote, not from the `.git` directory layout:
 
 ```bash
-cd /path/to/primary-checkout && tea pulls create --head feat/scaffold --base main \
-  --title "WIP: Scaffold <repo>" --description "..."
+tea pulls create --head feat/scaffold --base main \
+  --title 'WIP: Scaffold <repo>' --description 'What and why...'
 ```
+
+Two things that actually bite here:
+- Quote `--title`/`--description` with SINGLE quotes (or a heredoc). Backticks
+  and `$(...)` inside double quotes are run by bash before tea sees them, which
+  can silently mangle the call.
+- `tea pulls list` on this instance is unreliable (often prints an empty table
+  even when PRs exist). Confirm the PR via the API instead:
+  `GET /api/v1/repos/nozzle-industries/<repo>/pulls?state=open`.
 
 (If a `submit-for-review` skill is available, you may hand the PR step to it
 instead; it already encodes the branch + draft-PR flow.)
@@ -347,11 +352,13 @@ Green checks are the definitive proof the runner + registry are wired right:
 - **ASCII only, everywhere.** Forgejo flags ambiguous unicode (em dashes,
   arrows, box-drawing). Use `-`, `->`, `x`, `>=`, `...`, `+-|`. Applies to every
   file you write in the target repo.
-- **tea from a worktree fails.** A Workshop session workspace is a git worktree
-  whose `.git` is a *file* (gitdir pointer); tea reports "local repository
-  required". Run `tea pulls create` from the primary checkout (real `.git` dir).
-  The Bash sandbox also reverts a bare `cd` between calls - chain it:
-  `cd /path/to/primary && tea ...`.
+- **tea works from a worktree.** A Workshop session workspace is a git worktree
+  whose `.git` is a *file* (gitdir pointer); tea still resolves the repo from the
+  git remote and creates PRs fine from there (verified). If a tea call errors
+  with "local repository required", it is NOT the worktree - look at the args
+  (a bad value to `--repo`, or backticks/`$(...)` in a double-quoted title/body
+  that bash expanded). The Bash sandbox reverts a bare `cd` between calls, so
+  chain any needed `cd` in the same command.
 - **Registry is anonymous** - no `docker login`, no secrets. If that ever
   changes, add the login step backed by Forgejo Actions secrets; never hardcode.
 - **Tag to match zot retention**, do not script deletion. `pr-<n>` (7-day),
