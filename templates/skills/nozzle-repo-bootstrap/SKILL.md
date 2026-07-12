@@ -364,14 +364,31 @@ Green checks are the definitive proof the runner + registry are wired right:
 - **Tag to match zot retention**, do not script deletion. `pr-<n>` (7-day),
   `latest` + `release-<version>` (keep-5). A bare short-SHA tag matches no rule
   and gets GC'd - always prefix (`release-`, `main-`).
-- **`upload-artifact` must stay `@v3`** on Forgejo. `@v4` uses the
-  `@actions/artifact` v2 backend which hard-refuses on GHES, and Forgejo reports
-  as GHES (`GHESNotSupportedError`). Set `retention-days` on artifacts you do
-  upload.
-- **Third-party actions resolve fine** on the self-hosted runner
-  (`DeterminateSystems/*`, `actions/*`). Use the nix-installer *action*
-  (idempotent) rather than a raw `curl | sh` install: the raw installer refuses
-  to run when Nix already exists, which it does on a persistent runner.
+- **Artifacts: use the Forgejo v4 fork.** `actions/upload-artifact@v4` (and
+  `download-artifact@v4`) hard-refuse on Forgejo - it reports as GHES and the v4
+  backend throws `GHESNotSupportedError`. Use the Forgejo-maintained patched fork,
+  referenced by FULL URL so it resolves no matter what the runner's default
+  action registry is:
+  ```yaml
+  - uses: https://code.forgejo.org/forgejo/upload-artifact@v4
+    with:
+      name: <artifact-name>
+      path: <path>
+      retention-days: 7
+  ```
+  (matching `https://code.forgejo.org/forgejo/download-artifact@v4`). v4 is
+  faster and its artifacts are immutable. Fallback if you cannot use the fork:
+  pin `actions/upload-artifact@v3` (what obs-irl-backstage does today). Either
+  way set `retention-days` on what you upload.
+- **How action references resolve on this runner.** github-hosted actions
+  resolve from a bare slug (`actions/checkout@v4`,
+  `DeterminateSystems/nix-installer-action@v3`) - no full URL needed. Actions
+  hosted on `code.forgejo.org` must use the full `https://...@tag` URL, because
+  a bare `forgejo/...` slug is looked up on the default (github) registry and
+  will not be found.
+- **Prefer the nix-installer *action* over a raw `curl | sh`.** It is idempotent;
+  the raw installer refuses to run when Nix already exists, which it does on a
+  persistent self-hosted runner.
 - **Forgejo API exposes no Actions run/job logs** on the current instance
   (`/actions/runs/...` and `.../logs` 404; the web log route needs a session
   cookie). Debug CI by reasoning from step timing and re-running, not by pulling
