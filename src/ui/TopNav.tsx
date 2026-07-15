@@ -1,6 +1,7 @@
 import { useEffect, useState, useCallback } from 'react';
 import { NavLink, useMatch } from 'react-router-dom';
 import { useProfile } from './hooks/useProfile';
+import { useIsMobile } from './use-is-mobile';
 
 const LAST_TRACK_KEY = 'workshop:last-track';
 
@@ -27,6 +28,8 @@ const navItems = [
 export function TopNav() {
   const trackMatch = useMatch('/tracks/:trackId');
   const { user } = useProfile();
+  const isMobile = useIsMobile();
+  const [menuOpen, setMenuOpen] = useState(false);
   const [pendingCount, setPendingCount] = useState(0);
   const [lastTrack, setLastTrack] = useState<LastTrack | null>(() => {
     try {
@@ -86,7 +89,17 @@ export function TopNav() {
   }, [loadCount]);
 
   return (
-    <nav className="flex items-center gap-1 px-4 py-1.5 bg-gray-950 border-b border-gray-800 shrink-0">
+    <nav className="relative flex items-center gap-1 px-4 py-1.5 bg-gray-950 border-b border-gray-800 shrink-0">
+      {/* Hamburger toggle — mobile only; desktop keeps the flat horizontal nav */}
+      <button
+        onClick={() => setMenuOpen((v) => !v)}
+        aria-label="Toggle navigation menu"
+        aria-expanded={menuOpen}
+        className="md:hidden px-2 py-1 mr-1 text-lg leading-none text-gray-400 hover:text-gray-200 rounded hover:bg-gray-900"
+      >
+        ☰
+      </button>
+
       <NavLink
         to="/"
         className="text-sm font-semibold text-gray-300 hover:text-white mr-4 tracking-tight"
@@ -94,7 +107,7 @@ export function TopNav() {
         Workshop
       </NavLink>
 
-      <div className="flex items-center gap-0.5">
+      <div className="hidden md:flex items-center gap-0.5">
         <NavLink to="/" end className={navLinkClass}>
           Tracks
         </NavLink>
@@ -160,6 +173,32 @@ export function TopNav() {
           )}
         </NavLink>
       </div>
+
+      {/* Mobile dropdown drawer — same links stacked vertically, closes on navigate */}
+      {isMobile && menuOpen && (
+        <div className="md:hidden absolute top-full left-0 right-0 z-50 flex flex-col gap-0.5 p-2 bg-gray-950 border-b border-gray-800 shadow-lg">
+          <NavLink to="/" end className={navLinkClass} onClick={() => setMenuOpen(false)}>
+            Tracks
+          </NavLink>
+          <NavLink to="/sessions" className={navLinkClass} onClick={() => setMenuOpen(false)}>
+            Sessions
+          </NavLink>
+          {navItems.map(({ to, label, end }) => (
+            <NavLink key={to} to={to} end={end} className={navLinkClass} onClick={() => setMenuOpen(false)}>
+              {label}
+            </NavLink>
+          ))}
+          {lastTrack && (
+            <NavLink
+              to={`/tracks/${lastTrack.id}`}
+              className={navLinkClass}
+              onClick={() => setMenuOpen(false)}
+            >
+              {lastTrack.name}
+            </NavLink>
+          )}
+        </div>
+      )}
     </nav>
   );
 }
