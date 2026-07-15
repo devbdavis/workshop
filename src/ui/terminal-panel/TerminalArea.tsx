@@ -4,6 +4,7 @@ import { TerminalPane } from './TerminalPane';
 import { TrackOfficeStrip } from './TrackOfficeStrip';
 import { RecentlyDeletedPanel } from './RecentlyDeletedPanel';
 import { TerminalModal } from '../track-view/TerminalModal';
+import { useIsMobile } from '../use-is-mobile';
 
 interface Props {
   trackId: string;
@@ -166,9 +167,15 @@ export function TerminalArea({ trackId, trackName, sessions, todos, deletedSessi
     setShellModal(null);
   }, [shellModal]);
 
+  const isMobile = useIsMobile();
+
   const selectedSessions = selectedIds
     .map((id) => sessions.find((s) => s.id === id))
     .filter((s): s is Session => s !== undefined);
+
+  // A phone can't drive split-pane dividers (mouse-only) and can't fit two
+  // terminals side-by-side. Collapse to the single active pane on mobile.
+  const visibleSessions = isMobile ? selectedSessions.slice(0, 1) : selectedSessions;
 
   return (
     <div className="h-full flex flex-col">
@@ -197,12 +204,12 @@ export function TerminalArea({ trackId, trackName, sessions, todos, deletedSessi
           <div className="flex-1 flex items-center justify-center text-gray-500">
             <p>No active sessions. Click "New Session" to start one.</p>
           </div>
-        ) : selectedSessions.length === 0 ? (
+        ) : visibleSessions.length === 0 ? (
           <div className="flex-1 flex items-center justify-center text-gray-500">
             <p>Click a session below to open it.</p>
           </div>
         ) : (
-          selectedSessions.map((session, i) => (
+          visibleSessions.map((session, i) => (
             <div
               key={session.id}
               className={`min-h-0 min-w-0 overflow-hidden flex flex-col flex-1 ${
