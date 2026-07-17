@@ -11,6 +11,7 @@ import { NewSessionModal, type NewSessionOptions } from './NewSessionModal';
 import { TodoDetailModal } from '../kanban/TodoDetailModal';
 import { LinearTicketModal } from '../kanban/LinearTicketModal';
 import { TerminalArea } from '../terminal-panel/TerminalArea';
+import { useIsMobile } from '../use-is-mobile';
 
 interface IdleAlert {
   id: string;
@@ -42,6 +43,8 @@ export function TrackView() {
   // Cleared when session:ready arrives for that session.
   const [startingSessions, setStartingSessions] = useState<Set<string>>(new Set());
   const [showNewSession, setShowNewSession] = useState(false);
+  const isMobile = useIsMobile();
+  const [drawerOpen, setDrawerOpen] = useState(false);
 
   const loadTrack = useCallback(async () => {
     if (!trackId) return;
@@ -328,6 +331,12 @@ export function TrackView() {
           </h1>
         )}
         <span className="text-xs text-gray-500 bg-gray-800 px-2 py-0.5 rounded">{track.status}</span>
+        <button
+          onClick={() => setDrawerOpen(true)}
+          className="md:hidden px-3 py-1.5 text-sm bg-gray-800 hover:bg-gray-700 rounded-lg transition-colors"
+        >
+          Sessions
+        </button>
         <div className="ml-auto">
           <button
             onClick={() => setShowNewSession(true)}
@@ -338,8 +347,19 @@ export function TrackView() {
         </div>
       </header>
 
-      <div className="flex flex-1 overflow-hidden">
-        <aside className="w-80 border-r border-gray-800 overflow-y-auto shrink-0">
+      <div className="relative flex flex-1 overflow-hidden">
+        {/* Mobile-only backdrop; closes the slide-over drawer on tap */}
+        {isMobile && drawerOpen && (
+          <div
+            className="md:hidden absolute inset-0 z-30 bg-black/50"
+            onClick={() => setDrawerOpen(false)}
+          />
+        )}
+        <aside
+          className={`absolute inset-y-0 left-0 z-40 w-80 max-w-[85vw] bg-gray-950 border-r border-gray-800 overflow-y-auto md:static md:z-auto md:max-w-none md:shrink-0 md:block ${
+            drawerOpen ? '' : 'hidden'
+          }`}
+        >
           <div className="flex border-b border-gray-800">
             <button
               onClick={() => setSidebarTab('session')}
