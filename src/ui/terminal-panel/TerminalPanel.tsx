@@ -5,6 +5,8 @@ import { WebLinksAddon } from '@xterm/addon-web-links';
 import '@xterm/xterm/css/xterm.css';
 import { TerminalSearchBar } from './TerminalSearchBar';
 import { createSearchSession, type SearchResultInfo, type SearchSession } from './terminal-search';
+import { MobileKeyBar } from './MobileKeyBar';
+import { useIsMobile } from '../use-is-mobile';
 
 /** Shared terminal theme — keeps live and scrollback visually identical. */
 const THEME = {
@@ -195,8 +197,20 @@ export function TerminalPanel({ trackId = '', sessionId = '', wsPath, autoFocus,
   const wsRef = useRef<WebSocket | null>(null);
   const fitAddonRef = useRef<FitAddon | null>(null);
 
+  // Reactive so crossing the 767px breakpoint (rotate, resize) recreates
+  // the terminal with the correct fontSize + cols-pinning branch — a stale
+  // snapshot could drive the shared tmux window below 120 cols.
+  const isMobile = useIsMobile();
+  // Bumping this forces the setup effect to tear down and recreate the
+  // WebSocket — used to recover from mobile OSes killing background-tab
+  // sockets (see the visibilitychange effect below).
+  const [reconnectNonce, setReconnectNonce] = useState(0);
+
   const scrollbackRef = useRef<ScrollbackState | null>(null);
   const captureInFlightRef = useRef(false);
+  // Lets MobileKeyBar close an open scrollback overlay before sending keys,
+  // mirroring what typing into the overlay does.
+  const exitScrollbackRef = useRef<(() => void) | null>(null);
 
   // Search state.  `searchVisible` mirrors scrollback presence: the search
   // bar only renders while we have a scrollback terminal to search.  The
@@ -223,7 +237,7 @@ export function TerminalPanel({ trackId = '', sessionId = '', wsPath, autoFocus,
     const term = new Terminal({
       cursorBlink: true,
       cursorStyle: 'bar',
-      fontSize: 13,
+      fontSize: isMobile ? 11 : 13,
       fontFamily: 'Menlo, Monaco, "Courier New", monospace',
       scrollback: 1000,
       macOptionClickForcesSelection: true,
@@ -235,7 +249,20 @@ export function TerminalPanel({ trackId = '', sessionId = '', wsPath, autoFocus,
     term.loadAddon(fitAddon);
     term.loadAddon(new WebLinksAddon());
     term.open(container);
-    fitAddon.fit();
+    // Pin cols to 120 on mobile — this is a SHARED tmux window (window-size
+    // latest), so a narrow phone client resizing it down would force
+    // Claude's TUI to re-wrap narrow for every client, including desktop.
+    // 120 is wide and benign; rows tracking viewport height is safe since
+    // row-count changes never rewrap output.
+    const applyFit = () => {
+      if (isMobile) {
+        const dims = fitAddon.proposeDimensions();
+        term.resize(120, dims?.rows ?? 40);
+      } else {
+        fitAddon.fit();
+      }
+    };
+    applyFit();
     if (autoFocus) term.focus();
     termRef.current = term;
     fitAddonRef.current = fitAddon;
@@ -493,15 +520,24 @@ export function TerminalPanel({ trackId = '', sessionId = '', wsPath, autoFocus,
       pendingSearchRef.current = false;
       term.focus();
     }
+    exitScrollbackRef.current = exitScrollback;
 
     // ── Resize ────────────────────────────────────────────────────────
     let disposed = false;
     const resizeObserver = new ResizeObserver(() => {
       if (disposed) return;
-      fitAddon.fit();
+      applyFit();
       scrollbackRef.current?.fitAddon.fit();
     });
     resizeObserver.observe(container);
+
+    // Soft keyboard opening/closing changes visualViewport height without
+    // necessarily firing the container's ResizeObserver — re-pin rows so
+    // the terminal doesn't end up hidden behind the keyboard.
+    const viewportHandler = () => applyFit();
+    if (isMobile && window.visualViewport) {
+      window.visualViewport.addEventListener('resize', viewportHandler);
+    }
 
     // ── Cleanup ───────────────────────────────────────────────────────
     return () => {
@@ -510,10 +546,28 @@ export function TerminalPanel({ trackId = '', sessionId = '', wsPath, autoFocus,
       container.removeEventListener('wheel', wheelHandler, true);
       container.removeEventListener('copy', copyHandler, true);
       resizeObserver.disconnect();
+      if (isMobile && window.visualViewport) {
+        window.visualViewport.removeEventListener('resize', viewportHandler);
+      }
       ws.close();
       term.dispose();
     };
-  }, [trackId, sessionId, wsPath]);
+  }, [trackId, sessionId, wsPath, reconnectNonce, isMobile]);
+
+  // Reconnect the WebSocket after mobile OSes kill background-tab sockets
+  // (app-switch, screen-lock). Forces a remount via reconnectNonce; tmux
+  // redraws the full screen on re-attach, so no terminal state is lost.
+  useEffect(() => {
+    const handler = () => {
+      if (document.visibilityState !== 'visible') return;
+      const ws = wsRef.current;
+      if (ws === null || ws.readyState > WebSocket.OPEN) {
+        setReconnectNonce((n) => n + 1);
+      }
+    };
+    document.addEventListener('visibilitychange', handler);
+    return () => document.removeEventListener('visibilitychange', handler);
+  }, []);
 
   // Focus pulse — separate effect to avoid recreating the terminal.
   useEffect(() => {
@@ -558,7 +612,11 @@ export function TerminalPanel({ trackId = '', sessionId = '', wsPath, autoFocus,
   return (
     <div
       ref={containerRef}
-      className="h-full w-full relative"
+      className={`h-full w-full relative${isMobile ? ' overflow-x-auto' : ''}`}
+      // paddingBottom reserves space for the fixed MobileKeyBar (~44px) so
+      // FitAddon measures a shorter area and the last terminal row stays
+      // visible above the bar instead of hidden behind it.
+      style={isMobile ? { touchAction: 'pan-x pan-y', paddingBottom: '2.75rem' } : undefined}
       onClick={() => termRef.current?.focus()}
     >
       {searchVisible && (
@@ -570,6 +628,17 @@ export function TerminalPanel({ trackId = '', sessionId = '', wsPath, autoFocus,
           onClose={handleSearchClose}
           result={searchResult}
           focusTrigger={searchFocusTrigger}
+        />
+      )}
+      {isMobile && (
+        <MobileKeyBar
+          onSend={(seq) => {
+            // Close the scrollback overlay first (mirrors typing into it) so
+            // keys go to the live shell, not a hidden terminal.
+            if (scrollbackRef.current) exitScrollbackRef.current?.();
+            if (wsRef.current?.readyState === WebSocket.OPEN) wsRef.current.send(seq);
+            termRef.current?.focus();
+          }}
         />
       )}
     </div>
