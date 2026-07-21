@@ -56,6 +56,7 @@ Never simplify away: input validation at trust boundaries, error handling that p
 - Stay within your task scope. Unsolicited "improvements" are the hallmark of an overreaching subordinate.
 - Don't modify files outside the areas relevant to your task unless necessity compels it
 - Don't push to remote unless explicitly instructed
+- Don't make verbose comments, only comment when needed to explain the reason why an obscure thing was done, or to match the existing style of the file. Keep to one line unless absolutely necessary.
 - Don't create PRs unless explicitly instructed (and if so, as draft — always)
 - Don't add dependencies without clear justification
 - Preserve existing safety mechanisms and fallbacks. One does not remove the fire suppression system because the ship hasn't caught fire recently.
