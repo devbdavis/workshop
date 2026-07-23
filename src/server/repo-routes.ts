@@ -317,8 +317,8 @@ export function createRepoRouter(deps: RepoRouterDeps): Router {
       orgName: unknown;
       linearApiKey: unknown;
     };
-    if (!tracker || !['linear', 'jira', 'none'].includes(tracker as string)) {
-      res.status(400).json({ error: 'tracker must be linear, jira, or none' });
+    if (!tracker || !['linear', 'jira', 'github', 'none'].includes(tracker as string)) {
+      res.status(400).json({ error: 'tracker must be linear, jira, github, or none' });
       return;
     }
     settings.set('issue_tracker', tracker as string);

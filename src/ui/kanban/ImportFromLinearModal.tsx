@@ -13,6 +13,11 @@ interface Props {
 
 type TabId = 'available' | 'imported' | 'ignored';
 
+/** Trackers that support the import flow; others (jira/none) show a message instead of fetching. */
+type ImportSource = 'linear' | 'github';
+
+const SOURCE_LABELS: Record<ImportSource, string> = { linear: 'Linear', github: 'GitHub' };
+
 interface IssueListResponse {
   available: ImportableIssue[];
   imported: ImportableIssue[];
@@ -53,14 +58,26 @@ export function ImportFromLinearModal({ tracks, onClose, onImported }: Props) {
   const [error, setError] = useState<string | null>(null);
   const [issues, setIssues] = useState<IssueListResponse>({ available: [], imported: [], ignored: [] });
   const [rowStates, setRowStates] = useState<Record<string, RowState>>({});
+  // undefined = still checking settings; null = current tracker has no import support (jira/none).
+  const [source, setSource] = useState<ImportSource | null | undefined>(undefined);
 
   const defaultTrackId = tracks[0]?.id ?? '';
 
+  useEffect(() => {
+    fetch('/api/settings/issue-tracker')
+      .then((r) => r.json())
+      .then((data: { tracker: string }) => {
+        setSource(data.tracker === 'linear' || data.tracker === 'github' ? data.tracker : null);
+      })
+      .catch(() => setSource(null));
+  }, []);
+
   const loadIssues = useCallback(async () => {
+    if (!source) return;
     setLoading(true);
     setError(null);
     try {
-      const res = await fetch('/api/ticket-import/linear');
+      const res = await fetch(`/api/ticket-import/${source}`);
       if (!res.ok) {
         const body = (await res.json().catch(() => ({}))) as { error?: string };
         setError(body.error ?? `Request failed: ${res.status}`);
@@ -82,15 +99,15 @@ export function ImportFromLinearModal({ tracks, onClose, onImported }: Props) {
         return next;
       });
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to load Linear issues');
+      setError(err instanceof Error ? err.message : `Failed to load ${SOURCE_LABELS[source]} issues`);
     } finally {
       setLoading(false);
     }
-  }, [defaultTrackId]);
+  }, [defaultTrackId, source]);
 
   useEffect(() => {
-    loadIssues();
-  }, [loadIssues]);
+    if (source) loadIssues();
+  }, [source, loadIssues]);
 
   useEffect(() => {
     const handleEscape = (e: KeyboardEvent) => {
@@ -108,6 +125,7 @@ export function ImportFromLinearModal({ tracks, onClose, onImported }: Props) {
   }, [defaultTrackId]);
 
   async function importIssue(issue: ImportableIssue) {
+    if (!source) return;
     const state = rowStates[issue.externalId] ?? { trackId: defaultTrackId, busy: false };
     if (!state.trackId) {
       setError('Select a track before importing.');
@@ -115,7 +133,7 @@ export function ImportFromLinearModal({ tracks, onClose, onImported }: Props) {
     }
     setRow(issue.externalId, { busy: true });
     try {
-      const res = await fetch('/api/ticket-import/linear/import', {
+      const res = await fetch(`/api/ticket-import/${source}/import`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ externalId: issue.externalId, trackId: state.trackId }),
@@ -133,9 +151,10 @@ export function ImportFromLinearModal({ tracks, onClose, onImported }: Props) {
   }
 
   async function ignoreIssue(issue: ImportableIssue) {
+    if (!source) return;
     setRow(issue.externalId, { busy: true });
     try {
-      const res = await fetch('/api/ticket-import/linear/ignore', {
+      const res = await fetch(`/api/ticket-import/${source}/ignore`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -156,9 +175,10 @@ export function ImportFromLinearModal({ tracks, onClose, onImported }: Props) {
   }
 
   async function unignoreIssue(issue: ImportableIssue) {
+    if (!source) return;
     setRow(issue.externalId, { busy: true });
     try {
-      const res = await fetch(`/api/ticket-import/linear/ignore/${encodeURIComponent(issue.externalId)}`, {
+      const res = await fetch(`/api/ticket-import/${source}/ignore/${encodeURIComponent(issue.externalId)}`, {
         method: 'DELETE',
       });
       if (!res.ok && res.status !== 404) {
@@ -178,6 +198,27 @@ export function ImportFromLinearModal({ tracks, onClose, onImported }: Props) {
     return issues.ignored;
   }, [tab, issues]);
 
+  const sourceLabel = source ? SOURCE_LABELS[source] : 'issues';
+
+  if (source === null) {
+    return (
+      <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50" onClick={onClose}>
+        <div
+          className="bg-gray-900 border border-gray-700 rounded-xl w-[420px] mx-4 overflow-hidden flex flex-col"
+          onClick={(e) => e.stopPropagation()}
+        >
+          <div className="flex items-center justify-between px-5 py-3 border-b border-gray-800 shrink-0">
+            <h2 className="text-sm font-semibold text-gray-200">Import Issues</h2>
+            <button onClick={onClose} className="text-gray-500 hover:text-gray-300 text-lg">&times;</button>
+          </div>
+          <p className="p-5 text-xs text-gray-400">
+            Issue import is only available for Linear and GitHub. Configure it in Settings → Issue Tracking.
+          </p>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50" onClick={onClose}>
       <div
@@ -185,7 +226,7 @@ export function ImportFromLinearModal({ tracks, onClose, onImported }: Props) {
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-center justify-between px-5 py-3 border-b border-gray-800 shrink-0">
-          <h2 className="text-sm font-semibold text-gray-200">Import from Linear</h2>
+          <h2 className="text-sm font-semibold text-gray-200">Import from {sourceLabel}</h2>
           <button onClick={onClose} className="text-gray-500 hover:text-gray-300 text-lg">&times;</button>
         </div>
 
@@ -209,7 +250,7 @@ export function ImportFromLinearModal({ tracks, onClose, onImported }: Props) {
             onClick={loadIssues}
             disabled={loading}
             className="ml-auto px-2 py-1 text-[11px] text-gray-400 hover:text-gray-200 disabled:opacity-50"
-            title="Refresh from Linear"
+            title={`Refresh from ${sourceLabel}`}
           >
             {loading ? 'Refreshing…' : '↻ Refresh'}
           </button>
@@ -223,7 +264,7 @@ export function ImportFromLinearModal({ tracks, onClose, onImported }: Props) {
 
         <div className="flex-1 overflow-y-auto">
           {loading ? (
-            <div className="p-8 text-xs text-gray-500">Loading issues from Linear…</div>
+            <div className="p-8 text-xs text-gray-500">Loading issues from {sourceLabel}…</div>
           ) : currentList.length === 0 ? (
             <div className="p-8 text-xs text-gray-500">
               {tab === 'available' && 'No open issues assigned to you.'}
@@ -330,7 +371,7 @@ export function ImportFromLinearModal({ tracks, onClose, onImported }: Props) {
 
         <div className="px-5 py-3 border-t border-gray-800 shrink-0 flex items-center justify-between">
           <p className="text-[11px] text-gray-500">
-            Shows open issues assigned to you across every Linear project.
+            Shows open issues assigned to you across every {sourceLabel} project.
           </p>
           <button
             onClick={onClose}

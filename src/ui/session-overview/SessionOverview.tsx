@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import type { DefaultAiCli, PrMonitor, Session, SessionId, Todo, Track } from '@foundation/types';
+import { issueBaseUrlFor } from '@foundation/issue-tracker.js';
 import { TerminalPane } from '../terminal-panel/TerminalPane';
 import { SessionPanel } from '../track-view/SessionPanel';
 import { NewSessionModal, type NewSessionOptions } from '../track-view/NewSessionModal';
@@ -68,13 +69,7 @@ export function SessionOverview() {
     fetch('/api/settings/issue-tracker')
       .then((r) => r.json())
       .then(({ tracker, orgName }: { tracker: string; orgName: string }) => {
-        if (tracker === 'linear' && orgName.trim()) {
-          setIssueBaseUrl(`https://linear.app/${orgName.trim()}/issue/`);
-        } else if (tracker === 'jira' && orgName.trim()) {
-          setIssueBaseUrl(`https://${orgName.trim()}.atlassian.net/browse/`);
-        } else {
-          setIssueBaseUrl(undefined);
-        }
+        setIssueBaseUrl(issueBaseUrlFor(tracker, orgName));
       })
       .catch(() => { /* silently skip — no issue tracker configured */ });
   }, []);
