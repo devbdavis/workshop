@@ -207,8 +207,18 @@ export function TodoDetailModal({ todo, tracks, onClose, onSave, onDelete, onDis
               value={issueKey}
               onChange={(e) => {
               const raw = e.target.value;
+              const githubMatch = raw.match(/github\.com\/([^/]+)\/([^/]+)\/issues\/(\d+)/i);
+              if (githubMatch) {
+                setTicketKey(`${githubMatch[1]}/${githubMatch[2]}#${githubMatch[3]}`);
+                return;
+              }
               const linearMatch = raw.match(/\/issue\/([A-Z0-9]+-\d+)/i);
-              setTicketKey(linearMatch ? linearMatch[1].toUpperCase() : raw.toUpperCase());
+              if (linearMatch) {
+                setTicketKey(linearMatch[1].toUpperCase());
+                return;
+              }
+              const trimmed = raw.trim();
+              setTicketKey(/^[a-z0-9]+-\d+$/i.test(trimmed) ? trimmed.toUpperCase() : trimmed);
             }}
               placeholder="e.g. ASY-1402"
               className="w-full px-3 py-2 bg-gray-800 border border-gray-700 rounded-lg text-sm text-gray-200 font-mono placeholder:text-gray-600"

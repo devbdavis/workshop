@@ -160,7 +160,7 @@ export interface Session {
 }
 
 // External ticket
-export type TicketSource = 'jira' | 'linear';
+export type TicketSource = 'jira' | 'linear' | 'github';
 export type TicketRelationship = 'primary' | 'related' | 'blocked-by';
 
 export interface ExternalTicket {
@@ -248,7 +248,7 @@ export interface Todo {
   title: string;
   description?: string;
   resolution?: string;
-  /** Linear or Jira issue key (e.g. "ASY-1402"). Appended to worktree branch names. */
+  /** Issue key: Linear/Jira (e.g. "ASY-1402") or GitHub ("owner/repo#123"). Appended to worktree branch names. */
   issueKey?: string;
   /** Pull requests associated with this todo. */
   pullRequests?: PullRequest[];

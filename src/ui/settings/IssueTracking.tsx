@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 
-type IssueTracker = 'linear' | 'jira' | 'none';
+type IssueTracker = 'linear' | 'jira' | 'github' | 'none';
 
 interface TrackerConfig {
   tracker: IssueTracker;
@@ -18,6 +18,7 @@ function buildPreviewUrl(tracker: IssueTracker, orgName: string): string | null 
   if (!orgName.trim()) return null;
   if (tracker === 'linear') return `https://linear.app/${orgName.trim()}/issue/TEAM-123`;
   if (tracker === 'jira') return `https://${orgName.trim()}.atlassian.net/browse/TEAM-123`;
+  if (tracker === 'github') return `https://github.com/${orgName.trim() || 'owner'}/repo/issues/123`;
   return null;
 }
 
@@ -92,6 +93,7 @@ export function IssueTracking() {
           >
             <option value="linear">Linear</option>
             <option value="jira">Jira</option>
+            <option value="github">GitHub</option>
             <option value="none">None</option>
           </select>
         </div>
@@ -100,15 +102,32 @@ export function IssueTracking() {
         {config.tracker !== 'none' && (
           <div>
             <label className="block text-xs text-gray-400 mb-1.5">
-              {config.tracker === 'linear' ? 'Linear org name' : 'Jira domain'}
+              {config.tracker === 'linear'
+                ? 'Linear org name'
+                : config.tracker === 'github'
+                ? 'GitHub owner/org (optional)'
+                : 'Jira domain'}
             </label>
             <input
               type="text"
               value={config.orgName}
               onChange={(e) => setConfig((prev) => ({ ...prev, orgName: e.target.value }))}
-              placeholder={config.tracker === 'linear' ? 'e.g. myorg' : 'e.g. mycompany'}
+              placeholder={
+                config.tracker === 'linear'
+                  ? 'e.g. myorg'
+                  : config.tracker === 'github'
+                  ? 'e.g. my-org'
+                  : 'e.g. mycompany'
+              }
               className="bg-gray-800 border border-gray-700 rounded px-3 py-1.5 text-sm text-gray-200 focus:outline-none focus:border-blue-500 w-72"
             />
+            {config.tracker === 'github' && (
+              <p className="text-[11px] text-gray-500 mt-2">
+                Optional — scopes imported issues to this owner. Leave blank for all issues assigned to you.
+                Uses the local <span className="font-mono">gh</span> CLI, which must be authenticated
+                (<span className="font-mono">gh auth login</span>).
+              </p>
+            )}
             {previewUrl && (
               <p className="text-[11px] text-gray-500 mt-2">
                 Links will look like:{' '}

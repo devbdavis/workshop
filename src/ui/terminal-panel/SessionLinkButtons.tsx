@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect } from 'react';
 import type { PullRequest } from '@foundation/types';
+import { issueHref, isGithubIssueKey } from '@foundation/issue-tracker.js';
 
 interface Props {
   pullRequests?: PullRequest[];
@@ -69,8 +70,12 @@ export function SessionLinkButtons({ pullRequests, issueKey, issueBaseUrl }: Pro
   return (
     <>
       {hasIssue && (() => {
-        const issueUrl = issueBaseUrl ? `${issueBaseUrl}${issueKey}` : undefined;
-        const icon = <LinearIcon className="w-3.5 h-3.5" />;
+        const issueUrl = issueHref(issueBaseUrl, issueKey);
+        const icon = isGithubIssueKey(issueKey) ? (
+          <GitHubIcon className="w-3.5 h-3.5" />
+        ) : (
+          <LinearIcon className="w-3.5 h-3.5" />
+        );
         return issueUrl ? (
           <a
             href={issueUrl}

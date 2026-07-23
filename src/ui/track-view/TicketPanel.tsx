@@ -102,6 +102,7 @@ function AddTicketForm({
         >
           <option value="jira">Jira</option>
           <option value="linear">Linear</option>
+          <option value="github">GitHub</option>
         </select>
         <input
           value={externalId}

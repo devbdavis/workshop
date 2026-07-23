@@ -1,6 +1,7 @@
 import { useEffect, useState, useCallback } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import type { Track, Session, SessionId, ExternalTicket, Todo, DefaultAiCli, PrMonitor, TodoId } from '@foundation/types';
+import { issueBaseUrlFor } from '@foundation/issue-tracker.js';
 import type { DispatchOptions } from './DispatchDropdown';
 import { ContextPanel } from './ContextPanel';
 import { TicketPanel } from './TicketPanel';
@@ -82,13 +83,7 @@ export function TrackView() {
     fetch('/api/settings/issue-tracker')
       .then((r) => r.json())
       .then(({ tracker, orgName }: { tracker: string; orgName: string }) => {
-        if (tracker === 'linear' && orgName.trim()) {
-          setIssueBaseUrl(`https://linear.app/${orgName.trim()}/issue/`);
-        } else if (tracker === 'jira' && orgName.trim()) {
-          setIssueBaseUrl(`https://${orgName.trim()}.atlassian.net/browse/`);
-        } else {
-          setIssueBaseUrl(undefined);
-        }
+        setIssueBaseUrl(issueBaseUrlFor(tracker, orgName));
       })
       .catch(() => { /* silently skip — no issue tracker configured */ });
   }, []);
