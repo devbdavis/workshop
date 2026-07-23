@@ -197,7 +197,9 @@ function worktreeBranchName(name: string | undefined, sessionId: string, issueKe
     ? name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 40)
     : 'task';
   const base = `workshop/${slug}-${sessionId.slice(0, 6)}`;
-  return issueKey ? `${base}-${issueKey}` : base;
+  // Sanitize the key — GitHub keys ("owner/repo#123") carry chars that aren't git-ref safe.
+  const safeKey = issueKey?.replace(/[^a-zA-Z0-9._-]+/g, '-').replace(/^-+|-+$/g, '');
+  return safeKey ? `${base}-${safeKey}` : base;
 }
 
 /**
