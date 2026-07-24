@@ -521,6 +521,19 @@ export function createTerminalManager(
   /** Timestamp when we first observed a dead tmux session, keyed by session ID */
   const dyingSince = new Map<string, number>();
 
+  /** Sessions whose background init (worktree + tmux + CLI launch) hasn't
+   *  finished. The reaper skips these entirely: tmux may not exist yet, and
+   *  the pane shows a transient bare shell before the CLI paints — both would
+   *  otherwise trip the dead/exited teardown and kill a session that is merely
+   *  still starting up. */
+  const initializing = new Set<string>();
+
+  /** Timestamp when a background session's pane first looked like an exited
+   *  (bare shell) prompt. Gives the bare-shell retire the same grace as the
+   *  dead-tmux path, so a CLI that hasn't painted yet isn't mistaken for one
+   *  that exited. */
+  const exitedSince = new Map<string, number>();
+
   /** Current activity status derived from pane detection, keyed by session ID */
   const activityStatusMap = new Map<string, 'working' | 'idle' | 'needs-input'>();
 
@@ -569,6 +582,7 @@ export function createTerminalManager(
     lastPaneHash.delete(sessionId);
     lastActivityAt.delete(sessionId);
     dyingSince.delete(sessionId);
+    exitedSince.delete(sessionId);
     activityStatusMap.delete(sessionId);
     consecutiveIdleObs.delete(sessionId);
     firstIdledAt.delete(sessionId);
@@ -737,7 +751,9 @@ export function createTerminalManager(
 
       // Background init — worktree creation (slow), tmux, CLI launch. Not awaited.
       // The caller receives the session record immediately and can respond to the
-      // HTTP client; the terminal becomes usable once this resolves.
+      // HTTP client; the terminal becomes usable once this resolves. The reaper
+      // skips the session until this settles (see `initializing`).
+      initializing.add(session.id);
       const initPromise = (async () => {
         let cwd = options?.workingDirectory || process.env.HOME || '/tmp';
         let resolvedSystemPrompt = systemPrompt;
@@ -813,10 +829,12 @@ export function createTerminalManager(
         options?.onReady?.(session);
       })();
 
-      initPromise.catch((err) => {
-        console.error(`[session] Background init failed for ${session.id}:`, err);
-        try { options?.onReady?.(session); } catch { /* ignore */ }
-      });
+      initPromise
+        .catch((err) => {
+          console.error(`[session] Background init failed for ${session.id}:`, err);
+          try { options?.onReady?.(session); } catch { /* ignore */ }
+        })
+        .finally(() => { initializing.delete(session.id); });
 
       return session;
     },
@@ -1004,6 +1022,11 @@ export function createTerminalManager(
         // Already suspended — leave alone (resumeSuspendedSessions handles these)
         if (session.state === 'suspended') continue;
 
+        // Still coming up — worktree/tmux/CLI launch in flight. tmux may not
+        // exist yet and the pane shows a transient bare shell before the CLI
+        // paints; don't reap/retire until init finishes.
+        if (initializing.has(session.id)) continue;
+
         const alive = this.isSessionAlive(session);
 
         // 1. tmux session is gone — dying grace period before reap/suspend
@@ -1138,11 +1161,21 @@ export function createTerminalManager(
             continue;
           }
 
-          // Background CLI exited (bare shell prompt) — retire to recycle bin
+          // Background CLI exited (bare shell prompt) — retire to recycle bin.
+          // Require the bare shell to persist a grace window first: a just-
+          // launched CLI shows a bare prompt for a second or two before it
+          // paints, and retiring in that gap kills a healthy session.
           if (isSessionExited(session, capturedLines)) {
+            const since = exitedSince.get(session.id);
+            if (since === undefined) {
+              exitedSince.set(session.id, Date.now());
+              continue;
+            }
+            if (Date.now() - since < DYING_GRACE_PERIOD_MS) continue;
             retire(session, 'background: CLI exited (bare shell prompt)');
             continue;
           }
+          exitedSince.delete(session.id);
         }
         // All sessions (background or interactive) are otherwise left alone
       }
