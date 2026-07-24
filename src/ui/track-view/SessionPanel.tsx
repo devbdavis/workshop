@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import type { PrMonitor, Session, Todo } from '@foundation/types';
+import { issueHref } from '@foundation/issue-tracker.js';
 import { PrAttentionPanel } from './PrAttentionPanel';
 
 interface Props {
@@ -7,6 +8,8 @@ interface Props {
   todos: Todo[];
   /** Optional — current PR monitor rows for the track. */
   prMonitors?: PrMonitor[];
+  /** Base URL for the configured issue tracker; makes the issue key a link. */
+  issueBaseUrl?: string;
   onOpenTodo: (todo: Todo) => void;
   /** Triggers a parent reload (used after dispatching a PR action). */
   onRefresh?: () => void;
@@ -65,12 +68,14 @@ function SessionCard({
   session,
   todo,
   prMonitors,
+  issueBaseUrl,
   onOpenTodo,
   onRefresh,
 }: {
   session: Session;
   todo: Todo | null;
   prMonitors: PrMonitor[];
+  issueBaseUrl?: string;
   onOpenTodo: (todo: Todo) => void;
   onRefresh: () => void;
 }) {
@@ -125,9 +130,20 @@ function SessionCard({
               {todo.issueKey && (
                 <div className="flex items-center gap-2">
                   <span className="text-[10px] text-gray-500 uppercase tracking-wide w-10 shrink-0">Issue</span>
-                  <span className="text-xs font-mono text-blue-400 bg-blue-900/30 px-2 py-0.5 rounded">
-                    {todo.issueKey}
-                  </span>
+                  {issueHref(issueBaseUrl, todo.issueKey) ? (
+                    <a
+                      href={issueHref(issueBaseUrl, todo.issueKey)}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-xs font-mono text-blue-400 bg-blue-900/30 px-2 py-0.5 rounded hover:bg-blue-900/50 hover:underline"
+                    >
+                      {todo.issueKey}
+                    </a>
+                  ) : (
+                    <span className="text-xs font-mono text-blue-400 bg-blue-900/30 px-2 py-0.5 rounded">
+                      {todo.issueKey}
+                    </span>
+                  )}
                 </div>
               )}
 
@@ -221,7 +237,7 @@ function SessionCard({
   );
 }
 
-export function SessionPanel({ sessions, todos, prMonitors = [], onOpenTodo, onRefresh }: Props) {
+export function SessionPanel({ sessions, todos, prMonitors = [], issueBaseUrl, onOpenTodo, onRefresh }: Props) {
   const [activeIdx, setActiveIdx] = useState(0);
 
   if (sessions.length === 0) {
@@ -280,6 +296,7 @@ export function SessionPanel({ sessions, todos, prMonitors = [], onOpenTodo, onR
         session={session}
         todo={linkedTodo}
         prMonitors={todoMonitors}
+        issueBaseUrl={issueBaseUrl}
         onOpenTodo={onOpenTodo}
         onRefresh={onRefresh ?? (() => {})}
       />
