@@ -1,10 +1,12 @@
 import { useCallback, useEffect, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
 import type { DefaultAiCli, PrMonitor, Session, SessionId, Todo, Track } from '@foundation/types';
 import { issueBaseUrlFor } from '@foundation/issue-tracker.js';
 import { TerminalPane } from '../terminal-panel/TerminalPane';
 import { SessionPanel } from '../track-view/SessionPanel';
 import { NewSessionModal, type NewSessionOptions } from '../track-view/NewSessionModal';
+import type { DispatchOptions } from '../track-view/DispatchDropdown';
+import { TodoDetailModal } from '../kanban/TodoDetailModal';
+import { LinearTicketModal } from '../kanban/LinearTicketModal';
 import { groupSessionsByTrack, isVisibleTrack, sortTracks } from './group-sessions';
 import { TrackNavigator } from './TrackNavigator';
 import { NewSessionPicker } from './NewSessionPicker';
@@ -22,7 +24,6 @@ function loadSelected(): SessionId | null {
 }
 
 export function SessionOverview() {
-  const navigate = useNavigate();
   const [sessions, setSessions] = useState<Session[]>([]);
   const [tracks, setTracks] = useState<Track[]>([]);
   const [todos, setTodos] = useState<Todo[]>([]);
@@ -36,6 +37,8 @@ export function SessionOverview() {
   // Full track (repos populated) for the New Session modal — fetched on "+" click.
   const [modalTrack, setModalTrack] = useState<Track | null>(null);
   const [defaultAiCli, setDefaultAiCli] = useState<DefaultAiCli>('claude');
+  const [selectedTodo, setSelectedTodo] = useState<Todo | null>(null);
+  const [linearTicketTodoId, setLinearTicketTodoId] = useState<string | null>(null);
 
   const loadSessions = useCallback(async () => {
     try {
@@ -205,6 +208,39 @@ export function SessionOverview() {
     return null;
   }
 
+  async function handleSaveTodo(todoId: string, data: Partial<Todo>) {
+    await fetch(`/api/todos/${todoId}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data),
+    });
+    setSelectedTodo(null);
+    reload();
+  }
+
+  async function handleDeleteTodo(todoId: string) {
+    await fetch(`/api/todos/${todoId}`, { method: 'DELETE' });
+    setSelectedTodo(null);
+    reload();
+  }
+
+  async function handleDispatchTodo(todoId: string, opts: DispatchOptions, formData?: Partial<Todo>) {
+    if (formData) {
+      await fetch(`/api/todos/${todoId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(formData),
+      });
+    }
+    await fetch(`/api/todos/${todoId}/dispatch`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(opts),
+    });
+    setSelectedTodo(null);
+    reload();
+  }
+
   return (
     <div className="h-full flex">
       <aside className="w-80 border-r border-gray-800 overflow-y-auto shrink-0">
@@ -222,7 +258,8 @@ export function SessionOverview() {
               sessions={[selectedSession]}
               todos={todos}
               prMonitors={prMonitors}
-              onOpenTodo={(todo) => navigate(`/tracks/${todo.trackId}`)}
+              issueBaseUrl={issueBaseUrl}
+              onOpenTodo={setSelectedTodo}
               onRefresh={reload}
             />
           </div>
@@ -258,6 +295,22 @@ export function SessionOverview() {
           onCreate={createSession}
           onTodosChanged={loadTodos}
         />
+      )}
+
+      {selectedTodo !== null && (
+        <TodoDetailModal
+          todo={selectedTodo}
+          tracks={tracks}
+          onClose={() => setSelectedTodo(null)}
+          onSave={handleSaveTodo}
+          onDelete={handleDeleteTodo}
+          onDispatch={handleDispatchTodo}
+          onTicketCreationStarted={setLinearTicketTodoId}
+        />
+      )}
+
+      {linearTicketTodoId && (
+        <LinearTicketModal todoId={linearTicketTodoId} onClose={() => setLinearTicketTodoId(null)} />
       )}
     </div>
   );
