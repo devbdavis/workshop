@@ -91,7 +91,9 @@ export function detectAvailability(): AppAvailability {
     platform,
     editors: {
       cursor: hasCli('cursor') || (platform === 'darwin' && existsSync('/Applications/Cursor.app')),
-      code: hasCli('code'),
+      code:
+        hasCli('code') ||
+        (platform === 'darwin' && existsSync('/Applications/Visual Studio Code.app')),
     },
     terminals: {
       // iTerm: macOS-only, detected by the `.app` bundle (no CLI shim by default).
@@ -165,6 +167,16 @@ export interface LaunchOpts {
 export function launchEditor(editor: ResolvedEditor, target: string, platform: Platform): void {
   const quoted = JSON.stringify(target);
   if (editor === 'code') {
+    // On macOS the `code` shim is often hijacked by Cursor, so target VSCode by
+    // its bundle id (immune to $PATH) and fall back to the CLI only if that fails.
+    if (platform === 'darwin') {
+      try {
+        execSync(`open -b com.microsoft.VSCode ${quoted}`, { stdio: 'pipe' });
+      } catch {
+        execSync(`code ${quoted}`, { stdio: 'pipe' });
+      }
+      return;
+    }
     execSync(`code ${quoted}`, { stdio: 'pipe' });
     return;
   }
