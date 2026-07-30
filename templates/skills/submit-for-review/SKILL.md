@@ -53,6 +53,29 @@ Construct the PR body:
   🤖 Generated with [Claude Code](https://claude.com/claude-code)
   ```
 
+**Describe the change as it stands, never how it came to be.** The reviewer is
+deciding whether to approve the current diff. They did not see earlier
+iterations and gain nothing from hearing about them.
+
+Cut on sight:
+
+- "Originally this was X", "the prototype had these issues", "we fixed them"
+- "This PR shrank from N lines to M", "addresses review feedback", "as discussed"
+- "Rebased onto master, which had already changed Y"
+- Any fact that is only meaningful relative to a previous version of this PR
+
+A useful test: if a sentence would be deleted by someone who had never seen the
+PR before, delete it now.
+
+Lead with what changes and why it is needed. Include only what a reviewer must
+know to approve: behavior, blast radius, risk, rollback, merge ordering. Prefer
+a short paragraph plus a code or config block over prose narrating the block.
+The test plan lists what was actually verified, as evidence — not as a story.
+
+**When updating an existing PR body, rewrite it from the current diff rather
+than appending.** Appending is how history accumulates: each round leaves a
+sediment layer describing the round before it.
+
 Create the PR against whichever forge the `origin` remote points at:
 
 - **GitHub**:
@@ -91,6 +114,9 @@ Output a brief summary:
 ## Rules
 
 - **Always `--draft`** — no exceptions
+- **PR descriptions are current-state only** — no history, no iteration log, no "what changed since last review". Git already records that.
+- **Rewrite, never append, when updating a PR body**
+- **Default to zero code comments.** Most diffs need none; the reasoning belongs in the PR description, which is where reviewers actually read it. Write a comment only when it is the sole mechanism for a required effect (`# noqa`, a docstring, a build tag), or when correctness depends on something invisible from the file — e.g. a value that must stay in sync with one defined elsewhere. Never explain *why* the code is written the way it is. Never restate what well-named code already shows. If a comment seems necessary to make code understandable, rewrite the code instead. One line where one is genuinely warranted; never a paragraph.
 - **Never mark a todo or ticket as `done`** — "done" closes out the session, and review hasn't happened yet. Move items to a ready-for-review state instead.
 - **Never update an item's description** — any new information (such as the PR URL) goes in the **resolution** field, not the description.
 - Never push to `main`, `master`, or `develop` directly
