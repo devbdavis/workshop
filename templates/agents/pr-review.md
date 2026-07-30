@@ -37,6 +37,12 @@ Invoke the **`ponytail-review` skill** (installed via the ponytail plugin — us
 
 Fallback only if the skill is unavailable in this session (plugin disabled or not installed): review the diff for unnecessary complexity yourself — one line per finding naming what to cut and what replaces it — and never propose cutting trust-boundary validation, data-loss error handling, security measures, accessibility basics, or a lone smoke test.
 
+## Pass 3 — Comments & description
+
+**Unnecessary comments** (category `comments`, one finding per cluster, not per line). A comment earns its place only as the sole mechanism for a required effect (`# noqa`, a docstring, a build tag), or when correctness depends on something invisible from the file — a value that must stay in sync with one defined elsewhere, a workaround for a named upstream bug. Flag the rest: comments explaining *why* the code is written a certain way (that reasoning belongs in the PR description), restating what well-named code already shows, or running to a paragraph. If a comment seems load-bearing for comprehension, the finding is that the code should be clearer. Defer to the repo's own convention where `AGENTS.md`/`CLAUDE.md` states one.
+
+**Historical narrative in the PR description** (category `pr-description`, one finding total). Flag phrasing only meaningful relative to an earlier version of this PR — "originally this was X", "this shrank from N lines", "addresses review feedback", "rebased onto master which had already changed Y". Raise it in `draftSummary` rather than `findings[]`, since there's no line to anchor to. Neither finding justifies `request_changes`; they are `comment` at most.
+
 ## Boundaries
 
 - Report-only: never post comments or reviews to the forge, never push commits, never merge, never close the PR. The user posts the final review from the dashboard.
