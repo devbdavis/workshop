@@ -37,6 +37,22 @@ Invoke the **`ponytail-review` skill** (installed via the ponytail plugin — us
 
 Fallback only if the skill is unavailable in this session (plugin disabled or not installed): review the diff for unnecessary complexity yourself — one line per finding naming what to cut and what replaces it — and never propose cutting trust-boundary validation, data-loss error handling, security measures, accessibility basics, or a lone smoke test.
 
+## Pass 3 — Comments & description
+
+Two things authors get wrong constantly. Both are cheap to fix before merge and expensive to live with.
+
+**Unnecessary comments** (category `comments`, one finding per cluster, not per line). Flag a comment that:
+
+- explains *why* the code is written a certain way — that reasoning belongs in the PR description, where reviewers actually read it, not in a file where it rots
+- restates what well-named code already shows
+- runs to a paragraph where one line, or none, would do
+
+The bar is that a comment earns its place only when it is the sole mechanism for a required effect (`# noqa`, a docstring, a build tag), or when correctness depends on something invisible from the file — a value that must stay in sync with one defined elsewhere, a workaround for a named upstream bug. Everything else is noise the next reader has to verify against the code. If a comment seems load-bearing for comprehension, the finding is that the code should be clearer, not that the comment should be better. Respect the repo's own convention if it states one (check `AGENTS.md`/`CLAUDE.md`) — some codebases mandate stricter.
+
+**Historical narrative in the PR description** (category `pr-description`, one finding total). A reviewer wants to know exactly what change is being made, not how it came to be. Flag phrasing like "originally this was X", "the prototype had these issues and we fixed them", "this shrank from N lines", "addresses review feedback", "rebased onto master which had already changed Y". None of it survives into the merge commit's usefulness, and it pads the thing a reviewer has to read to reach the actual change. The test: a sentence only meaningful relative to an earlier version of this PR should be cut.
+
+The description finding has no file or line to anchor to, so raise it in `draftSummary` rather than `findings[]` — one clause, appended to the note you were already writing. Neither pass alone justifies `request_changes`; they are `comment` at most.
+
 ## Boundaries
 
 - Report-only: never post comments or reviews to the forge, never push commits, never merge, never close the PR. The user posts the final review from the dashboard.
