@@ -42,6 +42,7 @@ import { createWorkflowEngine } from '@application/workflow/engine.js';
 import { createExecutionDispatcher } from '@application/workflow/execution-dispatcher.js';
 import { createAgentDispatcher } from '@application/workflow/agent-dispatcher.js';
 import { createDispatchCoordinator } from '@application/workflow/dispatch-coordinator.js';
+import { generateShiftReport } from '@application/workflow/shift-report.js';
 import { createTopologyLoader } from '@application/workflow/topology-loader.js';
 import { createPlaybookRepository } from '@infrastructure/persistence/workflow-playbook-repository.js';
 import { createAgentRoleRepository } from '@infrastructure/persistence/workflow-agent-role-repository.js';
@@ -404,6 +405,20 @@ export function createApiRouter(deps: ApiRouterDeps = {}): Router {
     executionDispatcher,
     agentDispatcher,
     topologyLoader,
+    // Dark Factory: when an autonomous ticket comes to rest (awaiting merge,
+    // escalated, or done), generate a shift report and surface it to the UI.
+    onAutonomousRest: async (ticketId) => {
+      const t = workflowTickets.findById(ticketId);
+      if (!t) return;
+      const report = generateShiftReport(t, {
+        transitions: workflowTransitions,
+        topologyLoader,
+      });
+      workflowTickets.update(ticketId, {
+        stateData: { ...(t.stateData || {}), shiftReport: report },
+      });
+      broadcast('workflow:updated', ticketId);
+    },
   });
 
   // Wire the callback after coordinator exists (B4 fix: parent epic dispatch)
@@ -422,6 +437,8 @@ export function createApiRouter(deps: ApiRouterDeps = {}): Router {
     dependencies: ticketDependencies,
     dispatcher: dispatchCoordinator,
     topologyLoader,
+    playbooks: workflowPlaybooks,
+    projectRoot,
   });
   router.use(workflowRouter);
 

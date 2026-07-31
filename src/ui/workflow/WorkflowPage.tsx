@@ -57,17 +57,33 @@ export function WorkflowPage() {
 
   async function handleCreate(data: CreateEpicData) {
     const isFromPlan = !!data.planDraft;
-    const endpoint = isFromPlan ? '/api/workflow/tickets/from-plan' : '/api/workflow/tickets';
-    const body = isFromPlan
+    const isFromTemplate = !!data.templateSlug;
+    const endpoint = isFromTemplate
+      ? '/api/workflow/tickets/from-template'
+      : isFromPlan
+        ? '/api/workflow/tickets/from-plan'
+        : '/api/workflow/tickets';
+    const body = isFromTemplate
       ? {
           title: data.title,
           description: data.description,
-          planDraft: data.planDraft,
           trackId: data.trackId,
-          priority: data.priority,
           provider: data.provider,
+          priority: data.priority,
+          templateSlug: data.templateSlug,
+          autonomous: data.autonomous,
+          budget: data.budget,
         }
-      : { type: 'epic', ...data };
+      : isFromPlan
+        ? {
+            title: data.title,
+            description: data.description,
+            planDraft: data.planDraft,
+            trackId: data.trackId,
+            priority: data.priority,
+            provider: data.provider,
+          }
+        : { type: 'epic', ...data };
 
     await fetch(endpoint, {
       method: 'POST',

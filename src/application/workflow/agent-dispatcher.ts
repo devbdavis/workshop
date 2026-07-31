@@ -22,6 +22,7 @@ import type { AgentRoleRepository, AgentRoleRow } from '@domain/workflow/agent-r
 import { getStageDefinition, isAgentActionable } from '@domain/workflow/types.js';
 import type { StageDefinition } from '@domain/workflow/types.js';
 import { composeWorkflowPrompt, composeDataDrivenPrompt, type PromptContext } from './prompt-composer.js';
+import { isAutonomous } from './autonomy.js';
 
 // ---------------------------------------------------------------------------
 // Public interface
@@ -340,6 +341,7 @@ export function createAgentDispatcher(deps: AgentDispatcherDeps): AgentDispatche
             initialPrompt,
             workingDirectory: workingDir,
             executionTicketId: ticket.id,
+            dangerouslySkipPermissions: isAutonomous(ticket, tickets),
           });
           sessionIds.push(session.id);
           console.log(

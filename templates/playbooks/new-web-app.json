@@ -1,0 +1,129 @@
+{
+  "id": "new-web-app",
+  "name": "New Web App",
+  "description": "Dark Factory playbook for scaffolding a brand-new web application from scratch: triage the intake, plan the architecture, build it, and gate only on the final merge review.",
+  "ticketType": "epic",
+  "matchCriteria": {
+    "keywords": ["web", "app", "webapp", "frontend", "website", "new project", "scaffold", "greenfield"],
+    "complexity": "moderate",
+    "domains": ["web"]
+  },
+  "epicPlaybook": [
+    {
+      "state": "triaging",
+      "semanticRole": "entry",
+      "agentActionable": true,
+      "humanGate": false,
+      "agentRoleId": "triage",
+      "validTransitions": [
+        { "to": "planning", "trigger": "agent-complete" }
+      ]
+    },
+    {
+      "state": "planning",
+      "semanticRole": "processing",
+      "agentActionable": true,
+      "humanGate": false,
+      "agentRoleId": "planner",
+      "validTransitions": [
+        { "to": "plan-critique", "trigger": "agent-complete" }
+      ]
+    },
+    {
+      "state": "plan-critique",
+      "semanticRole": "processing",
+      "agentActionable": true,
+      "humanGate": false,
+      "agentRoleId": "plan-critic",
+      "validTransitions": [
+        { "to": "plan-review", "trigger": "agent-complete", "condition": "no blocking findings" },
+        { "to": "planning", "trigger": "agent-complete", "condition": "blocking findings exist" }
+      ]
+    },
+    {
+      "state": "plan-review",
+      "semanticRole": "human-gate",
+      "agentActionable": false,
+      "humanGate": true,
+      "autoApprovable": true,
+      "validTransitions": [
+        { "to": "execute", "trigger": "human-approve" },
+        { "to": "planning", "trigger": "human-reject" }
+      ]
+    },
+    {
+      "state": "execute",
+      "semanticRole": "processing",
+      "agentActionable": true,
+      "humanGate": false,
+      "agentRoleId": "implementer",
+      "promptOverride": "Scaffold the new web application per the approved plan. Before transitioning to execution-complete, run the project's full test suite and its linter/typecheck (e.g. `npm test` and `npm run typecheck` / `npm run lint`). Do NOT transition to execution-complete until both are green — fix failures and re-run rather than skipping or disabling checks. When you transition, paste the full test/lint run output (or a summary with pass counts and zero failures) into the transition comment as proof the tests-green gate was satisfied. If you cannot get them green after reasonable effort, transition to execution-failed with the error output in the comment instead.",
+      "validTransitions": [
+        { "to": "integration-review", "trigger": "execution-complete" },
+        { "to": "execution-failed", "trigger": "execution-failed" }
+      ]
+    },
+    {
+      "state": "execution-failed",
+      "semanticRole": "error",
+      "agentActionable": false,
+      "humanGate": false,
+      "validTransitions": [
+        { "to": "execute", "trigger": "manual" }
+      ]
+    },
+    {
+      "state": "integration-review",
+      "semanticRole": "processing",
+      "agentActionable": true,
+      "humanGate": false,
+      "agentRoleId": "integration-reviewer",
+      "validTransitions": [
+        { "to": "final-review", "trigger": "agent-complete", "condition": "no blocking findings" },
+        { "to": "integration-fix", "trigger": "agent-complete", "condition": "blocking findings exist" }
+      ]
+    },
+    {
+      "state": "integration-fix",
+      "semanticRole": "processing",
+      "agentActionable": true,
+      "humanGate": false,
+      "agentRoleId": "fixer",
+      "validTransitions": [
+        { "to": "integration-review", "trigger": "agent-complete" }
+      ]
+    },
+    {
+      "state": "final-review",
+      "semanticRole": "human-gate",
+      "agentActionable": false,
+      "humanGate": true,
+      "autoApprovable": false,
+      "validTransitions": [
+        { "to": "done", "trigger": "human-approve" },
+        { "to": "integration-fix", "trigger": "human-reject" }
+      ]
+    },
+    {
+      "state": "done",
+      "semanticRole": "terminal",
+      "agentActionable": false,
+      "humanGate": false,
+      "validTransitions": []
+    }
+  ],
+  "promptOverrides": {
+    "triage": "This is a NEW web application being built from scratch. Use the intake answers (stack, auth, persistence, deploy target, non-goals, acceptance criteria) to write a tight spec. Default to the requested stack; if unspecified, prefer a boring, well-supported stack (e.g. TypeScript + a mainstream framework) over anything exotic.",
+    "planner": "Plan the scaffold: project structure, framework choice, routing, auth integration, persistence layer, and deploy target, in that order. Call out the minimum viable slice that satisfies the acceptance criteria — do not plan speculative features beyond the stated non-goals boundary.",
+    "implementer": "Scaffold the new application. Prefer official CLIs/starters over hand-rolled boilerplate. Wire up auth and persistence only to the extent the intake requires; leave clear TODOs for anything explicitly out of scope."
+  },
+  "intakeQuestions": [
+    { "id": "what-it-is", "label": "What are you building? Give a one-paragraph description.", "required": true, "placeholder": "e.g. A customer-facing dashboard for viewing order history." },
+    { "id": "stack", "label": "Preferred tech stack (language, framework, major libraries)?", "required": true, "placeholder": "e.g. TypeScript, React, Vite, Tailwind" },
+    { "id": "auth", "label": "Authentication requirements, if any?", "required": true, "placeholder": "e.g. Email/password via Auth0, or none for MVP" },
+    { "id": "persistence", "label": "Data persistence needs?", "required": true, "placeholder": "e.g. PostgreSQL via Prisma, or none" },
+    { "id": "deploy-target", "label": "Where will this be deployed?", "required": true, "placeholder": "e.g. Vercel, internal k8s cluster, not yet decided" },
+    { "id": "non-goals", "label": "What is explicitly out of scope for this work?", "required": true, "placeholder": "e.g. Mobile app, admin panel, billing" },
+    { "id": "acceptance-criteria", "label": "How will you know this is done? List concrete acceptance criteria.", "required": true, "placeholder": "e.g. User can sign up, log in, and see their order history" }
+  ]
+}

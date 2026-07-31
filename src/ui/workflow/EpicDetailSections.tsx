@@ -1,4 +1,5 @@
 import { useMemo } from 'react';
+import Markdown from 'react-markdown';
 import type { WorkflowTicket, Session } from '@foundation/types.js';
 
 // State-specific data interfaces — now defined locally (runtime validated by stateData shape)
@@ -256,6 +257,86 @@ export function FinalReviewSection({ data }: { data: FinalReviewData | undefined
       {data.reviewNotes && (
         <p className="text-sm text-gray-400 mt-2 whitespace-pre-wrap">{data.reviewNotes}</p>
       )}
+    </Section>
+  );
+}
+
+export interface ShiftReport {
+  generatedAt: string;
+  reason: 'escalated' | 'awaiting-merge' | 'done';
+  markdown: string;
+  stepsUsed: number;
+}
+
+export interface AgentProgressEntry {
+  agentRole: string;
+  summary: string;
+  timestamp: string;
+}
+
+const SHIFT_REPORT_META: Record<ShiftReport['reason'], { label: string; className: string }> = {
+  'awaiting-merge': { label: '✅ Ready for your review — draft PR open', className: 'border-emerald-800/60 bg-emerald-950/30' },
+  escalated: { label: '⚠️ Escalated — needs you', className: 'border-amber-800/60 bg-amber-950/30' },
+  done: { label: '🏁 Done', className: 'border-gray-800 bg-gray-900' },
+};
+
+function formatRelativeTime(iso: string): string {
+  const diff = Date.now() - new Date(iso).getTime();
+  const minutes = Math.floor(diff / 60000);
+  if (minutes < 1) return 'just now';
+  if (minutes < 60) return `${minutes}m ago`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `${hours}h ago`;
+  const days = Math.floor(hours / 24);
+  return `${days}d ago`;
+}
+
+/** Small "running dark" badge for autonomous epics — used on both list and detail views. */
+export function RunningDarkPill() {
+  return (
+    <span className="text-[10px] px-1.5 py-0.5 bg-fuchsia-900/50 text-fuchsia-300 rounded-full shrink-0">
+      🏭 running dark
+    </span>
+  );
+}
+
+export function ShiftReportSection({ report }: { report: ShiftReport | undefined }) {
+  if (!report) return null;
+  const meta = SHIFT_REPORT_META[report.reason] ?? SHIFT_REPORT_META.done;
+
+  return (
+    <div className={`border rounded-lg p-4 ${meta.className}`}>
+      <div className="flex items-center gap-2 flex-wrap mb-2">
+        <h3 className="text-sm font-semibold text-gray-100">{meta.label}</h3>
+        <span className="text-[10px] text-gray-500 ml-auto">
+          {report.stepsUsed} step{report.stepsUsed === 1 ? '' : 's'} &middot; {formatRelativeTime(report.generatedAt)}
+        </span>
+      </div>
+      <div className="text-sm text-gray-300 markdown-body">
+        <Markdown>{report.markdown}</Markdown>
+      </div>
+    </div>
+  );
+}
+
+export function ProgressFeedSection({ entries }: { entries: AgentProgressEntry[] | undefined }) {
+  if (!entries || entries.length === 0) return null;
+  const sorted = [...entries].sort(
+    (a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime(),
+  );
+
+  return (
+    <Section title="Progress">
+      <ul className="space-y-1.5">
+        {sorted.map((e, idx) => (
+          <li key={idx} className="flex items-start gap-2 text-xs">
+            <span className="text-gray-600 shrink-0">{formatRelativeTime(e.timestamp)}</span>
+            <span className="text-gray-300">
+              <span className="text-gray-500">{e.agentRole}:</span> {e.summary}
+            </span>
+          </li>
+        ))}
+      </ul>
     </Section>
   );
 }
