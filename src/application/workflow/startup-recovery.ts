@@ -102,7 +102,8 @@ export async function recoverStuckTickets(
     (t) =>
       !checkIsTerminal(deps, t) &&
       checkIsAgentActionable(deps, t) &&
-      !checkIsExecutionStage(deps, t), // execution stages are handled by ExecutionDispatcher
+      !checkIsExecutionStage(deps, t) && // execution stages are handled by ExecutionDispatcher
+      (t.stateData as Record<string, unknown> | undefined)?.paused !== true, // Dark Factory: paused runs resume via the usage-pacing poller, not recovery
   );
 
   result.scanned = candidates.length;

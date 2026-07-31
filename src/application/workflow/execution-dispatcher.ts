@@ -15,6 +15,7 @@ import type { TerminalManager } from '@domain/terminal/manager.js';
 import type { WorkflowEngine } from './engine.js';
 import type { TopologyLoader } from './topology-loader.js';
 import { getStageDefinition } from '@domain/workflow/types.js';
+import type { StageDefinition } from '@domain/workflow/types.js';
 import { formatPlanContent } from './prompt-composer.js';
 import { isAutonomous } from './autonomy.js';
 
@@ -131,6 +132,13 @@ export function createExecutionDispatcher(
     const completionTarget = findTransitionTarget(topologyLoader, ticket, 'execution-complete');
     const failedTarget = findTransitionTarget(topologyLoader, ticket, 'execution-failed');
 
+    let stage: StageDefinition | undefined;
+    try {
+      stage = getStageDefinition(topologyLoader.loadForTicket(ticket), ticket.state);
+    } catch {
+      stage = undefined;
+    }
+
     const session = await terminal.createSession(
       ticket.trackId || getOrCreateWorkflowTrack(),
       {
@@ -140,6 +148,7 @@ export function createExecutionDispatcher(
         workingDirectory: workingDir,
         executionTicketId: ticket.id,
         dangerouslySkipPermissions: isAutonomous(ticket, tickets),
+        model: stage?.model,
       },
     );
 

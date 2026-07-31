@@ -43,6 +43,8 @@ import { createExecutionDispatcher } from '@application/workflow/execution-dispa
 import { createAgentDispatcher } from '@application/workflow/agent-dispatcher.js';
 import { createDispatchCoordinator } from '@application/workflow/dispatch-coordinator.js';
 import { generateShiftReport } from '@application/workflow/shift-report.js';
+import { createUsageTracker } from '@infrastructure/usage/usage-tracker.js';
+import { createUsagePacingPoller } from '@application/usage/usage-pacing-poller.js';
 import { createTopologyLoader } from '@application/workflow/topology-loader.js';
 import { createPlaybookRepository } from '@infrastructure/persistence/workflow-playbook-repository.js';
 import { createAgentRoleRepository } from '@infrastructure/persistence/workflow-agent-role-repository.js';
@@ -399,12 +401,23 @@ export function createApiRouter(deps: ApiRouterDeps = {}): Router {
   });
 
   // Unified coordinator — routes transitions through the right dispatcher
+  // Dark Factory usage pacing — reads local token logs (free) to estimate 5h-window usage.
+  const usageTracker = createUsageTracker({ settings: settingsRepo });
+  const USAGE_THRESHOLD = 0.75;
+
   const dispatchCoordinator = createDispatchCoordinator({
     engine: workflowEngine,
     tickets: workflowTickets,
     executionDispatcher,
     agentDispatcher,
     topologyLoader,
+    // Dark Factory usage pacing: pause new autonomous work at 75% of the learned
+    // usage ceiling, leaving headroom for interactive sessions (window is account-wide).
+    usageGate: () => ({
+      over: usageTracker.isOverThreshold(USAGE_THRESHOLD),
+      resumeAt: new Date(Date.now() + 15 * 60 * 1000).toISOString(),
+    }),
+    onPaused: async (ticketId) => { broadcast('workflow:updated', ticketId); },
     // Dark Factory: when an autonomous ticket comes to rest (awaiting merge,
     // escalated, or done), generate a shift report and surface it to the UI.
     onAutonomousRest: async (ticketId) => {
@@ -467,8 +480,22 @@ export function createApiRouter(deps: ApiRouterDeps = {}): Router {
     terminal,
     sessions,
     taskRuns: scheduledTaskRuns,
+    usageTracker,
   });
   router.use(executionHookRouter);
+
+  // Dark Factory usage-pacing poller — resumes paused autonomous epics once the
+  // usage window drains back under threshold. (Proactive pause happens at dispatch.)
+  const usagePacingPoller = createUsagePacingPoller({
+    tickets: workflowTickets,
+    usageTracker,
+    dispatcher: dispatchCoordinator,
+    onResumed: (id) => broadcast('workflow:updated', id),
+    threshold: USAGE_THRESHOLD,
+  });
+  usagePacingPoller.start();
+  process.on('SIGINT', () => usagePacingPoller.stop());
+  process.on('SIGTERM', () => usagePacingPoller.stop());
 
   // Recover stuck workflow tickets on startup (delay to let session sync finish first)
   setTimeout(async () => {

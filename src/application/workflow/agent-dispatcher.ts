@@ -342,6 +342,7 @@ export function createAgentDispatcher(deps: AgentDispatcherDeps): AgentDispatche
             workingDirectory: workingDir,
             executionTicketId: ticket.id,
             dangerouslySkipPermissions: isAutonomous(ticket, tickets),
+            model: stage?.model,
           });
           sessionIds.push(session.id);
           console.log(

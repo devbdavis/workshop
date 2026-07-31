@@ -1,6 +1,6 @@
 import type { WorkflowTicket, Track } from '@foundation/types.js';
 import { WorkflowStateIndicator } from './WorkflowStateIndicator.js';
-import { RunningDarkPill } from './EpicDetailSections.js';
+import { RunningDarkPill, PausedPill } from './EpicDetailSections.js';
 
 const PRIORITY_STYLES: Record<string, string> = {
   critical: 'bg-red-900/50 text-red-300',
@@ -166,6 +166,7 @@ function EpicCard({
             <h3 className="text-sm font-medium text-gray-200 truncate">{epic.title}</h3>
             <WorkflowStateIndicator state={epic.state} ticketType="epic" stateData={epic.stateData as Record<string, unknown> | undefined} />
             {stateData?.autonomous === true && <RunningDarkPill />}
+            {stateData?.paused === true && <PausedPill until={typeof stateData?.pausedUntil === 'string' ? stateData.pausedUntil : undefined} reason={typeof stateData?.pausedReason === 'string' ? stateData.pausedReason : undefined} />}
             {childReviewCount != null && childReviewCount > 0 && (
               <span className="text-[10px] px-1.5 py-0.5 bg-amber-900/60 text-amber-300 rounded-full animate-pulse">
                 {childReviewCount} task{childReviewCount > 1 ? 's' : ''} awaiting review

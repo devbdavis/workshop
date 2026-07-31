@@ -300,6 +300,25 @@ export function RunningDarkPill() {
   );
 }
 
+/** Paused badge — shown when an autonomous epic is paused for usage pacing. */
+export function PausedPill({ until, reason }: { until?: string; reason?: string }) {
+  const resumeHint = until
+    ? ` · resumes ${new Date(until).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}`
+    : '';
+  const title = [
+    reason || 'Paused for usage pacing',
+    until ? `Resumes around ${new Date(until).toLocaleString()}` : null,
+  ].filter(Boolean).join(' — ');
+  return (
+    <span
+      className="text-[10px] px-1.5 py-0.5 bg-amber-900/50 text-amber-300 rounded-full shrink-0"
+      title={title}
+    >
+      ⏸ paused{resumeHint}
+    </span>
+  );
+}
+
 export function ShiftReportSection({ report }: { report: ShiftReport | undefined }) {
   if (!report) return null;
   const meta = SHIFT_REPORT_META[report.reason] ?? SHIFT_REPORT_META.done;
