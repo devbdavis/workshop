@@ -8,6 +8,9 @@ import type {
 import type { WorkflowEngine } from '@application/workflow/engine.js';
 import type { DispatchCoordinator } from '@application/workflow/dispatch-coordinator.js';
 import type { TopologyLoader } from '@application/workflow/topology-loader.js';
+import type { PlaybookRepository } from '@domain/workflow/playbook-repository.js';
+import { listTemplates, ensurePlaybookForTemplate } from '@application/workflow/template-loader.js';
+import { DEFAULT_AUTONOMOUS_BUDGET } from '@application/workflow/autonomy.js';
 import { broadcast } from './events.js';
 
 export interface WorkflowRouterDeps {
@@ -19,6 +22,10 @@ export interface WorkflowRouterDeps {
   dispatcher?: DispatchCoordinator;
   /** Optional topology loader for enriching responses with semantic info */
   topologyLoader?: TopologyLoader;
+  /** Playbook registry — required for Dark Factory template seeding */
+  playbooks?: PlaybookRepository;
+  /** Repo root, used to locate templates/playbooks/*.json */
+  projectRoot?: string;
 }
 
 /**
@@ -59,7 +66,72 @@ function enrichTicketWithSemanticInfo(
 
 export function createWorkflowRouter(deps: WorkflowRouterDeps): Router {
   const router = Router();
-  const { engine, tickets, transitions, dependencies, dispatcher, topologyLoader } = deps;
+  const { engine, tickets, transitions, dependencies, dispatcher, topologyLoader, playbooks, projectRoot } = deps;
+
+  // --- Dark Factory: list available templates ---
+
+  router.get('/workflow/templates', (_req, res) => {
+    if (!projectRoot) {
+      res.json([]);
+      return;
+    }
+    res.json(listTemplates(projectRoot));
+  });
+
+  // --- Dark Factory: create an autonomous epic from a template ---
+
+  router.post('/workflow/tickets/from-template', async (req, res) => {
+    const { title, description, trackId, provider, priority, templateSlug, autonomous, budget } = req.body;
+
+    if (!title || typeof title !== 'string') {
+      res.status(400).json({ error: 'title is required' });
+      return;
+    }
+    if (!templateSlug || typeof templateSlug !== 'string') {
+      res.status(400).json({ error: 'templateSlug is required' });
+      return;
+    }
+    if (!playbooks || !projectRoot) {
+      res.status(503).json({ error: 'Template seeding not available' });
+      return;
+    }
+
+    try {
+      const playbookRowId = ensurePlaybookForTemplate(projectRoot, templateSlug, playbooks);
+
+      let ticket = engine.createEpic({
+        title,
+        description: description || '',
+        trackId: trackId as TrackId | undefined,
+        provider,
+        priority,
+        playbookRowId,
+      });
+
+      // Mark the epic autonomous (opt-out via autonomous:false) and set the budget.
+      const updated = tickets.update(ticket.id, {
+        stateData: {
+          ...(ticket.stateData || {}),
+          autonomous: autonomous !== false,
+          autonomousBudget: budget ?? DEFAULT_AUTONOMOUS_BUDGET,
+        },
+      });
+      if (updated) ticket = updated;
+
+      // Kick off the pipeline; the coordinator auto-advances gates for autonomous epics.
+      if (dispatcher) {
+        await dispatcher.dispatchForCurrentState(ticket.id);
+        const refreshed = tickets.findById(ticket.id);
+        if (refreshed) ticket = refreshed;
+      }
+
+      broadcast('workflow:created', ticket.id);
+      res.status(201).json(ticket);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Failed to create ticket from template';
+      res.status(400).json({ error: message });
+    }
+  });
 
   // --- List all workflow tickets ---
 

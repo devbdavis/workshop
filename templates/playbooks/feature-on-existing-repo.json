@@ -1,0 +1,129 @@
+{
+  "id": "feature-on-existing-repo",
+  "name": "Feature on Existing Repo",
+  "description": "Dark Factory playbook for adding a feature to an existing codebase: triage against current conventions, plan the change, implement it, and gate only on the final merge review.",
+  "ticketType": "epic",
+  "matchCriteria": {
+    "keywords": ["feature", "add", "existing", "existing repo", "existing codebase", "extend", "enhancement"],
+    "complexity": "moderate",
+    "domains": ["web", "backend"]
+  },
+  "epicPlaybook": [
+    {
+      "state": "triaging",
+      "semanticRole": "entry",
+      "agentActionable": true,
+      "humanGate": false,
+      "agentRoleId": "triage",
+      "validTransitions": [
+        { "to": "planning", "trigger": "agent-complete" }
+      ]
+    },
+    {
+      "state": "planning",
+      "semanticRole": "processing",
+      "agentActionable": true,
+      "humanGate": false,
+      "agentRoleId": "planner",
+      "validTransitions": [
+        { "to": "plan-critique", "trigger": "agent-complete" }
+      ]
+    },
+    {
+      "state": "plan-critique",
+      "semanticRole": "processing",
+      "agentActionable": true,
+      "humanGate": false,
+      "agentRoleId": "plan-critic",
+      "validTransitions": [
+        { "to": "plan-review", "trigger": "agent-complete", "condition": "no blocking findings" },
+        { "to": "planning", "trigger": "agent-complete", "condition": "blocking findings exist" }
+      ]
+    },
+    {
+      "state": "plan-review",
+      "semanticRole": "human-gate",
+      "agentActionable": false,
+      "humanGate": true,
+      "autoApprovable": true,
+      "validTransitions": [
+        { "to": "execute", "trigger": "human-approve" },
+        { "to": "planning", "trigger": "human-reject" }
+      ]
+    },
+    {
+      "state": "execute",
+      "semanticRole": "processing",
+      "agentActionable": true,
+      "humanGate": false,
+      "agentRoleId": "implementer",
+      "promptOverride": "Implement the feature per the approved plan, following the existing repo's conventions, layering, and style — do not introduce a parallel pattern where an existing one already covers the need. Before transitioning to execution-complete, run the project's full test suite and its linter/typecheck (e.g. `npm test` and `npm run typecheck` / `npm run lint`). Do NOT transition to execution-complete until both are green — fix failures and re-run rather than skipping or disabling checks. When you transition, paste the full test/lint run output (or a summary with pass counts and zero failures) into the transition comment as proof the tests-green gate was satisfied. If you cannot get them green after reasonable effort, transition to execution-failed with the error output in the comment instead.",
+      "validTransitions": [
+        { "to": "integration-review", "trigger": "execution-complete" },
+        { "to": "execution-failed", "trigger": "execution-failed" }
+      ]
+    },
+    {
+      "state": "execution-failed",
+      "semanticRole": "error",
+      "agentActionable": false,
+      "humanGate": false,
+      "validTransitions": [
+        { "to": "execute", "trigger": "manual" }
+      ]
+    },
+    {
+      "state": "integration-review",
+      "semanticRole": "processing",
+      "agentActionable": true,
+      "humanGate": false,
+      "agentRoleId": "integration-reviewer",
+      "validTransitions": [
+        { "to": "final-review", "trigger": "agent-complete", "condition": "no blocking findings" },
+        { "to": "integration-fix", "trigger": "agent-complete", "condition": "blocking findings exist" }
+      ]
+    },
+    {
+      "state": "integration-fix",
+      "semanticRole": "processing",
+      "agentActionable": true,
+      "humanGate": false,
+      "agentRoleId": "fixer",
+      "validTransitions": [
+        { "to": "integration-review", "trigger": "agent-complete" }
+      ]
+    },
+    {
+      "state": "final-review",
+      "semanticRole": "human-gate",
+      "agentActionable": false,
+      "humanGate": true,
+      "autoApprovable": false,
+      "validTransitions": [
+        { "to": "done", "trigger": "human-approve" },
+        { "to": "integration-fix", "trigger": "human-reject" }
+      ]
+    },
+    {
+      "state": "done",
+      "semanticRole": "terminal",
+      "agentActionable": false,
+      "humanGate": false,
+      "validTransitions": []
+    }
+  ],
+  "promptOverrides": {
+    "triage": "This feature is being added to an EXISTING codebase. Read the relevant existing modules, layering rules, and conventions (e.g. this repo's CLAUDE.md) before writing the spec. Note which files/areas the feature will touch and any existing patterns it should reuse rather than duplicate.",
+    "planner": "Plan the change as a diff against the existing codebase: which existing modules/files are touched, what new code is needed, and how it fits the current architecture and dependency rules. Prefer extending existing abstractions over introducing new ones.",
+    "implementer": "Modify the existing codebase to add this feature. Match existing conventions (naming, layering, test style). Do not refactor unrelated code while implementing. Keep the diff scoped to what the plan calls for."
+  },
+  "intakeQuestions": [
+    { "id": "what-it-is", "label": "What feature are you adding? Give a one-paragraph description.", "required": true, "placeholder": "e.g. Add CSV export to the reports page." },
+    { "id": "stack", "label": "What part of the existing stack does this touch (language, framework, module)?", "required": true, "placeholder": "e.g. TypeScript/Express API layer, or the React reports UI" },
+    { "id": "auth", "label": "Any changes to authentication/authorization for this feature?", "required": true, "placeholder": "e.g. None, reuse existing session auth" },
+    { "id": "persistence", "label": "Does this touch the existing data model or persistence layer?", "required": true, "placeholder": "e.g. Adds a new column to the reports table" },
+    { "id": "deploy-target", "label": "Any deployment or migration changes needed?", "required": true, "placeholder": "e.g. None, ships with the normal release" },
+    { "id": "non-goals", "label": "What is explicitly out of scope for this feature?", "required": true, "placeholder": "e.g. Bulk export, scheduled exports" },
+    { "id": "acceptance-criteria", "label": "How will you know this is done? List concrete acceptance criteria.", "required": true, "placeholder": "e.g. User can click Export and download a CSV matching the current filter" }
+  ]
+}

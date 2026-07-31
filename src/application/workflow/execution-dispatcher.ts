@@ -16,6 +16,7 @@ import type { WorkflowEngine } from './engine.js';
 import type { TopologyLoader } from './topology-loader.js';
 import { getStageDefinition } from '@domain/workflow/types.js';
 import { formatPlanContent } from './prompt-composer.js';
+import { isAutonomous } from './autonomy.js';
 
 // ---------------------------------------------------------------------------
 // Public interface
@@ -138,6 +139,7 @@ export function createExecutionDispatcher(
         initialPrompt: buildInitialPrompt(ticket, completionTarget, failedTarget),
         workingDirectory: workingDir,
         executionTicketId: ticket.id,
+        dangerouslySkipPermissions: isAutonomous(ticket, tickets),
       },
     );
 

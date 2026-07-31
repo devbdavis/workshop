@@ -43,6 +43,7 @@ export const StageDefinitionSchema = z.object({
   semanticRole: SemanticRoleSchema,
   agentActionable: z.boolean(),
   humanGate: z.boolean(),
+  autoApprovable: z.boolean().optional(),
   agentRoleId: z.string().optional(),
   agentCount: z.number().int().min(1).max(10).optional(),
   parallel: z.boolean().optional(),

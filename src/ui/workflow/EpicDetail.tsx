@@ -22,6 +22,7 @@ interface FinalReviewData {
   prLinks?: string[];
   reviewNotes?: string;
 }
+
 import { WorkflowStateIndicator } from './WorkflowStateIndicator';
 import { StateTimeline } from './StateTimeline';
 import { HumanGatePanel } from './HumanGatePanel';
@@ -29,6 +30,8 @@ import { WorkflowAssignmentPanel } from './WorkflowAssignmentPanel';
 import {
   Section, CollapsibleSection, DetailRow, NeedsInputSection,
   FindingsSection, FinalReviewSection, MiniTaskBoard,
+  ShiftReportSection, ProgressFeedSection, RunningDarkPill,
+  type ShiftReport, type AgentProgressEntry,
 } from './EpicDetailSections';
 import { TerminalModal } from '../track-view/TerminalModal';
 
@@ -199,6 +202,7 @@ export function EpicDetail() {
             <span className={`text-xs px-2 py-0.5 rounded ${PRIORITY_STYLES[ticket.priority]}`}>
               {ticket.priority}
             </span>
+            {sd?.autonomous === true && <RunningDarkPill />}
           </div>
           <ActionButtons
             ticket={ticket}
@@ -230,6 +234,10 @@ export function EpicDetail() {
         <div className="flex flex-col md:flex-row gap-6">
           {/* Left column (2/3) */}
           <div className="flex-1 min-w-0 space-y-4">
+            {sd?.shiftReport != null && (
+              <ShiftReportSection report={sd.shiftReport as ShiftReport | undefined} />
+            )}
+
             {sd?.refinedSpec ? (
               <>
                 <CollapsibleSection title="Refined Spec" defaultOpen={false} badge="agent-generated">
@@ -258,6 +266,8 @@ export function EpicDetail() {
                 </div>
               </CollapsibleSection>
             )}
+
+            <ProgressFeedSection entries={sd?.agentProgress as AgentProgressEntry[] | undefined} />
 
             {ticket.state === 'needs-input' && (
               <NeedsInputSection
