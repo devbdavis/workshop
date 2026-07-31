@@ -150,4 +150,55 @@ describe('DispatchCoordinator — Dark Factory auto-advance', () => {
     const final = tickets.findById(epic.id)!;
     expect(final.state).toBe('review-a');
   });
+
+  // --- Usage pacing gate (separate coordinator wired with a usageGate) ---
+
+  const gate = { over: true };
+  const onPaused = vi.fn().mockResolvedValue(undefined);
+  const pacingCoordinator = createDispatchCoordinator({
+    engine,
+    tickets,
+    executionDispatcher: createMockExecutionDispatcher(),
+    agentDispatcher: createMockAgentDispatcher(),
+    topologyLoader,
+    usageGate: () => ({ over: gate.over, resumeAt: '2999-01-01T00:00:00Z' }),
+    onPaused,
+  });
+
+  function autonomousEpic(): WorkflowTicket {
+    // Stays at 'idea' (entry, non-gate) — the usage gate fires for any autonomous ticket.
+    const epic = engine.createEpic({ title: 'Dark epic', description: 'x' });
+    return tickets.update(epic.id, { stateData: { ...(epic.stateData || {}), autonomous: true } })!;
+  }
+
+  it('pauses an over-threshold autonomous ticket instead of dispatching', async () => {
+    gate.over = true;
+    onPaused.mockClear();
+    const epic = autonomousEpic();
+
+    await pacingCoordinator.dispatchForCurrentState(epic.id);
+
+    const final = tickets.findById(epic.id)!;
+    expect(final.stateData?.paused).toBe(true);
+    expect(final.stateData?.pausedUntil).toBe('2999-01-01T00:00:00Z');
+    expect(onPaused).toHaveBeenCalledWith(epic.id, '2999-01-01T00:00:00Z');
+  });
+
+  it('does not pause an autonomous ticket when under threshold', async () => {
+    gate.over = false;
+    const epic = autonomousEpic();
+
+    await pacingCoordinator.dispatchForCurrentState(epic.id);
+
+    expect(tickets.findById(epic.id)!.stateData?.paused).not.toBe(true);
+  });
+
+  it('never pauses a non-autonomous ticket even when over threshold', async () => {
+    gate.over = true;
+    const epic = engine.createEpic({ title: 'Manual epic', description: 'x' });
+
+    await pacingCoordinator.dispatchForCurrentState(epic.id);
+
+    expect(tickets.findById(epic.id)!.stateData?.paused).not.toBe(true);
+  });
 });

@@ -59,7 +59,7 @@
       "agentRoleId": "implementer",
       "promptOverride": "Scaffold the new web application per the approved plan. Before transitioning to execution-complete, run the project's full test suite and its linter/typecheck (e.g. `npm test` and `npm run typecheck` / `npm run lint`). Do NOT transition to execution-complete until both are green — fix failures and re-run rather than skipping or disabling checks. When you transition, paste the full test/lint run output (or a summary with pass counts and zero failures) into the transition comment as proof the tests-green gate was satisfied. If you cannot get them green after reasonable effort, transition to execution-failed with the error output in the comment instead.",
       "validTransitions": [
-        { "to": "integration-review", "trigger": "execution-complete" },
+        { "to": "acceptance-review", "trigger": "execution-complete" },
         { "to": "execution-failed", "trigger": "execution-failed" }
       ]
     },
@@ -73,24 +73,103 @@
       ]
     },
     {
-      "state": "integration-review",
+      "state": "acceptance-review",
       "semanticRole": "processing",
       "agentActionable": true,
       "humanGate": false,
-      "agentRoleId": "integration-reviewer",
+      "agentRoleId": "acceptance-reviewer",
+      "model": "haiku",
+      "promptOverride": "Verify the build against the intake's stated acceptance criteria, item by item. For each criterion: state whether it is met, partially met, or not met, and why. This is a mechanical checklist pass, not a judgment call on code quality or architecture (those are separate gates). Emit blocking findings and transition to acceptance-fix if any criterion is not met; otherwise transition to code-quality-review.",
       "validTransitions": [
-        { "to": "final-review", "trigger": "agent-complete", "condition": "no blocking findings" },
-        { "to": "integration-fix", "trigger": "agent-complete", "condition": "blocking findings exist" }
+        { "to": "code-quality-review", "trigger": "agent-complete", "condition": "no blocking findings" },
+        { "to": "acceptance-fix", "trigger": "agent-complete", "condition": "blocking findings exist" }
       ]
     },
     {
-      "state": "integration-fix",
+      "state": "acceptance-fix",
       "semanticRole": "processing",
       "agentActionable": true,
       "humanGate": false,
       "agentRoleId": "fixer",
+      "model": "sonnet",
+      "promptOverride": "Address every blocking finding from the acceptance-criteria review. When done, transition back to acceptance-review so it can re-verify.",
       "validTransitions": [
-        { "to": "integration-review", "trigger": "agent-complete" }
+        { "to": "acceptance-review", "trigger": "agent-complete" }
+      ]
+    },
+    {
+      "state": "code-quality-review",
+      "semanticRole": "processing",
+      "agentActionable": true,
+      "humanGate": false,
+      "agentRoleId": "code-quality-reviewer",
+      "model": "sonnet",
+      "promptOverride": "Review the implementation for code quality: readability, that tests exist and are passing, error handling, and no slop or dead code. Emit blocking findings and transition to code-quality-fix if anything blocks; otherwise transition to architecture-review.",
+      "validTransitions": [
+        { "to": "architecture-review", "trigger": "agent-complete", "condition": "no blocking findings" },
+        { "to": "code-quality-fix", "trigger": "agent-complete", "condition": "blocking findings exist" }
+      ]
+    },
+    {
+      "state": "code-quality-fix",
+      "semanticRole": "processing",
+      "agentActionable": true,
+      "humanGate": false,
+      "agentRoleId": "fixer",
+      "model": "sonnet",
+      "promptOverride": "Address every blocking finding from the code-quality review. When done, transition back to code-quality-review so it can re-verify.",
+      "validTransitions": [
+        { "to": "code-quality-review", "trigger": "agent-complete" }
+      ]
+    },
+    {
+      "state": "architecture-review",
+      "semanticRole": "processing",
+      "agentActionable": true,
+      "humanGate": false,
+      "agentRoleId": "architecture-reviewer",
+      "model": "sonnet",
+      "promptOverride": "Review the implementation's structure: module boundaries, whether abstractions match the actual need (not over- or under-engineered), and scalability of the approach. Emit blocking findings and transition to architecture-fix if anything blocks; otherwise transition to ux-review.",
+      "validTransitions": [
+        { "to": "ux-review", "trigger": "agent-complete", "condition": "no blocking findings" },
+        { "to": "architecture-fix", "trigger": "agent-complete", "condition": "blocking findings exist" }
+      ]
+    },
+    {
+      "state": "architecture-fix",
+      "semanticRole": "processing",
+      "agentActionable": true,
+      "humanGate": false,
+      "agentRoleId": "fixer",
+      "model": "sonnet",
+      "promptOverride": "Address every blocking finding from the architecture review. When done, transition back to architecture-review so it can re-verify.",
+      "validTransitions": [
+        { "to": "architecture-review", "trigger": "agent-complete" }
+      ]
+    },
+    {
+      "state": "ux-review",
+      "semanticRole": "processing",
+      "agentActionable": true,
+      "humanGate": false,
+      "agentRoleId": "ux-reviewer",
+      "model": "sonnet",
+      "promptOverride": "Review the UI/flows/states/accessibility against the intake by reading the code (components, routes, templates) — this is a code-level heuristic review, not a live run of the app; actually driving the running app through a browser is a later follow-up, not part of this gate. Check for: missing loading/error/empty states, obvious accessibility gaps (labels, alt text, keyboard nav), and flows that don't match what the intake described. Emit blocking findings and transition to ux-fix if anything blocks; otherwise transition to final-review.",
+      "validTransitions": [
+        { "to": "final-review", "trigger": "agent-complete", "condition": "no blocking findings" },
+        { "to": "ux-fix", "trigger": "agent-complete", "condition": "blocking findings exist" }
+      ]
+    },
+    {
+      "state": "ux-fix",
+      "semanticRole": "processing",
+      "agentActionable": true,
+      "humanGate": false,
+      "agentRoleId": "fixer",
+      "model": "sonnet",
+      "promptOverride": "Address every blocking finding from the UX review. When done, transition back to ux-review so it can re-verify.",
+      "validTransitions": [
+        { "to": "ux-review", "trigger": "agent-complete" }
       ]
     },
     {
@@ -101,7 +180,7 @@
       "autoApprovable": false,
       "validTransitions": [
         { "to": "done", "trigger": "human-approve" },
-        { "to": "integration-fix", "trigger": "human-reject" }
+        { "to": "ux-fix", "trigger": "human-reject" }
       ]
     },
     {

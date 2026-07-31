@@ -30,7 +30,7 @@ import { WorkflowAssignmentPanel } from './WorkflowAssignmentPanel';
 import {
   Section, CollapsibleSection, DetailRow, NeedsInputSection,
   FindingsSection, FinalReviewSection, MiniTaskBoard,
-  ShiftReportSection, ProgressFeedSection, RunningDarkPill,
+  ShiftReportSection, ProgressFeedSection, RunningDarkPill, PausedPill,
   type ShiftReport, type AgentProgressEntry,
 } from './EpicDetailSections';
 import { TerminalModal } from '../track-view/TerminalModal';
@@ -203,6 +203,7 @@ export function EpicDetail() {
               {ticket.priority}
             </span>
             {sd?.autonomous === true && <RunningDarkPill />}
+            {sd?.paused === true && <PausedPill until={typeof sd?.pausedUntil === 'string' ? sd.pausedUntil : undefined} reason={typeof sd?.pausedReason === 'string' ? sd.pausedReason : undefined} />}
           </div>
           <ActionButtons
             ticket={ticket}

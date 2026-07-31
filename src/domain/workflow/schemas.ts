@@ -45,6 +45,7 @@ export const StageDefinitionSchema = z.object({
   humanGate: z.boolean(),
   autoApprovable: z.boolean().optional(),
   agentRoleId: z.string().optional(),
+  model: z.string().max(64).optional(),
   agentCount: z.number().int().min(1).max(10).optional(),
   parallel: z.boolean().optional(),
   validTransitions: z.array(TransitionSchema).max(15),

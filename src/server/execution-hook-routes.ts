@@ -15,6 +15,8 @@ import type { WorkflowTicketRepository } from '@domain/workflow/ticket-repositor
 import type { WorkflowEngine } from '@application/workflow/engine.js';
 import type { TerminalManager } from '@infrastructure/terminal/manager.js';
 import type { ScheduledTaskRunRepository } from '@domain/scheduled-task/repository.js';
+import type { UsageTracker } from '@infrastructure/usage/usage-tracker.js';
+import { isAutonomous } from '@application/workflow/autonomy.js';
 import { broadcast } from './events.js';
 
 export interface ExecutionHookRouterDeps {
@@ -23,6 +25,8 @@ export interface ExecutionHookRouterDeps {
   terminal: TerminalManager;
   sessions: SessionRepository;
   taskRuns: ScheduledTaskRunRepository;
+  /** Dark Factory usage pacing — calibrates the ceiling when a run hits the wall */
+  usageTracker?: UsageTracker;
 }
 
 const SESSION_DATA_DIR = path.join(os.homedir(), '.workshop', 'sessions');
@@ -52,7 +56,52 @@ function captureOutputToFile(sessionId: string, tmuxSession: string, maxLines = 
 
 export function createExecutionHookRouter(deps: ExecutionHookRouterDeps): Router {
   const router = Router();
-  const { engine, tickets, terminal, sessions, taskRuns } = deps;
+  const { engine, tickets, terminal, sessions, taskRuns, usageTracker } = deps;
+
+  /**
+   * StopFailure hook (matcher: rate_limit) — Dark Factory usage pacing backstop.
+   * Fires when an autonomous run's turn ends on a usage-limit error. Calibrates
+   * the usage ceiling from the token count at the wall and pauses the run; the
+   * usage-pacing poller resumes it once the window drains below threshold.
+   */
+  router.post('/hooks/stop-failure', (req, res) => {
+    try {
+      const ticketId = req.headers['x-workshop-ticket'] as string | undefined;
+      if (!ticketId) { res.json({}); return; }
+
+      const ticket = tickets.findById(ticketId as WorkflowTicketId);
+      if (!ticket || !isAutonomous(ticket, tickets)) { res.json({}); return; }
+
+      const error = req.body?.error;
+      if (error && error !== 'rate_limit') { res.json({}); return; }
+      const banner = typeof req.body?.last_assistant_message === 'string'
+        ? req.body.last_assistant_message
+        : undefined;
+
+      // Calibrate the ceiling: tokens burned this window ≈ the limit.
+      if (usageTracker) {
+        try {
+          const { windowTokens } = usageTracker.readWindowTokens();
+          usageTracker.recordCeiling(windowTokens);
+        } catch (calErr) {
+          console.warn('[dark-factory] usage ceiling calibration failed:', calErr);
+        }
+      }
+
+      // 1h floor; the poller gates the real resume on the trailing window draining below threshold.
+      const pausedUntil = new Date(Date.now() + 60 * 60 * 1000).toISOString();
+      const sd = (ticket.stateData || {}) as Record<string, unknown>;
+      tickets.update(ticket.id, {
+        stateData: { ...sd, paused: true, pausedUntil, pausedReason: banner || 'Claude usage limit reached' },
+      });
+      broadcast('workflow:updated', ticket.id);
+      console.warn(`[dark-factory] Ticket ${ticket.id} hit the usage wall — paused, will resume after reset.`);
+      res.json({});
+    } catch (err) {
+      console.error('Stop-failure hook error:', err);
+      res.json({});
+    }
+  });
 
   /**
    * SessionStart hook — Claude Code sends this when a session begins.

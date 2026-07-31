@@ -69,6 +69,36 @@ describe.each(TEMPLATE_FILES)('playbook template %s', (fileName) => {
     expect(terminalStates.some((s) => s.semanticRole === 'terminal')).toBe(true);
   });
 
+  it('runs four sequential review gates, each with a model and a fix state that returns to it', () => {
+    const stages = StageDefinitionsSchema.parse(template.epicPlaybook);
+    const stageMap = new Map(stages.map((s) => [s.state, s]));
+
+    const gates = ['acceptance-review', 'code-quality-review', 'architecture-review', 'ux-review'];
+
+    for (const gateName of gates) {
+      const gate = stageMap.get(gateName);
+      expect(gate).toBeDefined();
+      expect(gate!.agentActionable).toBe(true);
+      expect(gate!.humanGate).toBe(false);
+      expect(gate!.agentRoleId).toBeTruthy();
+      expect(gate!.model).toBeTruthy();
+
+      const fixName = `${gateName.replace('-review', '')}-fix`;
+      const fixState = stageMap.get(fixName);
+      expect(fixState).toBeDefined();
+      expect(fixState!.agentActionable).toBe(true);
+      expect(fixState!.validTransitions.some((t) => t.to === gateName)).toBe(true);
+    }
+
+    // Order: execute -> acceptance-review -> code-quality-review -> architecture-review -> ux-review -> final-review
+    const execute = stageMap.get('execute');
+    expect(execute!.validTransitions.some((t) => t.to === 'acceptance-review')).toBe(true);
+    expect(stageMap.get('acceptance-review')!.validTransitions.some((t) => t.to === 'code-quality-review')).toBe(true);
+    expect(stageMap.get('code-quality-review')!.validTransitions.some((t) => t.to === 'architecture-review')).toBe(true);
+    expect(stageMap.get('architecture-review')!.validTransitions.some((t) => t.to === 'ux-review')).toBe(true);
+    expect(stageMap.get('ux-review')!.validTransitions.some((t) => t.to === 'final-review')).toBe(true);
+  });
+
   it('has a non-empty intakeQuestions array with required fields', () => {
     expect(Array.isArray(template.intakeQuestions)).toBe(true);
     expect(template.intakeQuestions.length).toBeGreaterThan(0);

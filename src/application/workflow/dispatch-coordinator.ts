@@ -54,6 +54,10 @@ export interface DispatchCoordinatorDeps {
   onEpicAdvanced?: (ticket: WorkflowTicket) => Promise<void>;
   /** Dark Factory: called when an autonomous ticket comes to rest at a human gate or terminal state */
   onAutonomousRest?: (ticketId: WorkflowTicketId) => Promise<void>;
+  /** Dark Factory usage pacing: returns whether autonomous work should pause now, and until when */
+  usageGate?: () => { over: boolean; resumeAt?: string };
+  /** Dark Factory: called when an autonomous ticket is paused for usage pacing */
+  onPaused?: (ticketId: WorkflowTicketId, until?: string) => Promise<void>;
 }
 
 // ---------------------------------------------------------------------------
@@ -97,7 +101,6 @@ function findTransitionTarget(
   }
 }
 
-/** Dark Factory: a ticket runs autonomous if it (or its parent epic) has stateData.autonomous === true. */
 /** Max gates to auto-advance through in one call, to prevent runaway loops. */
 const MAX_AUTO_ADVANCE_DEPTH = 8;
 
@@ -111,6 +114,19 @@ export function createDispatchCoordinator(
   const { engine, tickets, executionDispatcher, agentDispatcher, topologyLoader } = deps;
 
   async function dispatchIfNeeded(ticket: WorkflowTicket): Promise<void> {
+    // Dark Factory usage pacing: don't spawn new autonomous work while over the
+    // usage threshold — pause the ticket instead; the poller resumes it later.
+    if (deps.usageGate && isAutonomous(ticket, tickets)) {
+      const gate = deps.usageGate();
+      if (gate.over) {
+        tickets.update(ticket.id, {
+          stateData: { ...(ticket.stateData || {}), paused: true, pausedUntil: gate.resumeAt },
+        });
+        await deps.onPaused?.(ticket.id, gate.resumeAt);
+        return;
+      }
+    }
+
     // Check if this is an execution stage
     if (isExecutionStage(topologyLoader, ticket)) {
       try {
