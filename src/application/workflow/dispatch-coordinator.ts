@@ -17,7 +17,8 @@ import type { WorkflowEngine } from './engine.js';
 import type { ExecutionDispatcher } from './execution-dispatcher.js';
 import type { AgentDispatcher } from './agent-dispatcher.js';
 import type { TopologyLoader } from './topology-loader.js';
-import { getStageDefinition, isTerminal } from '@domain/workflow/types.js';
+import { getStageDefinition, isTerminal, canAutoApprove } from '@domain/workflow/types.js';
+import { isAutonomous } from './autonomy.js';
 
 // ---------------------------------------------------------------------------
 // Public interface
@@ -51,6 +52,12 @@ export interface DispatchCoordinatorDeps {
   topologyLoader: TopologyLoader;
   /** Called when an epic advances (used to re-wire engine callback) */
   onEpicAdvanced?: (ticket: WorkflowTicket) => Promise<void>;
+  /** Dark Factory: called when an autonomous ticket comes to rest at a human gate or terminal state */
+  onAutonomousRest?: (ticketId: WorkflowTicketId) => Promise<void>;
+  /** Dark Factory usage pacing: returns whether autonomous work should pause now, and until when */
+  usageGate?: () => { over: boolean; resumeAt?: string };
+  /** Dark Factory: called when an autonomous ticket is paused for usage pacing */
+  onPaused?: (ticketId: WorkflowTicketId, until?: string) => Promise<void>;
 }
 
 // ---------------------------------------------------------------------------
@@ -94,6 +101,9 @@ function findTransitionTarget(
   }
 }
 
+/** Max gates to auto-advance through in one call, to prevent runaway loops. */
+const MAX_AUTO_ADVANCE_DEPTH = 8;
+
 // ---------------------------------------------------------------------------
 // Implementation
 // ---------------------------------------------------------------------------
@@ -104,6 +114,19 @@ export function createDispatchCoordinator(
   const { engine, tickets, executionDispatcher, agentDispatcher, topologyLoader } = deps;
 
   async function dispatchIfNeeded(ticket: WorkflowTicket): Promise<void> {
+    // Dark Factory usage pacing: don't spawn new autonomous work while over the
+    // usage threshold — pause the ticket instead; the poller resumes it later.
+    if (deps.usageGate && isAutonomous(ticket, tickets)) {
+      const gate = deps.usageGate();
+      if (gate.over) {
+        tickets.update(ticket.id, {
+          stateData: { ...(ticket.stateData || {}), paused: true, pausedUntil: gate.resumeAt },
+        });
+        await deps.onPaused?.(ticket.id, gate.resumeAt);
+        return;
+      }
+    }
+
     // Check if this is an execution stage
     if (isExecutionStage(topologyLoader, ticket)) {
       try {
@@ -145,6 +168,51 @@ export function createDispatchCoordinator(
     }
   }
 
+  /**
+   * Dark Factory: for autonomous tickets, auto-approve through human gates
+   * (except merge/terminal gates and any gate an escalation is waiting on).
+   */
+  async function autoAdvanceGates(ticketId: WorkflowTicketId): Promise<void> {
+    let ticket = tickets.findById(ticketId);
+    if (!ticket || !isAutonomous(ticket, tickets)) return;
+
+    for (let i = 0; i < MAX_AUTO_ADVANCE_DEPTH; i++) {
+      ticket = tickets.findById(ticketId);
+      if (!ticket) return;
+
+      const stages = topologyLoader.loadForTicket(ticket);
+      const stage = getStageDefinition(stages, ticket.state);
+      if (!stage || !stage.humanGate) return;
+
+      const stateData = (ticket.stateData || {}) as Record<string, unknown>;
+      if (stateData.needsHuman === true) return;
+      if (!canAutoApprove(stage)) return;
+
+      const approveTransition = stage.validTransitions.find((t) => t.trigger === 'human-approve');
+      if (!approveTransition) return;
+      if (isTerminal(stages, approveTransition.to)) return;
+
+      const updated = engine.approve(ticketId, 'Dark Factory: auto-approved', {
+        type: 'system',
+        reason: 'dark-factory-auto-approve',
+      });
+      await dispatchIfNeeded(updated);
+    }
+
+    const rested = tickets.findById(ticketId);
+    if (!rested) return;
+    const restedStages = topologyLoader.loadForTicket(rested);
+    const restedStage = getStageDefinition(restedStages, rested.state);
+    const atRest = restedStage?.humanGate === true || isTerminal(restedStages, rested.state);
+    if (atRest) {
+      try {
+        await deps.onAutonomousRest?.(ticketId);
+      } catch (err) {
+        console.warn(`[dark-factory] onAutonomousRest failed for ticket ${ticketId}:`, err);
+      }
+    }
+  }
+
   return {
     async transitionWithDispatch(
       ticketId: WorkflowTicketId,
@@ -161,6 +229,7 @@ export function createDispatchCoordinator(
       }
 
       await dispatchIfNeeded(updated);
+      await autoAdvanceGates(ticketId);
 
       // Re-read in case dispatchIfNeeded updated stateData
       return tickets.findById(ticketId) ?? updated;
@@ -178,6 +247,7 @@ export function createDispatchCoordinator(
       }
 
       await dispatchIfNeeded(updated);
+      await autoAdvanceGates(ticketId);
 
       return tickets.findById(ticketId) ?? updated;
     },
@@ -187,6 +257,7 @@ export function createDispatchCoordinator(
 
       // Rejection can land on agent-actionable states (e.g. final-review -> integration-fix)
       await dispatchIfNeeded(updated);
+      await autoAdvanceGates(ticketId);
 
       return tickets.findById(ticketId) ?? updated;
     },
@@ -195,6 +266,7 @@ export function createDispatchCoordinator(
       const ticket = tickets.findById(ticketId);
       if (!ticket) throw new Error(`Ticket not found: ${ticketId}`);
       await dispatchIfNeeded(ticket);
+      await autoAdvanceGates(ticketId);
     },
   };
 }

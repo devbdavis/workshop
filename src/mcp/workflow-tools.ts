@@ -214,6 +214,37 @@ export function registerWorkflowTools(
   );
 
   server.tool(
+    'workshop_create_epic_from_template',
+    'Create an autonomous "Dark Factory" epic from a template (e.g. new-web-app). Runs the workflow with human gates auto-approved EXCEPT the final merge gate, until a draft PR is ready.',
+    {
+      title: z.string().describe('Epic title'),
+      description: z.string().describe('Spec built from the template intake answers'),
+      templateSlug: z.string().describe('Template slug, e.g. "new-web-app" or "feature-on-existing-repo"'),
+      trackId: z.string().optional().describe('Track ID to bind to (must have a repo)'),
+      provider: z.enum(['claude', 'codex']).optional().describe('AI CLI (default: claude)'),
+      priority: z.enum(['low', 'medium', 'high', 'critical']).optional().describe('Priority'),
+      autonomous: z.boolean().optional().describe('Run dark (default true); false = manual gates'),
+      budget: z
+        .object({ maxSteps: z.number(), maxWallClockMs: z.number() })
+        .optional()
+        .describe('Autonomy budget before forced escalation (default 40 steps / 4h)'),
+    },
+    async ({ title, description, templateSlug, trackId, provider, priority, autonomous, budget }) => {
+      const body: Record<string, unknown> = { title, description, templateSlug };
+      if (trackId) body.trackId = trackId;
+      if (provider) body.provider = provider;
+      if (priority) body.priority = priority;
+      if (autonomous !== undefined) body.autonomous = autonomous;
+      if (budget) body.budget = budget;
+      const result = await api('/workflow/tickets/from-template', {
+        method: 'POST',
+        body: JSON.stringify(body),
+      });
+      return { content: [{ type: 'text' as const, text: JSON.stringify(result, null, 2) }] };
+    },
+  );
+
+  server.tool(
     'workshop_list_workflow_pending',
     'List workflow tickets at human gates needing approval.',
     {},

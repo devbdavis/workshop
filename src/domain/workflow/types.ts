@@ -39,6 +39,11 @@ export function isTerminal(stages: StageDefinition[], state: string): boolean {
   return stage.validTransitions.length === 0;
 }
 
+/** Absent/undefined means auto-approvable; only an explicit `false` blocks it (e.g. merge gate). */
+export function canAutoApprove(stage: StageDefinition): boolean {
+  return stage.autoApprovable !== false;
+}
+
 export function isAgentActionable(stages: StageDefinition[], state: string): boolean {
   const stage = stages.find(s => s.state === state);
   return stage?.agentActionable === true;

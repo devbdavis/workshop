@@ -23,6 +23,7 @@ import type { StageDefinition } from '@domain/workflow/types.js';
 import { isHumanGate, isTerminal, getStageDefinition } from '@domain/workflow/types.js';
 import { createDependencyResolver } from './dependency-resolver.js';
 import type { DependencyResolver } from './dependency-resolver.js';
+import { isAutonomous, DEFAULT_AUTONOMOUS_BUDGET, type AutonomousBudget } from './autonomy.js';
 
 // ---------------------------------------------------------------------------
 // Public interface
@@ -38,8 +39,8 @@ export interface WorkflowEngine {
     data?: Record<string, unknown>,
   ): WorkflowTicket;
 
-  /** Human approves a ticket at a human gate */
-  approve(ticketId: WorkflowTicketId, comment?: string): WorkflowTicket;
+  /** Approve a ticket at a human gate. Actor defaults to human; Dark Factory passes a system actor. */
+  approve(ticketId: WorkflowTicketId, comment?: string, actor?: TransitionActor): WorkflowTicket;
 
   /** Human rejects a ticket at a human gate */
   reject(ticketId: WorkflowTicketId, comment?: string): WorkflowTicket;
@@ -113,6 +114,15 @@ export function createWorkflowEngine(deps: WorkflowEngineDeps): WorkflowEngine {
   const { tickets, transitions, dependencies, topologyLoader } = deps;
   const resolver: DependencyResolver = createDependencyResolver({ tickets, dependencies, topologyLoader });
 
+  /** Resolve the whole-ticket autonomy budget from the ticket itself, or its parent epic. */
+  function resolveBudget(ticket: WorkflowTicket): AutonomousBudget {
+    const epicStateData = ticket.parentId
+      ? ((tickets.findById(ticket.parentId)?.stateData || {}) as Record<string, unknown>)
+      : ((ticket.stateData || {}) as Record<string, unknown>);
+    const budget = epicStateData.autonomousBudget as AutonomousBudget | undefined;
+    return budget ?? DEFAULT_AUTONOMOUS_BUDGET;
+  }
+
   function requireTicket(id: WorkflowTicketId): WorkflowTicket {
     const ticket = tickets.findById(id);
     if (!ticket) throw new Error(`Ticket not found: ${id}`);
@@ -183,6 +193,7 @@ export function createWorkflowEngine(deps: WorkflowEngineDeps): WorkflowEngine {
     const iteration = (typeof stateData.iteration === 'number' ? stateData.iteration : 0) + 1;
     const currentStage = getStageDefinition(stages, ticket.state);
 
+    let circuitBreakerEscalated = false;
     if (currentStage?.agentActionable && iteration >= MAX_AGENT_ITERATIONS) {
       // Look for a human gate to escalate to
       const humanGate = findNearestHumanGate(stages, ticket.state);
@@ -193,6 +204,32 @@ export function createWorkflowEngine(deps: WorkflowEngineDeps): WorkflowEngine {
         );
         toState = humanGate as WorkflowState;
         comment = `Circuit breaker: agent loop hit ${iteration} iterations. Escalating to human review.`;
+        circuitBreakerEscalated = true;
+      }
+    }
+
+    // Dark Factory: step/budget tracking, guarded so non-autonomous tickets are unaffected
+    let autonomousStateData: Record<string, unknown> | undefined;
+    if (isAutonomous(ticket, tickets)) {
+      const stepCount = (typeof stateData.stepCount === 'number' ? stateData.stepCount : 0) + 1;
+      autonomousStateData = { stepCount };
+
+      if (circuitBreakerEscalated) {
+        autonomousStateData.needsHuman = true;
+      } else {
+        const budget = resolveBudget(ticket);
+        const elapsedMs = Date.now() - Date.parse(ticket.createdAt);
+        if (stepCount >= budget.maxSteps || elapsedMs >= budget.maxWallClockMs) {
+          // Flag for human review regardless of whether we redirect toState — if the
+          // natural transition already lands on the gate, needsHuman must still be set
+          // so autoAdvanceGates refuses to wave it through.
+          autonomousStateData.needsHuman = true;
+          comment = 'Dark Factory: budget exhausted (steps/wall-clock), escalating to human review.';
+          const humanGate = findNearestHumanGate(stages, ticket.state);
+          if (humanGate && humanGate !== toState) {
+            toState = humanGate as WorkflowState;
+          }
+        }
       }
     }
 
@@ -234,9 +271,9 @@ export function createWorkflowEngine(deps: WorkflowEngineDeps): WorkflowEngine {
       data,
     });
 
-    // Update ticket state, merging transition data into stateData
-    const mergedStateData = data
-      ? { ...stateData, ...data }
+    // Update ticket state, merging transition data (and Dark Factory bookkeeping) into stateData
+    const mergedStateData = (data || autonomousStateData)
+      ? { ...stateData, ...data, ...autonomousStateData }
       : undefined;
     const updated = tickets.update(ticket.id, {
       state: toState,
@@ -321,7 +358,7 @@ export function createWorkflowEngine(deps: WorkflowEngineDeps): WorkflowEngine {
       return applyTransition(ticket, toState, actor, comment, data);
     },
 
-    approve(ticketId: WorkflowTicketId, comment?: string): WorkflowTicket {
+    approve(ticketId: WorkflowTicketId, comment?: string, actor: TransitionActor = { type: 'human' }): WorkflowTicket {
       const ticket = requireTicket(ticketId);
       const stages = topologyLoader.loadForTicket(ticket);
 
@@ -337,8 +374,10 @@ export function createWorkflowEngine(deps: WorkflowEngineDeps): WorkflowEngine {
         throw new Error(`No approval transition defined for state '${ticket.state}'`);
       }
 
-      const actor: TransitionActor = { type: 'human' };
-      return applyTransition(ticket, approvalTarget.to, actor, comment);
+      // Approval resolves any pending Dark Factory escalation (only touch stateData if it was set)
+      const stateData = (ticket.stateData || {}) as Record<string, unknown>;
+      const clearEscalation = stateData.needsHuman === true ? { needsHuman: false } : undefined;
+      return applyTransition(ticket, approvalTarget.to, actor, comment, clearEscalation);
     },
 
     reject(ticketId: WorkflowTicketId, comment?: string): WorkflowTicket {
@@ -358,7 +397,10 @@ export function createWorkflowEngine(deps: WorkflowEngineDeps): WorkflowEngine {
       }
 
       const actor: TransitionActor = { type: 'human' };
-      return applyTransition(ticket, rejectTarget.to, actor, comment);
+      // Human rejection resolves any pending Dark Factory escalation (only touch stateData if it was set)
+      const stateData = (ticket.stateData || {}) as Record<string, unknown>;
+      const clearEscalation = stateData.needsHuman === true ? { needsHuman: false } : undefined;
+      return applyTransition(ticket, rejectTarget.to, actor, comment, clearEscalation);
     },
 
     onTaskCompleted(ticketId: WorkflowTicketId): void {
