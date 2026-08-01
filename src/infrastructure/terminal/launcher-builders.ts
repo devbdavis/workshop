@@ -77,6 +77,22 @@ export function writeHookSettings(
         ],
       },
     ];
+
+    // StopFailure (matcher: rate_limit) — Dark Factory usage pacing. When an
+    // autonomous run hits the Claude usage wall, calibrate the ceiling and pause
+    // the run until the window resets. No-ops server-side for non-autonomous tickets.
+    const stopFailureScript = path.join(scriptsDir, 'agent-stopfailure-hook.sh');
+    hooks.StopFailure = [
+      {
+        matcher: 'rate_limit',
+        hooks: [
+          {
+            type: 'command',
+            command: `WORKSHOP_API_URL=${WORKSHOP_API_URL} WORKSHOP_SESSION_ID=${sessionId} WORKSHOP_TICKET_ID=${options.executionTicketId} ${stopFailureScript}`,
+          },
+        ],
+      },
+    ];
   }
 
   const settings: Record<string, unknown> = { hooks };

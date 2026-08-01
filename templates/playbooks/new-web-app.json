@@ -1,0 +1,208 @@
+{
+  "id": "new-web-app",
+  "name": "New Web App",
+  "description": "Dark Factory playbook for scaffolding a brand-new web application from scratch: triage the intake, plan the architecture, build it, and gate only on the final merge review.",
+  "ticketType": "epic",
+  "matchCriteria": {
+    "keywords": ["web", "app", "webapp", "frontend", "website", "new project", "scaffold", "greenfield"],
+    "complexity": "moderate",
+    "domains": ["web"]
+  },
+  "epicPlaybook": [
+    {
+      "state": "triaging",
+      "semanticRole": "entry",
+      "agentActionable": true,
+      "humanGate": false,
+      "agentRoleId": "triage",
+      "validTransitions": [
+        { "to": "planning", "trigger": "agent-complete" }
+      ]
+    },
+    {
+      "state": "planning",
+      "semanticRole": "processing",
+      "agentActionable": true,
+      "humanGate": false,
+      "agentRoleId": "planner",
+      "validTransitions": [
+        { "to": "plan-critique", "trigger": "agent-complete" }
+      ]
+    },
+    {
+      "state": "plan-critique",
+      "semanticRole": "processing",
+      "agentActionable": true,
+      "humanGate": false,
+      "agentRoleId": "plan-critic",
+      "validTransitions": [
+        { "to": "plan-review", "trigger": "agent-complete", "condition": "no blocking findings" },
+        { "to": "planning", "trigger": "agent-complete", "condition": "blocking findings exist" }
+      ]
+    },
+    {
+      "state": "plan-review",
+      "semanticRole": "human-gate",
+      "agentActionable": false,
+      "humanGate": true,
+      "autoApprovable": true,
+      "validTransitions": [
+        { "to": "execute", "trigger": "human-approve" },
+        { "to": "planning", "trigger": "human-reject" }
+      ]
+    },
+    {
+      "state": "execute",
+      "semanticRole": "processing",
+      "agentActionable": true,
+      "humanGate": false,
+      "agentRoleId": "implementer",
+      "promptOverride": "Scaffold the new web application per the approved plan. Before transitioning to execution-complete, run the project's full test suite and its linter/typecheck (e.g. `npm test` and `npm run typecheck` / `npm run lint`). Do NOT transition to execution-complete until both are green — fix failures and re-run rather than skipping or disabling checks. When you transition, paste the full test/lint run output (or a summary with pass counts and zero failures) into the transition comment as proof the tests-green gate was satisfied. If you cannot get them green after reasonable effort, transition to execution-failed with the error output in the comment instead.",
+      "validTransitions": [
+        { "to": "acceptance-review", "trigger": "execution-complete" },
+        { "to": "execution-failed", "trigger": "execution-failed" }
+      ]
+    },
+    {
+      "state": "execution-failed",
+      "semanticRole": "error",
+      "agentActionable": false,
+      "humanGate": false,
+      "validTransitions": [
+        { "to": "execute", "trigger": "manual" }
+      ]
+    },
+    {
+      "state": "acceptance-review",
+      "semanticRole": "processing",
+      "agentActionable": true,
+      "humanGate": false,
+      "agentRoleId": "acceptance-reviewer",
+      "model": "haiku",
+      "promptOverride": "Verify the build against the intake's stated acceptance criteria, item by item. For each criterion: state whether it is met, partially met, or not met, and why. This is a mechanical checklist pass, not a judgment call on code quality or architecture (those are separate gates). Emit blocking findings and transition to acceptance-fix if any criterion is not met; otherwise transition to code-quality-review.",
+      "validTransitions": [
+        { "to": "code-quality-review", "trigger": "agent-complete", "condition": "no blocking findings" },
+        { "to": "acceptance-fix", "trigger": "agent-complete", "condition": "blocking findings exist" }
+      ]
+    },
+    {
+      "state": "acceptance-fix",
+      "semanticRole": "processing",
+      "agentActionable": true,
+      "humanGate": false,
+      "agentRoleId": "fixer",
+      "model": "sonnet",
+      "promptOverride": "Address every blocking finding from the acceptance-criteria review. When done, transition back to acceptance-review so it can re-verify.",
+      "validTransitions": [
+        { "to": "acceptance-review", "trigger": "agent-complete" }
+      ]
+    },
+    {
+      "state": "code-quality-review",
+      "semanticRole": "processing",
+      "agentActionable": true,
+      "humanGate": false,
+      "agentRoleId": "code-quality-reviewer",
+      "model": "sonnet",
+      "promptOverride": "Review the implementation for code quality: readability, that tests exist and are passing, error handling, and no slop or dead code. Emit blocking findings and transition to code-quality-fix if anything blocks; otherwise transition to architecture-review.",
+      "validTransitions": [
+        { "to": "architecture-review", "trigger": "agent-complete", "condition": "no blocking findings" },
+        { "to": "code-quality-fix", "trigger": "agent-complete", "condition": "blocking findings exist" }
+      ]
+    },
+    {
+      "state": "code-quality-fix",
+      "semanticRole": "processing",
+      "agentActionable": true,
+      "humanGate": false,
+      "agentRoleId": "fixer",
+      "model": "sonnet",
+      "promptOverride": "Address every blocking finding from the code-quality review. When done, transition back to code-quality-review so it can re-verify.",
+      "validTransitions": [
+        { "to": "code-quality-review", "trigger": "agent-complete" }
+      ]
+    },
+    {
+      "state": "architecture-review",
+      "semanticRole": "processing",
+      "agentActionable": true,
+      "humanGate": false,
+      "agentRoleId": "architecture-reviewer",
+      "model": "sonnet",
+      "promptOverride": "Review the implementation's structure: module boundaries, whether abstractions match the actual need (not over- or under-engineered), and scalability of the approach. Emit blocking findings and transition to architecture-fix if anything blocks; otherwise transition to ux-review.",
+      "validTransitions": [
+        { "to": "ux-review", "trigger": "agent-complete", "condition": "no blocking findings" },
+        { "to": "architecture-fix", "trigger": "agent-complete", "condition": "blocking findings exist" }
+      ]
+    },
+    {
+      "state": "architecture-fix",
+      "semanticRole": "processing",
+      "agentActionable": true,
+      "humanGate": false,
+      "agentRoleId": "fixer",
+      "model": "sonnet",
+      "promptOverride": "Address every blocking finding from the architecture review. When done, transition back to architecture-review so it can re-verify.",
+      "validTransitions": [
+        { "to": "architecture-review", "trigger": "agent-complete" }
+      ]
+    },
+    {
+      "state": "ux-review",
+      "semanticRole": "processing",
+      "agentActionable": true,
+      "humanGate": false,
+      "agentRoleId": "ux-reviewer",
+      "model": "sonnet",
+      "promptOverride": "Review the UI/flows/states/accessibility against the intake by reading the code (components, routes, templates) — this is a code-level heuristic review, not a live run of the app; actually driving the running app through a browser is a later follow-up, not part of this gate. Check for: missing loading/error/empty states, obvious accessibility gaps (labels, alt text, keyboard nav), and flows that don't match what the intake described. Emit blocking findings and transition to ux-fix if anything blocks; otherwise transition to final-review.",
+      "validTransitions": [
+        { "to": "final-review", "trigger": "agent-complete", "condition": "no blocking findings" },
+        { "to": "ux-fix", "trigger": "agent-complete", "condition": "blocking findings exist" }
+      ]
+    },
+    {
+      "state": "ux-fix",
+      "semanticRole": "processing",
+      "agentActionable": true,
+      "humanGate": false,
+      "agentRoleId": "fixer",
+      "model": "sonnet",
+      "promptOverride": "Address every blocking finding from the UX review. When done, transition back to ux-review so it can re-verify.",
+      "validTransitions": [
+        { "to": "ux-review", "trigger": "agent-complete" }
+      ]
+    },
+    {
+      "state": "final-review",
+      "semanticRole": "human-gate",
+      "agentActionable": false,
+      "humanGate": true,
+      "autoApprovable": false,
+      "validTransitions": [
+        { "to": "done", "trigger": "human-approve" },
+        { "to": "ux-fix", "trigger": "human-reject" }
+      ]
+    },
+    {
+      "state": "done",
+      "semanticRole": "terminal",
+      "agentActionable": false,
+      "humanGate": false,
+      "validTransitions": []
+    }
+  ],
+  "promptOverrides": {
+    "triage": "This is a NEW web application being built from scratch. Use the intake answers (stack, auth, persistence, deploy target, non-goals, acceptance criteria) to write a tight spec. Default to the requested stack; if unspecified, prefer a boring, well-supported stack (e.g. TypeScript + a mainstream framework) over anything exotic.",
+    "planner": "Plan the scaffold: project structure, framework choice, routing, auth integration, persistence layer, and deploy target, in that order. Call out the minimum viable slice that satisfies the acceptance criteria — do not plan speculative features beyond the stated non-goals boundary.",
+    "implementer": "Scaffold the new application. Prefer official CLIs/starters over hand-rolled boilerplate. Wire up auth and persistence only to the extent the intake requires; leave clear TODOs for anything explicitly out of scope."
+  },
+  "intakeQuestions": [
+    { "id": "what-it-is", "label": "What are you building? Give a one-paragraph description.", "required": true, "placeholder": "e.g. A customer-facing dashboard for viewing order history." },
+    { "id": "stack", "label": "Preferred tech stack (language, framework, major libraries)?", "required": true, "placeholder": "e.g. TypeScript, React, Vite, Tailwind" },
+    { "id": "auth", "label": "Authentication requirements, if any?", "required": true, "placeholder": "e.g. Email/password via Auth0, or none for MVP" },
+    { "id": "persistence", "label": "Data persistence needs?", "required": true, "placeholder": "e.g. PostgreSQL via Prisma, or none" },
+    { "id": "deploy-target", "label": "Where will this be deployed?", "required": true, "placeholder": "e.g. Vercel, internal k8s cluster, not yet decided" },
+    { "id": "non-goals", "label": "What is explicitly out of scope for this work?", "required": true, "placeholder": "e.g. Mobile app, admin panel, billing" },
+    { "id": "acceptance-criteria", "label": "How will you know this is done? List concrete acceptance criteria.", "required": true, "placeholder": "e.g. User can sign up, log in, and see their order history" }
+  ]
+}
