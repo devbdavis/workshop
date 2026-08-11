@@ -69,16 +69,20 @@ Dev and prod can run simultaneously (dev: 3001, prod: 3002).
 
 ## Workshop Skills
 
-Workshop skills live in `skills/` in this repo and are symlinked to `~/.claude/skills/`. To create a new workshop skill:
+There are two skill directories in this repo, and they are not interchangeable:
 
-1. Create the skill directory and file: `mkdir -p skills/<skill-name> && touch skills/<skill-name>/SKILL.md`
-2. Edit `skills/<skill-name>/SKILL.md` — include `Tagged: workshop.` in the description
-3. Package/validate: `python3 ~/.claude/plugins/marketplaces/claude-plugins-official/plugins/skill-creator/skills/skill-creator/scripts/package_skill.py skills/<skill-name>`
-4. Symlink: `ln -s $(pwd)/skills/<skill-name> ~/.claude/skills/<skill-name>`
+- **`templates/skills/<slug>/SKILL.md`** — installable templates. These appear in Settings → Skills as install cards, and installing copies the skill into `~/.claude/skills/`. **This is where new skills go.**
+- **`skills/<name>/SKILL.md`** — the older symlink convention, kept for skills already wired up that way. Do not add to it.
+
+To create a new workshop skill:
+
+1. Create the directory and file: `mkdir -p templates/skills/<slug> && touch templates/skills/<slug>/SKILL.md`
+2. Edit the frontmatter — `name` and `description` (include `Tagged: workshop.`). Only `name`, `description`, `allowed-tools`, `compatibility`, `license`, and `metadata` are valid keys; the install flow takes the template slug from the directory name, so do not add a `templateName` key (some older templates carry one — it is inert and fails validation)
+3. Package/validate: `cd ~/.claude/plugins/marketplaces/claude-plugins-official/plugins/skill-creator/skills/skill-creator && python3 -m scripts.package_skill <abs-path-to-skill-dir>`
+
+The template list is read from disk per request (`GET /api/skills/templates`), so a merged skill shows up without restarting the server. Nothing needs symlinking.
 
 **Important**: Skills must be a directory containing `SKILL.md`, not a flat `<skill-name>.md` file.
-
-All workshop skills are tracked in git under `skills/`.
 
 ## Conventions
 
