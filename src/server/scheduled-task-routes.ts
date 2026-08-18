@@ -9,6 +9,7 @@ import { scheduleConfigToCron, describeSchedule, validateScheduleConfig, getNext
 import type { ScheduledTask } from '@foundation/types';
 import { broadcast } from './events.js';
 import { callClaude, extractJson, ClaudeBinaryNotFoundError } from './claude-cli.js';
+import { installScheduleScript, type BundledScheduleDefinition } from '@application/scheduler/schedule-importer.js';
 
 /** Translate a callClaude error into an HTTP response. See note in
  *  skill-routes.ts — surfaces the actual error so the UI can distinguish
@@ -25,6 +26,18 @@ function respondWithClaudeError(res: import('express').Response, err: unknown, f
 /** Slug a task name to a safe filename: "Daily Action Items" → "daily-action-items" */
 function slugify(name: string): string {
   return name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+}
+
+/** Install the companion script of templates/schedules/<slug>.json, if it has one. */
+function installTemplateScript(projectRoot: string, slug: string): string | undefined {
+  const filePath = path.join(projectRoot, 'templates', 'schedules', `${slug}.json`);
+  if (!fs.existsSync(filePath)) return undefined;
+  try {
+    const def = JSON.parse(fs.readFileSync(filePath, 'utf-8')) as BundledScheduleDefinition;
+    return installScheduleScript(projectRoot, def);
+  } catch {
+    return undefined;
+  }
 }
 
 /** Resolve the scripts directory, creating it if needed. */
@@ -99,6 +112,7 @@ export function createScheduledTaskRouter(deps: ScheduledTaskRouterDeps): Router
         if (!def.name || !def.scheduleConfig || !def.taskPrompt) continue;
         if (existingNames.has(def.name)) continue;
         templates.push({
+          slug: path.basename(file, '.json'),
           name: def.name,
           description: def.description,
           scheduleConfig: def.scheduleConfig,
@@ -148,7 +162,9 @@ export function createScheduledTaskRouter(deps: ScheduledTaskRouterDeps): Router
     if (!fs.existsSync(filePath)) { res.status(404).json({ error: 'Template file not found' }); return; }
 
     const def = JSON.parse(fs.readFileSync(filePath, 'utf-8')) as { taskPrompt?: string; scheduleConfig?: Parameters<typeof scheduleConfigToCron>[0]; description?: string };
+    const scriptPath = installTemplateScript(projectRoot, task.templateName);
     const updated = tasks.update(task.id, {
+      ...(scriptPath ? { scriptPath } : {}),
       ...(def.taskPrompt ? { taskPrompt: def.taskPrompt } : {}),
       ...(def.scheduleConfig ? {
         scheduleConfig: def.scheduleConfig,
@@ -318,6 +334,8 @@ Return ONLY the JSON object, no other text or markdown.`;
         res.status(500).json({ error: 'Failed to save script file' });
         return;
       }
+    } else if (templateName) {
+      scriptPath = installTemplateScript(projectRoot, templateName);
     }
 
     const task = tasks.create({
