@@ -68,14 +68,16 @@ export function PrReviewsPage() {
     load();
   }, [load, refreshKey]);
 
-  // Live updates: discovery poller, agent reports, and submits all broadcast pr-review:updated.
+  // Live updates: discovery poller, agent reports, and submits all broadcast
+  // pr-review:updated; session:deleted covers the stale-agent reaper retiring an
+  // analysis session out from under an open detail view.
   useEffect(() => {
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
     const ws = new WebSocket(`${protocol}//${window.location.host}/ws/events`);
     ws.onmessage = (evt) => {
       try {
         const event = JSON.parse(evt.data);
-        if (event.type === 'pr-review:updated') setRefreshKey((k) => k + 1);
+        if (event.type === 'pr-review:updated' || event.type === 'session:deleted') setRefreshKey((k) => k + 1);
       } catch {
         /* ignore malformed events */
       }
