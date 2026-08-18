@@ -3,7 +3,7 @@
 # main/master checkouts. Repos with local work are fetched only, so a later
 # `git checkout origin/main` still sees fresh refs.
 #
-# Root resolution: $1 → $SYNC_REPOS_ROOT → Workshop's repo_root setting → ~/repos
+# Repo root, first match wins: $1, $SYNC_REPOS_ROOT, Workshop's repo_root setting.
 
 set -uo pipefail
 
@@ -16,9 +16,9 @@ REPO_ROOT="${1:-${SYNC_REPOS_ROOT:-}}"
 if [[ -z "$REPO_ROOT" && -f "$WORKSHOP_DB" ]]; then
   REPO_ROOT=$(sqlite3 "$WORKSHOP_DB" "SELECT value FROM settings WHERE key='repo_root';" 2>/dev/null || true)
 fi
-REPO_ROOT="${REPO_ROOT:-$HOME/repos}"
 REPO_ROOT="${REPO_ROOT/#\~/$HOME}"
 
+[[ -n "$REPO_ROOT" ]] || { echo "[sync-repos] no repo root: pass one as \$1 or set SYNC_REPOS_ROOT"; exit 1; }
 [[ -d "$REPO_ROOT" ]] || { echo "[sync-repos] repo root not found: $REPO_ROOT"; exit 1; }
 echo "[sync-repos] root: $REPO_ROOT"
 
