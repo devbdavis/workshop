@@ -97,7 +97,8 @@ export function PrReviewDetail({ reviewId, refreshKey, onChanged }: Props) {
   const openCount = review.findings.filter((f) => f.status === 'open').length;
 
   async function analyze() {
-    if (analyzing && !window.confirm('An analysis session is already running. Dispatch a fresh one?')) return;
+    // The session is gone once reaped as stale, so don't warn about a run that no longer exists.
+    if (analyzing && review!.session && !window.confirm('An analysis session is already running. Dispatch a fresh one?')) return;
     await call('analyze', `/api/pr-reviews/${review!.id}/analyze`, { method: 'POST' });
   }
 
@@ -152,7 +153,7 @@ export function PrReviewDetail({ reviewId, refreshKey, onChanged }: Props) {
               Chat with agent
             </button>
           )}
-          {analyzing && <span className="text-[11px] text-yellow-300/80">Agent session running in the background…</span>}
+          {analyzing && review.session && <span className="text-[11px] text-yellow-300/80">Agent session running in the background…</span>}
           {review.state === 'incoming' && (
             <button
               onClick={() => call('dismiss', `/api/pr-reviews/${review.id}`, { method: 'PATCH', body: JSON.stringify({ state: 'dismissed' }) })}
