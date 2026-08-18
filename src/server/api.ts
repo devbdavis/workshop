@@ -86,6 +86,7 @@ import { createPrMonitorRegistrar } from '@application/pr-monitor/registrar.js';
 import { createPrMonitorRouter } from './pr-monitor-routes.js';
 import { createPrReviewRepository } from '@infrastructure/persistence/pr-review-repository.js';
 import { createPrReviewDiscoveryPoller } from '@application/pr-review/discovery-poller.js';
+import { createStaleAgentReaper } from '@application/session-cleanup/stale-agent-reaper.js';
 import { createPrReviewRouter } from './pr-review-routes.js';
 import {
   detectAvailability,
@@ -262,6 +263,18 @@ export function createApiRouter(deps: ApiRouterDeps = {}): Router {
   prReviewDiscovery.start();
   process.on('SIGINT', () => prReviewDiscovery.stop());
   process.on('SIGTERM', () => prReviewDiscovery.stop());
+
+  // Terminate PR-review / Linear-ticket agent sessions older than 48h — those
+  // system tracks otherwise accumulate parked one-shot agents forever.
+  const staleAgentReaper = createStaleAgentReaper({
+    sessions,
+    settings: settingsRepo,
+    terminal,
+    broadcast,
+  });
+  staleAgentReaper.start();
+  process.on('SIGINT', () => staleAgentReaper.stop());
+  process.on('SIGTERM', () => staleAgentReaper.stop());
 
   // Mount todo sub-router
   const todoRouter = createTodoRouter({
