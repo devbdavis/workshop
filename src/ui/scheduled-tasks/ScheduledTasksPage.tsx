@@ -4,6 +4,7 @@ import { ScheduledTaskCard } from './ScheduledTaskCard';
 import { ScheduledTaskForm } from './ScheduledTaskForm';
 
 interface ScheduleTemplate {
+  slug: string;
   name: string;
   description?: string;
   scheduleConfig: ScheduleConfig;
@@ -115,7 +116,7 @@ export function ScheduledTasksPage() {
         scheduleConfig: template.scheduleConfig,
         taskPrompt: template.taskPrompt,
         enabled: false,
-        templateName: template.name,
+        templateName: template.slug,
       }),
     });
     loadData();

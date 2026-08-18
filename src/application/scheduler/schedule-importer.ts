@@ -4,7 +4,7 @@ import type { ScheduledTaskRepository } from '@domain/scheduled-task/repository'
 import type { ScheduleConfig } from '@foundation/types';
 import { scheduleConfigToCron, describeSchedule } from './cron-utils.js';
 
-interface BundledScheduleDefinition {
+export interface BundledScheduleDefinition {
   name: string;
   description?: string;
   scheduleConfig: ScheduleConfig;
@@ -14,6 +14,29 @@ interface BundledScheduleDefinition {
   scriptFile?: string;
   /** Destination path for the script — supports leading ~ */
   scriptInstallPath?: string;
+}
+
+/**
+ * Copies a bundled schedule's companion script to its install path, so the
+ * task prompt's `bash <path>` actually resolves. Returns the installed path.
+ */
+export function installScheduleScript(
+  projectRoot: string,
+  def: BundledScheduleDefinition,
+): string | undefined {
+  if (!def.scriptFile || !def.scriptInstallPath) return undefined;
+
+  const src = path.join(projectRoot, def.scriptFile);
+  if (!existsSync(src)) {
+    console.warn(`[schedule-import] Script source not found: ${src}`);
+    return undefined;
+  }
+
+  const dst = def.scriptInstallPath.replace(/^~/, process.env.HOME ?? '/tmp');
+  mkdirSync(path.dirname(dst), { recursive: true });
+  writeFileSync(dst, readFileSync(src, 'utf-8'), { encoding: 'utf-8', mode: 0o755 });
+  console.log(`[schedule-import] Installed script: ${dst}`);
+  return dst;
 }
 
 /**
@@ -65,20 +88,7 @@ export function importBundledSchedules(
         continue; // Still respect user's content — never overwrite
       }
 
-      // Install the companion script if specified
-      let scriptPath: string | undefined;
-      if (def.scriptFile && def.scriptInstallPath) {
-        const src = path.join(projectRoot, def.scriptFile);
-        const dst = def.scriptInstallPath.replace(/^~/, process.env.HOME ?? '/tmp');
-        if (existsSync(src)) {
-          mkdirSync(path.dirname(dst), { recursive: true });
-          writeFileSync(dst, readFileSync(src, 'utf-8'), { encoding: 'utf-8', mode: 0o755 });
-          scriptPath = dst;
-          console.log(`[schedule-import] Installed script: ${dst}`);
-        } else {
-          console.warn(`[schedule-import] Script source not found: ${src}`);
-        }
-      }
+      const scriptPath = installScheduleScript(projectRoot, def);
 
       taskRepo.create({
         name: def.name,
