@@ -129,7 +129,10 @@ export function createPrReviewRouter(deps: PrReviewRouterDeps): Router {
       return;
     }
     // Session info lets the UI open a terminal to converse with the review agent.
-    const session = review.sessionId ? sessions.findById(review.sessionId) : null;
+    // A dead row (retired by the stale-agent reaper, or otherwise gone) is reported
+    // as no session at all, so the UI drops the "Chat with agent" affordance.
+    const found = review.sessionId ? sessions.findById(review.sessionId) : null;
+    const session = found && found.state !== 'dead' ? found : null;
     // Live head vs analyzed head → drives the "PR updated since analysis" hint and
     // the offer to re-analyze (incl. after a review was already submitted). Best-effort:
     // only pay the gh call once there is an analyzed head to compare against.
