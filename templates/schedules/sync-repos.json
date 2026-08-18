@@ -1,0 +1,13 @@
+{
+  "name": "Sync Repos",
+  "description": "Fetches every repo under the Workshop repo root and fast-forwards clean main/master checkouts. Repos with local work are fetched only, so origin refs stay current without touching your branches.",
+  "scheduleConfig": {
+    "preset": "daily",
+    "time": "08:00",
+    "daysOfWeek": [1, 2, 3, 4, 5]
+  },
+  "taskPrompt": "Sync all local repos against origin and report results:\n\n```\nbash ~/.claude/scripts/sync-repos.sh\n```\n\nReport the full output. Call out any repo that failed to fetch or that diverged from origin. If everything was already up to date, say so in one line.",
+  "enabled": true,
+  "scriptFile": "scripts/schedules/sync-repos.sh",
+  "scriptInstallPath": "~/.claude/scripts/sync-repos.sh"
+}
