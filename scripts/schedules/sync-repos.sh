@@ -52,6 +52,12 @@ fetch_repo() {
     git_fetch -C "$repo" fetch --prune --quiet origin 2>"$err" && return 0
     sleep 5
   done
+  # Port 22 to github.com is blocked or throttled on some networks; GitHub
+  # serves SSH on 443 for exactly this case.
+  if [[ "$(git -C "$repo" remote get-url origin)" == *github.com* ]]; then
+    GIT_SSH_COMMAND="$GIT_SSH_COMMAND -o Hostname=ssh.github.com -o Port=443 -o StrictHostKeyChecking=accept-new" \
+      git_fetch -C "$repo" fetch --prune --quiet origin 2>"$err" && return 0
+  fi
   [[ -n "$default" ]] || return 1
   git_fetch -C "$repo" fetch --no-tags --quiet origin "+refs/heads/$default:refs/remotes/origin/$default" 2>"$err"
 }
