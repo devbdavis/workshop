@@ -137,7 +137,7 @@ export function createPrReviewRouter(deps: PrReviewRouterDeps): Router {
     // the offer to re-analyze (incl. after a review was already submitted). Best-effort:
     // only pay the gh call once there is an analyzed head to compare against.
     let currentHeadSha: string | undefined;
-    if (review.headSha && (review.state === 'ready' || review.state === 'submitted')) {
+    if (review.headSha && (review.state === 'ready' || review.state === 'submitted' || review.state === 'needs_rereview')) {
       try {
         currentHeadSha = (await gh.fetchPrSnapshot(review.prUrl)).headRefOid;
       } catch (err) {
@@ -265,7 +265,7 @@ export function createPrReviewRouter(deps: PrReviewRouterDeps): Router {
       const dedupSection =
         priorFindings.length > 0
           ? [
-              `This PR was already analyzed. The following ${priorFindings.length} finding(s) were reported previously${review.state === 'submitted' ? ' and posted to GitHub' : ''}. Do NOT report any of these again unless the surrounding code has materially changed — deduplicate against them and surface only NEW issues (typically in code changed since the last analysis):`,
+              `This PR was already analyzed. The following ${priorFindings.length} finding(s) were reported previously${review.state === 'submitted' || review.state === 'needs_rereview' ? ' and posted to GitHub' : ''}. Do NOT report any of these again unless the surrounding code has materially changed — deduplicate against them and surface only NEW issues (typically in code changed since the last analysis):`,
               ...priorFindings.map((f, i) => `${i + 1}. ${f.file}${f.line ? `:${f.line}` : ''} — ${f.summary}`),
             ].join('\n')
           : null;

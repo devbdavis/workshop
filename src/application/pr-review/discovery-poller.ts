@@ -5,6 +5,8 @@ import type { ReviewRequestDiscovery } from '@infrastructure/forge/forge-adapter
 const EVENT_TRACK = 'pr-reviews';
 
 const DEFAULT_INTERVAL_MS = 5 * 60_000;
+/** How far back a submitted review stays eligible for the "author pushed" head check. */
+const RECHECK_WINDOW_MS = 14 * 24 * 60 * 60_000;
 
 function hostOf(url: string): string {
   try {
@@ -16,7 +18,10 @@ function hostOf(url: string): string {
 
 export interface PrReviewDiscoveryPollerDeps {
   reviews: PrReviewRepository;
-  forge: { discoverReviewRequests(): Promise<ReviewRequestDiscovery> };
+  forge: {
+    discoverReviewRequests(): Promise<ReviewRequestDiscovery>;
+    fetchPrSnapshot(prUrl: string): Promise<{ headRefOid?: string }>;
+  };
   broadcast: (type: 'pr-review:updated', trackId: string, payload?: Record<string, unknown>) => void;
   intervalMs?: number;
 }
@@ -64,7 +69,8 @@ export function createPrReviewDiscoveryPoller(deps: PrReviewDiscoveryPollerDeps)
       const liveUrls = new Set(discovered.map((pr) => pr.url));
       const searched = new Set(hosts);
       let pruned = 0;
-      for (const row of reviews.findAll()) {
+      const rows = reviews.findAll();
+      for (const row of rows) {
         if (row.state !== 'incoming' || row.discoveredVia !== 'poll') continue;
         if (!searched.has(hostOf(row.prUrl))) continue;
         if (liveUrls.has(row.prUrl)) continue;
@@ -72,8 +78,29 @@ export function createPrReviewDiscoveryPoller(deps: PrReviewDiscoveryPollerDeps)
         pruned++;
       }
 
-      if (added > 0 || pruned > 0) {
-        broadcast('pr-review:updated', EVENT_TRACK, { added, pruned });
+      // A submitted review goes stale the moment the author pushes, so flip those rows
+      // back onto the active list. Only recently submitted ones are checked: a PR reviewed
+      // weeks ago is almost certainly merged or abandoned, and each check is a forge round-trip.
+      const cutoff = Date.now() - RECHECK_WINDOW_MS;
+      const flips = await Promise.all(
+        rows
+          .filter((row) => row.state === 'submitted' && row.headSha && Date.parse(row.submittedAt ?? row.updatedAt) >= cutoff)
+          .map(async (row): Promise<boolean> => {
+            try {
+              const { headRefOid } = await forge.fetchPrSnapshot(row.prUrl);
+              if (!headRefOid || headRefOid === row.headSha) return false;
+              reviews.update(row.id, { state: 'needs_rereview' });
+              return true;
+            } catch (err) {
+              console.warn('[pr-review] Head check failed for', row.prUrl, err instanceof Error ? err.message : err);
+              return false;
+            }
+          }),
+      );
+      const rereview = flips.filter(Boolean).length;
+
+      if (added > 0 || pruned > 0 || rereview > 0) {
+        broadcast('pr-review:updated', EVENT_TRACK, { added, pruned, rereview });
       }
       return added;
     } catch (err) {

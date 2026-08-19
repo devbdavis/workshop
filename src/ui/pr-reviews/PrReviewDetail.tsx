@@ -4,6 +4,7 @@ import type { PrReview, PrReviewFinding, PrReviewVerdict } from '@foundation/typ
 import { FindingCard } from './FindingCard';
 import { STATE_BADGE } from './PrReviewsPage';
 import { TerminalModal } from '../track-view/TerminalModal';
+import { ConfirmDialog } from '../shared/ConfirmDialog';
 
 interface Props {
   reviewId: string;
@@ -39,6 +40,7 @@ export function PrReviewDetail({ reviewId, refreshKey, onChanged }: Props) {
   const [error, setError] = useState<string | null>(null);
   const [showTerminal, setShowTerminal] = useState(false);
   const [showDescription, setShowDescription] = useState(false);
+  const [pending, setPending] = useState<{ message: string; confirmLabel: string; danger?: boolean; run: () => void } | null>(null);
 
   const load = useCallback(async () => {
     try {
@@ -91,22 +93,34 @@ export function PrReviewDetail({ reviewId, refreshKey, onChanged }: Props) {
 
   const badge = STATE_BADGE[review.state];
   const submitted = review.state === 'submitted';
+  // A review already on GitHub — including one gone stale behind new commits. Posting
+  // again from here would duplicate it, so the draft/finding editors stay closed until
+  // a re-analysis lands a fresh set.
+  const posted = submitted || review.state === 'needs_rereview';
   const analyzing = review.state === 'analyzing';
   const prChanged = review.prChangedSinceAnalysis === true;
   const prFilesUrl = `${review.prUrl}/files`;
   const openCount = review.findings.filter((f) => f.status === 'open').length;
 
-  async function analyze() {
+  function analyze(): void {
+    const run = () => void call('analyze', `/api/pr-reviews/${review!.id}/analyze`, { method: 'POST' });
     // The session is gone once reaped as stale, so don't warn about a run that no longer exists.
-    if (analyzing && review!.session && !window.confirm('An analysis session is already running. Dispatch a fresh one?')) return;
-    await call('analyze', `/api/pr-reviews/${review!.id}/analyze`, { method: 'POST' });
+    if (analyzing && review!.session) {
+      setPending({ message: 'An analysis session is already running. Dispatch a fresh one?', confirmLabel: 'Dispatch', run });
+      return;
+    }
+    run();
   }
 
-  async function submit() {
-    if (!window.confirm(`Post this review to GitHub (${VERDICT_OPTIONS.find((v) => v.value === verdict)?.label}, ${openCount} comment(s))?`)) return;
-    await call('submit', `/api/pr-reviews/${review!.id}/submit`, {
-      method: 'POST',
-      body: JSON.stringify({ body: summary, verdict }),
+  function submit(): void {
+    setPending({
+      message: `Post this review to GitHub (${VERDICT_OPTIONS.find((v) => v.value === verdict)?.label}, ${openCount} comment(s))?`,
+      confirmLabel: 'Post review',
+      run: () =>
+        void call('submit', `/api/pr-reviews/${review!.id}/submit`, {
+          method: 'POST',
+          body: JSON.stringify({ body: summary, verdict }),
+        }),
     });
   }
 
@@ -173,11 +187,14 @@ export function PrReviewDetail({ reviewId, refreshKey, onChanged }: Props) {
             </button>
           )}
           <button
-            onClick={() => {
-              if (window.confirm('Remove this PR from the dashboard? Discovery will not re-add it (pasting the URL brings it back).')) {
-                void call('remove', `/api/pr-reviews/${review.id}`, { method: 'DELETE' });
-              }
-            }}
+            onClick={() =>
+              setPending({
+                message: 'Remove this PR from the dashboard? Discovery will not re-add it (pasting the URL brings it back).',
+                confirmLabel: 'Remove',
+                danger: true,
+                run: () => void call('remove', `/api/pr-reviews/${review.id}`, { method: 'DELETE' }),
+              })
+            }
             disabled={busy !== null}
             className="ml-auto px-3 py-1 text-xs font-medium rounded text-red-400/70 hover:text-red-300 hover:bg-red-900/20 disabled:opacity-50"
             title="Remove from the list entirely and block re-discovery"
@@ -191,7 +208,7 @@ export function PrReviewDetail({ reviewId, refreshKey, onChanged }: Props) {
 
       {prChanged && !analyzing && (
         <div className="px-3 py-2 text-xs text-yellow-200 bg-yellow-900/20 border border-yellow-900/50 rounded">
-          New commits since the last analysis{submitted ? ' (review already posted)' : ''}. Re-analyze to review the new
+          New commits since the last analysis{posted ? ' (review already posted)' : ''}. Re-analyze to review the new
           changes — previously reported findings won't be repeated.
         </div>
       )}
@@ -223,7 +240,7 @@ export function PrReviewDetail({ reviewId, refreshKey, onChanged }: Props) {
               key={f.id}
               finding={f}
               prFilesUrl={prFilesUrl}
-              disabled={busy !== null || submitted}
+              disabled={busy !== null || posted}
               onPatch={async (patch) => {
                 await call(`finding-${f.id}`, `/api/pr-reviews/${review.id}/findings/${f.id}`, {
                   method: 'PATCH',
@@ -238,7 +255,7 @@ export function PrReviewDetail({ reviewId, refreshKey, onChanged }: Props) {
         <div className="text-xs text-gray-500">The agent found nothing to flag. Clean PR — write a kind word and approve.</div>
       )}
 
-      {!submitted && (review.state === 'ready' || review.findings.length > 0) && (
+      {!posted && (review.state === 'ready' || review.findings.length > 0) && (
         <section className="space-y-2">
           <h2 className="text-xs font-semibold uppercase tracking-wide text-gray-500">Review comment</h2>
           <textarea
@@ -273,7 +290,7 @@ export function PrReviewDetail({ reviewId, refreshKey, onChanged }: Props) {
         </section>
       )}
 
-      {submitted && (
+      {posted && (
         <div className="text-xs text-gray-500">
           Review posted{review.submittedAt ? ` on ${new Date(review.submittedAt).toLocaleString()}` : ''}.{' '}
           <a href={review.prUrl} target="_blank" rel="noreferrer" className="text-blue-400 hover:text-blue-300">
@@ -288,6 +305,16 @@ export function PrReviewDetail({ reviewId, refreshKey, onChanged }: Props) {
           sessionId={review.session.id}
           title={review.session.name || `Review PR #${review.prNumber}`}
           onClose={() => setShowTerminal(false)}
+        />
+      )}
+
+      {pending && (
+        <ConfirmDialog
+          message={pending.message}
+          confirmLabel={pending.confirmLabel}
+          danger={pending.danger}
+          onConfirm={() => { const p = pending; setPending(null); p.run(); }}
+          onCancel={() => setPending(null)}
         />
       )}
     </div>

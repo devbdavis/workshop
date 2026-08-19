@@ -46,7 +46,10 @@ describe('PR review discovery poller', () => {
     const broadcast = vi.fn();
     const poller = createPrReviewDiscoveryPoller({
       reviews,
-      forge: { discoverReviewRequests: async () => ({ prs: [discovered(1), discovered(2)], hosts: ['github.com'] }) },
+      forge: {
+        discoverReviewRequests: async () => ({ prs: [discovered(1), discovered(2)], hosts: ['github.com'] }),
+        fetchPrSnapshot: async () => ({}),
+      },
       broadcast,
     });
 
@@ -54,14 +57,14 @@ describe('PR review discovery poller', () => {
     const all = reviews.findAll();
     expect(all).toHaveLength(2);
     expect(all.every((r) => r.state === 'incoming' && r.discoveredVia === 'poll')).toBe(true);
-    expect(broadcast).toHaveBeenCalledWith('pr-review:updated', 'pr-reviews', { added: 2, pruned: 0 });
+    expect(broadcast).toHaveBeenCalledWith('pr-review:updated', 'pr-reviews', { added: 2, pruned: 0, rereview: 0 });
   });
 
   it('leaves existing rows untouched on re-poll', async () => {
     const reviews = createPrReviewRepository();
     const poller = createPrReviewDiscoveryPoller({
       reviews,
-      forge: { discoverReviewRequests: async () => ({ prs: [discovered(1)], hosts: ['github.com'] }) },
+      forge: { discoverReviewRequests: async () => ({ prs: [discovered(1)], hosts: ['github.com'] }), fetchPrSnapshot: async () => ({}) },
       broadcast: vi.fn(),
     });
     await poller.pollNow();
@@ -79,7 +82,7 @@ describe('PR review discovery poller', () => {
     const results: DiscoveredPr[][] = [[discovered(1), discovered(2)], []];
     const poller = createPrReviewDiscoveryPoller({
       reviews,
-      forge: { discoverReviewRequests: async () => ({ prs: results.shift() ?? [], hosts: ['github.com'] }) },
+      forge: { discoverReviewRequests: async () => ({ prs: results.shift() ?? [], hosts: ['github.com'] }), fetchPrSnapshot: async () => ({}) },
       broadcast: vi.fn(),
     });
     await poller.pollNow();
@@ -103,7 +106,7 @@ describe('PR review discovery poller', () => {
     const reviews = createPrReviewRepository();
     const poller = createPrReviewDiscoveryPoller({
       reviews,
-      forge: { discoverReviewRequests: async () => ({ prs: [discovered(1)], hosts: ['github.com'] }) },
+      forge: { discoverReviewRequests: async () => ({ prs: [discovered(1)], hosts: ['github.com'] }), fetchPrSnapshot: async () => ({}) },
       broadcast: vi.fn(),
     });
     await poller.pollNow();
@@ -131,6 +134,7 @@ describe('PR review discovery poller', () => {
         discoverReviewRequests: async () => {
           throw new Error('gh: not logged in');
         },
+        fetchPrSnapshot: async () => ({}),
       },
       broadcast: vi.fn(),
     });
@@ -151,10 +155,84 @@ describe('PR review discovery poller', () => {
     });
     const poller = createPrReviewDiscoveryPoller({
       reviews,
-      forge: { discoverReviewRequests: async () => ({ prs: [], hosts: ['github.com'] }) },
+      forge: { discoverReviewRequests: async () => ({ prs: [], hosts: ['github.com'] }), fetchPrSnapshot: async () => ({}) },
       broadcast: vi.fn(),
     });
     await poller.pollNow();
     expect(reviews.findAll()).toHaveLength(1);
+  });
+
+  it('flips a submitted review to needs_rereview when the author pushes past the analyzed head', async () => {
+    const reviews = createPrReviewRepository();
+    const submittedReview = reviews.upsertIncoming({
+      prUrl: 'https://github.com/acme/widgets/pull/1',
+      repoOwner: 'acme',
+      repoName: 'widgets',
+      prNumber: 1,
+      discoveredVia: 'poll',
+    });
+    reviews.update(submittedReview.id, { state: 'submitted', headSha: 'abc' });
+    const fetchPrSnapshot = vi.fn(async () => ({ headRefOid: 'def' }));
+    const poller = createPrReviewDiscoveryPoller({
+      reviews,
+      forge: { discoverReviewRequests: async () => ({ prs: [], hosts: ['github.com'] }), fetchPrSnapshot },
+      broadcast: vi.fn(),
+    });
+
+    await poller.pollNow();
+    expect(reviews.findById(submittedReview.id)?.state).toBe('needs_rereview');
+  });
+
+  it('skips the head check for reviews submitted long ago', async () => {
+    const reviews = createPrReviewRepository();
+    const old = reviews.upsertIncoming({
+      prUrl: 'https://github.com/acme/widgets/pull/3',
+      repoOwner: 'acme',
+      repoName: 'widgets',
+      prNumber: 3,
+      discoveredVia: 'poll',
+    });
+    reviews.update(old.id, { state: 'submitted', headSha: 'abc', submittedAt: '2020-01-01T00:00:00.000Z' });
+    const fetchPrSnapshot = vi.fn(async () => ({ headRefOid: 'def' }));
+    const poller = createPrReviewDiscoveryPoller({
+      reviews,
+      forge: { discoverReviewRequests: async () => ({ prs: [], hosts: ['github.com'] }), fetchPrSnapshot },
+      broadcast: vi.fn(),
+    });
+
+    await poller.pollNow();
+    expect(fetchPrSnapshot).not.toHaveBeenCalled();
+    expect(reviews.findById(old.id)?.state).toBe('submitted');
+  });
+
+  it('leaves a submitted review alone when the head SHA is unchanged, and never head-checks other states', async () => {
+    const reviews = createPrReviewRepository();
+    const submittedReview = reviews.upsertIncoming({
+      prUrl: 'https://github.com/acme/widgets/pull/1',
+      repoOwner: 'acme',
+      repoName: 'widgets',
+      prNumber: 1,
+      discoveredVia: 'poll',
+    });
+    reviews.update(submittedReview.id, { state: 'submitted', headSha: 'abc' });
+    const readyReview = reviews.upsertIncoming({
+      prUrl: 'https://github.com/acme/widgets/pull/2',
+      repoOwner: 'acme',
+      repoName: 'widgets',
+      prNumber: 2,
+      discoveredVia: 'poll',
+    });
+    reviews.update(readyReview.id, { state: 'ready', headSha: 'xyz' });
+    const fetchPrSnapshot = vi.fn(async () => ({ headRefOid: 'abc' }));
+    const poller = createPrReviewDiscoveryPoller({
+      reviews,
+      forge: { discoverReviewRequests: async () => ({ prs: [], hosts: ['github.com'] }), fetchPrSnapshot },
+      broadcast: vi.fn(),
+    });
+
+    await poller.pollNow();
+    expect(reviews.findById(submittedReview.id)?.state).toBe('submitted');
+    expect(fetchPrSnapshot).toHaveBeenCalledTimes(1);
+    expect(fetchPrSnapshot).toHaveBeenCalledWith(submittedReview.prUrl);
   });
 });
