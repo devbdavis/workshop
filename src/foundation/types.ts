@@ -693,8 +693,9 @@ export type PrReviewFindingId = string & { readonly __brand: 'PrReviewFindingId'
 
 /** Lifecycle: discovered/added → agent dispatched → findings in → review posted.
  *  `removed` rows are hidden everywhere and block re-discovery (the poller's
- *  upsert-by-URL finds them and leaves them alone). */
-export type PrReviewState = 'incoming' | 'analyzing' | 'ready' | 'submitted' | 'dismissed' | 'removed';
+ *  upsert-by-URL finds them and leaves them alone). A submitted review flips to
+ *  `needs_rereview` when the author pushes past the analyzed head SHA. */
+export type PrReviewState = 'incoming' | 'analyzing' | 'ready' | 'submitted' | 'needs_rereview' | 'dismissed' | 'removed';
 export type PrReviewVerdict = 'approve' | 'request_changes' | 'comment';
 export type PrReviewDiscoveredVia = 'poll' | 'manual';
 

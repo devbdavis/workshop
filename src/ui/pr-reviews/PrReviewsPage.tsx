@@ -7,13 +7,14 @@ export interface PrReviewListItem extends PrReview {
   findingCounts: { open: number; total: number };
 }
 
-const ACTIVE_STATES: ReadonlySet<PrReviewState> = new Set(['incoming', 'analyzing', 'ready']);
+const ACTIVE_STATES: ReadonlySet<PrReviewState> = new Set(['incoming', 'analyzing', 'ready', 'needs_rereview']);
 
 export const STATE_BADGE: Record<PrReviewState, { label: string; className: string }> = {
   incoming: { label: 'To review', className: 'text-blue-300 bg-blue-900/40' },
   analyzing: { label: 'Analyzing…', className: 'text-yellow-300 bg-yellow-900/40' },
   ready: { label: 'Findings ready', className: 'text-emerald-300 bg-emerald-900/40' },
   submitted: { label: 'Submitted', className: 'text-purple-300 bg-purple-900/40' },
+  needs_rereview: { label: 'Needs re-review', className: 'text-amber-300 bg-amber-900/40' },
   dismissed: { label: 'Dismissed', className: 'text-gray-400 bg-gray-800' },
   // Removed rows are filtered out server-side; entry exists for type exhaustiveness.
   removed: { label: 'Removed', className: 'text-gray-500 bg-gray-800' },
@@ -108,7 +109,8 @@ export function PrReviewsPage() {
     }
   }
 
-  const active = reviews.filter((r) => ACTIVE_STATES.has(r.state));
+  // Stable sort: a pushed-after-review PR jumps back to the top of the active list.
+  const active = reviews.filter((r) => ACTIVE_STATES.has(r.state)).sort((a, b) => (a.state === 'needs_rereview' ? -1 : 0) - (b.state === 'needs_rereview' ? -1 : 0));
   const completed = reviews.filter((r) => !ACTIVE_STATES.has(r.state));
   const selected = reviews.find((r) => r.id === selectedId) ?? null;
 
