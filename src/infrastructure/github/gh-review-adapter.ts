@@ -105,6 +105,43 @@ function spawnWithStdin(
   });
 }
 
+/** A comment shaped for GitHub's create-review payload (line/side, or legacy diff position). */
+type ReviewCommentPayload = Record<string, string | number>;
+
+interface PendingReviewComment {
+  path?: string;
+  body?: string;
+  line?: number | null;
+  side?: 'LEFT' | 'RIGHT' | null;
+  start_line?: number | null;
+  start_side?: 'LEFT' | 'RIGHT' | null;
+  position?: number | null;
+  in_reply_to_id?: number | null;
+}
+
+/** Re-express a hand-written pending comment for the create-review payload. Pending
+ *  comments carry only a diff `position` — `line`/`side` are filled in on submit. */
+function toReviewComment(c: PendingReviewComment): ReviewCommentPayload {
+  const reject = (why: string) =>
+    new Error(
+      `Pending review comment on ${c.path ?? 'an unknown file'} ${why}. ` +
+        'Submit or delete your in-progress review on GitHub, then retry.',
+    );
+  if (!c.path || !c.body) throw reject('is missing a path or body');
+  if (c.in_reply_to_id) throw reject('is a reply to another comment and cannot be merged');
+  if (typeof c.line === 'number') {
+    return {
+      path: c.path,
+      body: c.body,
+      line: c.line,
+      side: c.side ?? 'RIGHT',
+      ...(typeof c.start_line === 'number' ? { start_line: c.start_line, start_side: c.start_side ?? 'RIGHT' } : {}),
+    };
+  }
+  if (typeof c.position === 'number') return { path: c.path, body: c.body, position: c.position };
+  throw reject('is no longer anchored to the diff');
+}
+
 export function createGhReviewAdapter(opts: CreateGhReviewAdapterOptions = {}): GhReviewAdapter {
   const ghBinary = opts.ghBinary ?? 'gh';
   const timeoutMs = opts.timeoutMs ?? 30_000;
@@ -114,6 +151,50 @@ export function createGhReviewAdapter(opts: CreateGhReviewAdapterOptions = {}): 
       execFileAsync(binary, args, { timeout: timeoutMs, maxBuffer: 20 * 1024 * 1024 }));
   const execWithStdin =
     opts.execWithStdin ?? ((binary: string, args: string[], stdin: string) => spawnWithStdin(binary, args, stdin, timeoutMs));
+
+  /** GitHub allows one pending review per user, so a review started by hand in the UI
+   *  makes our POST 422. Adopt its comments and drop it, so everything lands as one
+   *  review. Only the authed user's own pending review is ever listed. */
+  async function drainPendingReview(
+    reviewsPath: string,
+  ): Promise<{ body: string; comments: ReviewCommentPayload[] } | null> {
+    const { stdout } = await exec(ghBinary, ['api', `${reviewsPath}?per_page=100`, '--paginate']);
+    const pending = (JSON.parse(stdout) as { id: number; state: string; body?: string }[]).find(
+      (r) => r.state === 'PENDING',
+    );
+    if (!pending) return null;
+    const { stdout: raw } = await exec(ghBinary, [
+      'api',
+      `${reviewsPath}/${pending.id}/comments?per_page=100`,
+      '--paginate',
+    ]);
+    const comments = (JSON.parse(raw) as PendingReviewComment[]).map(toReviewComment);
+    await exec(ghBinary, ['api', `${reviewsPath}/${pending.id}`, '--method', 'DELETE']);
+    return { body: pending.body?.trim() ?? '', comments };
+  }
+
+  const postReview = (reviewsPath: string, payload: string) =>
+    execWithStdin(ghBinary, ['api', reviewsPath, '--method', 'POST', '--input', '-'], payload);
+
+  /** Our POST failed after the pending review was consumed — put the user's work back. */
+  async function restorePendingReview(
+    reviewsPath: string,
+    drained: { body: string; comments: ReviewCommentPayload[] },
+    cause: unknown,
+  ): Promise<void> {
+    // No API appends to a pending review, so it is deleted before we post: a crash in
+    // that window loses it. Recreating it is the best guard available.
+    const payload = JSON.stringify({ body: drained.body, comments: drained.comments });
+    try {
+      await postReview(reviewsPath, payload);
+    } catch {
+      const lost = drained.comments.map((c) => `- ${c.path}: ${c.body}`).join('\n');
+      throw new Error(
+        `${cause instanceof Error ? cause.message : String(cause)}\n\n` +
+          `Your pending review was consumed and could not be restored. Comments:\n${lost}`,
+      );
+    }
+  }
 
   return {
     async searchReviewRequestedPrs(): Promise<DiscoveredPr[]> {
@@ -159,19 +240,22 @@ export function createGhReviewAdapter(opts: CreateGhReviewAdapterOptions = {}): 
       const parsed = parsePrUrl(prUrl);
       if (!parsed) throw new Error(`Invalid PR URL: ${prUrl}`);
       const { owner, repo, number: prNumber } = parsed;
+      const reviewsPath = `repos/${owner}/${repo}/pulls/${prNumber}/reviews`;
+      const drained = await drainPendingReview(reviewsPath);
       const payload = JSON.stringify({
-        body: submission.body,
+        body: [drained?.body, submission.body].filter(Boolean).join('\n\n'),
         event: VERDICT_TO_EVENT[submission.verdict],
-        comments: submission.comments.map((c) => ({ path: c.path, line: c.line, side: c.side, body: c.body })),
+        comments: [
+          ...(drained?.comments ?? []),
+          ...submission.comments.map((c) => ({ path: c.path, line: c.line, side: c.side, body: c.body })),
+        ],
       });
-      await execWithStdin(ghBinary, [
-        'api',
-        `repos/${owner}/${repo}/pulls/${prNumber}/reviews`,
-        '--method',
-        'POST',
-        '--input',
-        '-',
-      ], payload);
+      try {
+        await postReview(reviewsPath, payload);
+      } catch (err) {
+        if (drained && (drained.comments.length > 0 || drained.body)) await restorePendingReview(reviewsPath, drained, err);
+        throw err;
+      }
     },
   };
 }
