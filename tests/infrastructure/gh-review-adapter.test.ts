@@ -46,6 +46,7 @@ describe('GhReviewAdapter', () => {
     let capturedArgs: string[] = [];
     let capturedStdin = '';
     const adapter = createGhReviewAdapter({
+      exec: async () => ({ stdout: '[]', stderr: '' }),
       execWithStdin: async (_binary, args, stdin) => {
         capturedArgs = args;
         capturedStdin = stdin;
@@ -68,6 +69,7 @@ describe('GhReviewAdapter', () => {
 
   it('propagates gh failures from submit', async () => {
     const adapter = createGhReviewAdapter({
+      exec: async () => ({ stdout: '[]', stderr: '' }),
       execWithStdin: async () => {
         throw new Error('HTTP 422: Unprocessable Entity');
       },
@@ -75,5 +77,76 @@ describe('GhReviewAdapter', () => {
     await expect(
       adapter.submitPrReview('https://github.com/acme/widgets/pull/9', { body: 'x', verdict: 'comment', comments: [] }),
     ).rejects.toThrow('422');
+  });
+
+  it('folds a hand-started pending review into the submitted one', async () => {
+    const calls: string[][] = [];
+    let capturedStdin = '';
+    const adapter = createGhReviewAdapter({
+      exec: async (_binary, args) => {
+        calls.push(args);
+        if (args[1].endsWith('/reviews?per_page=100')) {
+          return { stdout: JSON.stringify([{ id: 77, state: 'PENDING', body: 'started by hand' }]), stderr: '' };
+        }
+        if (args[1].includes('/reviews/77/comments')) {
+          return {
+            stdout: JSON.stringify([
+              { path: 'a.py', body: 'needs a runbook', position: 16, line: null, side: null },
+              { path: 'b.py', body: 'multi-line', line: 9, side: 'RIGHT', start_line: 7 },
+            ]),
+            stderr: '',
+          };
+        }
+        return { stdout: '', stderr: '' };
+      },
+      execWithStdin: async (_binary, _args, stdin) => {
+        capturedStdin = stdin;
+        return { stdout: '{}', stderr: '' };
+      },
+    });
+
+    await adapter.submitPrReview('https://github.com/acme/widgets/pull/9', {
+      body: 'from workshop',
+      verdict: 'comment',
+      comments: [{ path: 'src/a.ts', line: 12, side: 'RIGHT', body: 'off-by-one' }],
+    });
+
+    // The pending review is consumed, not left to 422 the POST.
+    expect(calls).toContainEqual(['api', 'repos/acme/widgets/pulls/9/reviews/77', '--method', 'DELETE']);
+    const payload = JSON.parse(capturedStdin) as Record<string, unknown>;
+    expect(payload.body).toBe('started by hand\n\nfrom workshop');
+    expect(payload.comments).toEqual([
+      { path: 'a.py', body: 'needs a runbook', position: 16 },
+      { path: 'b.py', body: 'multi-line', line: 9, side: 'RIGHT', start_line: 7, start_side: 'RIGHT' },
+      { path: 'src/a.ts', line: 12, side: 'RIGHT', body: 'off-by-one' },
+    ]);
+  });
+
+  it('restores the pending review when the merged submit fails', async () => {
+    const stdins: string[] = [];
+    const adapter = createGhReviewAdapter({
+      exec: async (_binary, args) => {
+        if (args[1].endsWith('/reviews?per_page=100')) {
+          return { stdout: JSON.stringify([{ id: 77, state: 'PENDING', body: '' }]), stderr: '' };
+        }
+        if (args[1].includes('/comments')) {
+          return { stdout: JSON.stringify([{ path: 'a.py', body: 'keep me', position: 16 }]), stderr: '' };
+        }
+        return { stdout: '', stderr: '' };
+      },
+      execWithStdin: async (_binary, _args, stdin) => {
+        stdins.push(stdin);
+        if (stdins.length === 1) throw new Error('HTTP 422: Unprocessable Entity');
+        return { stdout: '{}', stderr: '' };
+      },
+    });
+
+    await expect(
+      adapter.submitPrReview('https://github.com/acme/widgets/pull/9', { body: 'x', verdict: 'comment', comments: [] }),
+    ).rejects.toThrow('422');
+    // Second call re-creates a pending review holding the hand-written comment.
+    const restored = JSON.parse(stdins[1]) as Record<string, unknown>;
+    expect(restored.event).toBeUndefined();
+    expect(restored.comments).toEqual([{ path: 'a.py', body: 'keep me', position: 16 }]);
   });
 });
