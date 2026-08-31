@@ -121,3 +121,17 @@ export function isSessionExited(session: Session, preCapture?: string[]): boolea
   // Bare shell prompts: zsh (➜/%), bash ($)
   return /^[$%]$/.test(lastLine) || /^➜\s/.test(lastLine);
 }
+
+/** Next key to send to the Claude workspace-trust dialog: `Enter` once the
+ *  cursor sits on "Yes, I trust this folder", otherwise `Down` to move it
+ *  there. The dialog defaults the cursor to "No, exit", so a blind Enter
+ *  declines trust and the CLI exits. Returns null when the dialog isn't
+ *  (fully) rendered, so pollers keep waiting. */
+export function trustDialogKey(pane: string): 'Down' | 'Enter' | null {
+  if (!/trust this folder/i.test(pane)) return null;
+  // Only the option lines — the pane also carries the shell's own `❯` prompt.
+  const options = pane.split('\n').filter((l) => /(Yes, I trust|No, exit)/i.test(l));
+  const cursorLine = options.find((l) => l.includes('❯'));
+  if (!cursorLine) return null;
+  return /Yes, I trust/i.test(cursorLine) ? 'Enter' : 'Down';
+}
