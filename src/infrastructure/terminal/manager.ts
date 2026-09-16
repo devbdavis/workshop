@@ -14,6 +14,7 @@ import { toEnabledPluginsMap } from '@domain/plugin/repository.js';
 import { readAgentsRules } from '@infrastructure/plugins/rules-writer.js';
 import {
   capturePaneLines, isSessionIdle, isSessionNeedsInput, isSessionLoggedOut, isSessionExited,
+  trustDialogKey,
 } from './pane-detection.js';
 import {
   buildClaudeLauncher, buildGeminiLauncher, buildCodexLauncher, buildCursorLauncher,
@@ -683,7 +684,9 @@ export function createTerminalManager(
     // Auto-approve the Claude workspace trust dialog from the server process.
     // Running tmux commands here (rather than inside the launcher script's
     // subprocess) avoids WSL socket-access issues where child processes of the
-    // tmux pane cannot reach the tmux server.
+    // tmux pane cannot reach the tmux server. The keys are derived from the
+    // pane, not hardcoded: the dialog's cursor defaults to "No, exit", so a
+    // blind Enter declines trust and drops the session to a bare shell.
     if (provider === 'claude') {
       const deadline = Date.now() + 30_000;
       const trustTimer = setInterval(() => {
@@ -697,9 +700,12 @@ export function createTerminalManager(
             encoding: 'utf-8',
             timeout: 2000,
           });
-          if (/trust this folder/i.test(pane)) {
-            execSync(`tmux send-keys -t ${tmuxName} Enter`, { stdio: 'pipe' });
-            clearInterval(trustTimer);
+          const key = trustDialogKey(pane);
+          if (key) {
+            execSync(`tmux send-keys -t ${tmuxName} ${key}`, { stdio: 'pipe' });
+            // `Down` only moves the cursor — keep polling until it lands on the
+            // trust option and we can confirm with Enter.
+            if (key === 'Enter') clearInterval(trustTimer);
           }
         } catch {
           // tmux session not ready yet or already gone — keep trying until deadline
