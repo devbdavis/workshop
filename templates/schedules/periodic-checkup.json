@@ -1,0 +1,10 @@
+{
+  "name": "Periodic Checkup",
+  "description": "Every other month, runs the available agent health checks — `claude doctor`, plus any installed checkup skills such as /checkup prompt-audit — and reports what needs attention. Report-only; nothing is changed.",
+  "scheduleConfig": {
+    "preset": "cron",
+    "cronExpression": "0 9 1 */2 *"
+  },
+  "taskPrompt": "Run a periodic health checkup of this machine's AI tooling and report the results. This is report-only: do not apply fixes, edit settings, or install anything.\n\n1. Run `claude doctor` and capture its full output.\n2. If a `checkup` skill or command is available to you (e.g. `/checkup`), run `/checkup prompt-audit`. Run any other installed checkup, audit, or doctor-style skills your organization provides (check your available skills list). Skip silently anything that is not installed.\n3. If `codex` is on PATH, run `codex --version` and note it.\n\nFinish with a short report:\n- **Warnings / errors** — each issue, the tool that raised it, and its suggested fix\n- **Checks run** — one line each, with pass/warn/fail\n- **Skipped** — checks that were unavailable\n\nIf everything passed, say so in one line.",
+  "enabled": true
+}

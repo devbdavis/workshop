@@ -116,10 +116,12 @@ export function Dashboard() {
   }, []);
 
   const visible = useMemo(() => {
-    let list = showSystem ? tracks : tracks.filter((t) => t.label !== 'system');
-    if (!showHidden) list = list.filter((t) => !t.hidden);
+    // A track with a session blocked on input always shows, so stuck background jobs surface.
+    const blocked = (t: Track) => (activity[t.id]?.needsInput ?? 0) > 0;
+    let list = showSystem ? tracks : tracks.filter((t) => t.label !== 'system' || blocked(t));
+    if (!showHidden) list = list.filter((t) => !t.hidden || blocked(t));
     return sortTracks(list, sort);
-  }, [tracks, showSystem, showHidden, sort]);
+  }, [tracks, activity, showSystem, showHidden, sort]);
 
   return (
     <div className="max-w-6xl mx-auto px-6 py-8">
