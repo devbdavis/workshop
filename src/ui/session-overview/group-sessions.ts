@@ -12,7 +12,7 @@ export function isVisibleSession(session: Session): boolean {
   return session.state !== 'dead';
 }
 
-/** System tracks and profile-hidden tracks are never shown on the overview page. */
+/** System and profile-hidden tracks are hidden on the overview page, except for sessions blocked on input. */
 export function isVisibleTrack(track: Track): boolean {
   return !track.hidden && track.label !== 'system';
 }
@@ -28,7 +28,8 @@ export function sortSessions(sessions: Session[]): Session[] {
   });
 }
 
-/** Groups visible sessions by visible track (no system/hidden tracks), tracks sorted A-Z, omitting empty tracks. */
+/** Groups visible sessions by visible track, tracks sorted A-Z, omitting empty tracks.
+    System/hidden tracks appear only with their sessions blocked on input, so stuck background jobs surface. */
 export function groupSessionsByTrack(sessions: Session[], tracks: Track[]): TrackSessionGroup[] {
   const byTrack = new Map<string, Session[]>();
   for (const session of sessions) {
@@ -39,8 +40,9 @@ export function groupSessionsByTrack(sessions: Session[], tracks: Track[]): Trac
   }
 
   const groups: TrackSessionGroup[] = [];
-  for (const track of sortTracks(tracks.filter(isVisibleTrack))) {
-    const list = byTrack.get(track.id);
+  for (const track of sortTracks(tracks)) {
+    let list = byTrack.get(track.id);
+    if (list && !isVisibleTrack(track)) list = list.filter((s) => s.activityStatus === 'needs-input');
     if (!list || list.length === 0) continue;
     groups.push({ track, sessions: sortSessions(list) });
   }
