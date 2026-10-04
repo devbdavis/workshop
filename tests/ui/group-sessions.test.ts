@@ -51,6 +51,18 @@ describe('groupSessionsByTrack', () => {
     expect(groups.map((g) => g.track.id)).toEqual(['t2']);
   });
 
+  it('surfaces only needs-input sessions from system and hidden tracks', () => {
+    const sessions = [
+      session({ id: 'blocked' as Session['id'], trackId: 't1' as Session['trackId'], activityStatus: 'needs-input' }),
+      session({ id: 'working' as Session['id'], trackId: 't1' as Session['trackId'], activityStatus: 'working' }),
+      session({ id: 'hblocked' as Session['id'], trackId: 't2' as Session['trackId'], activityStatus: 'needs-input' }),
+    ];
+    const system = { ...track('t1'), label: 'system' };
+    const hidden = { ...track('t2'), hidden: true };
+    const groups = groupSessionsByTrack(sessions, [system, hidden]);
+    expect(groups.map((g) => g.sessions.map((s) => s.id))).toEqual([['blocked'], ['hblocked']]);
+  });
+
   it('sorts track groups A-Z by name', () => {
     const sessions = [
       session({ id: 'a' as Session['id'], trackId: 'zebra' as Session['trackId'] }),
