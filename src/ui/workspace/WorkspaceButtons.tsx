@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
 import { WorkspaceBrowser } from './WorkspaceBrowser';
 
 let codeServerAvailable: Promise<boolean> | null = null;
@@ -44,35 +44,42 @@ export async function openInVsCode(sessionId: string, editorPath: string): Promi
 interface Props {
   sessionId: string;
   editorPath?: string;
+  /** Extra in-Workshop buttons (e.g. the in-browser shell) shown inside the same group. */
+  children?: ReactNode;
 }
 
-/** "Files" + "VS Code" header buttons for a session pane. */
-export function WorkspaceButtons({ sessionId, editorPath }: Props) {
+/** Outlined group of tools that open inside Workshop, kept visually apart from local-app launchers. */
+export function WorkspaceButtons({ sessionId, editorPath, children }: Props) {
   const [showBrowser, setShowBrowser] = useState(false);
   const codeServerReady = useCodeServerAvailable();
 
-  if (!editorPath) return null;
+  if (!editorPath && !children) return null;
 
   return (
     <>
-      <button
-        onClick={() => setShowBrowser(true)}
-        className="flex items-center gap-0.5 text-[10px] text-gray-500 hover:text-blue-400 px-1"
-        title="Browse and edit workspace files (in browser)"
-      >
-        <FolderIcon className="w-3.5 h-3.5" />
-        <span>Files</span>
-      </button>
-      {codeServerReady && (
-        <button
-          onClick={() => openInVsCode(sessionId, editorPath)}
-          className="flex items-center gap-0.5 text-[10px] text-gray-500 hover:text-blue-400 px-1"
-          title="Open VS Code in the browser (runs on the Workshop server)"
-        >
-          <GlobeIcon className="w-3.5 h-3.5" />
-          <span>VS Code</span>
-        </button>
-      )}
+      <div className="flex items-center rounded border border-gray-700 bg-gray-800/50" title="Opens inside Workshop, in this browser">
+        {editorPath && (
+          <button
+            onClick={() => setShowBrowser(true)}
+            className="flex items-center gap-0.5 text-[10px] text-gray-500 hover:text-blue-400 px-1"
+            title="Browse and edit workspace files (in browser)"
+          >
+            <FolderIcon className="w-3.5 h-3.5" />
+            <span>Files</span>
+          </button>
+        )}
+        {editorPath && codeServerReady && (
+          <button
+            onClick={() => openInVsCode(sessionId, editorPath)}
+            className="flex items-center gap-0.5 text-[10px] text-gray-500 hover:text-blue-400 px-1"
+            title="Open VS Code in the browser (runs on the Workshop server)"
+          >
+            <GlobeIcon className="w-3.5 h-3.5" />
+            <span>Web VS Code</span>
+          </button>
+        )}
+        {children}
+      </div>
       {showBrowser && <WorkspaceBrowser sessionId={sessionId} onClose={() => setShowBrowser(false)} />}
     </>
   );
