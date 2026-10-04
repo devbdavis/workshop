@@ -28,7 +28,7 @@
   </Overview>
   <Category>Productivity: Tools:</Category>
   <WebUI>http://[IP]:[PORT:3002]/</WebUI>
-  <Icon>https://raw.githubusercontent.com/devbdavis/workshop/main/public/favicon.svg</Icon>
+  <Icon>https://raw.githubusercontent.com/devbdavis/workshop/main/public/favicon.png</Icon>
   <ExtraParams>--init</ExtraParams>
   <DonateText/>
   <DonateLink/>

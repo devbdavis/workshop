@@ -17,7 +17,7 @@ function tildeify(p: string): string {
 
 export function Repositories() {
   const [repos, setRepos] = useState<GlobalRepo[]>([]);
-  const [repoRoot, setRepoRoot] = useState('~/repos');
+  const [repoRoot, setRepoRoot] = useState('/repos');
   const [editingRoot, setEditingRoot] = useState(false);
   const [rootDraft, setRootDraft] = useState('');
   const [suggestions, setSuggestions] = useState<string[]>([]);
