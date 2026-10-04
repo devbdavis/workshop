@@ -6,7 +6,7 @@
   (on the unraid host or another machine and `docker save`/`load`), tagging it
   `workshop:latest`:
 
-      docker build -t workshop:latest https://github.com/bdavis-klaviyo/workshop.git#docker-builds
+      docker build -t workshop:latest https://github.com/devbdavis/workshop.git#docker-builds
 
   Then add this template via the Docker tab → "Add Container" → Template, or drop
   this file in /boot/config/plugins/dockerMan/templates-user/.
@@ -20,7 +20,7 @@
   <Shell>bash</Shell>
   <Privileged>false</Privileged>
   <Support/>
-  <Project>https://github.com/bdavis-klaviyo/workshop</Project>
+  <Project>https://github.com/devbdavis/workshop</Project>
   <Overview>
     Workshop — a local-first project command center for managing parallel work
     tracks with AI-assisted (Claude Code) terminal sessions. Requires a
@@ -28,7 +28,7 @@
   </Overview>
   <Category>Productivity: Tools:</Category>
   <WebUI>http://[IP]:[PORT:3002]/</WebUI>
-  <Icon>https://raw.githubusercontent.com/bdavis-klaviyo/workshop/main/public/favicon.svg</Icon>
+  <Icon>https://raw.githubusercontent.com/devbdavis/workshop/main/public/favicon.png</Icon>
   <ExtraParams>--init</ExtraParams>
   <DonateText/>
   <DonateLink/>

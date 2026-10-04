@@ -171,8 +171,8 @@ function deriveCheckStatus(rollup: GhCheckRollupNode[] | undefined): { status: P
 
 /**
  * `gh` reports every comment author as a bare `{ login }` with no bot flag —
- * bots (trunk-io, klaviyo-code-delivery, etc.)
- * are indistinguishable from humans except by login string. Filtering is
+ * bots (trunk-io, wiz-inc, etc.) are indistinguishable from humans except by
+ * login string. Filtering is
  * therefore a case-insensitive substring match against the caller-supplied
  * ignore list rather than any bot-detection heuristic.
  */

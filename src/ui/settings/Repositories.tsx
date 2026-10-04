@@ -17,7 +17,7 @@ function tildeify(p: string): string {
 
 export function Repositories() {
   const [repos, setRepos] = useState<GlobalRepo[]>([]);
-  const [repoRoot, setRepoRoot] = useState('~/Klaviyo/Repos');
+  const [repoRoot, setRepoRoot] = useState('/repos');
   const [editingRoot, setEditingRoot] = useState(false);
   const [rootDraft, setRootDraft] = useState('');
   const [suggestions, setSuggestions] = useState<string[]>([]);
@@ -192,7 +192,7 @@ export function Repositories() {
               className="block w-full px-2 py-1 bg-gray-800 border border-gray-700 rounded text-xs font-mono disabled:opacity-50"
             />
             <p className="text-[10px] text-gray-600 leading-relaxed">
-              e.g. <span className="font-mono">https://github.com/bdavis-klaviyo/workshop</span> or{' '}
+              e.g. <span className="font-mono">https://github.com/devbdavis/workshop</span> or{' '}
               <span className="font-mono">https://git.example.com/team/repo.git</span>. Private repos require{' '}
               <span className="font-mono">gh</span>/<span className="font-mono">tea</span> to be logged in (via the auth terminals).
             </p>

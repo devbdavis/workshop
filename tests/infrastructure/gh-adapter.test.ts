@@ -119,10 +119,10 @@ describe('snapshotFromGhJson', () => {
           { id: 'r2', author: { login: 'A-Human' }, state: 'CHANGES_REQUESTED', body: 'please fix' },
         ],
       },
-      [inline({ id: 'rc1', author: 'Klaviyo-Code-Delivery' }), inline({ id: 'rc2', author: 'cursor' })],
-      ['trunk-io', 'klaviyo-code-delivery', 'wiz-inc'],
+      [inline({ id: 'rc1', author: 'Spacelift' }), inline({ id: 'rc2', author: 'cursor' })],
+      ['trunk-io', 'spacelift', 'wiz-inc'],
     );
-    // Ignored bots (wiz-inc review, klaviyo inline) dropped; human review + unlisted bot (cursor) kept.
+    // Ignored bots (wiz-inc review, spacelift inline) dropped; human review + unlisted bot (cursor) kept.
     expect(snap.unresolvedComments.map((c) => c.id).sort()).toEqual(['r2', 'rc2']);
   });
 

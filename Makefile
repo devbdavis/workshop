@@ -15,7 +15,7 @@
 IMAGE   ?= workshop:latest
 COMPOSE ?= docker compose
 SERVICE ?= workshop
-REPO    ?= https://github.com/bdavis-klaviyo/workshop.git
+REPO    ?= https://github.com/devbdavis/workshop.git
 REF     ?= main
 
 # Pass NO_CACHE=1 to force a clean rebuild (e.g. to pull a newer Claude CLI).

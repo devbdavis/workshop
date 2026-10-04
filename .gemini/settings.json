@@ -23,15 +23,11 @@
       "url": "https://developers.glean.com/mcp",
       "type": "http"
     },
-    "glean_default": {
-      "url": "https://klaviyo-be.glean.com/mcp/default",
-      "type": "http"
-    },
     "workshop": {
       "command": "npx",
       "args": [
         "tsx",
-        "/Users/brendan.davis/Klaviyo/Repos/workshop/src/mcp/server.ts"
+        "/repos/workshop/src/mcp/server.ts"
       ]
     }
   }

@@ -9,8 +9,8 @@ describe('Github issues client', () => {
           number: 39,
           title: 'Fix thing',
           body: 'details',
-          repository: { nameWithOwner: 'bdavis-klaviyo/workshop' },
-          url: 'https://github.com/bdavis-klaviyo/workshop/issues/39',
+          repository: { nameWithOwner: 'devbdavis/workshop' },
+          url: 'https://github.com/devbdavis/workshop/issues/39',
           updatedAt: '2026-01-01T00:00:00Z',
         },
       ]),
@@ -20,13 +20,13 @@ describe('Github issues client', () => {
     const issues = await listAssignedOpenIssues(undefined, { exec });
     expect(issues).toEqual([
       {
-        externalId: 'bdavis-klaviyo/workshop#39',
+        externalId: 'devbdavis/workshop#39',
         title: 'Fix thing',
         description: 'details',
-        url: 'https://github.com/bdavis-klaviyo/workshop/issues/39',
+        url: 'https://github.com/devbdavis/workshop/issues/39',
         stateName: 'open',
         updatedAt: '2026-01-01T00:00:00Z',
-        repository: 'bdavis-klaviyo/workshop',
+        repository: 'devbdavis/workshop',
       },
     ]);
   });
@@ -38,9 +38,9 @@ describe('Github issues client', () => {
       return { stdout: '[]', stderr: '' };
     };
 
-    await listAssignedOpenIssues('bdavis-klaviyo', { exec });
+    await listAssignedOpenIssues('devbdavis', { exec });
     expect(capturedArgs).toContain('--owner');
-    expect(capturedArgs).toContain('bdavis-klaviyo');
+    expect(capturedArgs).toContain('devbdavis');
   });
 
   it('getIssueByIdentifier returns null for an unparseable identifier without exec-ing', async () => {

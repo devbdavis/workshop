@@ -930,7 +930,7 @@ function runMigrations(db: Database.Database): void {
   }
 
   // Seed default repo_root setting
-  db.exec(`INSERT OR IGNORE INTO settings (key, value) VALUES ('repo_root', '~/Klaviyo/Repos');`);
+  db.exec(`INSERT OR IGNORE INTO settings (key, value) VALUES ('repo_root', '/repos');`);
 
   // Seed default prompt templates if the table is empty
   seedDefaultTemplates(db);
