@@ -141,7 +141,7 @@ function expandHome(p: string): string {
 
 /** Resolve the configured repos-root directory, expanding a leading `~`. */
 function resolveRepoRoot(settings: SettingsRepository): string {
-  const repoRoot = settings.get('repo_root') || '~/repos';
+  const repoRoot = settings.get('repo_root') || '/repos';
   return expandHome(repoRoot);
 }
 
@@ -275,7 +275,7 @@ export function createRepoRouter(deps: RepoRouterDeps): Router {
   // --- Get repo root setting ---
 
   router.get('/settings/repo-root', (_req, res) => {
-    const value = settings.get('repo_root') || '~/repos';
+    const value = settings.get('repo_root') || '/repos';
     res.json({ value });
   });
 
