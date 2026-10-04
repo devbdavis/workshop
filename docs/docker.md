@@ -56,7 +56,7 @@ to run as root.
    elsewhere and `docker save` / `docker load`):
 
    ```bash
-   docker build -t workshop:latest https://github.com/bdavis-klaviyo/workshop.git#docker-builds
+   docker build -t workshop:latest https://github.com/devbdavis/workshop.git#docker-builds
    ```
 
 2. Install the Community Applications template: copy

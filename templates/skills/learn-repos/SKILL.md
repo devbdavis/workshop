@@ -63,7 +63,7 @@ git shortlog -sne --since="6 months ago" HEAD | head -10
 
 The filter is a starting point, not a guarantee — also discount mass-reformat and dependency-bump commits by eye before calling something a hot file. Generated churn inflates counts without telling anyone where to work.
 
-Two window adjustments worth making: if six months returns only a handful of commits, widen it (`--since="2 years ago"`) and say the repo is quiet, since "nothing changes here" is itself useful routing information. If the repo is a monorepo where the track only cares about one subtree, scope every command with a pathspec (`-- python/klaviyo/kms/`) — whole-monorepo churn stats are noise wearing a statistic's clothes.
+Two window adjustments worth making: if six months returns only a handful of commits, widen it (`--since="2 years ago"`) and say the repo is quiet, since "nothing changes here" is itself useful routing information. If the repo is a monorepo where the track only cares about one subtree, scope every command with a pathspec (`-- services/billing/`) — whole-monorepo churn stats are noise wearing a statistic's clothes.
 
 ### PR feedback
 

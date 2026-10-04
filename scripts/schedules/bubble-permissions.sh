@@ -4,13 +4,14 @@
 #   2. <source-repo>/.claude/settings.json — source repo for each active worktree
 #   3. <workspace>/.claude/settings.json  — merged workspace settings (regenerated)
 #
-# Sources scanned: settings.local.json, Workshop worktrees, ~/Klaviyo/Repos/
+# Sources scanned: settings.local.json, Workshop worktrees, $REPO_ROOT (default /repos)
 
 set -euo pipefail
 
 USER_SETTINGS="$HOME/.claude/settings.json"
 LOCAL_SETTINGS="$HOME/.claude/settings.local.json"
 WORKSHOP_DB="$HOME/.workshop/workshop.db"
+REPO_ROOT="${REPO_ROOT:-/repos}"
 
 log() { echo "[bubble-permissions] $*"; }
 
@@ -60,7 +61,7 @@ fi
 
 while IFS= read -r f; do
   get_allows "$f" >> "$candidates"
-done < <(find "$HOME/Klaviyo/Repos" -maxdepth 3 -name "settings.json" -path "*/.claude/*" 2>/dev/null || true)
+done < <(find "$REPO_ROOT" -maxdepth 3 -name "settings.json" -path "*/.claude/*" 2>/dev/null || true)
 
 # ─── PHASE 2: Bubble to user-level settings.json ────────────────────────────
 

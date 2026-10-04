@@ -21,10 +21,10 @@ describe('resolveCloneTarget', () => {
   });
 
   it('ignores a trailing # fragment', () => {
-    expect(resolveCloneTarget('https://github.com/bdavis-klaviyo/workshop#')).toEqual({
+    expect(resolveCloneTarget('https://github.com/devbdavis/workshop#')).toEqual({
       provider: 'github',
       host: 'github.com',
-      owner: 'bdavis-klaviyo',
+      owner: 'devbdavis',
       repo: 'workshop',
     });
   });

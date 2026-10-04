@@ -78,7 +78,7 @@ claude auth login
 claude --version
 ```
 
-Authentication depends on your setup — at Klaviyo we use SSO, so Claude Code picks up credentials automatically. Otherwise you'll need a Claude Pro/Team/Enterprise subscription or an Anthropic API key.
+Authentication depends on your setup. If your organization uses SSO, Claude Code picks up credentials automatically. Otherwise you'll need a Claude Pro/Team/Enterprise subscription or an Anthropic API key.
 
 See [Claude Code docs](https://docs.anthropic.com/en/docs/claude-code) for detailed setup.
 
@@ -90,14 +90,14 @@ If you want to use OpenAI's Codex CLI as an alternative provider:
 # Install
 npm install -g @openai/codex
 
-# Authenticate via SSO (Klaviyo)
+# Authenticate
 codex auth login
 
 # Verify
 codex --version
 ```
 
-At Klaviyo, Codex authenticates through SSO — no API keys needed. If you're outside the org, see the [Codex docs](https://github.com/openai/codex) for authentication options.
+If your organization provides Codex through SSO, no API key is needed. Otherwise see the [Codex docs](https://github.com/openai/codex) for authentication options.
 
 When creating sessions in Workshop, you can choose the provider (Claude or Codex) per session.
 
@@ -105,7 +105,7 @@ When creating sessions in Workshop, you can choose the provider (Claude or Codex
 
 ```bash
 # Clone the repo
-git clone https://github.com/klaviyo/workshop.git
+git clone https://github.com/devbdavis/workshop.git
 cd workshop
 
 # Run the setup script (checks prerequisites and installs npm packages)

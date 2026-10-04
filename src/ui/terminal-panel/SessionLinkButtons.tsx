@@ -5,7 +5,7 @@ import { issueHref, isGithubIssueKey } from '@foundation/issue-tracker.js';
 interface Props {
   pullRequests?: PullRequest[];
   issueKey?: string;
-  /** Base URL for the issue tracker, e.g. "https://linear.app/klaviyo/issue/". Appended with issueKey to form the full link. */
+  /** Base URL for the issue tracker, e.g. "https://linear.app/your-team/issue/". Appended with issueKey to form the full link. */
   issueBaseUrl?: string;
 }
 
