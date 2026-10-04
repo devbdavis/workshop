@@ -26,7 +26,7 @@ export function TerminalPane({ trackId, session, todos, onDestroy, onRename, def
   const inputRef = useRef<HTMLInputElement>(null);
   const launchApps = useLaunchApps();
   const editor = useEditorLaunch();
-  const editorName = editor.uriPrefix ? 'Editor' : editorLabel(launchApps);
+  const editorName = editor.uriPrefix ? uriEditorName(editor.uriPrefix) : editorLabel(launchApps);
 
   const displayName = session.name || `session:${session.id.slice(0, 8)}`;
   const editorPath = session.worktreeRoot ?? defaultOpenPath;
@@ -76,50 +76,45 @@ export function TerminalPane({ trackId, session, todos, onDestroy, onRename, def
             issueKey={linkedTodo?.issueKey}
             issueBaseUrl={issueBaseUrl}
           />
+          {/* Local launchers (monitor icon) open apps on the user's own computer; the outlined
+              group after them opens inside Workshop in this browser. */}
           {editorPath && (
-            <>
-              <button
-                onClick={() => editor.openInEditor(editorPath, session.id)}
-                className="flex items-center gap-0.5 text-[10px] text-gray-500 hover:text-blue-400 px-1"
-                title={`Open in ${editorName} on your computer: ${editorPath}`}
-              >
-                <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" />
-                  <polyline points="15 3 21 3 21 9" />
-                  <line x1="10" y1="14" x2="21" y2="3" />
-                </svg>
-                <span>{editorName}</span>
-              </button>
-            </>
+            <button
+              onClick={() => editor.openInEditor(editorPath, session.id)}
+              className="flex items-center gap-0.5 text-[10px] text-gray-500 hover:text-blue-400 px-1"
+              title={`Open in ${editorName} on your computer: ${editorPath}`}
+            >
+              <MonitorIcon />
+              <span>{editorName}</span>
+            </button>
           )}
-          <WorkspaceButtons sessionId={session.id} editorPath={editorPath} />
-          {/* Native install (a host terminal is detected and no remote editor
-              URI prefix is configured) → open the local terminal emulator, as it
-              worked before the in-app shell landed. Otherwise (Docker / remote
-              host) fall back to the in-app dockable shell, which runs inside the
-              container. Gated on terminalPath, not editorPath: a session can have
-              a working directory without the track exposing an editor root. */}
-          {terminalPath && launchApps?.resolvedTerminal && !editor.uriPrefix ? (
+          {/* Native install with a host terminal and no remote editor URI → local terminal app.
+              Otherwise (Docker / remote) the in-app shell, which runs inside the container. */}
+          {terminalPath && launchApps?.resolvedTerminal && !editor.uriPrefix && (
             <button
               onClick={() => fetch('/api/shell/open-in-editor', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ path: terminalPath, app: 'terminal', sessionId: session.id }),
               })}
-              className="text-[10px] text-gray-500 hover:text-green-400 px-1 font-mono"
+              className="flex items-center gap-0.5 text-[10px] text-gray-500 hover:text-green-400 px-1 font-mono"
               title={`Open ${terminalLabel(launchApps)} on your computer: ${terminalPath}`}
             >
-              &gt;_
+              <MonitorIcon />
+              <span>&gt;_</span>
             </button>
-          ) : onOpenTerminal && terminalPath ? (
-            <button
-              onClick={() => onOpenTerminal(terminalPath)}
-              className="text-[10px] text-gray-500 hover:text-green-400 px-1 font-mono"
-              title={`Open a shell in the browser: ${terminalPath}`}
-            >
-              &gt;_
-            </button>
-          ) : null}
+          )}
+          <WorkspaceButtons sessionId={session.id} editorPath={editorPath}>
+            {!(launchApps?.resolvedTerminal && !editor.uriPrefix) && onOpenTerminal && terminalPath && (
+              <button
+                onClick={() => onOpenTerminal(terminalPath)}
+                className="text-[10px] text-gray-500 hover:text-green-400 px-1 font-mono"
+                title={`Open a shell in the browser: ${terminalPath}`}
+              >
+                &gt;_
+              </button>
+            )}
+          </WorkspaceButtons>
           <button
             onClick={onDestroy}
             className="text-xs text-gray-500 hover:text-red-400 px-1"
@@ -133,5 +128,22 @@ export function TerminalPane({ trackId, session, todos, onDestroy, onRename, def
         <TerminalPanel trackId={trackId} sessionId={session.id} autoFocus={autoFocus} focusTrigger={focusTrigger} />
       </div>
     </div>
+  );
+}
+
+/** Names the local editor a URI prefix hands off to, e.g. vscode://… → VS Code. */
+function uriEditorName(prefix: string): string {
+  if (prefix.startsWith('cursor:')) return 'Cursor';
+  if (prefix.startsWith('vscode')) return 'VS Code';
+  return 'Editor';
+}
+
+function MonitorIcon() {
+  return (
+    <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <rect x="2" y="3" width="20" height="14" rx="2" />
+      <line x1="8" y1="21" x2="16" y2="21" />
+      <line x1="12" y1="17" x2="12" y2="21" />
+    </svg>
   );
 }
