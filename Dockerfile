@@ -62,6 +62,13 @@ RUN arch="$(dpkg --print-architecture)" \
   && chmod +x /usr/local/bin/tea \
   && tea --version
 
+# --- code-server ---------------------------------------------------------
+# Standalone install (no systemd/root service) so Workshop can spawn/manage it
+# itself and proxy it through its own port — see src/infrastructure/code-server.
+ARG CODE_SERVER_VERSION=4.140.0
+RUN curl -fsSL https://code-server.dev/install.sh | sh -s -- --method=standalone --prefix=/usr/local --version=${CODE_SERVER_VERSION} \
+  && code-server --version
+
 # --- Nix (multi-user) for per-project dependency management ----------------
 # Tracked projects use flake.nix + direnv `use flake`. The Determinate
 # installer is container-friendly (--init none = no systemd) and enables the
