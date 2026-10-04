@@ -119,7 +119,7 @@ describe('snapshotFromGhJson', () => {
           { id: 'r2', author: { login: 'A-Human' }, state: 'CHANGES_REQUESTED', body: 'please fix' },
         ],
       },
-      [inline({ id: 'rc1', author: 'spacelift' }), inline({ id: 'rc2', author: 'cursor' })],
+      [inline({ id: 'rc1', author: 'Spacelift' }), inline({ id: 'rc2', author: 'cursor' })],
       ['trunk-io', 'spacelift', 'wiz-inc'],
     );
     // Ignored bots (wiz-inc review, spacelift inline) dropped; human review + unlisted bot (cursor) kept.

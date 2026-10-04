@@ -78,7 +78,7 @@ claude auth login
 claude --version
 ```
 
-Authentication depends on your setup — if your org uses SSO, so Claude Code picks up credentials automatically. Otherwise you'll need a Claude Pro/Team/Enterprise subscription or an Anthropic API key.
+Authentication depends on your setup. If your organization uses SSO, Claude Code picks up credentials automatically. Otherwise you'll need a Claude Pro/Team/Enterprise subscription or an Anthropic API key.
 
 See [Claude Code docs](https://docs.anthropic.com/en/docs/claude-code) for detailed setup.
 
@@ -90,14 +90,14 @@ If you want to use OpenAI's Codex CLI as an alternative provider:
 # Install
 npm install -g @openai/codex
 
-# Authenticate via SSO
+# Authenticate
 codex auth login
 
 # Verify
 codex --version
 ```
 
-Via org SSO, Codex authenticates through SSO — no API keys needed. If you're outside the org, see the [Codex docs](https://github.com/openai/codex) for authentication options.
+If your organization provides Codex through SSO, no API key is needed. Otherwise see the [Codex docs](https://github.com/openai/codex) for authentication options.
 
 When creating sessions in Workshop, you can choose the provider (Claude or Codex) per session.
 
