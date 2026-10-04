@@ -5,7 +5,7 @@
 
 import { spawn, type ChildProcess } from 'child_process';
 import { once } from 'events';
-import { existsSync, mkdirSync, writeFileSync } from 'fs';
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'fs';
 import { createServer, connect } from 'net';
 import path from 'path';
 import { hasCli } from '@infrastructure/launch/launch-apps.js';
@@ -61,23 +61,31 @@ function waitForPort(port: number, timeoutMs = 15_000): Promise<void> {
   });
 }
 
-// Follow the browser's OS light/dark preference; Dark Modern is the fallback theme.
-const DEFAULT_SETTINGS = {
+const DEFAULT_SETTINGS: Record<string, unknown> = {
+  // Follow the browser's OS light/dark preference; Dark Modern is the fallback theme.
   'window.autoDetectColorScheme': true,
   'workbench.preferredDarkColorTheme': 'Default Dark Modern',
   'workbench.preferredLightColorTheme': 'Default Light Modern',
   'workbench.colorTheme': 'Default Dark Modern',
+  // The EditContext input path drops plain Space/Enter in some browsers; use the classic textarea.
+  'editor.editContext': false,
 };
 
-/** Writes default user settings once; never overwrites what the user has changed since. */
+/** Adds any missing default user settings; never changes a value the user has set. */
 export function seedUserSettings(dataDir: string): void {
-  const userDir = path.join(dataDir, 'User');
-  mkdirSync(userDir, { recursive: true });
-  try {
-    writeFileSync(path.join(userDir, 'settings.json'), JSON.stringify(DEFAULT_SETTINGS, null, 2) + '\n', { flag: 'wx' });
-  } catch (err) {
-    if ((err as NodeJS.ErrnoException).code !== 'EEXIST') throw err;
+  const file = path.join(dataDir, 'User', 'settings.json');
+  mkdirSync(path.dirname(file), { recursive: true });
+  let current: Record<string, unknown> = {};
+  if (existsSync(file)) {
+    try {
+      current = JSON.parse(readFileSync(file, 'utf8')) as Record<string, unknown>;
+    } catch {
+      return; // ponytail: JSONC with comments isn't parsed; leave a hand-edited file alone.
+    }
   }
+  const missing = Object.entries(DEFAULT_SETTINGS).filter(([key]) => !(key in current));
+  if (missing.length === 0) return;
+  writeFileSync(file, JSON.stringify({ ...current, ...Object.fromEntries(missing) }, null, 2) + '\n');
 }
 
 async function spawnCodeServer(): Promise<number> {
