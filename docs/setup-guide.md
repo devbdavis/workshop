@@ -149,6 +149,8 @@ The MCP server lets Claude Code interact with Workshop programmatically — list
 
 ### Configure Claude Code
 
+Sessions launched by Workshop get this server automatically (via `--mcp-config`). The config below is only needed for Claude Code sessions you start yourself.
+
 Add Workshop's MCP server to your Claude Code config:
 
 Add to `~/.claude.json` under `mcpServers` (global — available in all Claude Code sessions):

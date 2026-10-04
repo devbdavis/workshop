@@ -85,8 +85,11 @@ RUN chmod +x /usr/local/bin/docker-entrypoint.sh
 
 # HOME=/config so all $HOME-derived state (~/.workshop, ~/.claude) lands on the
 # persistent /config volume.
+# DISABLE_AUTOUPDATER: the global npm prefix is root-owned, so the runtime user's
+# auto-update always fails. Claude Code updates by rebuilding the image instead.
 ENV NODE_ENV=production \
     HOME=/config \
+    DISABLE_AUTOUPDATER=1 \
     PORT=3002 \
     WORKSHOP_VAULT_ROOT=/config/.workshop/vault \
     LANG=C.UTF-8 \

@@ -78,6 +78,13 @@ describe('buildClaudeLauncher print vs interactive', () => {
     expect(script).toContain('exec claude');
   });
 
+  it('attaches the Workshop MCP server via --mcp-config before --settings', () => {
+    const script = launch({ initialPrompt: 'go' });
+    expect(script).toMatch(/--mcp-config "[^"]*mcp\.json" --settings /);
+    const config = JSON.parse(fs.readFileSync(path.join(testDir, 'mcp.json'), 'utf-8'));
+    expect(config.mcpServers.workshop.args[0]).toMatch(/src\/mcp\/server\.ts$/);
+  });
+
   it('omits --print when resuming a background session', () => {
     const script = launch({ background: true, claudeResumeId: 'abc-123' });
     expect(script).not.toContain('--print');
