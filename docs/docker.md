@@ -20,8 +20,8 @@ ships with a full toolchain (`git`, `tmux`, the `claude` CLI, `gh`, `nix`,
 
 | Container path     | Purpose                                                            |
 |--------------------|-------------------------------------------------------------------|
-| `/config`          | `HOME`. Holds `~/.workshop` (SQLite db, auth-token, sessions, vault, sprites). Persist this. |
-| `/config/.claude`  | Claude Code auth/config — bind-mount your **logged-in** host `~/.claude`. |
+| `/config`          | `HOME`. Holds `~/.workshop` (SQLite db, auth-token, sessions, vault, sprites) **and `~/.claude.json`**, which is where Claude Code keeps your sign-in session. Persist this. |
+| `/config/.claude`  | Claude Code auth/config — bind-mount your **logged-in** host `~/.claude`. Holds `.credentials.json` (tokens) and `settings.json` (theme). |
 | `/repos`           | Host directory of git repos Workshop manages. Reference them in the UI as `/repos/<name>`. |
 
 ## Prerequisites
@@ -103,6 +103,17 @@ alongside more specific rules.
   `/config/.workshop/auth-token` and persists on the state volume.
 - **Repo ownership**: the entrypoint sets `git safe.directory = *` so host-owned
   repos don't trip git's "dubious ownership" guard.
+- **Claude config ownership**: the entrypoint reconciles ownership of the agent
+  and forge credential paths (`~/.claude.json`, `~/.claude`, `~/.codex`,
+  `~/.gemini`, `~/.cursor`, `~/.config`, `~/.git-credentials`) to `PUID:PGID` on
+  every start, touching only entries that don't already match. Without this,
+  "I have to log in again on every restart" is the usual symptom: Docker creates
+  a missing bind-mount target as root, and an image rebuild or a `PUID=0` start
+  writes as root too. Claude Code stores `~/.claude.json` mode `0620` and parts
+  of `~/.claude` mode `0700`, so root-owned means the runtime user cannot read
+  them at all — Claude Code treats the sign-in session as absent and re-runs
+  onboarding, which is why both the login *and* the theme come back blank. The
+  reconcile heals an already-broken mount; no manual `chown` needed.
 - **Nix store**: `/nix` lives inside the image layer. Build caches are rebuilt if
   you recreate the image; mount a volume at `/nix` if you want them to persist
   across rebuilds (optional, not default — the store can grow large).
