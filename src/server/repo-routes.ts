@@ -65,7 +65,6 @@ function parseAvailableAgents(raw: string | null): SessionProvider[] {
 export const DEFAULT_PR_MONITOR_IGNORED_AUTHORS: readonly string[] = [
   'trunk-io',
   'spacelift',
-  'spacelift',
   'wiz-inc',
   'linear-code',
   'coderabbitai',

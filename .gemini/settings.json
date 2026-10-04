@@ -23,10 +23,6 @@
       "url": "https://developers.glean.com/mcp",
       "type": "http"
     },
-    "glean_default": {
-      "url": "https://example.glean.com/mcp/default",
-      "type": "http"
-    },
     "workshop": {
       "command": "npx",
       "args": [
