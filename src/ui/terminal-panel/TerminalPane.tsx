@@ -5,6 +5,7 @@ import { ActivityDot } from '@ui/shared/ActivityDot';
 import { SessionLinkButtons } from './SessionLinkButtons';
 import { useLaunchApps, editorLabel, terminalLabel } from '@ui/hooks/useLaunchApps';
 import { useEditorLaunch } from '@ui/hooks/useEditorLaunch';
+import { WorkspaceButtons } from '@ui/workspace/WorkspaceButtons';
 
 interface PaneProps {
   trackId: string;
@@ -91,6 +92,7 @@ export function TerminalPane({ trackId, session, todos, onDestroy, onRename, def
               </button>
             </>
           )}
+          <WorkspaceButtons sessionId={session.id} editorPath={editorPath} />
           {/* Native install (a host terminal is detected and no remote editor
               URI prefix is configured) → open the local terminal emulator, as it
               worked before the in-app shell landed. Otherwise (Docker / remote

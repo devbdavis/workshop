@@ -5,6 +5,7 @@ import { fileURLToPath } from 'url';
 import { createApiRouter } from './api.js';
 import { createAuthRoutes } from './auth-routes.js';
 import { createAuthMiddleware } from './auth-middleware.js';
+import { createCodeServerProxy } from './code-server-proxy.js';
 import { setupWebSocket } from './websocket.js';
 import { closeDatabase } from '@infrastructure/persistence/database.js';
 import { createAutomationRuleRepository, createAutomationRunRepository } from '@infrastructure/persistence/automation-repository.js';
@@ -28,6 +29,12 @@ registerActionHandlers(automationEngine);
 automationEngine.start();
 
 const app = express();
+
+// Mounted before express.json() so request bodies (e.g. VS Code extension
+// installs) reach code-server unconsumed.
+const codeServerProxy = createCodeServerProxy();
+app.use(codeServerProxy.middleware);
+
 app.use(express.json());
 
 // Auth routes (public — no middleware gate)
@@ -61,7 +68,7 @@ if (isProduction) {
 const server = createServer(app);
 
 // WebSocket for terminal sessions
-setupWebSocket(server, terminal);
+setupWebSocket(server, terminal, codeServerProxy);
 
 server.listen(PORT, '0.0.0.0', () => {
   console.log(`Workshop server running on http://0.0.0.0:${PORT}`);
