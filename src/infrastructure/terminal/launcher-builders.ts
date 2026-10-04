@@ -109,6 +109,23 @@ export function writeHookSettings(
   return settingsFile;
 }
 
+/** Write an --mcp-config file registering Workshop's MCP server (src/mcp/server.ts). */
+export function writeWorkshopMcpConfig(sessionDir: string): string {
+  const repoRoot = path.resolve(__dirname, '../../..');
+  const file = path.join(sessionDir, 'mcp.json');
+  const config = {
+    mcpServers: {
+      workshop: {
+        command: path.join(repoRoot, 'node_modules', '.bin', 'tsx'),
+        args: [path.join(repoRoot, 'src', 'mcp', 'server.ts')],
+        env: { WORKSHOP_API_URL },
+      },
+    },
+  };
+  writeFileSync(file, JSON.stringify(config, null, 2), 'utf-8');
+  return file;
+}
+
 /** Append background agent instructions to the system prompt */
 export function appendBackgroundInstructions(prompt: string, todoId?: string): string {
   const instructions = [
@@ -198,6 +215,10 @@ export function buildClaudeLauncher(
     mcpServers: options?.mcpServers,
     enabledPlugins: options?.enabledPlugins,
   });
+  // Always attach Workshop's own MCP server, so sessions don't depend on a
+  // user-scope registration in ~/.claude.json (which can be reset). Must precede
+  // --settings: --mcp-config is variadic and would swallow a trailing prompt.
+  claudeArgs.push('--mcp-config', JSON.stringify(writeWorkshopMcpConfig(sessionDir)));
   claudeArgs.push('--settings', JSON.stringify(settingsFile));
 
   // Pre-approve tool patterns so interactive sessions don't block on permission prompts
