@@ -5,7 +5,7 @@
 
 import { spawn, type ChildProcess } from 'child_process';
 import { once } from 'events';
-import { existsSync } from 'fs';
+import { existsSync, mkdirSync, writeFileSync } from 'fs';
 import { createServer, connect } from 'net';
 import path from 'path';
 import { hasCli } from '@infrastructure/launch/launch-apps.js';
@@ -61,11 +61,32 @@ function waitForPort(port: number, timeoutMs = 15_000): Promise<void> {
   });
 }
 
+// Follow the browser's OS light/dark preference; Dark Modern is the fallback theme.
+const DEFAULT_SETTINGS = {
+  'window.autoDetectColorScheme': true,
+  'workbench.preferredDarkColorTheme': 'Default Dark Modern',
+  'workbench.preferredLightColorTheme': 'Default Light Modern',
+  'workbench.colorTheme': 'Default Dark Modern',
+};
+
+/** Writes default user settings once; never overwrites what the user has changed since. */
+export function seedUserSettings(dataDir: string): void {
+  const userDir = path.join(dataDir, 'User');
+  mkdirSync(userDir, { recursive: true });
+  try {
+    writeFileSync(path.join(userDir, 'settings.json'), JSON.stringify(DEFAULT_SETTINGS, null, 2) + '\n', { flag: 'wx' });
+  } catch (err) {
+    if ((err as NodeJS.ErrnoException).code !== 'EEXIST') throw err;
+  }
+}
+
 async function spawnCodeServer(): Promise<number> {
   const port = process.env.WORKSHOP_CODE_SERVER_PORT
     ? parseInt(process.env.WORKSHOP_CODE_SERVER_PORT, 10)
     : await findFreePort();
   const home = process.env.HOME || '/tmp';
+  const dataDir = path.join(home, '.workshop', 'code-server', 'data');
+  seedUserSettings(dataDir);
 
   const child = spawn(
     BIN,
@@ -75,7 +96,7 @@ async function spawnCodeServer(): Promise<number> {
       '--bind-addr', `127.0.0.1:${port}`,
       '--disable-telemetry',
       '--disable-update-check',
-      '--user-data-dir', path.join(home, '.workshop', 'code-server', 'data'),
+      '--user-data-dir', dataDir,
       '--extensions-dir', path.join(home, '.workshop', 'code-server', 'extensions'),
     ],
     // code-server lets $PORT override --bind-addr, and Workshop's own PORT is set in Docker.
