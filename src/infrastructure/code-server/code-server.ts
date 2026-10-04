@@ -96,6 +96,7 @@ async function spawnCodeServer(): Promise<number> {
       '--bind-addr', `127.0.0.1:${port}`,
       '--disable-telemetry',
       '--disable-update-check',
+      '--disable-workspace-trust',
       '--user-data-dir', dataDir,
       '--extensions-dir', path.join(home, '.workshop', 'code-server', 'extensions'),
     ],
@@ -131,3 +132,9 @@ export function ensureCodeServer(): Promise<number> {
 process.on('exit', () => {
   running?.child.kill();
 });
+
+// ponytail: Docker/Podman marker files only; a native install on a remote box won't get web VS Code.
+/** Web VS Code is only offered in a container: a native install should open the user's own editor. */
+export function isRunningInContainer(): boolean {
+  return existsSync('/.dockerenv') || existsSync('/run/.containerenv');
+}

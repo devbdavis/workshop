@@ -99,7 +99,7 @@ import {
   launchEditor,
   launchTerminal,
 } from '@infrastructure/launch/launch-apps.js';
-import { isCodeServerAvailable } from '@infrastructure/code-server/code-server.js';
+import { isCodeServerAvailable, isRunningInContainer } from '@infrastructure/code-server/code-server.js';
 
 export interface ApiRouterDeps {
   automationEngine?: AutomationEngine;
@@ -1190,7 +1190,7 @@ export function createApiRouter(deps: ApiRouterDeps = {}): Router {
     res.json({ path: resolveEditorTarget(targetPath, sessionId) });
   });
 
-  router.get('/code-server/status', (_req, res) => res.json({ available: isCodeServerAvailable() }));
+  router.get('/code-server/status', (_req, res) => res.json({ available: isRunningInContainer() && isCodeServerAvailable() }));
 
   router.post('/shell/open-in-editor', (req, res) => {
     const { path: targetPath, app, sessionId } = req.body;

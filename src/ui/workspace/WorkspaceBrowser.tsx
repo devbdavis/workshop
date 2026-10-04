@@ -136,7 +136,7 @@ export function WorkspaceBrowser({ sessionId, onClose }: Props) {
                 onClick={() => openInVsCode(sessionId, root)}
                 className="text-[10px] text-gray-400 hover:text-blue-400 border border-gray-700 rounded px-2 py-0.5"
               >
-                Open in VS Code
+                Open in VS Code (web)
               </button>
             )}
             <button onClick={requestClose} className="text-gray-400 hover:text-gray-200 text-xl leading-none px-1">×</button>
