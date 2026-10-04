@@ -40,6 +40,21 @@ if [ "$PUID" != "0" ]; then
   # Own the state dir (not a recursive chown of repos/nix — those stay as-is).
   chown "$PUID:$PGID" /config /config/.workshop 2>/dev/null || true
 
+  # Agent/forge credentials live in $HOME dotfiles, and anything that ever ran
+  # as root leaves them root-owned: Docker creates a missing bind-mount target
+  # as root, an image rebuild or a PUID=0 start writes as root, and `docker
+  # exec` bypasses the drop below. Claude Code writes these mode 0620/0700, so
+  # root-owned means PUID cannot read them *at all* — it then treats
+  # ~/.claude.json as absent and re-runs onboarding, losing the stored sign-in
+  # and theme on every restart. Reconcile only mismatched entries so a clean
+  # boot pays for a stat pass and nothing else.
+  for p in /config/.claude.json /config/.claude /config/.codex /config/.gemini \
+           /config/.cursor /config/.config /config/.git-credentials; do
+    [ -e "$p" ] || continue
+    find "$p" -xdev \( ! -user "$PUID" -o ! -group "$PGID" \) \
+      -exec chown -h "$PUID:$PGID" {} + 2>/dev/null || true
+  done
+
   exec gosu "$PUID:$PGID" "$@"
 fi
 
