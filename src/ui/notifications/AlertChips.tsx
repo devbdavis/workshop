@@ -15,24 +15,30 @@ export function AlertChips({ chips, onOpen, onDismiss }: Props) {
       {chips.map((alert) => (
         <div
           key={alert.id}
-          onClick={() => onOpen(alert)}
-          className="flex items-start gap-2 bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 shadow-lg text-sm cursor-pointer"
+          className="flex items-start gap-2 bg-gray-800 border border-gray-700 hover:border-gray-500 rounded-lg px-3 py-2 shadow-lg text-sm transition-colors"
         >
-          <span
-            className={`mt-0.5 w-2 h-2 rounded-full shrink-0 ${
-              alert.kind === 'needs-input' ? 'bg-red-500' : 'bg-yellow-500'
-            }`}
-          />
-          <div className="flex-1 min-w-0">
-            <p className="text-gray-200 font-medium truncate">
-              {alert.sessionName ?? `Session ${alert.sessionId.slice(0, 8)}`}
-            </p>
-            <p className="text-gray-400 text-xs">
-              {alert.kind === 'needs-input' ? 'Needs input' : 'Idle — waiting for input'}
-            </p>
-          </div>
           <button
-            onClick={(e) => { e.stopPropagation(); onDismiss(alert.id); }}
+            type="button"
+            onClick={() => onOpen(alert)}
+            className="flex flex-1 min-w-0 items-start gap-2 text-left cursor-pointer"
+          >
+            <span
+              className={`mt-0.5 w-2 h-2 rounded-full shrink-0 ${
+                alert.kind === 'needs-input' ? 'bg-red-500' : 'bg-yellow-500'
+              }`}
+            />
+            <div className="flex-1 min-w-0">
+              <p className="text-gray-200 font-medium truncate">
+                {alert.sessionName ?? `Session ${alert.sessionId.slice(0, 8)}`}
+              </p>
+              <p className="text-gray-400 text-xs">
+                {alert.kind === 'needs-input' ? 'Needs input' : 'Idle — waiting for input'}
+              </p>
+            </div>
+          </button>
+          <button
+            type="button"
+            onClick={() => onDismiss(alert.id)}
             className="text-gray-600 hover:text-gray-300 transition-colors shrink-0 mt-0.5"
             aria-label="Dismiss"
           >
