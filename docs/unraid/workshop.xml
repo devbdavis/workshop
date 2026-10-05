@@ -37,6 +37,10 @@
           Description="Workshop web UI / API port" Type="Port"
           Display="always" Required="true" Mask="false">3002</Config>
 
+  <Config Name="Preview Port" Target="3102" Default="3102" Mode="tcp"
+          Description="Design Mode: proxy port for your dev server, mapped host:container 1:1"
+          Type="Port" Display="always" Required="false" Mask="false">3102</Config>
+
   <Config Name="State" Target="/config" Default="/mnt/user/appdata/workshop"
           Mode="rw" Description="Persistent state: SQLite db, auth-token, sessions, vault, sprites"
           Type="Path" Display="always" Required="true" Mask="false">/mnt/user/appdata/workshop</Config>
@@ -60,4 +64,12 @@
   <Config Name="PORT" Target="PORT" Default="3002" Mode=""
           Description="Internal server port (keep in sync with the WebUI port mapping)"
           Type="Variable" Display="advanced" Required="false" Mask="false">3002</Config>
+
+  <Config Name="WORKSHOP_PREVIEW_PORT" Target="WORKSHOP_PREVIEW_PORT" Default="3102" Mode=""
+          Description="Internal preview proxy port (keep in sync with the Preview Port mapping)"
+          Type="Variable" Display="advanced" Required="false" Mask="false">3102</Config>
+
+  <Config Name="WORKSHOP_SCREENSHOT_URL" Target="WORKSHOP_SCREENSHOT_URL" Default="" Mode=""
+          Description="Design Mode screenshot sidecar, e.g. http://&lt;unraid-ip&gt;:3100. Leave empty to pick elements without screenshots"
+          Type="Variable" Display="advanced" Required="false" Mask="false"></Config>
 </Container>
