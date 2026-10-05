@@ -22,7 +22,7 @@ interface WorkspaceEntry {
 }
 
 /** Workspace root for a session: worktree root, else the track's first repo, else the raw cwd. */
-function workspaceRoot(deps: WorkspaceRouterDeps, sessionId: SessionId): string | null {
+export function workspaceRoot(deps: WorkspaceRouterDeps, sessionId: SessionId): string | null {
   const session = deps.sessions.findById(sessionId);
   if (!session) return null;
   const repos = deps.tracks.findReposByTrack(session.trackId);
@@ -33,7 +33,7 @@ function workspaceRoot(deps: WorkspaceRouterDeps, sessionId: SessionId): string 
  * Resolves a root-relative path for reading, requiring the realpath to land inside `root`.
  * Rejects traversal (`../`) and symlinks that escape the root. Returns null if invalid or missing.
  */
-function resolveExisting(root: string, rel: string): string | null {
+export function resolveExisting(root: string, rel: string): string | null {
   if (typeof rel !== 'string') return null;
   const resolved = path.resolve(root, rel || '.');
   try {
