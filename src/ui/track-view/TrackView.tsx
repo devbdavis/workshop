@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useRef } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import type { Track, Session, SessionId, ExternalTicket, Todo, DefaultAiCli, PrMonitor, TodoId } from '@foundation/types';
 import { issueBaseUrlFor } from '@foundation/issue-tracker.js';
@@ -43,6 +43,12 @@ export function TrackView() {
   // Session IDs that have been created but whose tmux/CLI init is still in progress.
   // Cleared when session:ready arrives for that session.
   const [startingSessions, setStartingSessions] = useState<Set<string>>(new Set());
+  // A fast init (e.g. a shell) can broadcast session:ready before session:created or the
+  // POST response lands; remembering it stops those from re-marking the session as starting.
+  const readySessionsRef = useRef(new Set<string>());
+  const markStarting = useCallback((id: string) => {
+    if (!readySessionsRef.current.has(id)) setStartingSessions((prev) => new Set([...prev, id]));
+  }, []);
   const [showNewSession, setShowNewSession] = useState(false);
   const isMobile = useIsMobile();
   const [drawerOpen, setDrawerOpen] = useState(false);
@@ -130,9 +136,10 @@ export function TrackView() {
               setIdleAlerts((prev) => prev.filter((a) => a.id !== alert.id));
             }, 30_000);
           } else if (event.type === 'session:created' && event.sessionId) {
-            setStartingSessions((prev) => new Set([...prev, event.sessionId!]));
+            markStarting(event.sessionId);
             loadTrack();
           } else if (event.type === 'session:ready' && event.sessionId) {
+            readySessionsRef.current.add(event.sessionId);
             setStartingSessions((prev) => {
               const next = new Set(prev);
               next.delete(event.sessionId!);
@@ -157,7 +164,7 @@ export function TrackView() {
       clearTimeout(reconnectTimer);
       ws?.close();
     };
-  }, [trackId, loadTrack]);
+  }, [trackId, loadTrack, markStarting]);
 
   /**
    * `select` drives whether the new session takes over the pane selection. A
@@ -176,7 +183,7 @@ export function TrackView() {
         const session: Session = await res.json();
         setSessions((prev) => [...prev, session]);
         // Mark as starting immediately — cleared when session:ready arrives.
-        setStartingSessions((prev) => new Set([...prev, session.id]));
+        markStarting(session.id);
         if (select) setPendingSelectSessionId(session.id);
         return session;
       }
@@ -422,9 +429,6 @@ export function TrackView() {
               onPurgeSession={purgeSession}
               defaultOpenPath={track.repos?.[0]?.path}
               onSelectionChange={setActiveSessionIds}
-              onOpenShell={(cwd, name) =>
-                createSession({ provider: 'claude', shell: true, worktreeMode: false, cwd, name }, false)
-              }
             />
           </div>
         </main>

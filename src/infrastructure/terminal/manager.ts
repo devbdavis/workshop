@@ -84,7 +84,7 @@ const NIX_DEVSHELL_VARS = [
  *  Only emitted for vars that are actually present — avoids spuriously setting
  *  empty vars on machines that don't have nix/direnv, which can trigger direnv
  *  hooks and introduce shell startup latency that causes send-keys races. */
-const NIX_CLEAN_TMUX_FLAGS = NIX_DEVSHELL_VARS
+export const NIX_CLEAN_TMUX_FLAGS = NIX_DEVSHELL_VARS
   .filter((v) => v in process.env)
   .map((v) => `-e ${v}=`)
   .join(' ');
@@ -99,7 +99,7 @@ const NIX_CLEAN_TMUX_FLAGS = NIX_DEVSHELL_VARS
  * nix store paths where `claude` lives. Explicitly passing Workshop's own PATH
  * ensures the session shell can reach whatever tools Workshop itself can reach.
  */
-const TMUX_PATH_FLAG = process.env.PATH
+export const TMUX_PATH_FLAG = process.env.PATH
   ? `-e PATH=${JSON.stringify(process.env.PATH)}`
   : '';
 
@@ -121,7 +121,7 @@ const TMUX_PATH_FLAG = process.env.PATH
  * Also ensures the *server-wide* `terminal-features` list includes
  * `hyperlinks` — see ensureTmuxHyperlinks() for the rationale.
  */
-function configureTmuxSession(tmuxName: string): void {
+export function configureTmuxSession(tmuxName: string): void {
   try {
     execSync(`tmux set-option -t ${tmuxName} mouse off`, { stdio: 'pipe' });
     execSync(`tmux set-option -t ${tmuxName} set-clipboard on`, { stdio: 'pipe' });
