@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import type { DefaultAiCli, PrMonitor, Session, SessionId, Todo, Track } from '@foundation/types';
 import { issueBaseUrlFor } from '@foundation/issue-tracker.js';
 import { TerminalPane } from '../terminal-panel/TerminalPane';
@@ -114,6 +115,15 @@ export function SessionOverview() {
       prev && visible.some((s) => s.id === prev) ? prev : (visible[0]?.id ?? null),
     );
   }, [sessions, tracks]);
+
+  // Click-through from a session alert (?session=id): select it, then drop the param.
+  const [searchParams, setSearchParams] = useSearchParams();
+  const sessionParam = searchParams.get('session');
+  useEffect(() => {
+    if (!sessionParam) return;
+    setSelectedId(sessionParam as SessionId);
+    setSearchParams({}, { replace: true });
+  }, [sessionParam, setSearchParams]);
 
   useEffect(() => {
     try {
