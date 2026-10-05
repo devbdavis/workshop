@@ -116,22 +116,28 @@ describe('createSessionHistoryScanner', () => {
     expect(third).toHaveLength(0);
   });
 
-  it('readTranscript renders text + tool_use, skips tool-result-only and thinking, and returns null for unknown sessions', async () => {
+  it('readTranscript renders text + tool calls with paired results, skips meta/thinking/result-only turns, and returns null for unknown sessions', async () => {
     const sessionId = randomUUID();
     writeFixture(`project-a/${sessionId}.jsonl`, [
       JSON.stringify({ type: 'user', timestamp: '2026-07-01T00:00:00.000Z', isMeta: true, message: { role: 'user', content: '<local-command-stdout>ignored</local-command-stdout>' } }),
-      JSON.stringify({ type: 'user', timestamp: '2026-07-01T00:00:01.000Z', message: { role: 'user', content: [{ type: 'tool_result', content: 'ok' }] } }),
+      JSON.stringify({ type: 'user', timestamp: '2026-07-01T00:00:01.000Z', message: { role: 'user', content: [{ type: 'tool_result', tool_use_id: 'orphan', content: 'ok' }] } }),
       JSON.stringify({ type: 'user', timestamp: '2026-07-01T00:00:02.000Z', message: { role: 'user', content: 'What does this do?' } }),
-      JSON.stringify({ type: 'assistant', timestamp: '2026-07-01T00:00:03.000Z', message: { content: [{ type: 'thinking', thinking: 'let me check' }, { type: 'tool_use', name: 'Read', input: {} }] } }),
+      JSON.stringify({ type: 'assistant', timestamp: '2026-07-01T00:00:03.000Z', message: { content: [{ type: 'thinking', thinking: 'let me check' }, { type: 'tool_use', id: 't1', name: 'Read', input: { file_path: '/a.ts' } }] } }),
+      JSON.stringify({ type: 'user', timestamp: '2026-07-01T00:00:03.500Z', message: { role: 'user', content: [{ type: 'tool_result', tool_use_id: 't1', is_error: true, content: [{ type: 'text', text: 'ENOENT' }] }] } }),
       JSON.stringify({ type: 'assistant', timestamp: '2026-07-01T00:00:04.000Z', message: { content: [{ type: 'text', text: 'It reads a file.' }] } }),
     ]);
 
     const scanner = createSessionHistoryScanner({ projectsDir: testDir });
     const messages = await scanner.readTranscript(sessionId);
     expect(messages).toEqual([
-      { role: 'user', text: 'What does this do?', timestamp: '2026-07-01T00:00:02.000Z' },
-      { role: 'assistant', text: '[tool: Read]', timestamp: '2026-07-01T00:00:03.000Z' },
-      { role: 'assistant', text: 'It reads a file.', timestamp: '2026-07-01T00:00:04.000Z' },
+      { id: null, role: 'user', blocks: [{ type: 'text', text: 'What does this do?' }], timestamp: '2026-07-01T00:00:02.000Z' },
+      {
+        id: null,
+        role: 'assistant',
+        blocks: [{ type: 'tool', name: 'Read', hint: '/a.ts', input: JSON.stringify({ file_path: '/a.ts' }, null, 2), result: 'ENOENT', isError: true }],
+        timestamp: '2026-07-01T00:00:03.000Z',
+      },
+      { id: null, role: 'assistant', blocks: [{ type: 'text', text: 'It reads a file.' }], timestamp: '2026-07-01T00:00:04.000Z' },
     ]);
 
     expect(await scanner.readTranscript(randomUUID())).toBeNull();
