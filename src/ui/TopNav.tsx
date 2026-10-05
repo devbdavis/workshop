@@ -3,6 +3,7 @@ import { NavLink, useMatch } from 'react-router-dom';
 import { useProfile } from './hooks/useProfile';
 import { useIsMobile } from './use-is-mobile';
 import { useSessionAlerts } from './notifications/SessionAlerts';
+import { UsageChip } from './UsageChip';
 
 const LAST_TRACK_KEY = 'workshop:last-track';
 
@@ -137,6 +138,7 @@ export function TopNav() {
 
       {/* Profile chip + notification bell — pushed to the right */}
       <div className="ml-auto flex items-center gap-1">
+        <UsageChip />
         {user && (
           <NavLink
             to="/settings/profile"
