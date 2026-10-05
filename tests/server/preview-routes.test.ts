@@ -101,7 +101,7 @@ describe('preview routes', () => {
     rmSync(sessionsHome, { recursive: true, force: true });
   });
 
-  it('reports screenshot availability from WORKSHOP_SCREENSHOT_URL', async () => {
+  it('reports screenshots unavailable when no sidecar answers', async () => {
     const res = await fetch(`${base}/preview/status`);
     const body = await res.json();
     expect(body).toEqual({ port: body.port, screenshots: false });
@@ -164,12 +164,14 @@ describe('preview routes', () => {
     expect(res.status).toBe(409);
   });
 
-  it('503s shot when WORKSHOP_SCREENSHOT_URL is unset', async () => {
+  it('503s shot when screenshots are disabled', async () => {
+    process.env.WORKSHOP_SCREENSHOT_URL = '';
     const res = await fetch(`${base}/sessions/session-1/preview/shot`, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ target: 'http://x', url: '/', selector: '#a', width: 200, height: 200 }),
     });
     expect(res.status).toBe(503);
+    delete process.env.WORKSHOP_SCREENSHOT_URL;
   });
 });

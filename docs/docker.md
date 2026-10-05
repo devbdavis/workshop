@@ -110,31 +110,23 @@ Element screenshots are optional and come from a separate sidecar container
 toolchain doesn't belong in the main image. Without it, picks are still sent
 to Claude, just without a screenshot.
 
-- **docker compose**: add to `.env`:
+Workshop checks for the sidecar when the Preview opens (`WORKSHOP_SCREENSHOT_URL`,
+default `http://localhost:3100`; set it empty to turn screenshots off).
 
-  ```
-  COMPOSE_PROFILES=design-mode
-  WORKSHOP_SCREENSHOT_URL=http://playwright:3100
-  ```
+- **docker compose**: put `COMPOSE_PROFILES=design-mode` in `.env`, then
+  `docker compose up -d --build`. Compose already points Workshop at
+  `http://playwright:3100`.
 
-  then `docker compose up -d --build`. This builds and starts the
-  `playwright` sidecar alongside `workshop` and wires them together over the
-  compose network.
+- **unraid**: add the **Preview Port** (3102) to the `workshop` container. For
+  screenshots, also install [`docs/unraid/workshop-playwright.xml`](./unraid/workshop-playwright.xml)
+  with **WORKSHOP_PREVIEW_URL** = `http://<unraid-ip>:3102`, and set
+  **WORKSHOP_SCREENSHOT_URL** on `workshop` to `http://<unraid-ip>:3100`
+  (containers on `bridge` can't resolve each other by name).
 
-- **unraid**: two separate containers, each pointed at the other's unraid IP
-  (containers on `bridge` networking can't resolve each other by name).
-  Install [`docs/unraid/workshop-playwright.xml`](./unraid/workshop-playwright.xml)
-  for the sidecar, set its **WORKSHOP_PREVIEW_URL** to
-  `http://<unraid-ip>:3102`, then set **WORKSHOP_SCREENSHOT_URL** on the
-  `workshop` template to `http://<unraid-ip>:3100`.
-
-- **running locally without Docker**:
-
-  ```bash
-  cd docker/playwright && npm install && npx playwright install chromium
-  WORKSHOP_PREVIEW_URL=http://localhost:3101 node server.mjs
-  # then start Workshop with WORKSHOP_SCREENSHOT_URL=http://localhost:3100
-  ```
+- **locally (macOS, no Docker)**: nothing to map. For screenshots run
+  `npm run sidecar` from the repo (installs Chromium on first run). It targets
+  the prod preview port 3102; for `npm run dev` use
+  `WORKSHOP_PREVIEW_URL=http://localhost:3101 npm run sidecar`.
 
 If your preview is behind an HTTPS reverse proxy, the preview port needs to
 be proxied too, not just the main Workshop port.

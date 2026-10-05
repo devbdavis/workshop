@@ -137,11 +137,26 @@ function isInsideDir(filePath: string, dir: string): boolean {
   }
 }
 
+/** Sidecar base URL; unset defaults to a local sidecar, empty string disables screenshots. */
+function screenshotUrl(): string {
+  return process.env.WORKSHOP_SCREENSHOT_URL ?? 'http://localhost:3100';
+}
+
+async function sidecarUp(): Promise<boolean> {
+  const url = screenshotUrl();
+  if (!url) return false;
+  try {
+    return (await fetch(`${url}/healthz`, { signal: AbortSignal.timeout(1500) })).ok;
+  } catch {
+    return false;
+  }
+}
+
 export function createPreviewRouter(deps: PreviewRouterDeps): Router {
   const router = Router();
 
-  router.get('/preview/status', (_req, res) => {
-    res.json({ port: getPreviewPort(), screenshots: !!process.env.WORKSHOP_SCREENSHOT_URL });
+  router.get('/preview/status', async (_req, res) => {
+    res.json({ port: getPreviewPort(), screenshots: await sidecarUp() });
   });
 
   router.post('/sessions/:id/preview/shot', async (req, res) => {
@@ -151,8 +166,8 @@ export function createPreviewRouter(deps: PreviewRouterDeps): Router {
       return;
     }
 
-    const screenshotUrl = process.env.WORKSHOP_SCREENSHOT_URL;
-    if (!screenshotUrl) {
+    const sidecar = screenshotUrl();
+    if (!sidecar) {
       res.status(503).json({ error: 'Screenshot sidecar is not configured' });
       return;
     }
@@ -165,7 +180,7 @@ export function createPreviewRouter(deps: PreviewRouterDeps): Router {
 
     let upstream: globalThis.Response;
     try {
-      upstream = await fetch(`${screenshotUrl}/shot`, {
+      upstream = await fetch(`${sidecar}/shot`, {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({

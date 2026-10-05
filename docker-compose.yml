@@ -13,10 +13,8 @@
 #   PUID=99
 #   PGID=100
 #
-# Design Mode (optional element screenshots) needs a second container. To
-# enable it, also add to .env:
-#   COMPOSE_PROFILES=design-mode
-#   WORKSHOP_SCREENSHOT_URL=http://playwright:3100
+# Design Mode element screenshots need a second container. Enable it with
+# COMPOSE_PROFILES=design-mode in .env; Workshop detects it automatically.
 services:
   workshop:
     build: .
@@ -34,7 +32,7 @@ services:
       PGID: "${PGID:-100}"
       WORKSHOP_VAULT_ROOT: /config/.workshop/vault
       WORKSHOP_PREVIEW_PORT: "3102"
-      WORKSHOP_SCREENSHOT_URL: "${WORKSHOP_SCREENSHOT_URL:-}"
+      WORKSHOP_SCREENSHOT_URL: "${WORKSHOP_SCREENSHOT_URL:-http://playwright:3100}"
     volumes:
       # Persistent Workshop state (SQLite db, auth-token, sessions, vault, sprites)
       - workshop-state:/config

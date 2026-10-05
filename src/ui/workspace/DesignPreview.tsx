@@ -19,16 +19,11 @@ interface PreviewStatus {
   screenshots: boolean;
 }
 
-let previewStatus: Promise<PreviewStatus | null> | null = null;
-
-/** Fetched once per page load — mirrors fetchCodeServerAvailable in WorkspaceButtons.tsx. */
+/** Checked on every open: the screenshot sidecar may have been started since. */
 function fetchPreviewStatus(): Promise<PreviewStatus | null> {
-  if (!previewStatus) {
-    previewStatus = fetch('/api/preview/status')
-      .then((r) => (r.ok ? (r.json() as Promise<PreviewStatus>) : null))
-      .catch(() => null);
-  }
-  return previewStatus;
+  return fetch('/api/preview/status')
+    .then((r) => (r.ok ? (r.json() as Promise<PreviewStatus>) : null))
+    .catch(() => null);
 }
 
 function isRect(v: unknown): v is Pick['rect'] {
