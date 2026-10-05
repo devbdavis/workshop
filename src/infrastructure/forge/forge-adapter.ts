@@ -17,6 +17,7 @@ interface PrSource {
   fetchPrSnapshot(prUrl: string): Promise<GhPrSnapshot>;
   fetchPrDiff(prUrl: string): Promise<string>;
   submitPrReview(prUrl: string, submission: GhReviewSubmission): Promise<void>;
+  fetchCheckLog(prUrl: string, detailsUrl: string): Promise<string>;
 }
 
 export type ForgeAdapter = PrSource & {
@@ -61,6 +62,9 @@ export function createForgeAdapter(opts: CreateForgeAdapterOptions = {}): ForgeA
     },
     submitPrReview(prUrl: string, submission: GhReviewSubmission): Promise<void> {
       return pick(prUrl).submitPrReview(prUrl, submission);
+    },
+    fetchCheckLog(prUrl: string, detailsUrl: string): Promise<string> {
+      return pick(prUrl).fetchCheckLog(prUrl, detailsUrl);
     },
 
     async discoverReviewRequests(): Promise<ReviewRequestDiscovery> {

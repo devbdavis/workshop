@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { createGhReviewAdapter } from '@infrastructure/github/gh-review-adapter';
+import { createGhReviewAdapter, tailFailedLog } from '@infrastructure/github/gh-review-adapter';
 
 describe('GhReviewAdapter', () => {
   it('parses search results into DiscoveredPr and searches explicit review requests only', async () => {
@@ -148,5 +148,35 @@ describe('GhReviewAdapter', () => {
     const restored = JSON.parse(stdins[1]) as Record<string, unknown>;
     expect(restored.event).toBeUndefined();
     expect(restored.comments).toEqual([{ path: 'a.py', body: 'keep me', position: 16 }]);
+  });
+});
+
+describe('fetchCheckLog', () => {
+  it('fetches the failed-step log for the job in the details URL, tailed and de-prefixed', async () => {
+    let capturedArgs: string[] = [];
+    const adapter = createGhReviewAdapter({
+      exec: async (_binary, args) => {
+        capturedArgs = args;
+        return { stdout: 'build\tRun tests\t2026-10-04T22:01:49.8996270Z FAIL x.test.ts\tdetail\n', stderr: '' };
+      },
+    });
+    const log = await adapter.fetchCheckLog(
+      'https://github.com/acme/widgets/pull/9',
+      'https://github.com/acme/widgets/actions/runs/111/job/222',
+    );
+    expect(capturedArgs).toEqual(['run', 'view', '--job', '222', '--log-failed', '-R', 'acme/widgets']);
+    expect(log).toBe('FAIL x.test.ts\tdetail');
+  });
+
+  it('rejects checks that are not Actions jobs without shelling out', async () => {
+    const adapter = createGhReviewAdapter({ exec: async () => { throw new Error('should not run'); } });
+    await expect(
+      adapter.fetchCheckLog('https://github.com/acme/widgets/pull/9', 'https://ci.example.com/build/1'),
+    ).rejects.toThrow('Not a GitHub Actions job');
+  });
+
+  it('keeps only the last N lines', () => {
+    const raw = Array.from({ length: 5 }, (_, i) => `j\ts\tline${i}`).join('\n');
+    expect(tailFailedLog(raw, 2)).toBe('line3\nline4');
   });
 });
