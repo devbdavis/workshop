@@ -6,6 +6,7 @@ import { TerminalPanel } from './TerminalPanel';
 import { SplitDivider } from './SplitDivider';
 import { SessionLinkButtons } from './SessionLinkButtons';
 import { useEditorLaunch } from '@ui/hooks/useEditorLaunch';
+import { WorkspaceButtons } from '@ui/workspace/WorkspaceButtons';
 
 interface Props {
   node: LayoutNode;
@@ -228,6 +229,7 @@ function LeafPane({ node, trackId, sessions, todos, onSplit, onClose, onCreateSe
                     &gt;_
                   </button>
                 )}
+                <WorkspaceButtons sessionId={session.id} editorPath={editorPath} />
               </>
             );
           })()}

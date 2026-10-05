@@ -43,6 +43,12 @@ export default defineConfig({
         target: 'http://localhost:3001',
         changeOrigin: true,
       },
+      // Host left as-is: code-server rejects WebSockets whose Origin doesn't match Host.
+      '^/code(/|$)': {
+        target: 'http://localhost:3001',
+        changeOrigin: false,
+        ws: true,
+      },
       '/ws': {
         target: 'ws://localhost:3001',
         ws: true,
