@@ -29,6 +29,7 @@ interface ComposerProps {
 export function CommentComposer({ initialValue = '', onSave, onCancel }: ComposerProps) {
   const [value, setValue] = useState(initialValue);
   const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const ref = useRef<HTMLTextAreaElement>(null);
 
   useEffect(() => { ref.current?.focus(); }, []);
@@ -36,8 +37,11 @@ export function CommentComposer({ initialValue = '', onSave, onCancel }: Compose
   async function save(): Promise<void> {
     if (!value.trim() || saving) return;
     setSaving(true);
+    setError(null);
     try {
       await onSave(value);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Save failed');
     } finally {
       setSaving(false);
     }
@@ -59,6 +63,7 @@ export function CommentComposer({ initialValue = '', onSave, onCancel }: Compose
         placeholder="Leave a comment (markdown)… ⌘/Ctrl+Enter to save, Esc to cancel"
         className="w-full px-2 py-1 text-xs bg-gray-950 border border-gray-800 rounded text-gray-200 placeholder-gray-600 focus:outline-none focus:border-gray-600 resize-y whitespace-pre-wrap"
       />
+      {error && <div className="text-[10px] text-red-300 mt-1">{error}</div>}
       <div className="flex gap-2 mt-1">
         <button
           onClick={save}

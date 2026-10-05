@@ -85,7 +85,7 @@ export function buildDiffCommentsPrompt(comments: DiffComment[]): string {
     if (c.anchored) {
       lines.push(`   > ${c.lineText}`);
     } else {
-      lines.push(`   > (this line has moved or was removed since the comment was made; it previously read) ${c.lineText}`);
+      lines.push(`   (line since changed or removed — it read:) ${c.lineText}`);
     }
     lines.push('');
     lines.push(c.body);

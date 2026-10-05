@@ -98,6 +98,10 @@ export function DiffView({ sessionId, changes, onRefresh }: Props) {
     openCountByFile.set(c.file, (openCountByFile.get(c.file) ?? 0) + 1);
   }
 
+  // A file the agent fully reverted leaves the changes list; keep its comments reachable.
+  const changedPaths = new Set((changes ?? []).map((c) => c.path));
+  const orphanFiles = [...new Set(allComments.map((c) => c.file))].filter((p) => !changedPaths.has(p));
+
   const fileComments = selected ? allComments.filter((c) => c.file === selected.path) : [];
   const anchoredByLine = new Map<number, DiffComment[]>();
   for (const c of fileComments) {
@@ -163,6 +167,21 @@ export function DiffView({ sessionId, changes, onRefresh }: Props) {
               })}
             </div>
           ))
+        )}
+        {orphanFiles.length > 0 && (
+          <div>
+            <div className="px-2 py-1 text-[10px] text-gray-500 uppercase tracking-wide bg-gray-900/60">Commented, no longer changed</div>
+            {orphanFiles.map((path) => (
+              <div
+                key={path}
+                onClick={() => setSelected({ repo: '', path, status: '  ' })}
+                className={`px-2 py-1 text-xs font-mono cursor-pointer hover:bg-gray-800 truncate ${selected?.path === path ? 'bg-blue-900/40 text-blue-200' : 'text-gray-400'}`}
+                title={path}
+              >
+                {path}
+              </div>
+            ))}
+          </div>
         )}
       </div>
 
