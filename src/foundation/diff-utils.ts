@@ -22,6 +22,8 @@ export interface DiffFile {
   path: string;
   /** New-version line numbers present in the diff (added + context) — anchorable for side=RIGHT. */
   rightLines: Set<number>;
+  /** Text (sans +/space prefix) of each new-version line in the diff — lets a comment re-find its line after edits. */
+  rightText: Map<number, string>;
   hunks: DiffHunk[];
 }
 
@@ -44,7 +46,7 @@ export function parseUnifiedDiff(diff: string): ParsedDiff {
         current = null; // deleted file — nothing anchorable on the RIGHT side
       } else {
         const path = rawPath.startsWith('b/') ? rawPath.slice(2) : rawPath;
-        current = { path, rightLines: new Set(), hunks: [] };
+        current = { path, rightLines: new Set(), rightText: new Map(), hunks: [] };
         files.set(path, current);
       }
       hunk = null;
@@ -73,6 +75,7 @@ export function parseUnifiedDiff(diff: string): ParsedDiff {
     // but only while the hunk still expects new-side lines (hunkLimit).
     if ((line.startsWith('+') || line.startsWith(' ') || line === '') && newLine <= hunkLimit) {
       current.rightLines.add(newLine);
+      current.rightText.set(newLine, line.slice(1));
       hunk.newEnd = newLine;
       newLine++;
       hunk.lines.push(line);
@@ -91,6 +94,36 @@ export function parseUnifiedDiff(diff: string): ParsedDiff {
 export function isAnchorable(parsed: ParsedDiff, file: string, line: number | undefined): boolean {
   if (line === undefined) return false;
   return parsed.get(file)?.rightLines.has(line) ?? false;
+}
+
+/**
+ * Where a comment anchored at `line` (whose text was `lineText`) sits now: the same
+ * line if its text is unchanged, else the nearest diff line with identical text.
+ */
+export function relocateLine(file: DiffFile | undefined, line: number, lineText: string): number | undefined {
+  if (!file) return undefined;
+  if (file.rightText.get(line) === lineText) return line;
+  let best: number | undefined;
+  for (const [n, text] of file.rightText) {
+    if (text === lineText && (best === undefined || Math.abs(n - line) < Math.abs(best - line))) best = n;
+  }
+  return best;
+}
+
+/** New-version line number for each line of `diff.split('\n')`; null for headers and deletions. */
+export function rightLineNumbers(diff: string): (number | null)[] {
+  let newLine = 0;
+  let limit = -1;
+  return diff.split('\n').map((line) => {
+    const m = HUNK_RE.exec(line);
+    if (m) {
+      newLine = Number.parseInt(m[1], 10);
+      limit = newLine + (m[2] !== undefined ? Number.parseInt(m[2], 10) : 1) - 1;
+      return null;
+    }
+    if (line.startsWith('+++') || newLine > limit) return null;
+    return line.startsWith('+') || line.startsWith(' ') || line === '' ? newLine++ : null;
+  });
 }
 
 /** Max raw diff lines returned as display context per finding. */

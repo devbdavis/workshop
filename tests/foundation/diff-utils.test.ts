@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { parseUnifiedDiff, isAnchorable, extractHunkForLine } from '@infrastructure/github/diff-utils';
+import { parseUnifiedDiff, isAnchorable, extractHunkForLine, relocateLine, rightLineNumbers } from '@foundation/diff-utils';
 
 const MULTI_HUNK_DIFF = `diff --git a/src/app.ts b/src/app.ts
 index 1111111..2222222 100644
@@ -92,5 +92,35 @@ describe('extractHunkForLine', () => {
     expect(lines.length).toBeLessThanOrEqual(27); // header + ellipsis + window
     expect(ctx).toContain('line50');
     expect(ctx).toContain('…');
+  });
+});
+
+describe('relocateLine', () => {
+  const file = parseUnifiedDiff(MULTI_HUNK_DIFF).get('src/app.ts');
+
+  it('keeps the line when its text is unchanged', () => {
+    expect(relocateLine(file, 2, "import b from 'b';")).toBe(2);
+  });
+
+  it('follows the text to its nearest new position', () => {
+    expect(relocateLine(file, 10, '  // alive')).toBe(22);
+  });
+
+  it('returns undefined once the text is gone', () => {
+    expect(relocateLine(file, 22, '  // dead')).toBeUndefined();
+    expect(relocateLine(undefined, 1, 'x')).toBeUndefined();
+  });
+});
+
+describe('rightLineNumbers', () => {
+  it('numbers added and context lines, nulls headers and deletions', () => {
+    const lines = MULTI_HUNK_DIFF.split('\n');
+    const nums = rightLineNumbers(MULTI_HUNK_DIFF);
+    expect(nums).toHaveLength(lines.length);
+    expect(nums[lines.indexOf("+import b from 'b';")]).toBe(2);
+    expect(nums[lines.indexOf('-  // dead')]).toBeNull();
+    expect(nums[lines.indexOf('+  // extra')]).toBe(23);
+    expect(nums[lines.indexOf('+added();')]).toBe(6);
+    expect(nums[lines.indexOf('+++ b/src/app.ts')]).toBeNull();
   });
 });
