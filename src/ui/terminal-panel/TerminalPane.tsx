@@ -6,6 +6,7 @@ import { SessionLinkButtons } from './SessionLinkButtons';
 import { useLaunchApps, editorLabel, terminalLabel } from '@ui/hooks/useLaunchApps';
 import { useEditorLaunch } from '@ui/hooks/useEditorLaunch';
 import { WorkspaceButtons } from '@ui/workspace/WorkspaceButtons';
+import { InAppShellButton } from './InAppShellButton';
 
 interface PaneProps {
   trackId: string;
@@ -17,10 +18,9 @@ interface PaneProps {
   autoFocus: boolean;
   focusTrigger?: number;
   issueBaseUrl?: string;
-  onOpenTerminal?: (cwd: string) => void;
 }
 
-export function TerminalPane({ trackId, session, todos, onDestroy, onRename, defaultOpenPath, autoFocus, focusTrigger, issueBaseUrl, onOpenTerminal }: PaneProps) {
+export function TerminalPane({ trackId, session, todos, onDestroy, onRename, defaultOpenPath, autoFocus, focusTrigger, issueBaseUrl }: PaneProps) {
   const [editing, setEditing] = useState(false);
   const [editValue, setEditValue] = useState('');
   const inputRef = useRef<HTMLInputElement>(null);
@@ -105,15 +105,7 @@ export function TerminalPane({ trackId, session, todos, onDestroy, onRename, def
             </button>
           )}
           <WorkspaceButtons sessionId={session.id} editorPath={editorPath}>
-            {!(launchApps?.resolvedTerminal && !editor.uriPrefix) && onOpenTerminal && terminalPath && (
-              <button
-                onClick={() => onOpenTerminal(terminalPath)}
-                className="text-[10px] text-gray-500 hover:text-green-400 px-1 font-mono"
-                title={`Open a shell in the browser: ${terminalPath}`}
-              >
-                &gt;_
-              </button>
-            )}
+            {!(launchApps?.resolvedTerminal && !editor.uriPrefix) && terminalPath && <InAppShellButton cwd={terminalPath} />}
           </WorkspaceButtons>
           <button
             onClick={onDestroy}

@@ -244,6 +244,12 @@ export function createGiteaAdapter(opts: CreateGiteaAdapterOptions = {}) {
       });
     },
 
+    // ponytail: Forgejo (≤15) serves job logs only to browser sessions, not tokens.
+    // Upstream Gitea ≥1.24 has GET /repos/{o}/{r}/actions/jobs/{id}/logs — wire it here if one shows up.
+    async fetchCheckLog(): Promise<string> {
+      throw new Error("This forge doesn't expose Actions logs to API tokens — open the run instead.");
+    },
+
     /**
      * Open PRs across every configured Gitea login where our review is requested.
      * `hosts` lists the logins that actually answered — the discovery poller may

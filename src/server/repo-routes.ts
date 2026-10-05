@@ -25,6 +25,7 @@ import {
 } from '@infrastructure/launch/launch-apps.js';
 import {
   startAuthTerminal,
+  startShellTerminal,
   stopAuthTerminal,
 } from '@infrastructure/terminal/auth-terminal.js';
 import { resolveCloneTarget, buildCloneCommand } from '@server/repo-clone.js';
@@ -429,6 +430,27 @@ export function createRepoRouter(deps: RepoRouterDeps): Router {
   // Tear down an auth terminal (kills its tmux session). Idempotent.
   router.delete('/auth/cli/:authId', (req, res) => {
     stopAuthTerminal(req.params.authId);
+    res.status(204).send();
+  });
+
+  // A throwaway in-browser shell at `cwd` — no session row, gone once closed.
+  router.post('/shell/terminal', async (req, res) => {
+    const cwd = req.body?.cwd;
+    if (typeof cwd !== 'string' || !path.isAbsolute(cwd) || cwd.includes('..') || !existsSync(cwd) || !statSync(cwd).isDirectory()) {
+      res.status(400).json({ error: 'cwd must be an existing absolute directory' });
+      return;
+    }
+    try {
+      const { authId } = await startShellTerminal(cwd);
+      res.json({ id: authId });
+    } catch (err) {
+      console.error('Failed to start shell terminal:', err);
+      res.status(500).json({ error: 'Failed to start shell terminal' });
+    }
+  });
+
+  router.delete('/shell/terminal/:id', (req, res) => {
+    stopAuthTerminal(req.params.id);
     res.status(204).send();
   });
 

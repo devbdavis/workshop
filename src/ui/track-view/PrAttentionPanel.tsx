@@ -2,6 +2,7 @@ import { useState } from 'react';
 import type { PrCheckStatus, PrMonitor, PrState, Todo } from '@foundation/types';
 import { RefreshButton } from '../shared/RefreshButton';
 import { PrCommentList } from './PrCommentList';
+import { FailingCheckLog } from './FailingCheckLog';
 
 interface Props {
   todo: Todo;
@@ -204,6 +205,7 @@ export function PrAttentionPanel({ todo, monitor, sessionActive, onRefresh }: Pr
                     <span className="text-gray-500 ml-1">— {c.conclusion ?? c.status ?? 'failed'}</span>
                   </div>
                   {c.summary && <p className="text-gray-500 line-clamp-2">{c.summary}</p>}
+                  {c.detailsUrl && <FailingCheckLog todoId={todo.id} prUrl={monitor.prUrl} checkName={c.name} />}
                 </div>
               </li>
             ))}
