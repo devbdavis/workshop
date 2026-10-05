@@ -1,5 +1,5 @@
 import path from 'path';
-import { Router } from 'express';
+import { Router, type Request, type Response } from 'express';
 import type { DiffComment, DiffCommentId, SessionId } from '@foundation/types';
 import type { SessionRepository } from '@domain/session/repository';
 import type { TrackRepository } from '@domain/track/repository';
@@ -95,12 +95,22 @@ export function buildDiffCommentsPrompt(comments: DiffComment[]): string {
   return lines.join('\n');
 }
 
+// Express 4 ignores rejected handler promises — an escaped throw would take the whole server down.
+function safe(fn: (req: Request, res: Response) => Promise<void>) {
+  return (req: Request, res: Response): void => {
+    fn(req, res).catch((err: unknown) => {
+      console.error('Diff comment route failed:', err);
+      if (!res.headersSent) res.status(500).json({ error: 'Internal error' });
+    });
+  };
+}
+
 export function createDiffCommentRouter(deps: DiffCommentRouterDeps): Router {
   const router = Router();
   const { comments } = deps;
   const wsDeps: WorkspaceRouterDeps = { sessions: deps.sessions, tracks: deps.tracks };
 
-  router.get('/sessions/:id/diff-comments', async (req, res) => {
+  router.get('/sessions/:id/diff-comments', safe(async (req, res) => {
     const sessionId = req.params.id as SessionId;
     const root = workspaceRoot(wsDeps, sessionId);
     if (!root) {
@@ -110,9 +120,9 @@ export function createDiffCommentRouter(deps: DiffCommentRouterDeps): Router {
     const existing = comments.findBySession(sessionId);
     const reanchored = await reanchorComments(deps, root, existing);
     res.json(reanchored);
-  });
+  }));
 
-  router.post('/sessions/:id/diff-comments', async (req, res) => {
+  router.post('/sessions/:id/diff-comments', safe(async (req, res) => {
     const sessionId = req.params.id as SessionId;
     const root = workspaceRoot(wsDeps, sessionId);
     if (!root) {
@@ -151,7 +161,7 @@ export function createDiffCommentRouter(deps: DiffCommentRouterDeps): Router {
     const codeContext = extractHunkForLine(new Map([[entry.path, entry]]), entry.path, line);
     const created = comments.create({ sessionId, file, line, lineText, body: trimmedBody, codeContext });
     res.status(201).json(created);
-  });
+  }));
 
   router.patch('/diff-comments/:id', (req, res) => {
     const { body, status } = (req.body ?? {}) as { body?: unknown; status?: unknown };
@@ -180,7 +190,7 @@ export function createDiffCommentRouter(deps: DiffCommentRouterDeps): Router {
     res.status(204).end();
   });
 
-  router.post('/sessions/:id/diff-comments/send', async (req, res) => {
+  router.post('/sessions/:id/diff-comments/send', safe(async (req, res) => {
     const sessionId = req.params.id as SessionId;
     const root = workspaceRoot(wsDeps, sessionId);
     if (!root) {
@@ -204,7 +214,7 @@ export function createDiffCommentRouter(deps: DiffCommentRouterDeps): Router {
     const now = new Date().toISOString();
     for (const c of open) comments.update(c.id, { sentAt: now });
     res.json({ sent: open.length });
-  });
+  }));
 
   return router;
 }
