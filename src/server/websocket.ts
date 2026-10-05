@@ -7,6 +7,7 @@ import { createSessionRepository } from '@infrastructure/persistence/session-rep
 import { getAuthTmux } from '@infrastructure/terminal/auth-terminal.js';
 import { addEventClient, broadcast } from './events.js';
 import { extractToken, validateToken } from './auth-middleware.js';
+import type { CodeServerProxy } from './code-server-proxy.js';
 import type { SessionId } from '@foundation/types';
 import type { TerminalManager } from '@infrastructure/terminal/manager.js';
 import type { IPty } from 'node-pty';
@@ -27,7 +28,11 @@ const tmuxPath = (() => {
   }
 })();
 
-export function setupWebSocket(server: HttpServer, terminal: TerminalManager): void {
+export function setupWebSocket(
+  server: HttpServer,
+  terminal: TerminalManager,
+  codeServerProxy: CodeServerProxy,
+): void {
   const wss = new WebSocketServer({ noServer: true });
   const sessions = createSessionRepository();
 
@@ -60,6 +65,8 @@ export function setupWebSocket(server: HttpServer, terminal: TerminalManager): v
       socket.destroy();
       return;
     }
+
+    if (codeServerProxy.handleUpgrade(request, socket, head)) return;
 
     const url = new URL(request.url || '', `http://${request.headers.host}`);
 

@@ -67,6 +67,7 @@ import { createPluginRepository } from '@infrastructure/persistence/plugin-repos
 import { ensureRegisteredPluginsInstalled } from '@infrastructure/plugins/ensure-installed.js';
 import { createGlobalRepoRepository, createSettingsRepository } from '@infrastructure/persistence/repo-repository.js';
 import { createRepoRouter, parsePrMonitorIgnoredAuthors } from './repo-routes.js';
+import { createWorkspaceRouter } from './workspace-routes.js';
 import { createUserRepository } from '@infrastructure/persistence/user-repository.js';
 import { createUserRouter } from './user-routes.js';
 import { getProfileId } from './profile.js';
@@ -98,6 +99,7 @@ import {
   launchEditor,
   launchTerminal,
 } from '@infrastructure/launch/launch-apps.js';
+import { isCodeServerAvailable, isRunningInContainer } from '@infrastructure/code-server/code-server.js';
 
 export interface ApiRouterDeps {
   automationEngine?: AutomationEngine;
@@ -591,6 +593,10 @@ export function createApiRouter(deps: ApiRouterDeps = {}): Router {
   const globalRepos = createGlobalRepoRepository();
   const repoRouter = createRepoRouter({ repos: globalRepos, settings: settingsRepo });
   router.use(repoRouter);
+
+  // Mount workspace sub-router (file browser, edits, git changes/diff for a session)
+  const workspaceRouter = createWorkspaceRouter({ sessions, tracks });
+  router.use(workspaceRouter);
 
   // Mount profiles + per-user settings sub-router (lightweight multi-user layer)
   const users = createUserRepository();
@@ -1183,6 +1189,8 @@ export function createApiRouter(deps: ApiRouterDeps = {}): Router {
     const sessionId = typeof req.query.sessionId === 'string' ? req.query.sessionId : undefined;
     res.json({ path: resolveEditorTarget(targetPath, sessionId) });
   });
+
+  router.get('/code-server/status', (_req, res) => res.json({ available: isRunningInContainer() && isCodeServerAvailable() }));
 
   router.post('/shell/open-in-editor', (req, res) => {
     const { path: targetPath, app, sessionId } = req.body;
