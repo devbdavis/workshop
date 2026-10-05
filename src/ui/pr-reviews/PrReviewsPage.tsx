@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import type { PrReview, PrReviewState } from '@foundation/types';
 import { RefreshButton } from '../shared/RefreshButton';
 import { PrReviewDetail } from './PrReviewDetail';
@@ -68,6 +69,15 @@ export function PrReviewsPage() {
   useEffect(() => {
     load();
   }, [load, refreshKey]);
+
+  // Deep link from the command palette (?review=id): select it, then drop the param.
+  const [searchParams, setSearchParams] = useSearchParams();
+  const reviewParam = searchParams.get('review');
+  useEffect(() => {
+    if (!reviewParam) return;
+    setSelectedId(reviewParam);
+    setSearchParams({}, { replace: true });
+  }, [reviewParam, setSearchParams]);
 
   // Live updates: discovery poller, agent reports, and submits all broadcast
   // pr-review:updated; session:deleted covers the stale-agent reaper retiring an
