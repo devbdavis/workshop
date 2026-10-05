@@ -16,6 +16,7 @@ import { DiscussionsPage } from './discussions/DiscussionsPage';
 import { NotificationsPage } from './notifications/NotificationsPage';
 import { PrReviewsPage } from './pr-reviews/PrReviewsPage';
 import { SessionAlertsProvider } from './notifications/SessionAlerts';
+import { SessionHistoryPage } from './session-history/SessionHistoryPage';
 import { TopNav } from './TopNav';
 
 /** Gates the app behind profile selection (identity, not security). */
@@ -60,6 +61,7 @@ export function App() {
                   <Route path="/workflow/:id" element={<EpicDetail />} />
                   <Route path="/notifications" element={<NotificationsPage />} />
                   <Route path="/pr-reviews" element={<PrReviewsPage />} />
+                  <Route path="/history" element={<SessionHistoryPage />} />
                 </Routes>
               </div>
             </div>
