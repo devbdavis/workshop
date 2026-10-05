@@ -1,5 +1,8 @@
 import { useEffect, useState } from 'react';
 import { RefreshButton } from '@ui/shared/RefreshButton';
+import { rightLineNumbers } from '@foundation/diff-utils';
+import { useDiffComments, type DiffComment } from './useDiffComments';
+import { CommentComposer, CommentItem, OutdatedComments } from './DiffComments';
 
 export interface ChangedFile {
   /** Repo root, relative to the workspace root ('' for the root itself). */
@@ -40,6 +43,10 @@ export function DiffView({ sessionId, changes, onRefresh }: Props) {
   const [selected, setSelected] = useState<ChangedFile | null>(null);
   const [diff, setDiff] = useState<string | null>(null);
   const [loadingDiff, setLoadingDiff] = useState(false);
+  const [composingLine, setComposingLine] = useState<number | null>(null);
+  const [sendError, setSendError] = useState<string | null>(null);
+  const [sending, setSending] = useState(false);
+  const { comments, refetch: refetchComments, create, update, remove, send } = useDiffComments(sessionId);
 
   useEffect(() => {
     if (!selected) {
@@ -54,7 +61,27 @@ export function DiffView({ sessionId, changes, onRefresh }: Props) {
       .then((d: { diff: string }) => { if (!cancelled) setDiff(d.diff); })
       .finally(() => { if (!cancelled) setLoadingDiff(false); });
     return () => { cancelled = true; };
-  }, [sessionId, selected]);
+    // `changes` is replaced wholesale on refresh — depend on it so a refresh refetches the diff too.
+  }, [sessionId, selected, changes]);
+
+  useEffect(() => { setComposingLine(null); }, [selected]);
+
+  async function handleRefresh(): Promise<void> {
+    await onRefresh();
+    await refetchComments();
+  }
+
+  async function handleSend(): Promise<void> {
+    setSending(true);
+    setSendError(null);
+    try {
+      await send();
+    } catch (err) {
+      setSendError(err instanceof Error ? err.message : 'Send failed');
+    } finally {
+      setSending(false);
+    }
+  }
 
   const grouped = new Map<string, ChangedFile[]>();
   for (const change of changes ?? []) {
@@ -63,13 +90,44 @@ export function DiffView({ sessionId, changes, onRefresh }: Props) {
     grouped.set(change.repo, list);
   }
 
+  const allComments = comments ?? [];
+  const openCount = allComments.filter((c) => c.status === 'open').length;
+  const openCountByFile = new Map<string, number>();
+  for (const c of allComments) {
+    if (c.status !== 'open') continue;
+    openCountByFile.set(c.file, (openCountByFile.get(c.file) ?? 0) + 1);
+  }
+
+  const fileComments = selected ? allComments.filter((c) => c.file === selected.path) : [];
+  const anchoredByLine = new Map<number, DiffComment[]>();
+  for (const c of fileComments) {
+    if (!c.anchored) continue;
+    const list = anchoredByLine.get(c.line) ?? [];
+    list.push(c);
+    anchoredByLine.set(c.line, list);
+  }
+  const outdated = fileComments.filter((c) => !c.anchored);
+
+  const lineNumbers = diff ? rightLineNumbers(diff) : [];
+
   return (
     <div className="flex flex-col md:flex-row h-full min-h-0">
       <div className="w-full md:w-72 shrink-0 border-b md:border-b-0 md:border-r border-gray-800 overflow-y-auto max-h-48 md:max-h-none">
-        <div className="flex items-center justify-between px-2 py-1 border-b border-gray-800">
+        <div className="flex items-center justify-between px-2 py-1 border-b border-gray-800 gap-2">
           <span className="text-xs text-gray-500">{changes?.length ?? 0} changed file{changes?.length === 1 ? '' : 's'}</span>
-          <RefreshButton onRefresh={onRefresh} title="Refresh changes" />
+          <div className="flex items-center gap-2">
+            <button
+              onClick={handleSend}
+              disabled={openCount === 0 || sending}
+              className="text-[10px] px-2 py-0.5 rounded bg-blue-900/50 text-blue-200 hover:bg-blue-800/60 disabled:opacity-40"
+              title="Send all open comments to the agent"
+            >
+              {sending ? 'Sending…' : `Send ${openCount} to agent`}
+            </button>
+            <RefreshButton onRefresh={handleRefresh} title="Refresh changes" />
+          </div>
         </div>
+        {sendError && <div className="px-2 py-1 text-[10px] text-red-300 bg-red-900/20 border-b border-gray-800">{sendError}</div>}
         {changes === null ? (
           <div className="p-3 text-xs text-gray-500">Loading…</div>
         ) : changes.length === 0 ? (
@@ -83,6 +141,7 @@ export function DiffView({ sessionId, changes, onRefresh }: Props) {
               {files.map((file) => {
                 const badge = statusBadge(file.status);
                 const isSelected = selected?.path === file.path;
+                const fileOpenCount = openCountByFile.get(file.path) ?? 0;
                 return (
                   <div
                     key={file.path}
@@ -96,6 +155,9 @@ export function DiffView({ sessionId, changes, onRefresh }: Props) {
                       {badge.label}
                     </span>
                     <span className="truncate">{file.path}</span>
+                    {fileOpenCount > 0 && (
+                      <span className="shrink-0 ml-auto text-[10px] px-1 rounded bg-gray-800 text-gray-400">{fileOpenCount}</span>
+                    )}
                   </div>
                 );
               })}
@@ -107,16 +169,61 @@ export function DiffView({ sessionId, changes, onRefresh }: Props) {
       <div className="flex-1 min-h-0 overflow-y-auto font-mono text-xs">
         {!selected ? (
           <div className="p-3 text-gray-500">Select a file to view its diff</div>
-        ) : loadingDiff ? (
-          <div className="p-3 text-gray-500">Loading diff…</div>
-        ) : !diff ? (
-          <div className="p-3 text-gray-500">No diff available</div>
         ) : (
-          <pre className="whitespace-pre px-3 py-2">
-            {diff.split('\n').map((line, idx) => (
-              <div key={idx} className={diffLineClassName(line)}>{line || ' '}</div>
-            ))}
-          </pre>
+          <>
+            <OutdatedComments
+              comments={outdated}
+              onUpdate={(id, patch) => update(id, patch)}
+              onDelete={(id) => remove(id)}
+            />
+            {loadingDiff ? (
+              <div className="p-3 text-gray-500">Loading diff…</div>
+            ) : !diff ? (
+              <div className="p-3 text-gray-500">No diff available</div>
+            ) : (
+              <pre className="whitespace-pre px-3 py-2">
+                {diff.split('\n').map((line, idx) => {
+                  const number = lineNumbers[idx];
+                  const lineComments = number !== null ? anchoredByLine.get(number) : undefined;
+                  return (
+                    <div key={idx}>
+                      <div className={`group flex ${diffLineClassName(line)}`}>
+                        <span className="w-10 shrink-0 text-right pr-2 text-gray-600 select-none">{number ?? ''}</span>
+                        <span className="w-4 shrink-0">
+                          {number !== null && (
+                            <button
+                              type="button"
+                              aria-label="Add comment"
+                              title="Add comment"
+                              onClick={() => setComposingLine(number)}
+                              className="opacity-0 group-hover:opacity-100 text-gray-500 hover:text-blue-400 leading-none"
+                            >
+                              +
+                            </button>
+                          )}
+                        </span>
+                        <span className="flex-1">{line || ' '}</span>
+                      </div>
+                      {lineComments?.map((c) => (
+                        <CommentItem
+                          key={c.id}
+                          comment={c}
+                          onUpdate={(patch) => update(c.id, patch)}
+                          onDelete={() => remove(c.id)}
+                        />
+                      ))}
+                      {composingLine === number && number !== null && (
+                        <CommentComposer
+                          onSave={async (body) => { await create(selected.path, number, body); setComposingLine(null); }}
+                          onCancel={() => setComposingLine(null)}
+                        />
+                      )}
+                    </div>
+                  );
+                })}
+              </pre>
+            )}
+          </>
         )}
       </div>
     </div>
