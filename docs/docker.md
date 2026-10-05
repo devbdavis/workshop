@@ -97,6 +97,40 @@ needed. If you SSH into the **host**, set path remaps in Settings â†’ Profile â€
 volume), so they need separate rules. A catch-all `/ -> /mnt/host` line can sit
 alongside more specific rules.
 
+## Design Mode (optional)
+
+Design Mode lets you pick an element in a live preview of your dev server.
+Workshop proxies your dev server on a second port, the **preview port**
+(`WORKSHOP_PREVIEW_PORT`, default `3102`). This port must be mapped to the
+*same number* on the host, since the UI builds the preview URL as
+`<same-hostname>:<port>`.
+
+Element screenshots are optional and come from a separate sidecar container
+(`docker/playwright`) running headless Chromium, since the full browser
+toolchain doesn't belong in the main image. Without it, picks are still sent
+to Claude, just without a screenshot.
+
+Workshop checks for the sidecar when the Preview opens (`WORKSHOP_SCREENSHOT_URL`,
+default `http://localhost:3100`; set it empty to turn screenshots off).
+
+- **docker compose**: put `COMPOSE_PROFILES=design-mode` in `.env`, then
+  `docker compose up -d --build`. Compose already points Workshop at
+  `http://playwright:3100`.
+
+- **unraid**: add the **Preview Port** (3102) to the `workshop` container. For
+  screenshots, also install [`docs/unraid/workshop-playwright.xml`](./unraid/workshop-playwright.xml)
+  with **WORKSHOP_PREVIEW_URL** = `http://<unraid-ip>:3102`, and set
+  **WORKSHOP_SCREENSHOT_URL** on `workshop` to `http://<unraid-ip>:3100`
+  (containers on `bridge` can't resolve each other by name).
+
+- **locally (macOS, no Docker)**: nothing to map. For screenshots run
+  `npm run sidecar` from the repo (installs Chromium on first run). It targets
+  the prod preview port 3102; for `npm run dev` use
+  `WORKSHOP_PREVIEW_URL=http://localhost:3101 npm run sidecar`.
+
+If your preview is behind an HTTPS reverse proxy, the preview port needs to
+be proxied too, not just the main Workshop port.
+
 ## Notes & caveats
 
 - **Auth token**: a Workshop API auth-token is generated on first request under

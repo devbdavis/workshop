@@ -6,6 +6,7 @@ import { createApiRouter } from './api.js';
 import { createAuthRoutes } from './auth-routes.js';
 import { createAuthMiddleware } from './auth-middleware.js';
 import { createCodeServerProxy } from './code-server-proxy.js';
+import { createPreviewServer, getPreviewPort } from './preview-proxy.js';
 import { setupWebSocket } from './websocket.js';
 import { closeDatabase } from '@infrastructure/persistence/database.js';
 import { createAutomationRuleRepository, createAutomationRunRepository } from '@infrastructure/persistence/automation-repository.js';
@@ -35,7 +36,8 @@ const app = express();
 const codeServerProxy = createCodeServerProxy();
 app.use(codeServerProxy.middleware);
 
-app.use(express.json());
+// Design Mode sends up to 10 picks of truncated HTML + styles, which can exceed the 100kb default.
+app.use(express.json({ limit: '1mb' }));
 
 // Auth routes (public — no middleware gate)
 app.use('/api/auth', createAuthRoutes());
@@ -74,12 +76,21 @@ server.listen(PORT, '0.0.0.0', () => {
   console.log(`Workshop server running on http://0.0.0.0:${PORT}`);
 });
 
+// Preview proxy — its own origin (different port) so a previewed dev server's
+// absolute asset paths and HMR websocket work without colliding with Workshop's routes.
+const previewServer = createPreviewServer();
+const previewPort = getPreviewPort();
+previewServer.listen(previewPort, '0.0.0.0', () => {
+  console.log(`Workshop preview proxy running on http://0.0.0.0:${previewPort}`);
+});
+
 // Graceful shutdown
 process.on('SIGINT', () => {
   console.log('\nShutting down...');
   automationEngine.stop();
   closeDatabase();
   server.close();
+  previewServer.close();
   process.exit(0);
 });
 
@@ -87,5 +98,6 @@ process.on('SIGTERM', () => {
   automationEngine.stop();
   closeDatabase();
   server.close();
+  previewServer.close();
   process.exit(0);
 });
