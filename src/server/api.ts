@@ -174,6 +174,12 @@ export function createApiRouter(deps: ApiRouterDeps = {}): Router {
         sessionName: alert.sessionName,
       });
     }
+    for (const alert of result.needsInputAlerts) {
+      broadcast('session:needs-input', alert.trackId, {
+        sessionId: alert.sessionId,
+        sessionName: alert.sessionName,
+      });
+    }
     if (result.suspended.length > 0) {
       try {
         const resumed = await terminal.resumeSuspendedSessions();

@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { Terminal } from '@xterm/xterm';
 import { FitAddon } from '@xterm/addon-fit';
 import { WebLinksAddon } from '@xterm/addon-web-links';
+import { loadWebglRenderer } from './webgl-renderer';
 import '@xterm/xterm/css/xterm.css';
 import { TerminalSearchBar } from './TerminalSearchBar';
 import { createSearchSession, type SearchResultInfo, type SearchSession } from './terminal-search';
@@ -249,6 +250,8 @@ export function TerminalPanel({ trackId = '', sessionId = '', wsPath, autoFocus,
     term.loadAddon(fitAddon);
     term.loadAddon(new WebLinksAddon());
     term.open(container);
+    // ponytail: desktop only until verified on mobile Safari/Chrome (120-col pinned path).
+    if (!isMobile) loadWebglRenderer(term);
     // Pin cols to 120 on mobile — this is a SHARED tmux window (window-size
     // latest), so a narrow phone client resizing it down would force
     // Claude's TUI to re-wrap narrow for every client, including desktop.

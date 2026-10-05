@@ -30,6 +30,7 @@
     "@dnd-kit/utilities": "^3.2.2",
     "@modelcontextprotocol/sdk": "^1.27.1",
     "@types/dagre": "^0.7.54",
+    "@xterm/addon-webgl": "^0.18.0",
     "@xyflow/react": "^12.10.2",
     "better-sqlite3": "^12.10.0",
     "cron-parser": "5.5.0",

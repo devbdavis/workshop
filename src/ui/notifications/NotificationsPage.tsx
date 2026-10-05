@@ -1,6 +1,7 @@
 import { useEffect, useState, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import type { WorkflowTicket } from '@foundation/types';
+import { useSessionAlerts, type SessionAlert } from './SessionAlerts';
 
 const LEGACY_HUMAN_GATE_STATES = new Set([
   'spec-review', 'plan-review', 'final-review', 'needs-input',
@@ -26,6 +27,7 @@ const GATE_LABELS: Record<string, { label: string; description: string; action: 
 
 export function NotificationsPage() {
   const navigate = useNavigate();
+  const { unread, open, clearAll } = useSessionAlerts();
   const [workflowItems, setWorkflowItems] = useState<WorkflowTicket[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -76,11 +78,14 @@ export function NotificationsPage() {
       </header>
 
       <div className="flex-1 overflow-y-auto p-6">
-        {workflowItems.length === 0 ? (
+        {workflowItems.length === 0 && unread.length === 0 ? (
           <EmptyState />
         ) : (
           <div className="space-y-4 max-w-3xl">
+            {unread.length > 0 && <SessionAlertsSection alerts={unread} onOpen={open} onClearAll={clearAll} />}
+
             {/* Workflow items needing human action */}
+            {workflowItems.length > 0 && (
             <div className="border border-gray-800 rounded-lg overflow-hidden">
               <div className="flex items-center gap-2 px-4 py-2 bg-gray-900/60 border-b border-gray-800">
                 <span className="w-2 h-2 rounded-full bg-amber-400 animate-pulse" />
@@ -117,8 +122,58 @@ export function NotificationsPage() {
                 })}
               </div>
             </div>
+            )}
           </div>
         )}
+      </div>
+    </div>
+  );
+}
+
+interface SessionAlertsSectionProps {
+  alerts: SessionAlert[];
+  onOpen: (alert: SessionAlert) => void;
+  onClearAll: () => void;
+}
+
+function SessionAlertsSection({ alerts, onOpen, onClearAll }: SessionAlertsSectionProps) {
+  return (
+    <div className="border border-gray-800 rounded-lg overflow-hidden">
+      <div className="flex items-center gap-2 px-4 py-2 bg-gray-900/60 border-b border-gray-800">
+        <span className="w-2 h-2 rounded-full bg-red-400 animate-pulse" />
+        <span className="text-sm font-medium text-gray-200">Sessions — waiting on you</span>
+        <span className="text-xs text-gray-500">{alerts.length} item{alerts.length !== 1 ? 's' : ''}</span>
+        <button
+          onClick={onClearAll}
+          className="ml-auto text-xs text-gray-500 hover:text-gray-300 transition-colors"
+        >
+          Clear
+        </button>
+      </div>
+      <div className="divide-y divide-gray-800/50">
+        {alerts.map((alert) => (
+          <div key={alert.id} className="px-4 py-3 flex items-center gap-3">
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center gap-2 mb-0.5">
+                <span className={`text-[10px] px-1.5 py-0.5 rounded font-medium ${
+                  alert.kind === 'needs-input' ? 'bg-blue-900/50 text-blue-300' : 'bg-amber-900/50 text-amber-300'
+                }`}>
+                  {alert.kind === 'needs-input' ? 'Needs Input' : 'Idle'}
+                </span>
+                <span className="text-[10px] text-gray-500">{new Date(alert.timestamp).toLocaleTimeString()}</span>
+              </div>
+              <p className="text-sm text-gray-200 truncate">
+                {alert.sessionName ?? `Session ${alert.sessionId.slice(0, 8)}`}
+              </p>
+            </div>
+            <button
+              onClick={() => onOpen(alert)}
+              className="shrink-0 px-3 py-1.5 text-xs bg-blue-700 hover:bg-blue-600 text-white rounded transition-colors"
+            >
+              Go to Session
+            </button>
+          </div>
+        ))}
       </div>
     </div>
   );
