@@ -52,6 +52,7 @@ export function useEditorLaunch(): EditorLaunch {
         try {
           const qs = new URLSearchParams({ path });
           if (sessionId) qs.set('sessionId', sessionId);
+          qs.set('portable', '1');
           const resolved = (await fetch(`/api/shell/resolve-editor-target?${qs}`).then((r) =>
             r.ok ? r.json() : null,
           )) as { path?: string } | null;

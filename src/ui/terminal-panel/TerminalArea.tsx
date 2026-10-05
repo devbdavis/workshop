@@ -3,7 +3,6 @@ import type { Session, SessionId, Todo } from '@foundation/types';
 import { TerminalPane } from './TerminalPane';
 import { TrackOfficeStrip } from './TrackOfficeStrip';
 import { RecentlyDeletedPanel } from './RecentlyDeletedPanel';
-import { TerminalModal } from '../track-view/TerminalModal';
 import { useIsMobile } from '../use-is-mobile';
 
 interface Props {
@@ -21,18 +20,11 @@ interface Props {
   defaultOpenPath?: string;
   onSelectionChange?: (ids: SessionId[]) => void;
   issueBaseUrl?: string;
-  /** Create an undocked shell session at `cwd` — opened in the floating terminal modal. */
-  onOpenShell?: (cwd: string, name: string) => Promise<Session | null>;
 }
 
 const storageKey = (trackId: string) => `workshop:selected:${trackId}`;
 
-/** `/repos/workshop/src` → `src`. Used to name shell sessions after their folder. */
-function basename(p: string): string {
-  return p.replace(/\/+$/, '').split('/').pop() || p;
-}
-
-export function TerminalArea({ trackId, trackName, sessions, todos, deletedSessions, startingSessions, pendingSelectSessionId, onDestroySession, onRenameSession, onRestoreSession, onPurgeSession, defaultOpenPath, onSelectionChange, issueBaseUrl, onOpenShell }: Props) {
+export function TerminalArea({ trackId, trackName, sessions, todos, deletedSessions, startingSessions, pendingSelectSessionId, onDestroySession, onRenameSession, onRestoreSession, onPurgeSession, defaultOpenPath, onSelectionChange, issueBaseUrl }: Props) {
   const [selectedIds, setSelectedIds] = useState<SessionId[]>(() => {
     try {
       const stored = localStorage.getItem(storageKey(trackId));
@@ -133,40 +125,6 @@ export function TerminalArea({ trackId, trackName, sessions, todos, deletedSessi
     });
   }, []);
 
-  // A terminal opened from a pane header lives in a floating modal until docked.
-  // It is a real session all along, so it also shows up in the office strip.
-  const [shellModal, setShellModal] = useState<{ sessionId: SessionId; title: string } | null>(null);
-
-  // cwd → the shell session we opened for it. Without this, every click of the
-  // terminal button spawns another tmux session that nobody ever reaps.
-  const shellSessionsRef = useRef(new Map<string, SessionId>());
-
-  const openShellTerminal = useCallback(
-    async (cwd: string) => {
-      if (!onOpenShell) return;
-      const existing = shellSessionsRef.current.get(cwd);
-      if (existing && sessions.some((s) => s.id === existing)) {
-        setShellModal({ sessionId: existing, title: cwd });
-        return;
-      }
-      shellSessionsRef.current.delete(cwd);
-      const session = await onOpenShell(cwd, `Shell: ${basename(cwd)}`);
-      if (session) {
-        shellSessionsRef.current.set(cwd, session.id);
-        setShellModal({ sessionId: session.id, title: cwd });
-      }
-    },
-    [onOpenShell, sessions],
-  );
-
-  const dockShellTerminal = useCallback(() => {
-    if (!shellModal) return;
-    const id = shellModal.sessionId;
-    // Same two-pane cap as additive click-selection in the office strip.
-    setSelectedIds((prev) => (prev.includes(id) ? prev : prev.length >= 2 ? [prev[1], id] : [...prev, id]));
-    setShellModal(null);
-  }, [shellModal]);
-
   const isMobile = useIsMobile();
 
   const selectedSessions = selectedIds
@@ -179,16 +137,6 @@ export function TerminalArea({ trackId, trackName, sessions, todos, deletedSessi
 
   return (
     <div className="h-full flex flex-col">
-      {shellModal && (
-        <TerminalModal
-          trackId={trackId}
-          sessionId={shellModal.sessionId}
-          title={shellModal.title}
-          onClose={() => setShellModal(null)}
-          onDock={dockShellTerminal}
-        />
-      )}
-
       {showRecentlyDeleted && (
         <RecentlyDeletedPanel
           sessions={deletedSessions}
@@ -226,7 +174,6 @@ export function TerminalArea({ trackId, trackName, sessions, todos, deletedSessi
                 autoFocus={i === 0}
                 focusTrigger={i === 0 ? focusTrigger : undefined}
                 issueBaseUrl={issueBaseUrl}
-                onOpenTerminal={onOpenShell ? openShellTerminal : undefined}
               />
             </div>
           ))

@@ -1,4 +1,7 @@
 import { describe, it, expect } from 'vitest';
+import { mkdtempSync, writeFileSync } from 'fs';
+import { tmpdir } from 'os';
+import path from 'path';
 import {
   isEditorChoice,
   isTerminalChoice,
@@ -6,6 +9,7 @@ import {
   parseTerminalChoice,
   resolveEditor,
   resolveTerminal,
+  resolveEditorTarget,
   type AppAvailability,
 } from '@infrastructure/launch/launch-apps';
 
@@ -128,5 +132,24 @@ describe('resolveTerminal', () => {
 
   it('returns null when nothing matches', () => {
     expect(resolveTerminal('auto', avail({ platform: 'unknown' }))).toBeNull();
+  });
+});
+
+describe('resolveEditorTarget portable', () => {
+  function dirWithWorkspace(folderPath: string): string {
+    const dir = mkdtempSync(path.join(tmpdir(), 'editor-target-'));
+    writeFileSync(path.join(dir, 'workspace.code-workspace'), JSON.stringify({ folders: [{ path: folderPath }] }));
+    return dir;
+  }
+
+  it('keeps a workspace file with relative folders for remote links', () => {
+    const dir = dirWithWorkspace('workshop');
+    expect(resolveEditorTarget(dir, undefined, true)).toBe(path.join(dir, 'workspace.code-workspace'));
+  });
+
+  it('falls back to the folder when the workspace file lists absolute container paths', () => {
+    const dir = dirWithWorkspace('/repos');
+    expect(resolveEditorTarget(dir, undefined, true)).toBe(dir);
+    expect(resolveEditorTarget(dir, undefined)).toBe(path.join(dir, 'workspace.code-workspace'));
   });
 });

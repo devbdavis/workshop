@@ -48,6 +48,20 @@ export interface GhReviewAdapter {
   fetchPrDiff(prUrl: string): Promise<string>;
   /** Posts ONE review (body + verdict + inline comments) via the forge's reviews API. */
   submitPrReview(prUrl: string, submission: GhReviewSubmission): Promise<void>;
+  /** Tail of a failing check's job log (`gh run view --log-failed`). */
+  fetchCheckLog(prUrl: string, detailsUrl: string): Promise<string>;
+}
+
+export const CHECK_LOG_TAIL_LINES = 200;
+
+/** `--log-failed` prefixes every line with `job\tstep\ttimestamp `; keep only the text. */
+export function tailFailedLog(raw: string, lines = CHECK_LOG_TAIL_LINES): string {
+  return raw
+    .trimEnd()
+    .split('\n')
+    .slice(-lines)
+    .map((l) => l.split('\t').slice(2).join('\t').replace(/^\d{4}-\d\d-\d\dT[\d:.]+Z /, ''))
+    .join('\n');
 }
 
 interface GhSearchPrNode {
@@ -234,6 +248,15 @@ export function createGhReviewAdapter(opts: CreateGhReviewAdapterOptions = {}): 
     async fetchPrDiff(prUrl: string): Promise<string> {
       const { stdout } = await exec(ghBinary, ['pr', 'diff', prUrl]);
       return stdout;
+    },
+
+    async fetchCheckLog(prUrl: string, detailsUrl: string): Promise<string> {
+      const parsed = parsePrUrl(prUrl);
+      if (!parsed) throw new Error(`Invalid PR URL: ${prUrl}`);
+      const job = /\/actions\/runs\/\d+\/job\/(\d+)/.exec(detailsUrl)?.[1];
+      if (!job) throw new Error('Not a GitHub Actions job — no log to fetch.');
+      const { stdout } = await exec(ghBinary, ['run', 'view', '--job', job, '--log-failed', '-R', `${parsed.owner}/${parsed.repo}`]);
+      return tailFailedLog(stdout);
     },
 
     async submitPrReview(prUrl: string, submission: GhReviewSubmission): Promise<void> {

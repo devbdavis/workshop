@@ -1,15 +1,16 @@
 import { execSync } from 'child_process';
 import { v4 as uuid } from 'uuid';
+import { NIX_CLEAN_TMUX_FLAGS, TMUX_PATH_FLAG, configureTmuxSession } from './manager.js';
 
 /**
- * Ephemeral, DB-less auth terminals.
+ * Ephemeral, DB-less terminals: CLI auth popups and plain shells.
  *
  * The regular session pipeline stores rows in `sessions`, which has a NOT NULL
- * FK to `tracks` (with foreign_keys=ON). Authentication popups have no track,
- * so they MUST NOT touch the sessions table. Instead we keep a small in-memory
- * map of authId -> tmux session name and let websocket.ts attach to it.
+ * FK to `tracks` (with foreign_keys=ON) and shows up in the session list. These
+ * terminals must not, so we keep a small in-memory map of id -> tmux session
+ * name and let websocket.ts attach to it via /ws/auth/:id/terminal.
  *
- * The login command is sent via `send-keys` (not run via `tmux new-session
+ * A login command is sent via `send-keys` (not run via `tmux new-session
  * <cmd>`) so the shell stays alive after the command exits — the user can
  * correct or re-run the login flow (e.g. picking a different gh auth method).
  */
@@ -22,7 +23,7 @@ export interface AuthTerminalHandle {
   tmuxSession: string;
 }
 
-export async function startAuthTerminal(loginCommand: string): Promise<AuthTerminalHandle> {
+async function startEphemeralTerminal(cwd: string, command?: string): Promise<AuthTerminalHandle> {
   const authId = uuid();
   const tmuxName = `workshop-auth-${authId.slice(0, 8)}`;
 
@@ -31,11 +32,13 @@ export async function startAuthTerminal(loginCommand: string): Promise<AuthTermi
   const cleanEnv = { ...process.env };
   delete cleanEnv.CLAUDECODE;
 
-  const cwd = process.env.HOME || '/tmp';
-  execSync(`tmux new-session -d -s ${tmuxName} -x 120 -y 40 -c ${JSON.stringify(cwd)}`, {
-    stdio: 'pipe',
-    env: cleanEnv,
-  });
+  execSync(
+    `tmux new-session -d -s ${tmuxName} ${NIX_CLEAN_TMUX_FLAGS} ${TMUX_PATH_FLAG} -x 120 -y 40 -c ${JSON.stringify(cwd)}`,
+    { stdio: 'pipe', env: cleanEnv },
+  );
+  configureTmuxSession(tmuxName);
+  authSessions.set(authId, tmuxName);
+  if (!command) return { authId, tmuxSession: tmuxName };
 
   // Wait for the shell to produce its prompt before sending keys — a send-keys
   // fired before the shell is ready is silently dropped (see manager.ts).
@@ -54,13 +57,20 @@ export async function startAuthTerminal(loginCommand: string): Promise<AuthTermi
     await new Promise((resolve) => setTimeout(resolve, 100));
   }
 
-  execSync(`tmux send-keys -t ${tmuxName} ${JSON.stringify(loginCommand)} Enter`, {
+  execSync(`tmux send-keys -t ${tmuxName} ${JSON.stringify(command)} Enter`, {
     stdio: 'pipe',
     env: cleanEnv,
   });
-
-  authSessions.set(authId, tmuxName);
   return { authId, tmuxSession: tmuxName };
+}
+
+export function startAuthTerminal(loginCommand: string): Promise<AuthTerminalHandle> {
+  return startEphemeralTerminal(process.env.HOME || '/tmp', loginCommand);
+}
+
+/** A plain interactive shell at `cwd`, killed by stopAuthTerminal when the user closes it. */
+export function startShellTerminal(cwd: string): Promise<AuthTerminalHandle> {
+  return startEphemeralTerminal(cwd);
 }
 
 export function getAuthTmux(authId: string): string | undefined {

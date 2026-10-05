@@ -85,6 +85,7 @@ import { createForgeAdapter } from '@infrastructure/forge/forge-adapter.js';
 import { createPrMonitorPoller } from '@application/pr-monitor/poller.js';
 import { createPrMonitorRegistrar } from '@application/pr-monitor/registrar.js';
 import { createPrMonitorRouter } from './pr-monitor-routes.js';
+import { createPrCheckLogRouter } from './pr-check-log-routes.js';
 import { createPrReviewRepository } from '@infrastructure/persistence/pr-review-repository.js';
 import { createPrReviewDiscoveryPoller } from '@application/pr-review/discovery-poller.js';
 import { createStaleAgentReaper } from '@application/session-cleanup/stale-agent-reaper.js';
@@ -312,6 +313,7 @@ export function createApiRouter(deps: ApiRouterDeps = {}): Router {
     terminal,
   });
   router.use(prMonitorRouter);
+  router.use(createPrCheckLogRouter({ monitors: prMonitors, forge: forgeAdapter }));
 
   // Mount PR-review dashboard sub-router
   const prReviewRouter = createPrReviewRouter({
@@ -1193,7 +1195,7 @@ export function createApiRouter(deps: ApiRouterDeps = {}): Router {
       return;
     }
     const sessionId = typeof req.query.sessionId === 'string' ? req.query.sessionId : undefined;
-    res.json({ path: resolveEditorTarget(targetPath, sessionId) });
+    res.json({ path: resolveEditorTarget(targetPath, sessionId, req.query.portable === '1') });
   });
 
   router.get('/code-server/status', (_req, res) => res.json({ available: isRunningInContainer() && isCodeServerAvailable() }));
