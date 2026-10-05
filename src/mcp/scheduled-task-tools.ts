@@ -1,6 +1,20 @@
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
 
+const scheduleConfigSchema = z
+  .object({
+    preset: z.enum(['interval', 'daily', 'weekly', 'monthly', 'cron']).describe('Schedule type'),
+    intervalMinutes: z.number().optional().describe('For interval: run every N minutes'),
+    time: z.string().optional().describe('HH:MM time for daily/weekly/monthly'),
+    daysOfWeek: z.array(z.number()).optional().describe('Days of week (0=Sun..6=Sat) for daily preset'),
+    dayOfWeek: z.number().optional().describe('Day of week for weekly preset (0-6)'),
+    monthRule: z.enum(['day-of-month', 'weekday-of-month']).optional(),
+    dayOfMonth: z.number().optional().describe('Day of month (1-31, -1 for last)'),
+    weekOfMonth: z.number().optional().describe('Week of month (1-4, -1 for last)'),
+    cronExpression: z.string().optional().describe('Raw cron expression for cron preset'),
+  })
+  .describe('Schedule configuration');
+
 export function registerScheduledTaskTools(
   server: McpServer,
   api: (path: string, options?: RequestInit) => Promise<any>,
@@ -25,19 +39,7 @@ export function registerScheduledTaskTools(
     {
       name: z.string().describe('Task name'),
       taskPrompt: z.string().describe('The instruction/prompt to send to the agent'),
-      scheduleConfig: z
-        .object({
-          preset: z.enum(['interval', 'daily', 'weekly', 'monthly', 'cron']).describe('Schedule type'),
-          intervalMinutes: z.number().optional().describe('For interval: run every N minutes'),
-          time: z.string().optional().describe('HH:MM time for daily/weekly/monthly'),
-          daysOfWeek: z.array(z.number()).optional().describe('Days of week (0=Sun..6=Sat) for daily preset'),
-          dayOfWeek: z.number().optional().describe('Day of week for weekly preset (0-6)'),
-          monthRule: z.enum(['day-of-month', 'weekday-of-month']).optional(),
-          dayOfMonth: z.number().optional().describe('Day of month (1-31, -1 for last)'),
-          weekOfMonth: z.number().optional().describe('Week of month (1-4, -1 for last)'),
-          cronExpression: z.string().optional().describe('Raw cron expression for cron preset'),
-        })
-        .describe('Schedule configuration'),
+      scheduleConfig: scheduleConfigSchema,
       description: z.string().optional().describe('Task description'),
       trackId: z.string().optional().describe('Track ID to bind to (pulls context into prompt)'),
       agentId: z.string().optional().describe('Agent ID to use'),
@@ -87,6 +89,54 @@ export function registerScheduledTaskTools(
     async ({ taskId }) => {
       const result = await api(`/scheduled-tasks/${taskId}/toggle`, { method: 'POST' });
       return { content: [{ type: 'text' as const, text: JSON.stringify(result, null, 2) }] };
+    },
+  );
+
+  server.tool(
+    'workshop_update_scheduled_task',
+    'Update fields of a scheduled task. Only provided fields change.',
+    {
+      taskId: z.string().describe('The scheduled task ID'),
+      name: z.string().optional(),
+      taskPrompt: z.string().optional().describe('The instruction/prompt to send to the agent'),
+      scheduleConfig: scheduleConfigSchema.optional(),
+      description: z.string().optional(),
+      trackId: z.string().optional().describe('Track ID to bind to; empty string unbinds'),
+      agentId: z.string().optional().describe('Agent ID; empty string clears'),
+      provider: z.enum(['claude', 'codex']).optional(),
+      systemPromptOverride: z.string().optional(),
+      scriptContent: z.string().optional().describe('Pre-run bash script; empty string removes it'),
+      skipOnNonZero: z.boolean().optional(),
+      enabled: z.boolean().optional(),
+      templateName: z.string().optional().describe('Link to templates/schedules/<slug>.json (slug only); empty string unlinks'),
+    },
+    async ({ taskId, ...body }) => {
+      const task = await api(`/scheduled-tasks/${taskId}`, { method: 'PUT', body: JSON.stringify(body) });
+      return { content: [{ type: 'text' as const, text: JSON.stringify(task, null, 2) }] };
+    },
+  );
+
+  server.tool(
+    'workshop_delete_scheduled_task',
+    'Permanently delete a scheduled task',
+    {
+      taskId: z.string().describe('The scheduled task ID'),
+    },
+    async ({ taskId }) => {
+      await api(`/scheduled-tasks/${taskId}`, { method: 'DELETE' });
+      return { content: [{ type: 'text' as const, text: `Deleted scheduled task ${taskId}` }] };
+    },
+  );
+
+  server.tool(
+    'workshop_sync_scheduled_task_from_template',
+    'Reset a scheduled task to its linked template: overwrites prompt, schedule, description and script from templates/schedules/<templateName>.json',
+    {
+      taskId: z.string().describe('The scheduled task ID'),
+    },
+    async ({ taskId }) => {
+      const task = await api(`/scheduled-tasks/${taskId}/sync-from-template`, { method: 'POST' });
+      return { content: [{ type: 'text' as const, text: JSON.stringify(task, null, 2) }] };
     },
   );
 

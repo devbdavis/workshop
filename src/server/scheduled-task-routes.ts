@@ -387,7 +387,16 @@ Return ONLY the JSON object, no other text or markdown.`;
       scriptContent,
       skipOnNonZero,
       enabled,
+      templateName,
     } = req.body;
+
+    // '' unlinks; otherwise it must name an existing templates/schedules/<slug>.json (it becomes a path segment)
+    if (templateName !== undefined && templateName !== '' && (typeof templateName !== 'string'
+      || !/^[a-z0-9][a-z0-9-]*$/.test(templateName)
+      || !fs.existsSync(path.join(projectRoot, 'templates', 'schedules', `${templateName}.json`)))) {
+      res.status(400).json({ error: `Unknown template: ${String(templateName)}` });
+      return;
+    }
 
     // If schedule config is changing, recompute cron
     let cronExpression: string | undefined;
@@ -440,6 +449,7 @@ Return ONLY the JSON object, no other text or markdown.`;
       ...(scriptContent !== undefined ? { scriptPath: updatedScriptPath } : {}),
       ...(typeof skipOnNonZero === 'boolean' ? { skipOnNonZero } : {}),
       enabled,
+      templateName,
     });
 
     if (!updated) {
