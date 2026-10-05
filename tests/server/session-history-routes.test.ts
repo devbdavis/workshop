@@ -36,7 +36,9 @@ describe('session history routes', () => {
     const deps: SessionHistoryRouterDeps = {
       scanner: {
         list: async () => [entry],
-        readTranscript: async (id: string) => (id === sessionId ? [{ role: 'user', text: 'hi', timestamp: null }] : null),
+        readTranscript: async (id: string) => (id === sessionId
+          ? [{ id: 'u1', role: 'user', blocks: [{ type: 'text', text: 'hi' }], timestamp: null }, { id: 'u2', role: 'assistant', blocks: [{ type: 'text', text: 'yo' }], timestamp: null }]
+          : null),
       },
       sessions: {
         findAll: () => [{ id: 'session-1', trackId: 'track-1', worktreeRoot: root } as never],
@@ -92,8 +94,14 @@ describe('session history routes', () => {
   it('returns the transcript for a known session', async () => {
     const res = await fetch(`${base}/session-history/${sessionId}/transcript`);
     expect(res.status).toBe(200);
-    const body = (await res.json()) as { messages: Array<{ role: string; text: string }> };
-    expect(body.messages).toEqual([{ role: 'user', text: 'hi', timestamp: null }]);
+    const body = (await res.json()) as { messages: unknown[] };
+    expect(body.messages).toHaveLength(2);
+  });
+
+  it('tails the transcript when limit is given', async () => {
+    const res = await fetch(`${base}/session-history/${sessionId}/transcript?limit=1`);
+    const body = (await res.json()) as { messages: unknown[] };
+    expect(body.messages).toEqual([{ id: 'u2', role: 'assistant', blocks: [{ type: 'text', text: 'yo' }], timestamp: null }]);
   });
 
   it('404s resume for an unknown track', async () => {

@@ -2,6 +2,7 @@ import fs from 'fs';
 import path from 'path';
 
 import { DEFAULT_PROJECTS_DIR, listJsonlFiles, parseJsonlLines } from './jsonl.js';
+import { toTranscript, type TranscriptMessage } from './transcript.js';
 
 export interface SessionHistoryEntry {
   sessionId: string;
@@ -14,12 +15,6 @@ export interface SessionHistoryEntry {
   firstAt: string | null;
   lastAt: string | null;
   messageCount: number;
-}
-
-export interface TranscriptMessage {
-  role: 'user' | 'assistant';
-  text: string;
-  timestamp: string | null;
 }
 
 export interface SessionHistoryScanner {
@@ -56,27 +51,6 @@ function extractPromptText(content: unknown): string | null {
     if (trimmed && !trimmed.startsWith('<')) parts.push(trimmed);
   }
   return parts.length > 0 ? parts.join(' ') : null;
-}
-
-/** Renders a transcript message's content: text blocks joined, tool_use as "[tool: name]", thinking/tool_result/image skipped. */
-function extractTranscriptText(content: unknown): string | null {
-  if (typeof content === 'string') {
-    const trimmed = content.trim();
-    return trimmed || null;
-  }
-  if (!Array.isArray(content)) return null;
-  const parts: string[] = [];
-  for (const raw of content) {
-    const block = asRecord(raw);
-    if (!block) continue;
-    if (block.type === 'text' && typeof block.text === 'string') {
-      const trimmed = block.text.trim();
-      if (trimmed) parts.push(trimmed);
-    } else if (block.type === 'tool_use' && typeof block.name === 'string') {
-      parts.push(`[tool: ${block.name}]`);
-    }
-  }
-  return parts.length > 0 ? parts.join('\n') : null;
 }
 
 function buildEntry(lines: unknown[], sessionId: string, filePath: string, mtimeIso: string): SessionHistoryEntry | null {
@@ -144,25 +118,6 @@ function buildEntry(lines: unknown[], sessionId: string, filePath: string, mtime
   };
 }
 
-function toTranscript(lines: unknown[]): TranscriptMessage[] {
-  const messages: TranscriptMessage[] = [];
-  for (const raw of lines) {
-    const entry = asRecord(raw);
-    if (!entry) continue;
-    if (entry.type !== 'user' && entry.type !== 'assistant') continue;
-    if (entry.isMeta === true) continue;
-    const message = asRecord(entry.message);
-    const text = message ? extractTranscriptText(message.content) : null;
-    if (!text) continue;
-    messages.push({
-      role: entry.type as 'user' | 'assistant',
-      text,
-      timestamp: typeof entry.timestamp === 'string' ? entry.timestamp : null,
-    });
-  }
-  return messages;
-}
-
 /** Scans `~/.claude/projects` for top-level Claude Code session transcripts (excludes subagent sub-transcripts). */
 export function createSessionHistoryScanner(deps: { projectsDir?: string } = {}): SessionHistoryScanner {
   const projectsDir = deps.projectsDir ?? DEFAULT_PROJECTS_DIR;
@@ -220,6 +175,7 @@ export function createSessionHistoryScanner(deps: { projectsDir?: string } = {})
     } catch {
       return null;
     }
+    // ponytail: full re-read + re-parse per call (the mobile live view polls every 4s); seek-from-end if huge sessions get slow.
     return toTranscript(parseJsonlLines(content));
   }
 

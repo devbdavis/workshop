@@ -87,7 +87,9 @@ export function createSessionHistoryRouter(deps: SessionHistoryRouterDeps): Rout
         res.status(404).json({ error: 'Session not found' });
         return;
       }
-      res.json({ messages });
+      // Optional tail so a phone polling a long session only pulls the recent end.
+      const limit = Number(req.query.limit);
+      res.json({ messages: Number.isInteger(limit) && limit > 0 ? messages.slice(-limit) : messages });
     } catch (err) {
       console.error('Failed to read session transcript:', err);
       res.status(500).json({ error: 'Failed to read session transcript' });
