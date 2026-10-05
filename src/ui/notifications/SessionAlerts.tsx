@@ -28,7 +28,7 @@ export function useSessionAlerts(): SessionAlertsContextValue {
 }
 
 function alertUrl(alert: SessionAlert): string {
-  return `/tracks/${alert.trackId}?session=${alert.sessionId}`;
+  return `/sessions?session=${alert.sessionId}`;
 }
 
 function alertTitle(alert: SessionAlert): string {
