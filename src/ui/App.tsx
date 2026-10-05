@@ -15,6 +15,7 @@ import { EpicDetail } from './workflow/EpicDetail';
 import { DiscussionsPage } from './discussions/DiscussionsPage';
 import { NotificationsPage } from './notifications/NotificationsPage';
 import { PrReviewsPage } from './pr-reviews/PrReviewsPage';
+import { SessionAlertsProvider } from './notifications/SessionAlerts';
 import { TopNav } from './TopNav';
 
 /** Gates the app behind profile selection (identity, not security). */
@@ -42,25 +43,27 @@ export function App() {
     <AuthGate>
       <ProfileProvider>
         <ProfileGate>
-          <div className="h-screen flex flex-col bg-gray-950 text-gray-100">
-            <TopNav />
-            <div className="flex-1 min-h-0 overflow-y-auto">
-              <Routes>
-                <Route path="/" element={<Dashboard />} />
-                <Route path="/tracks/:trackId" element={<TrackView />} />
-                <Route path="/sessions" element={<SessionOverview />} />
-                <Route path="/discussions" element={<DiscussionsPage />} />
-                <Route path="/settings" element={<Navigate to="/settings/general" replace />} />
-                <Route path="/settings/:tab" element={<Settings />} />
-                <Route path="/kanban" element={<KanbanBoard />} />
-                <Route path="/scheduled-tasks" element={<ScheduledTasksPage />} />
-                <Route path="/workflow" element={<WorkflowPage />} />
-                <Route path="/workflow/:id" element={<EpicDetail />} />
-                <Route path="/notifications" element={<NotificationsPage />} />
-                <Route path="/pr-reviews" element={<PrReviewsPage />} />
-              </Routes>
+          <SessionAlertsProvider>
+            <div className="h-screen flex flex-col bg-gray-950 text-gray-100">
+              <TopNav />
+              <div className="flex-1 min-h-0 overflow-y-auto">
+                <Routes>
+                  <Route path="/" element={<Dashboard />} />
+                  <Route path="/tracks/:trackId" element={<TrackView />} />
+                  <Route path="/sessions" element={<SessionOverview />} />
+                  <Route path="/discussions" element={<DiscussionsPage />} />
+                  <Route path="/settings" element={<Navigate to="/settings/general" replace />} />
+                  <Route path="/settings/:tab" element={<Settings />} />
+                  <Route path="/kanban" element={<KanbanBoard />} />
+                  <Route path="/scheduled-tasks" element={<ScheduledTasksPage />} />
+                  <Route path="/workflow" element={<WorkflowPage />} />
+                  <Route path="/workflow/:id" element={<EpicDetail />} />
+                  <Route path="/notifications" element={<NotificationsPage />} />
+                  <Route path="/pr-reviews" element={<PrReviewsPage />} />
+                </Routes>
+              </div>
             </div>
-          </div>
+          </SessionAlertsProvider>
         </ProfileGate>
       </ProfileProvider>
     </AuthGate>

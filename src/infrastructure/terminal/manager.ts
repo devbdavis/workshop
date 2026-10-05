@@ -986,6 +986,7 @@ export function createTerminalManager(
       const dying: SyncResult['dying'] = [];
       const activityChangedSet = new Set<TrackId>();
       const idleAlerts: SyncResult['idleAlerts'] = [];
+      const needsInputAlerts: SyncResult['needsInputAlerts'] = [];
 
       /** Reap a session: kill tmux, clean up files, remove from DB */
       const reap = (session: Session, reason: string) => {
@@ -1100,6 +1101,14 @@ export function createTerminalManager(
           if (prevStatus !== 'needs-input' && !viewerCounts.has(session.id)) {
             attentionMap.set(session.id, new Date().toISOString());
           }
+          // Skip the first observation (prevStatus undefined, e.g. server restart) to avoid a notification burst.
+          if (prevStatus !== undefined && prevStatus !== 'needs-input') {
+            needsInputAlerts.push({
+              sessionId: session.id,
+              trackId: session.trackId,
+              sessionName: session.name ?? undefined,
+            });
+          }
           activityStatusMap.set(session.id, 'needs-input');
         } else if (isSessionIdle(session, capturedLines)) {
           // Require IDLE_CONSECUTIVE_THRESHOLD consecutive idle observations
@@ -1197,7 +1206,7 @@ export function createTerminalManager(
           console.log(`[idle-alert] Session ${alert.sessionId} (${alert.sessionName ?? 'unnamed'}) has been idle for ${IDLE_NOTIFY_DELAY_MS / 1000}s`);
         }
       }
-      return { cleaned, suspended, dying, activityChanged: [...activityChangedSet], idleAlerts };
+      return { cleaned, suspended, dying, activityChanged: [...activityChangedSet], idleAlerts, needsInputAlerts };
     },
 
     async resumeSuspendedSessions(): Promise<Session[]> {

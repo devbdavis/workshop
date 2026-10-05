@@ -4,6 +4,7 @@ import { McpServers } from './McpServers';
 import { Plugins } from './Plugins';
 import { SoulEditor } from './SoulEditor';
 import { ThemeSelector } from './ThemeSelector';
+import { NotificationSettings } from './NotificationSettings';
 import { Repositories } from './Repositories';
 import { AgentsSettings } from './AgentsSettings';
 import { SkillsSettings } from './SkillsSettings';
@@ -64,6 +65,10 @@ export function Settings() {
         <div className="space-y-6">
           <section className="bg-gray-900 border border-gray-800 rounded-lg p-6">
             <ThemeSelector />
+          </section>
+
+          <section className="bg-gray-900 border border-gray-800 rounded-lg p-6">
+            <NotificationSettings />
           </section>
 
           <section className="bg-gray-900 border border-gray-800 rounded-lg p-6">
