@@ -20,7 +20,6 @@ import type {
 export function createScheduledTaskRepository(): ScheduledTaskRepository {
   const db = getDatabase();
 
-  // Prepare statements once
   const findByIdStmt = db.prepare('SELECT * FROM scheduled_tasks WHERE id = ?');
   const findAllStmt = db.prepare('SELECT * FROM scheduled_tasks ORDER BY created_at DESC');
   const findEnabledStmt = db.prepare('SELECT * FROM scheduled_tasks WHERE enabled = 1 ORDER BY created_at DESC');
@@ -29,14 +28,14 @@ export function createScheduledTaskRepository(): ScheduledTaskRepository {
     `INSERT INTO scheduled_tasks
      (id, name, description, schedule_config, cron_expression, schedule_description,
       track_id, agent_id, provider, task_prompt, system_prompt_override, script_path,
-      template_name, enabled, run_count, created_at, updated_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?)`,
+      skip_on_nonzero, template_name, enabled, run_count, created_at, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?)`,
   );
   const updateStmt = db.prepare(
     `UPDATE scheduled_tasks SET
        name = ?, description = ?, schedule_config = ?, cron_expression = ?,
        schedule_description = ?, track_id = ?, agent_id = ?, provider = ?,
-       task_prompt = ?, system_prompt_override = ?, script_path = ?, template_name = ?,
+       task_prompt = ?, system_prompt_override = ?, script_path = ?, skip_on_nonzero = ?, template_name = ?,
        enabled = ?, last_run_at = ?, last_run_status = ?, last_session_id = ?,
        run_count = ?, updated_at = ?
      WHERE id = ?`,
@@ -81,6 +80,7 @@ export function createScheduledTaskRepository(): ScheduledTaskRepository {
         data.taskPrompt,
         data.systemPromptOverride || null,
         data.scriptPath || null,
+        data.skipOnNonZero ? 1 : 0,
         data.templateName || null,
         data.enabled ? 1 : 0,
         now,
@@ -100,6 +100,7 @@ export function createScheduledTaskRepository(): ScheduledTaskRepository {
         taskPrompt: data.taskPrompt,
         systemPromptOverride: data.systemPromptOverride,
         scriptPath: data.scriptPath,
+        skipOnNonZero: !!data.skipOnNonZero,
         enabled: data.enabled,
         runCount: 0,
         createdAt: now,
@@ -126,6 +127,7 @@ export function createScheduledTaskRepository(): ScheduledTaskRepository {
           ? data.systemPromptOverride
           : existing.systemPromptOverride,
         scriptPath: data.scriptPath !== undefined ? data.scriptPath : existing.scriptPath,
+        skipOnNonZero: data.skipOnNonZero ?? existing.skipOnNonZero,
         templateName: data.templateName !== undefined ? data.templateName : existing.templateName,
         enabled: data.enabled !== undefined ? data.enabled : existing.enabled,
         lastRunAt: data.lastRunAt !== undefined ? data.lastRunAt : existing.lastRunAt,
@@ -146,6 +148,7 @@ export function createScheduledTaskRepository(): ScheduledTaskRepository {
         merged.taskPrompt,
         merged.systemPromptOverride || null,
         merged.scriptPath || null,
+        merged.skipOnNonZero ? 1 : 0,
         merged.templateName || null,
         merged.enabled ? 1 : 0,
         merged.lastRunAt || null,
@@ -171,7 +174,6 @@ export function createScheduledTaskRepository(): ScheduledTaskRepository {
 export function createScheduledTaskRunRepository(): ScheduledTaskRunRepository {
   const db = getDatabase();
 
-  // Prepare statements once
   const findByTaskStmt = db.prepare('SELECT * FROM scheduled_task_runs WHERE task_id = ? ORDER BY started_at DESC LIMIT ?');
   const findBySessionIdStmt = db.prepare('SELECT * FROM scheduled_task_runs WHERE session_id = ? LIMIT 1');
   const insertStmt = db.prepare(
@@ -238,6 +240,7 @@ interface TaskRow {
   task_prompt: string;
   system_prompt_override: string | null;
   script_path: string | null;
+  skip_on_nonzero: number;
   template_name: string | null;
   enabled: number;
   last_run_at: string | null;
@@ -272,6 +275,7 @@ function rowToTask(row: TaskRow): ScheduledTask {
     taskPrompt: row.task_prompt,
     systemPromptOverride: row.system_prompt_override || undefined,
     scriptPath: row.script_path || undefined,
+    skipOnNonZero: row.skip_on_nonzero === 1,
     templateName: row.template_name || undefined,
     enabled: row.enabled === 1,
     lastRunAt: row.last_run_at || undefined,

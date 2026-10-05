@@ -35,6 +35,7 @@ export function ScheduledTaskForm({ task, tracks, agents, onSave, onClose, onSav
   // Script state
   const [scriptContent, setScriptContent] = useState('');
   const [scriptPath, setScriptPath] = useState(task?.scriptPath ?? '');
+  const [skipOnNonZero, setSkipOnNonZero] = useState(task?.skipOnNonZero ?? false);
 
   // Generate state (new tasks only)
   const [generateDesc, setGenerateDesc] = useState('');
@@ -195,6 +196,7 @@ export function ScheduledTaskForm({ task, tracks, agents, onSave, onClose, onSav
       provider,
       systemPromptOverride: systemPromptOverride.trim() || undefined,
       scriptContent: scriptContent.trim() || '',
+      skipOnNonZero,
       enabled: task?.enabled ?? true,
     };
     onSave(data);
@@ -495,6 +497,14 @@ export function ScheduledTaskForm({ task, tracks, agents, onSave, onClose, onSav
                 : <> Stored in <span className="font-mono text-gray-500">~/.workshop/schedule/scripts/</span></>
               }
             </p>
+            <label className="flex items-center gap-2 mt-1.5 text-xs text-gray-400">
+              <input
+                type="checkbox"
+                checked={skipOnNonZero}
+                onChange={(e) => setSkipOnNonZero(e.target.checked)}
+              />
+              Skip the run when the script exits non-zero (precheck)
+            </label>
           </Field>
 
           {/* Track binding */}
