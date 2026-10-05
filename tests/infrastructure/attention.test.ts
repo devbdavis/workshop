@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
 // Hoisted above the manager import — replaces real tmux/pane inspection with
 // controllable fakes so activity-status transitions can be driven directly.
@@ -14,15 +14,18 @@ vi.mock('@infrastructure/terminal/pane-detection.js', () => ({
   isSessionNeedsInput: vi.fn(() => false),
   isSessionLoggedOut: vi.fn(() => false),
   isSessionExited: vi.fn(() => false),
+  isPaneBusy: vi.fn(() => false),
+  hasBackgroundWork: vi.fn(() => false),
 }));
 
 import { createTerminalManager } from '@infrastructure/terminal/manager.js';
-import { isSessionIdle, isSessionNeedsInput } from '@infrastructure/terminal/pane-detection.js';
+import { isSessionIdle, isSessionNeedsInput, isPaneBusy, hasBackgroundWork } from '@infrastructure/terminal/pane-detection.js';
 import type { SessionRepository } from '@domain/session/repository';
 import type { Session, SessionId, TrackId } from '@foundation/types';
 
 const mockIsSessionIdle = vi.mocked(isSessionIdle);
 const mockIsSessionNeedsInput = vi.mocked(isSessionNeedsInput);
+const mockIsPaneBusy = vi.mocked(isPaneBusy);
 
 const SESSION_ID = 'sess-1' as SessionId;
 const TRACK_ID = 'track-1' as TrackId;
@@ -180,5 +183,74 @@ describe('terminal manager attention tracking', () => {
     await terminal.destroySession(SESSION_ID);
 
     expect(terminal.getAttentionSince(SESSION_ID)).toBeUndefined();
+  });
+});
+
+describe('hook-reported activity', () => {
+  beforeEach(() => {
+    mockIsSessionIdle.mockReset().mockReturnValue(false);
+    mockIsSessionNeedsInput.mockReset().mockReturnValue(false);
+    mockIsPaneBusy.mockReset().mockReturnValue(false);
+    vi.mocked(hasBackgroundWork).mockReset().mockReturnValue(false);
+    vi.useFakeTimers();
+  });
+  afterEach(() => vi.useRealTimers());
+
+  function setup() {
+    const terminal = createTerminalManager(makeSessionRepo(makeSession()));
+    terminal.syncSessionStates(); // pane-observed working
+    return terminal;
+  }
+
+  it('idle hook applies immediately, sets attention, and dedupes', () => {
+    const terminal = setup();
+    expect(terminal.reportHookActivity(SESSION_ID, 'idle')).toMatchObject({ trackId: TRACK_ID, changed: true });
+    expect(terminal.getActivityStatus(SESSION_ID)).toBe('idle');
+    expect(terminal.getAttentionSince(SESSION_ID)).toBeDefined();
+    expect(terminal.reportHookActivity(SESSION_ID, 'idle')?.changed).toBe(false);
+  });
+
+  it('keeps hook status when the pane is unrecognized after the grace window', () => {
+    const terminal = setup();
+    terminal.reportHookActivity(SESSION_ID, 'idle');
+    vi.advanceTimersByTime(6_000);
+    terminal.syncSessionStates();
+    expect(terminal.getActivityStatus(SESSION_ID)).toBe('idle');
+  });
+
+  it('pane busy signal overrides hook idle after the grace window', () => {
+    const terminal = setup();
+    terminal.reportHookActivity(SESSION_ID, 'idle');
+    vi.advanceTimersByTime(6_000);
+    mockIsPaneBusy.mockReturnValue(true);
+    terminal.syncSessionStates();
+    expect(terminal.getActivityStatus(SESSION_ID)).toBe('working');
+  });
+
+  it('does not let a contradicting pane signal override within the grace window', () => {
+    const terminal = setup();
+    terminal.reportHookActivity(SESSION_ID, 'idle');
+    mockIsPaneBusy.mockReturnValue(true);
+    terminal.syncSessionStates();
+    expect(terminal.getActivityStatus(SESSION_ID)).toBe('idle');
+  });
+
+  it('does not re-alert idle from the pane fallback after a hook idle', () => {
+    const terminal = setup();
+    terminal.reportHookActivity(SESSION_ID, 'idle');
+    mockIsSessionIdle.mockReturnValue(true);
+    const alerts = [];
+    for (let i = 0; i < 6; i++) {
+      vi.advanceTimersByTime(7_500);
+      alerts.push(...terminal.syncSessionStates().idleAlerts);
+    }
+    expect(alerts).toHaveLength(0);
+  });
+
+  it('ignores a Stop hook while delegated agents are still running', () => {
+    const terminal = setup();
+    vi.mocked(hasBackgroundWork).mockReturnValue(true);
+    expect(terminal.reportHookActivity(SESSION_ID, 'idle')).toBeUndefined();
+    expect(terminal.getActivityStatus(SESSION_ID)).toBe('working');
   });
 });

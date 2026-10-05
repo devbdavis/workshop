@@ -4,7 +4,7 @@ import path from 'path';
 import fs from 'fs';
 import os from 'os';
 
-import { writeHookSettings, buildClaudeLauncher } from '@infrastructure/terminal/launcher-builders';
+import { writeHookSettings, buildClaudeLauncher, buildCodexLauncher } from '@infrastructure/terminal/launcher-builders';
 
 const testDir = path.join(os.tmpdir(), `workshop-test-launcher-${randomUUID()}`);
 
@@ -29,6 +29,33 @@ describe('writeHookSettings', () => {
     expect(hooks.SessionStart).toBeDefined();
     expect(hooks.SessionEnd).toBeDefined();
     expect(settings.enabledPlugins).toBeUndefined();
+  });
+
+  it('writes activity hooks with the right status arg', () => {
+    const hooks = readSettings(writeHookSettings(testDir, 'session-a')).hooks as Record<
+      string,
+      { matcher?: string; hooks: { command: string }[] }[]
+    >;
+    const expected: [string, string, string | undefined][] = [
+      ['UserPromptSubmit', 'working', undefined],
+      ['Stop', 'idle', undefined],
+      ['Notification', 'needs-input', 'permission_prompt|elicitation_dialog'],
+      ['PreToolUse', 'needs-input', 'AskUserQuestion'],
+      ['PostToolUse', 'working', 'AskUserQuestion'],
+    ];
+    for (const [event, status, matcher] of expected) {
+      expect(hooks[event][0].matcher).toBe(matcher);
+      expect(hooks[event][0].hooks[0].command).toMatch(
+        new RegExp(`session-activity-hook\\.sh ${status}$`),
+      );
+    }
+  });
+
+  it('omits activity hooks for --print runs', () => {
+    const hooks = readSettings(writeHookSettings(testDir, 'session-p', { skipActivityHooks: true }))
+      .hooks as Record<string, unknown>;
+    expect(hooks.Stop).toBeUndefined();
+    expect(hooks.SessionEnd).toBeDefined();
   });
 
   it('writes the enabledPlugins map with explicit true and false entries', () => {
@@ -88,5 +115,25 @@ describe('buildClaudeLauncher print vs interactive', () => {
   it('omits --print when resuming a background session', () => {
     const script = launch({ background: true, claudeResumeId: 'abc-123' });
     expect(script).not.toContain('--print');
+  });
+});
+
+describe('buildCodexLauncher activity hooks', () => {
+  it('wires activity hooks with a session-independent command for interactive sessions', () => {
+    const lines: string[] = [];
+    buildCodexLauncher(lines, 'sess-x', testDir, '/tmp/cwd');
+    expect(lines[0]).toContain('WORKSHOP_SESSION_ID=sess-x');
+    const exec = lines[1];
+    for (const [event, status] of [['UserPromptSubmit', 'working'], ['Stop', 'idle'], ['Interrupt', 'idle'], ['PermissionRequest', 'needs-input']]) {
+      expect(exec).toMatch(new RegExp(`hooks\\.${event}=.*session-activity-hook\\.sh ${status}"`));
+    }
+    // Codex trusts hooks by command hash — a per-session ID in the command would force re-review every launch.
+    expect(exec).not.toContain('sess-x');
+  });
+
+  it('adds no hooks to codex exec (background), which never runs them', () => {
+    const lines: string[] = [];
+    buildCodexLauncher(lines, 'sess-y', testDir, '/tmp/cwd', { background: true, initialPrompt: 'hi' });
+    expect(lines.join('\n')).not.toContain('hooks.');
   });
 });

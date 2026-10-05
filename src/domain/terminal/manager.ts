@@ -103,6 +103,11 @@ export interface TerminalManager {
   getActivityStatus(sessionId: SessionId): 'working' | 'idle' | 'needs-input' | undefined;
   /** ISO timestamp of when the session raised its unread/attention highlight, or undefined */
   getAttentionSince(sessionId: SessionId): string | undefined;
+  /** Apply a hook-reported activity status; `changed` is false when it matches the current status. */
+  reportHookActivity(
+    sessionId: SessionId,
+    status: 'working' | 'idle' | 'needs-input',
+  ): { trackId: TrackId; sessionName: string | undefined; changed: boolean } | undefined;
   /** Clear the attention highlight. Returns true if an entry was actually cleared. */
   clearAttention(sessionId: SessionId): boolean;
   /** A terminal client attached — while ≥1 viewer is attached, status transitions don't raise attention */
