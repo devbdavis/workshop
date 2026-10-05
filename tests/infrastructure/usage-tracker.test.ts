@@ -133,4 +133,18 @@ describe('createUsageTracker', () => {
     expect(tracker.isOverThreshold(0.75)).toBe(true);
     expect(tracker.isOverThreshold(0.8)).toBe(false);
   });
+
+  it('reports when the oldest in-window entry drains, null when empty', () => {
+    const tracker = createUsageTracker({ settings: makeSettingsStub(), projectsDir: testDir, now: (): number => FIXED_NOW });
+    expect(tracker.getUsageStatus().drainsAt).toBeNull();
+
+    const oldest = WINDOW_START_MS + 30 * 60 * 1000;
+    writeFixture('project-a/a.jsonl', [
+      JSON.stringify({ type: 'assistant', timestamp: new Date(oldest + 60_000).toISOString(), message: { usage: { input_tokens: 1 } } }),
+    ]);
+    writeFixture('project-a/b.jsonl', [
+      JSON.stringify({ type: 'assistant', timestamp: new Date(oldest).toISOString(), message: { usage: { input_tokens: 1 } } }),
+    ]);
+    expect(tracker.getUsageStatus().drainsAt).toBe(new Date(oldest + 5 * 60 * 60 * 1000).toISOString());
+  });
 });
