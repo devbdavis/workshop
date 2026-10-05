@@ -20,7 +20,7 @@ import { ProfileSettings } from './ProfileSettings';
 
 type Tab = 'general' | 'profile' | 'repositories' | 'mcp' | 'plugins' | 'templates' | 'agents' | 'skills' | 'issue-tracking';
 
-const TABS: { id: Tab; label: string }[] = [
+export const SETTINGS_TABS: { id: Tab; label: string }[] = [
   { id: 'general', label: 'General' },
   { id: 'profile', label: 'Profile' },
   { id: 'agents', label: 'Agents' },
@@ -32,7 +32,7 @@ const TABS: { id: Tab; label: string }[] = [
   { id: 'issue-tracking', label: 'Issue Tracking' },
 ];
 
-const VALID_TABS = new Set<string>(TABS.map((t) => t.id));
+const VALID_TABS = new Set<string>(SETTINGS_TABS.map((t) => t.id));
 
 export function Settings() {
   const { tab } = useParams<{ tab: string }>();
@@ -45,7 +45,7 @@ export function Settings() {
       <header className="flex items-center gap-4 mb-6">
         <h1 className="text-xl font-semibold">Settings</h1>
         <div className="flex items-center gap-0.5">
-          {TABS.map(({ id, label }) => (
+          {SETTINGS_TABS.map(({ id, label }) => (
             <button
               key={id}
               onClick={() => navigate(`/settings/${id}`)}

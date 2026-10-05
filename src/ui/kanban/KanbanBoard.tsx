@@ -13,6 +13,7 @@ import {
   type CollisionDetection,
 } from '@dnd-kit/core';
 import { arrayMove } from '@dnd-kit/sortable';
+import { useSearchParams } from 'react-router-dom';
 import type { Todo, TodoStatus, TodoPriority, Track } from '@foundation/types';
 import type { DispatchOptions } from '../track-view/DispatchDropdown';
 import { KanbanColumn } from './KanbanColumn';
@@ -92,6 +93,16 @@ export function KanbanBoard() {
   useEffect(() => {
     loadData();
   }, [loadData]);
+
+  // Deep link from the command palette (?todo=id): open it once todos are loaded, then drop the param.
+  const [searchParams, setSearchParams] = useSearchParams();
+  const todoParam = searchParams.get('todo');
+  useEffect(() => {
+    if (!todoParam || loading) return;
+    const todo = todos.find((t) => t.id === todoParam);
+    if (todo) setSelectedTodo(todo);
+    setSearchParams({}, { replace: true });
+  }, [todoParam, todos, loading, setSearchParams]);
 
   // WebSocket for real-time updates
   useEffect(() => {
