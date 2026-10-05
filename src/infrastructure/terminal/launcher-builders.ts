@@ -375,8 +375,27 @@ export function buildCursorLauncher(
 }
 
 /** Build launcher script lines for a Codex CLI session */
+/**
+ * `-c` hook overrides reporting activity to Workshop (interactive only — `codex exec` runs no hooks).
+ * The session ID travels via env so the command text, and so Codex's one-time /hooks trust, is stable.
+ */
+export function codexActivityHookArgs(): string[] {
+  const script = path.join(path.resolve(__dirname, '../../../scripts'), 'session-activity-hook.sh');
+  const events: [string, string][] = [
+    ['UserPromptSubmit', 'working'],
+    ['Stop', 'idle'],
+    ['Interrupt', 'idle'],
+    ['PermissionRequest', 'needs-input'],
+  ];
+  return events.flatMap(([event, status]) => [
+    '-c',
+    `'hooks.${event}=[{hooks=[{type="command",command=${JSON.stringify(`${script} ${status}`).replace(/'/g, "'\\''")}}]}]'`,
+  ]);
+}
+
 export function buildCodexLauncher(
   lines: string[],
+  sessionId: string,
   sessionDir: string,
   cwd: string,
   options?: CreateSessionOptions,
@@ -402,7 +421,8 @@ export function buildCodexLauncher(
     writeFileSync(promptFile, fullPrompt, 'utf-8');
     lines.push(`exec ${codexArgs.join(' ')} "$(cat ${JSON.stringify(promptFile)})"`);
   } else {
-    codexArgs.push('-C', JSON.stringify(cwd));
+    lines.push(`export WORKSHOP_API_URL=${WORKSHOP_API_URL} WORKSHOP_SESSION_ID=${sessionId}`);
+    codexArgs.push('-C', JSON.stringify(cwd), ...codexActivityHookArgs());
 
     if (options?.systemPrompt) {
       writeFileSync(promptFile, options.systemPrompt, 'utf-8');
