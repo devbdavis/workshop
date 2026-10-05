@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import fs from 'fs';
 import path from 'path';
-import { scheduleConfigToCron, describeSchedule } from '@application/scheduler/cron-utils';
+import { describeSchedule, validateScheduleConfig } from '@application/scheduler/cron-utils';
 import type { BundledScheduleDefinition } from '@application/scheduler/schedule-importer';
 
 const TEMPLATES_DIR = path.resolve(__dirname, '../../templates/schedules');
@@ -29,11 +29,9 @@ describe('schedule templates', () => {
       expect(def.taskPrompt.length).toBeGreaterThan(0);
     });
 
-    it('has a scheduleConfig that produces a cron expression and description', () => {
-      expect(() => scheduleConfigToCron(def.scheduleConfig)).not.toThrow();
-      expect(scheduleConfigToCron(def.scheduleConfig).length).toBeGreaterThan(0);
-      expect(() => describeSchedule(def.scheduleConfig)).not.toThrow();
-      expect(describeSchedule(def.scheduleConfig).length).toBeGreaterThan(0);
+    it('has a valid scheduleConfig', () => {
+      expect(validateScheduleConfig(def.scheduleConfig)).toBeNull();
+      expect(describeSchedule(def.scheduleConfig)).not.toBe('');
     });
 
     it('points scriptFile at a file that exists, if set', () => {
