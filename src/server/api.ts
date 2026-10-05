@@ -70,6 +70,8 @@ import { createRepoRouter, parsePrMonitorIgnoredAuthors } from './repo-routes.js
 import { createWorkspaceRouter } from './workspace-routes.js';
 import { createSessionHistoryRouter } from './session-history-routes.js';
 import { createSessionHistoryScanner } from '@infrastructure/usage/session-history.js';
+import { createDiffCommentRouter } from './diff-comment-routes.js';
+import { createDiffCommentRepository } from '@infrastructure/persistence/diff-comment-repository.js';
 import { createUserRepository } from '@infrastructure/persistence/user-repository.js';
 import { createUserRouter } from './user-routes.js';
 import { getProfileId } from './profile.js';
@@ -612,6 +614,11 @@ export function createApiRouter(deps: ApiRouterDeps = {}): Router {
   const sessionHistoryScanner = createSessionHistoryScanner();
   const sessionHistoryRouter = createSessionHistoryRouter({ scanner: sessionHistoryScanner, sessions, tracks, terminal });
   router.use(sessionHistoryRouter);
+
+  // Mount diff-comment sub-router (inline notes on a session's working-tree diff)
+  const diffComments = createDiffCommentRepository();
+  const diffCommentRouter = createDiffCommentRouter({ sessions, tracks, comments: diffComments, terminal });
+  router.use(diffCommentRouter);
 
   // Mount profiles + per-user settings sub-router (lightweight multi-user layer)
   const users = createUserRepository();
