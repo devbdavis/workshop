@@ -49,6 +49,7 @@ import { createTopologyLoader } from '@application/workflow/topology-loader.js';
 import { createPlaybookRepository } from '@infrastructure/persistence/workflow-playbook-repository.js';
 import { createAgentRoleRepository } from '@infrastructure/persistence/workflow-agent-role-repository.js';
 import { createExecutionHookRouter } from './execution-hook-routes.js';
+import { createActivityHookRouter } from './activity-hook-routes.js';
 import { recoverStuckTickets } from '@application/workflow/startup-recovery.js';
 import { broadcast } from './events.js';
 import { createDiscussionTeamRepository } from '@infrastructure/persistence/discussion-team-repository.js';
@@ -511,6 +512,7 @@ export function createApiRouter(deps: ApiRouterDeps = {}): Router {
     usageTracker,
   });
   router.use(executionHookRouter);
+  router.use(createActivityHookRouter({ terminal }));
 
   // Dark Factory usage-pacing poller — resumes paused autonomous epics once the
   // usage window drains back under threshold. (Proactive pause happens at dispatch.)

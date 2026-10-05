@@ -14,14 +14,9 @@ export function capturePaneLines(tmuxSession: string, count = 20): string[] {
   }
 }
 
-/** Indicators that a session is not idle: the main thread is working
- *  (spinner/interruptible) OR a sub-Agent is still running after control was
- *  handed back. Used to keep a session with async work from being reaped. */
-const ACTIVE_WORK_RE = new RegExp(
+/** Delegated work still running after the main turn ended (a Stop hook fires here). */
+const BACKGROUND_WORK_RE = new RegExp(
   [
-    'Running…',
-    'Thinking',
-    'esc to interrupt',
     'local agents? still running',
     // Newer Claude Code TUI: spinner while delegated background agents run
     String.raw`Waiting for \d+ background (?:agents?|tasks?)`,
@@ -31,6 +26,10 @@ const ACTIVE_WORK_RE = new RegExp(
   ].join('|'),
   'i',
 );
+/** Indicators that a session is not idle: the main thread is working
+ *  (spinner/interruptible) OR a sub-Agent is still running after control was
+ *  handed back. Used to keep a session with async work from being reaped. */
+const ACTIVE_WORK_RE = new RegExp(`Running…|Thinking|esc to interrupt|${BACKGROUND_WORK_RE.source}`, 'i');
 
 /** Indicators that Claude's MAIN thread is actively producing output right now.
  *  Narrower than ACTIVE_WORK_RE on purpose: it deliberately excludes
@@ -52,6 +51,15 @@ function isComposerPrompt(line: string): boolean {
   // non-numbered `❯ Yes, proceed` select (older/other CLIs) would read as a
   // draft and lose RED — add its shape here if a supported CLI renders one.
   return /^❯\s+\S/.test(t); // ❯ with a draft — `>` excluded so scrollback quotes don't match
+}
+
+/** Positive "working" signal in the pane (spinner, running tool, etc.). */
+export function isPaneBusy(lines: string[]): boolean {
+  return ACTIVE_WORK_RE.test(lines.join(' '));
+}
+
+export function hasBackgroundWork(lines: string[]): boolean {
+  return BACKGROUND_WORK_RE.test(lines.join(' '));
 }
 
 /** Check if the tmux pane shows an idle Claude session: no active-work
