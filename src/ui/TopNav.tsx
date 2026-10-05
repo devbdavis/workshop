@@ -18,7 +18,7 @@ function navLinkClass({ isActive }: { isActive: boolean }): string {
   }`;
 }
 
-const navItems = [
+export const navItems = [
   { to: '/kanban', label: 'Kanban', end: false },
 { to: '/scheduled-tasks', label: 'Schedules', end: false },
   { to: '/workflow', label: 'Workflow', end: false },
