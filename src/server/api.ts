@@ -68,6 +68,8 @@ import { ensureRegisteredPluginsInstalled } from '@infrastructure/plugins/ensure
 import { createGlobalRepoRepository, createSettingsRepository } from '@infrastructure/persistence/repo-repository.js';
 import { createRepoRouter, parsePrMonitorIgnoredAuthors } from './repo-routes.js';
 import { createWorkspaceRouter } from './workspace-routes.js';
+import { createSessionHistoryRouter } from './session-history-routes.js';
+import { createSessionHistoryScanner } from '@infrastructure/usage/session-history.js';
 import { createUserRepository } from '@infrastructure/persistence/user-repository.js';
 import { createUserRouter } from './user-routes.js';
 import { getProfileId } from './profile.js';
@@ -605,6 +607,11 @@ export function createApiRouter(deps: ApiRouterDeps = {}): Router {
   // Mount workspace sub-router (file browser, edits, git changes/diff for a session)
   const workspaceRouter = createWorkspaceRouter({ sessions, tracks });
   router.use(workspaceRouter);
+
+  // Mount session-history sub-router (browse + resume any past Claude Code session on the box)
+  const sessionHistoryScanner = createSessionHistoryScanner();
+  const sessionHistoryRouter = createSessionHistoryRouter({ scanner: sessionHistoryScanner, sessions, tracks, terminal });
+  router.use(sessionHistoryRouter);
 
   // Mount profiles + per-user settings sub-router (lightweight multi-user layer)
   const users = createUserRepository();

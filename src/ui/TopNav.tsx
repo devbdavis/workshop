@@ -23,6 +23,7 @@ const navItems = [
   { to: '/workflow', label: 'Workflow', end: false },
   { to: '/pr-reviews', label: 'PR Reviews', end: false },
   { to: '/discussions', label: 'Discussions', end: false },
+  { to: '/history', label: 'History', end: false },
   { to: '/settings', label: 'Settings', end: false },
 ];
 
