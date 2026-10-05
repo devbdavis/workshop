@@ -299,6 +299,7 @@ Return ONLY the JSON object, no other text or markdown.`;
       taskPrompt,
       systemPromptOverride,
       scriptContent,
+      skipOnNonZero,
       templateName,
       enabled,
     } = req.body;
@@ -350,6 +351,7 @@ Return ONLY the JSON object, no other text or markdown.`;
       taskPrompt,
       systemPromptOverride,
       scriptPath,
+      skipOnNonZero: skipOnNonZero === true,
       templateName: templateName || undefined,
       enabled: enabled !== undefined ? enabled : true,
     });
@@ -383,6 +385,7 @@ Return ONLY the JSON object, no other text or markdown.`;
       taskPrompt,
       systemPromptOverride,
       scriptContent,
+      skipOnNonZero,
       enabled,
     } = req.body;
 
@@ -435,6 +438,7 @@ Return ONLY the JSON object, no other text or markdown.`;
       taskPrompt,
       systemPromptOverride,
       ...(scriptContent !== undefined ? { scriptPath: updatedScriptPath } : {}),
+      ...(typeof skipOnNonZero === 'boolean' ? { skipOnNonZero } : {}),
       enabled,
     });
 

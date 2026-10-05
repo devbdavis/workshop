@@ -223,6 +223,24 @@ describe('Scheduled Task Repository', () => {
       expect(updated!.enabled).toBe(false);
     });
 
+    it('should persist skipOnNonZero', () => {
+      const task = taskRepo.create({
+        name: 'Precheck',
+        scheduleConfig: dailyConfig,
+        cronExpression: '0 9 * * *',
+        scheduleDescription: 'Daily',
+        provider: 'claude',
+        taskPrompt: 'Test',
+        scriptPath: '/tmp/x.sh',
+        skipOnNonZero: true,
+        enabled: true,
+      });
+      expect(taskRepo.findById(task.id)).toMatchObject({ skipOnNonZero: true, scriptPath: '/tmp/x.sh', enabled: true });
+
+      taskRepo.update(task.id, { skipOnNonZero: false });
+      expect(taskRepo.findById(task.id)).toMatchObject({ skipOnNonZero: false, scriptPath: '/tmp/x.sh', enabled: true });
+    });
+
     it('should update schedule config and cron expression', () => {
       const task = taskRepo.create({
         name: 'Reschedule me',

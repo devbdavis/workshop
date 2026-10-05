@@ -693,6 +693,13 @@ function runMigrations(db: Database.Database): void {
     // Column already exists — safe to ignore
   }
 
+  // Migration: add skip_on_nonzero column to scheduled_tasks (script exit code gates the run)
+  try {
+    db.exec(`ALTER TABLE scheduled_tasks ADD COLUMN skip_on_nonzero INTEGER NOT NULL DEFAULT 0;`);
+  } catch {
+    // Column already exists — safe to ignore
+  }
+
   // Migration: add pull_requests column to todos (JSON array of {url, title?})
   try {
     db.exec(`ALTER TABLE todos ADD COLUMN pull_requests TEXT;`);
