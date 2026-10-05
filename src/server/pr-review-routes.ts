@@ -20,7 +20,7 @@ import type { FilesystemAgentScanner } from '@infrastructure/agents/filesystem-s
 import type { GhAdapter } from '@infrastructure/github/gh-adapter';
 import type { GhReviewAdapter } from '@infrastructure/github/gh-review-adapter';
 import { parsePrUrl } from '@infrastructure/forge/pr-url.js';
-import { parseUnifiedDiff, isAnchorable, extractHunkForLine } from '@infrastructure/github/diff-utils.js';
+import { parseUnifiedDiff, isAnchorable, extractHunkForLine } from '@foundation/diff-utils.js';
 import { broadcast } from './events.js';
 
 const PR_REVIEW_AGENT_ID = 'global:pr-review' as AgentId;

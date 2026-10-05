@@ -693,6 +693,13 @@ function runMigrations(db: Database.Database): void {
     // Column already exists — safe to ignore
   }
 
+  // Migration: add skip_on_nonzero column to scheduled_tasks (script exit code gates the run)
+  try {
+    db.exec(`ALTER TABLE scheduled_tasks ADD COLUMN skip_on_nonzero INTEGER NOT NULL DEFAULT 0;`);
+  } catch {
+    // Column already exists — safe to ignore
+  }
+
   // Migration: add pull_requests column to todos (JSON array of {url, title?})
   try {
     db.exec(`ALTER TABLE todos ADD COLUMN pull_requests TEXT;`);
@@ -927,6 +934,31 @@ function runMigrations(db: Database.Database): void {
     db.exec(`ALTER TABLE pr_reviews ADD COLUMN pr_body TEXT;`);
   } catch {
     // Column already exists — safe to ignore
+  }
+
+  // Migration: inline diff comments on a session's working-tree diff. Anchoring
+  // model mirrors pr_review_findings (file + RIGHT-side line + code_context), plus
+  // line_text so a comment can relocate as the diff shifts (see diff-utils relocateLine).
+  try {
+    db.exec(`
+      CREATE TABLE diff_comments (
+        id TEXT PRIMARY KEY,
+        session_id TEXT NOT NULL REFERENCES sessions(id) ON DELETE CASCADE,
+        file TEXT NOT NULL,
+        line INTEGER NOT NULL,
+        side TEXT NOT NULL DEFAULT 'RIGHT',
+        line_text TEXT NOT NULL,
+        body TEXT NOT NULL,
+        code_context TEXT,
+        anchored INTEGER NOT NULL DEFAULT 1,
+        status TEXT NOT NULL DEFAULT 'open',
+        sent_at TEXT,
+        created_at TEXT NOT NULL
+      );
+    `);
+    db.exec(`CREATE INDEX idx_diff_comments_session ON diff_comments(session_id);`);
+  } catch {
+    // Table already exists — safe to ignore
   }
 
   // Seed default repo_root setting

@@ -71,6 +71,8 @@ export interface SyncResult {
   activityChanged: TrackId[];
   /** Sessions that transitioned working→idle and have stayed idle for the notify threshold. */
   idleAlerts: { sessionId: SessionId; trackId: TrackId; sessionName: string | undefined }[];
+  /** Sessions that transitioned into needs-input from a known prior status (not first observation). */
+  needsInputAlerts: { sessionId: SessionId; trackId: TrackId; sessionName: string | undefined }[];
 }
 
 export interface TerminalManager {

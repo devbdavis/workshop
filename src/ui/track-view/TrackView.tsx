@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback, useRef } from 'react';
-import { useParams, Link } from 'react-router-dom';
+import { useParams, useSearchParams, Link } from 'react-router-dom';
 import type { Track, Session, SessionId, ExternalTicket, Todo, DefaultAiCli, PrMonitor, TodoId } from '@foundation/types';
 import { issueBaseUrlFor } from '@foundation/issue-tracker.js';
 import type { DispatchOptions } from './DispatchDropdown';
@@ -14,15 +14,9 @@ import { LinearTicketModal } from '../kanban/LinearTicketModal';
 import { TerminalArea } from '../terminal-panel/TerminalArea';
 import { useIsMobile } from '../use-is-mobile';
 
-interface IdleAlert {
-  id: string;
-  sessionId: string;
-  sessionName: string | undefined;
-  timestamp: string;
-}
-
 export function TrackView() {
   const { trackId } = useParams<{ trackId: string }>();
+  const [searchParams, setSearchParams] = useSearchParams();
   const [track, setTrack] = useState<Track | null>(null);
   const [sessions, setSessions] = useState<Session[]>([]);
   const [tickets, setTickets] = useState<ExternalTicket[]>([]);
@@ -36,7 +30,6 @@ export function TrackView() {
   const [linearTicketTodoId, setLinearTicketTodoId] = useState<string | null>(null);
   const [editingName, setEditingName] = useState(false);
   const [nameValue, setNameValue] = useState('');
-  const [idleAlerts, setIdleAlerts] = useState<IdleAlert[]>([]);
   const [pendingSelectSessionId, setPendingSelectSessionId] = useState<SessionId | null>(null);
   const [issueBaseUrl, setIssueBaseUrl] = useState<string | undefined>(undefined);
   const [defaultAiCli, setDefaultAiCli] = useState<DefaultAiCli>('claude');
@@ -84,6 +77,22 @@ export function TrackView() {
     loadTrack();
   }, [loadTrack]);
 
+  // Click-through from a session alert (?session=id) — select the pane, then
+  // drop the param so it doesn't re-fire on refresh or re-navigation.
+  useEffect(() => {
+    const sessionParam = searchParams.get('session');
+    if (!sessionParam) return;
+    setPendingSelectSessionId(sessionParam as SessionId);
+    setSearchParams(
+      (prev) => {
+        const next = new URLSearchParams(prev);
+        next.delete('session');
+        return next;
+      },
+      { replace: true },
+    );
+  }, [searchParams, setSearchParams]);
+
   // Fetch global issue tracker config once on mount — independent of track reloads.
   useEffect(() => {
     fetch('/api/settings/issue-tracker')
@@ -123,18 +132,9 @@ export function TrackView() {
         try {
           const event = JSON.parse(evt.data) as { type: string; trackId: string; sessionId?: string; sessionName?: string; timestamp?: string };
           if (event.trackId !== trackId) return;
-          if (event.type === 'session:idle-alert') {
-            const alert: IdleAlert = {
-              id: `${event.sessionId}-${Date.now()}`,
-              sessionId: event.sessionId ?? '',
-              sessionName: event.sessionName,
-              timestamp: event.timestamp ?? new Date().toISOString(),
-            };
-            setIdleAlerts((prev) => [...prev, alert]);
-            // Auto-dismiss after 30s
-            setTimeout(() => {
-              setIdleAlerts((prev) => prev.filter((a) => a.id !== alert.id));
-            }, 30_000);
+          // Alert-only events — the global SessionAlertsProvider handles toasts/notifications.
+          if (event.type === 'session:idle-alert' || event.type === 'session:needs-input') {
+            return;
           } else if (event.type === 'session:created' && event.sessionId) {
             markStarting(event.sessionId);
             loadTrack();
@@ -459,35 +459,6 @@ export function TrackView() {
 
       {linearTicketTodoId && (
         <LinearTicketModal todoId={linearTicketTodoId} onClose={() => setLinearTicketTodoId(null)} />
-      )}
-
-      {/* Idle alert toasts — bottom-right, auto-dismiss */}
-      {idleAlerts.length > 0 && (
-        <div className="fixed bottom-4 right-4 flex flex-col gap-2 z-50 max-w-xs">
-          {idleAlerts.map((alert) => (
-            <div
-              key={alert.id}
-              className="flex items-start gap-2 bg-gray-800 border border-yellow-600/50 rounded-lg px-3 py-2 shadow-lg text-sm"
-            >
-              <span className="mt-0.5 w-2 h-2 rounded-full bg-yellow-500 shrink-0" />
-              <div className="flex-1 min-w-0">
-                <p className="text-gray-200 font-medium truncate">
-                  {alert.sessionName ?? `Session ${alert.sessionId.slice(0, 8)}`}
-                </p>
-                <p className="text-gray-400 text-xs">Idle — waiting for input</p>
-              </div>
-              <button
-                onClick={() => setIdleAlerts((prev) => prev.filter((a) => a.id !== alert.id))}
-                className="text-gray-600 hover:text-gray-300 transition-colors shrink-0 mt-0.5"
-                aria-label="Dismiss"
-              >
-                <svg className="w-3 h-3" viewBox="0 0 12 12" fill="currentColor">
-                  <path d="M2 2l8 8M10 2l-8 8" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
-                </svg>
-              </button>
-            </div>
-          ))}
-        </div>
       )}
     </div>
   );

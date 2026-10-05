@@ -182,8 +182,8 @@ export function createTaskScheduler(deps: TaskSchedulerDeps): TaskScheduler {
     return parts.length > 0 ? parts.join('\n\n---\n\n') : '';
   }
 
-  /** Run a script and return its stdout. Rejects if the script exits non-zero. */
-  function runScript(scriptPath: string): Promise<string> {
+  /** Run a script and return its exit code and output. Rejects only on spawn error or timeout. */
+  function runScript(scriptPath: string): Promise<{ code: number | null; stdout: string; stderr: string }> {
     return new Promise((resolve, reject) => {
       const child = spawn('bash', [scriptPath], { env: { ...process.env } });
       const out: Buffer[] = [];
@@ -199,12 +199,7 @@ export function createTaskScheduler(deps: TaskSchedulerDeps): TaskScheduler {
 
       child.on('close', (code) => {
         clearTimeout(timer);
-        if (code !== 0) {
-          const errText = Buffer.concat(err).toString().trim();
-          reject(new Error(`Script exited ${code}: ${errText || scriptPath}`));
-        } else {
-          resolve(Buffer.concat(out).toString());
-        }
+        resolve({ code, stdout: Buffer.concat(out).toString(), stderr: Buffer.concat(err).toString().trim() });
       });
 
       child.on('error', (e) => { clearTimeout(timer); reject(e); });
@@ -227,9 +222,25 @@ export function createTaskScheduler(deps: TaskSchedulerDeps): TaskScheduler {
       let effectivePrompt = task.taskPrompt;
       if (task.scriptPath) {
         try {
-          const scriptOutput = await runScript(task.scriptPath);
-          if (scriptOutput.trim()) {
-            effectivePrompt = `## Script Output\n\n\`\`\`\n${scriptOutput.trim()}\n\`\`\`\n\n---\n\n${task.taskPrompt}`;
+          const { code, stdout, stderr } = await runScript(task.scriptPath);
+          if (code !== 0 && task.skipOnNonZero) {
+            const reason = `precheck exit ${code}${stderr ? `: ${stderr}` : ''}`;
+            const skippedRun = deps.runs.create({
+              taskId: task.id,
+              status: 'skipped',
+              error: reason,
+              startedAt: now,
+              completedAt: new Date().toISOString(),
+            });
+            // lastRunAt still advances so startup catch-up doesn't re-fire this occurrence
+            deps.tasks.update(task.id, { lastRunAt: now, lastRunStatus: 'skipped' });
+            deps.broadcast('scheduled-task:updated', task.id);
+            return skippedRun;
+          }
+          if (code !== 0) {
+            console.warn(`Script exited ${code} for task "${task.name}" (${task.id}): ${stderr || task.scriptPath}`);
+          } else if (stdout.trim()) {
+            effectivePrompt = `## Script Output\n\n\`\`\`\n${stdout.trim()}\n\`\`\`\n\n---\n\n${task.taskPrompt}`;
           }
         } catch (scriptErr) {
           // Non-fatal: log and proceed without script output

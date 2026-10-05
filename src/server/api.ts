@@ -69,6 +69,10 @@ import { createGlobalRepoRepository, createSettingsRepository } from '@infrastru
 import { createRepoRouter, parsePrMonitorIgnoredAuthors } from './repo-routes.js';
 import { createWorkspaceRouter } from './workspace-routes.js';
 import { createPreviewRouter } from './preview-routes.js';
+import { createSessionHistoryRouter } from './session-history-routes.js';
+import { createSessionHistoryScanner } from '@infrastructure/usage/session-history.js';
+import { createDiffCommentRouter } from './diff-comment-routes.js';
+import { createDiffCommentRepository } from '@infrastructure/persistence/diff-comment-repository.js';
 import { createUserRepository } from '@infrastructure/persistence/user-repository.js';
 import { createUserRouter } from './user-routes.js';
 import { getProfileId } from './profile.js';
@@ -86,6 +90,7 @@ import { createForgeAdapter } from '@infrastructure/forge/forge-adapter.js';
 import { createPrMonitorPoller } from '@application/pr-monitor/poller.js';
 import { createPrMonitorRegistrar } from '@application/pr-monitor/registrar.js';
 import { createPrMonitorRouter } from './pr-monitor-routes.js';
+import { createPrCheckLogRouter } from './pr-check-log-routes.js';
 import { createPrReviewRepository } from '@infrastructure/persistence/pr-review-repository.js';
 import { createPrReviewDiscoveryPoller } from '@application/pr-review/discovery-poller.js';
 import { createStaleAgentReaper } from '@application/session-cleanup/stale-agent-reaper.js';
@@ -170,6 +175,12 @@ export function createApiRouter(deps: ApiRouterDeps = {}): Router {
     }
     for (const alert of result.idleAlerts) {
       broadcast('session:idle-alert', alert.trackId, {
+        sessionId: alert.sessionId,
+        sessionName: alert.sessionName,
+      });
+    }
+    for (const alert of result.needsInputAlerts) {
+      broadcast('session:needs-input', alert.trackId, {
         sessionId: alert.sessionId,
         sessionName: alert.sessionName,
       });
@@ -307,6 +318,7 @@ export function createApiRouter(deps: ApiRouterDeps = {}): Router {
     terminal,
   });
   router.use(prMonitorRouter);
+  router.use(createPrCheckLogRouter({ monitors: prMonitors, forge: forgeAdapter }));
 
   // Mount PR-review dashboard sub-router
   const prReviewRouter = createPrReviewRouter({
@@ -602,6 +614,16 @@ export function createApiRouter(deps: ApiRouterDeps = {}): Router {
   // Mount Design Mode preview sub-router (screenshot + send picks into a session)
   const previewRouter = createPreviewRouter({ sessions, terminal });
   router.use(previewRouter);
+
+  // Mount session-history sub-router (browse + resume any past Claude Code session on the box)
+  const sessionHistoryScanner = createSessionHistoryScanner();
+  const sessionHistoryRouter = createSessionHistoryRouter({ scanner: sessionHistoryScanner, sessions, tracks, terminal });
+  router.use(sessionHistoryRouter);
+
+  // Mount diff-comment sub-router (inline notes on a session's working-tree diff)
+  const diffComments = createDiffCommentRepository();
+  const diffCommentRouter = createDiffCommentRouter({ sessions, tracks, comments: diffComments, terminal });
+  router.use(diffCommentRouter);
 
   // Mount profiles + per-user settings sub-router (lightweight multi-user layer)
   const users = createUserRepository();

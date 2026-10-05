@@ -2,6 +2,7 @@ import { useEffect, useState, useCallback } from 'react';
 import { NavLink, useMatch } from 'react-router-dom';
 import { useProfile } from './hooks/useProfile';
 import { useIsMobile } from './use-is-mobile';
+import { useSessionAlerts } from './notifications/SessionAlerts';
 
 const LAST_TRACK_KEY = 'workshop:last-track';
 
@@ -22,6 +23,7 @@ const navItems = [
   { to: '/workflow', label: 'Workflow', end: false },
   { to: '/pr-reviews', label: 'PR Reviews', end: false },
   { to: '/discussions', label: 'Discussions', end: false },
+  { to: '/history', label: 'History', end: false },
   { to: '/settings', label: 'Settings', end: false },
 ];
 
@@ -29,8 +31,10 @@ export function TopNav() {
   const trackMatch = useMatch('/tracks/:trackId');
   const { user } = useProfile();
   const isMobile = useIsMobile();
+  const { unread } = useSessionAlerts();
   const [menuOpen, setMenuOpen] = useState(false);
   const [pendingCount, setPendingCount] = useState(0);
+  const alertCount = pendingCount + unread.length;
   const [lastTrack, setLastTrack] = useState<LastTrack | null>(() => {
     try {
       const raw = localStorage.getItem(LAST_TRACK_KEY);
@@ -154,7 +158,7 @@ export function TopNav() {
             `relative flex items-center gap-1.5 px-3 py-1 text-xs font-medium rounded transition-colors ${
               isActive
                 ? 'bg-gray-800 text-gray-100'
-                : pendingCount > 0
+                : alertCount > 0
                   ? 'text-amber-400 hover:text-amber-300 hover:bg-gray-900'
                   : 'text-gray-500 hover:text-gray-300 hover:bg-gray-900'
             }`
@@ -164,10 +168,10 @@ export function TopNav() {
           <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
             <path strokeLinecap="round" strokeLinejoin="round" d="M14.857 17.082a23.848 23.848 0 005.454-1.31A8.967 8.967 0 0118 9.75v-.7V9A6 6 0 006 9v.75a8.967 8.967 0 01-2.312 6.022c1.733.64 3.56 1.085 5.455 1.31m5.714 0a24.255 24.255 0 01-5.714 0m5.714 0a3 3 0 11-5.714 0" />
           </svg>
-          {pendingCount > 0 && (
+          {alertCount > 0 && (
             <>
               <span className="min-w-[18px] h-[18px] flex items-center justify-center text-[10px] font-bold bg-amber-600 text-white rounded-full animate-pulse">
-                {pendingCount}
+                {alertCount}
               </span>
             </>
           )}

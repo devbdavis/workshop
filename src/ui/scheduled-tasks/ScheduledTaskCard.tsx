@@ -17,6 +17,7 @@ const RUN_STATUS_STYLES: Record<string, string> = {
   running: 'bg-amber-900/60 text-amber-300',
   completed: 'bg-green-900/60 text-green-300',
   failed: 'bg-red-900/60 text-red-300',
+  skipped: 'bg-gray-800 text-gray-400',
 };
 
 export function ScheduledTaskCard({
@@ -299,7 +300,8 @@ function RunRow({ run }: { run: ScheduledTaskRun }) {
             {outputLoading ? 'loading…' : showOutput ? '▾ output' : '▸ output'}
           </button>
         )}
-        {run.error && (
+        {run.status === 'skipped' && run.error && <span className="text-gray-500">{run.error}</span>}
+        {run.error && run.status !== 'skipped' && (
           <button
             onClick={() => setShowError((v) => !v)}
             className="text-red-400 hover:text-red-300"
@@ -342,6 +344,9 @@ function deriveScheduleStatus(task: ScheduledTask): ScheduleStatus {
   }
   if (task.lastRunStatus === 'failed') {
     return { label: 'Failed', style: 'bg-red-900/60 text-red-300' };
+  }
+  if (task.lastRunStatus === 'skipped') {
+    return { label: 'Skipped', style: 'bg-gray-800 text-gray-400' };
   }
   return { label: 'Waiting', style: 'bg-gray-800 text-gray-400' };
 }

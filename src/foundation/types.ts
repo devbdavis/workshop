@@ -448,10 +448,12 @@ export interface ScheduledTask {
   systemPromptOverride?: string;
   /** Optional path to a shell script run before the agent; stdout is prepended to the task prompt as context */
   scriptPath?: string;
+  /** When true, a non-zero exit from the script skips the run instead of dispatching */
+  skipOnNonZero?: boolean;
   // State
   enabled: boolean;
   lastRunAt?: string;
-  lastRunStatus?: 'running' | 'completed' | 'failed';
+  lastRunStatus?: 'running' | 'completed' | 'failed' | 'skipped';
   lastSessionId?: SessionId;
   runCount: number;
   /** Next scheduled occurrence — computed server-side, not persisted */
@@ -464,7 +466,7 @@ export interface ScheduledTaskRun {
   id: string;
   taskId: ScheduledTaskId;
   sessionId?: SessionId;
-  status: 'running' | 'completed' | 'failed';
+  status: 'running' | 'completed' | 'failed' | 'skipped';
   error?: string;
   startedAt: string;
   completedAt?: string;
@@ -747,5 +749,32 @@ export interface PrReviewFinding {
   /** True when file+line lands on a diff line — eligible for a true inline comment. */
   anchored: boolean;
   status: PrReviewFindingStatus;
+  createdAt: string;
+}
+
+// Inline diff comments — notes left on a session's working-tree diff, batch-sent
+// to the running agent as one prompt. Anchoring reuses the pr_review_findings model.
+export type DiffCommentId = string & { readonly __brand: 'DiffCommentId' };
+export type DiffCommentStatus = 'open' | 'resolved';
+
+/** A user note anchored to one line of a session's working-tree diff. */
+export interface DiffComment {
+  id: DiffCommentId;
+  sessionId: SessionId;
+  /** Workspace-root-relative path, same as ChangedFile.path. */
+  file: string;
+  /** New-side line number, last known — re-anchored on read as the diff shifts. */
+  line: number;
+  side: 'RIGHT';
+  /** Text of the line when the comment was anchored — lets it follow the line after edits. */
+  lineText: string;
+  /** Comment body (markdown). */
+  body: string;
+  /** Diff hunk excerpt around the line, refreshed whenever the line re-anchors. */
+  codeContext?: string;
+  /** True when `line` currently sits on `lineText` in the diff. */
+  anchored: boolean;
+  status: DiffCommentStatus;
+  sentAt?: string;
   createdAt: string;
 }

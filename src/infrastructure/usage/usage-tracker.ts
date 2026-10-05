@@ -1,8 +1,7 @@
 import fs from 'fs';
-import path from 'path';
-import os from 'os';
 
 import type { SettingsRepository } from '@domain/repo/repository';
+import { DEFAULT_PROJECTS_DIR, listJsonlFiles, parseJsonlLines } from './jsonl.js';
 
 const SETTINGS_KEY = 'usage_pacing';
 const WINDOW_MS = 5 * 60 * 60 * 1000;
@@ -53,26 +52,6 @@ export interface UsageTrackerDeps {
   now?: () => number;
 }
 
-// Recursively lists .jsonl files under dir, skipping anything unreadable (deleted mid-scan, permissions, etc).
-function listJsonlFiles(dir: string): string[] {
-  let dirents: fs.Dirent[];
-  try {
-    dirents = fs.readdirSync(dir, { withFileTypes: true });
-  } catch {
-    return [];
-  }
-  const files: string[] = [];
-  for (const dirent of dirents) {
-    const full = path.join(dir, dirent.name);
-    if (dirent.isDirectory()) {
-      files.push(...listJsonlFiles(full));
-    } else if (dirent.isFile() && dirent.name.endsWith('.jsonl')) {
-      files.push(full);
-    }
-  }
-  return files;
-}
-
 function sumUsage(usage: AssistantUsage | undefined): number {
   if (!usage) return 0;
   return (
@@ -92,14 +71,8 @@ function readFileTokens(filePath: string, windowStartMs: number): { tokens: numb
   }
   let tokens = 0;
   let count = 0;
-  for (const line of content.split('\n')) {
-    if (!line.trim()) continue;
-    let entry: AssistantEntry;
-    try {
-      entry = JSON.parse(line) as AssistantEntry;
-    } catch {
-      continue; // malformed/partial line (e.g. mid-write) — skip
-    }
+  for (const raw of parseJsonlLines(content)) {
+    const entry = raw as AssistantEntry;
     if (entry.type !== 'assistant') continue;
     const entryMs = Date.parse(entry.timestamp);
     if (Number.isNaN(entryMs) || entryMs < windowStartMs) continue;
@@ -111,7 +84,7 @@ function readFileTokens(filePath: string, windowStartMs: number): { tokens: numb
 
 export function createUsageTracker(deps: UsageTrackerDeps): UsageTracker {
   const settings = deps.settings;
-  const projectsDir = deps.projectsDir ?? path.join(os.homedir(), '.claude', 'projects');
+  const projectsDir = deps.projectsDir ?? DEFAULT_PROJECTS_DIR;
   const now = deps.now ?? ((): number => Date.now());
 
   function readWindowTokens(): WindowTokens {

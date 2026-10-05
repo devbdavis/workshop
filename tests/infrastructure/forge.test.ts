@@ -234,12 +234,14 @@ describe('ForgeAdapter', () => {
     fetchPrDiff: vi.fn(async () => 'gh-diff'),
     submitPrReview: vi.fn(async () => {}),
     searchReviewRequestedPrs: vi.fn(async () => []),
+    fetchCheckLog: vi.fn(async () => 'gh-log'),
   };
   const stubGitea = {
     fetchPrSnapshot: vi.fn(async () => ({ state: 'open' }) as never),
     fetchPrDiff: vi.fn(async () => 'tea-diff'),
     submitPrReview: vi.fn(async () => {}),
     discoverReviewRequests: vi.fn(async () => ({ prs: [], hosts: ['git.example.com'] })),
+    fetchCheckLog: vi.fn(async () => 'tea-log'),
   };
 
   beforeEach(() => vi.clearAllMocks());
@@ -248,6 +250,8 @@ describe('ForgeAdapter', () => {
     const forge = createForgeAdapter({ github: stubGithub, gitea: stubGitea });
     expect(await forge.fetchPrDiff('https://github.com/acme/widgets/pull/1')).toBe('gh-diff');
     expect(await forge.fetchPrDiff(PR_URL)).toBe('tea-diff');
+    expect(await forge.fetchCheckLog('https://github.com/acme/widgets/pull/1', 'u')).toBe('gh-log');
+    expect(await forge.fetchCheckLog(PR_URL, 'u')).toBe('tea-log');
   });
 
   // A host that didn't answer must be absent from `hosts`, or the discovery
