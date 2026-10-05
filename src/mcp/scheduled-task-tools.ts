@@ -43,15 +43,19 @@ export function registerScheduledTaskTools(
       agentId: z.string().optional().describe('Agent ID to use'),
       provider: z.enum(['claude', 'codex']).optional().describe('AI CLI (default: claude)'),
       systemPromptOverride: z.string().optional().describe('Custom system prompt (overrides auto-compose)'),
+      scriptContent: z.string().optional().describe('Bash script run before the agent; its stdout is prepended to the task prompt'),
+      skipOnNonZero: z.boolean().optional().describe('Treat scriptContent as a precheck: non-zero exit skips the run (no session spawned)'),
       enabled: z.boolean().optional().describe('Enable immediately (default: true)'),
     },
-    async ({ name, taskPrompt, scheduleConfig, description, trackId, agentId, provider, systemPromptOverride, enabled }) => {
+    async ({ name, taskPrompt, scheduleConfig, description, trackId, agentId, provider, systemPromptOverride, scriptContent, skipOnNonZero, enabled }) => {
       const body: Record<string, unknown> = { name, taskPrompt, scheduleConfig };
       if (description) body.description = description;
       if (trackId) body.trackId = trackId;
       if (agentId) body.agentId = agentId;
       if (provider) body.provider = provider;
       if (systemPromptOverride) body.systemPromptOverride = systemPromptOverride;
+      if (scriptContent) body.scriptContent = scriptContent;
+      if (skipOnNonZero !== undefined) body.skipOnNonZero = skipOnNonZero;
       if (enabled !== undefined) body.enabled = enabled;
 
       const task = await api('/scheduled-tasks', {

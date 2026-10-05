@@ -448,10 +448,12 @@ export interface ScheduledTask {
   systemPromptOverride?: string;
   /** Optional path to a shell script run before the agent; stdout is prepended to the task prompt as context */
   scriptPath?: string;
+  /** When true, a non-zero exit from the script skips the run instead of dispatching */
+  skipOnNonZero?: boolean;
   // State
   enabled: boolean;
   lastRunAt?: string;
-  lastRunStatus?: 'running' | 'completed' | 'failed';
+  lastRunStatus?: 'running' | 'completed' | 'failed' | 'skipped';
   lastSessionId?: SessionId;
   runCount: number;
   /** Next scheduled occurrence — computed server-side, not persisted */
@@ -464,7 +466,7 @@ export interface ScheduledTaskRun {
   id: string;
   taskId: ScheduledTaskId;
   sessionId?: SessionId;
-  status: 'running' | 'completed' | 'failed';
+  status: 'running' | 'completed' | 'failed' | 'skipped';
   error?: string;
   startedAt: string;
   completedAt?: string;
