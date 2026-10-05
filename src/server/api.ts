@@ -1187,7 +1187,7 @@ export function createApiRouter(deps: ApiRouterDeps = {}): Router {
       return;
     }
     const sessionId = typeof req.query.sessionId === 'string' ? req.query.sessionId : undefined;
-    res.json({ path: resolveEditorTarget(targetPath, sessionId) });
+    res.json({ path: resolveEditorTarget(targetPath, sessionId, req.query.portable === '1') });
   });
 
   router.get('/code-server/status', (_req, res) => res.json({ available: isRunningInContainer() && isCodeServerAvailable() }));

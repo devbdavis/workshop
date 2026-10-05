@@ -138,18 +138,34 @@ export function resolveTerminal(choice: TerminalChoice, avail: AppAvailability):
   return null;
 }
 
+/** True when every folder in a .code-workspace is relative, so the file still works after a path remap. */
+function isPortableWorkspace(file: string): boolean {
+  try {
+    const { folders } = JSON.parse(readFileSync(file, 'utf8')) as { folders?: { path?: unknown }[] };
+    return (folders ?? []).every((f) => typeof f.path === 'string' && !path.isAbsolute(f.path));
+  } catch {
+    return false;
+  }
+}
+
 /**
  * Resolve the path to open in the editor. If a `.code-workspace` file exists
  * (per-session or co-located), prefer that; both VSCode and Cursor recognise
  * the format and will restore the multi-root workspace correctly.
+ *
+ * `portable`: the path will be remapped onto another machine (Remote-SSH URI), so a
+ * workspace file listing absolute container paths would open empty — use the folder.
  */
-export function resolveEditorTarget(targetPath: string, sessionId: string | undefined): string {
-  const sessionWorkspaceFile = sessionId
-    ? path.join(process.env.HOME || '/tmp', '.workshop', 'sessions', sessionId, 'workspace', 'workspace.code-workspace')
-    : null;
-  if (sessionWorkspaceFile && existsSync(sessionWorkspaceFile)) return sessionWorkspaceFile;
-  const colocated = path.join(targetPath, 'workspace.code-workspace');
-  if (existsSync(colocated)) return colocated;
+export function resolveEditorTarget(targetPath: string, sessionId: string | undefined, portable = false): string {
+  const candidates = [
+    sessionId
+      ? path.join(process.env.HOME || '/tmp', '.workshop', 'sessions', sessionId, 'workspace', 'workspace.code-workspace')
+      : null,
+    path.join(targetPath, 'workspace.code-workspace'),
+  ];
+  for (const file of candidates) {
+    if (file && existsSync(file) && (!portable || isPortableWorkspace(file))) return file;
+  }
   return targetPath;
 }
 
