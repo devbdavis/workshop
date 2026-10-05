@@ -23,6 +23,7 @@ export interface WindowTokens {
   windowTokens: number;
   windowStartAt: string;
   entryCount: number;
+  oldestEntryAt: string | null;
 }
 
 export interface UsageCalibration {
@@ -36,6 +37,8 @@ export interface UsageStatus {
   ceilingTokens: number | null;
   fraction: number | null;
   windowStartAt: string;
+  /** When the oldest in-window entry ages out of the trailing window; null if the window is empty. */
+  drainsAt: string | null;
 }
 
 export interface UsageTracker {
@@ -62,15 +65,16 @@ function sumUsage(usage: AssistantUsage | undefined): number {
   );
 }
 
-function readFileTokens(filePath: string, windowStartMs: number): { tokens: number; count: number } {
+function readFileTokens(filePath: string, windowStartMs: number): { tokens: number; count: number; oldestMs: number } {
   let content: string;
   try {
     content = fs.readFileSync(filePath, 'utf-8');
   } catch {
-    return { tokens: 0, count: 0 };
+    return { tokens: 0, count: 0, oldestMs: Infinity };
   }
   let tokens = 0;
   let count = 0;
+  let oldestMs = Infinity;
   for (const raw of parseJsonlLines(content)) {
     const entry = raw as AssistantEntry;
     if (entry.type !== 'assistant') continue;
@@ -78,8 +82,9 @@ function readFileTokens(filePath: string, windowStartMs: number): { tokens: numb
     if (Number.isNaN(entryMs) || entryMs < windowStartMs) continue;
     tokens += sumUsage(entry.message?.usage);
     count += 1;
+    oldestMs = Math.min(oldestMs, entryMs);
   }
-  return { tokens, count };
+  return { tokens, count, oldestMs };
 }
 
 export function createUsageTracker(deps: UsageTrackerDeps): UsageTracker {
@@ -94,6 +99,7 @@ export function createUsageTracker(deps: UsageTrackerDeps): UsageTracker {
 
     let windowTokens = 0;
     let entryCount = 0;
+    let oldestMs = Infinity;
     for (const file of listJsonlFiles(projectsDir)) {
       let stat: fs.Stats;
       try {
@@ -102,11 +108,13 @@ export function createUsageTracker(deps: UsageTrackerDeps): UsageTracker {
         continue;
       }
       if (stat.mtimeMs < windowStartMs) continue; // perf guard: file untouched in window can't hold in-window entries
-      const { tokens, count } = readFileTokens(file, windowStartMs);
-      windowTokens += tokens;
-      entryCount += count;
+      const r = readFileTokens(file, windowStartMs);
+      windowTokens += r.tokens;
+      entryCount += r.count;
+      oldestMs = Math.min(oldestMs, r.oldestMs);
     }
-    return { windowTokens, windowStartAt, entryCount };
+    const oldestEntryAt = Number.isFinite(oldestMs) ? new Date(oldestMs).toISOString() : null;
+    return { windowTokens, windowStartAt, entryCount, oldestEntryAt };
   }
 
   function getCalibration(): UsageCalibration {
@@ -131,10 +139,11 @@ export function createUsageTracker(deps: UsageTrackerDeps): UsageTracker {
   }
 
   function getUsageStatus(): UsageStatus {
-    const { windowTokens, windowStartAt } = readWindowTokens();
+    const { windowTokens, windowStartAt, oldestEntryAt } = readWindowTokens();
     const { ceilingTokens } = getCalibration();
     const fraction = ceilingTokens ? windowTokens / ceilingTokens : null;
-    return { windowTokens, ceilingTokens: ceilingTokens ?? null, fraction, windowStartAt };
+    const drainsAt = oldestEntryAt ? new Date(Date.parse(oldestEntryAt) + WINDOW_MS).toISOString() : null;
+    return { windowTokens, ceilingTokens: ceilingTokens ?? null, fraction, windowStartAt, drainsAt };
   }
 
   function isOverThreshold(fraction = 0.75): boolean {

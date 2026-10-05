@@ -522,6 +522,18 @@ export function createApiRouter(deps: ApiRouterDeps = {}): Router {
     threshold: USAGE_THRESHOLD,
   });
   usagePacingPoller.start();
+
+  // Mirrors isOverThreshold() from one status read so the UI and the dispatch gate agree.
+  router.get('/usage', (_req, res) => {
+    const status = usageTracker.getUsageStatus();
+    res.json({
+      ...status,
+      calibrated: status.ceilingTokens !== null,
+      threshold: USAGE_THRESHOLD,
+      overThreshold: status.fraction !== null && status.fraction >= USAGE_THRESHOLD,
+      msUntilDrain: status.drainsAt ? Math.max(0, Date.parse(status.drainsAt) - Date.now()) : null,
+    });
+  });
   process.on('SIGINT', () => usagePacingPoller.stop());
   process.on('SIGTERM', () => usagePacingPoller.stop());
 
