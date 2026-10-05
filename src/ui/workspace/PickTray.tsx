@@ -64,7 +64,7 @@ function PickCard({ item, onRemove }: { item: PickItem; onRemove: (id: string) =
         {item.shotStatus === 'loading' && <span className="text-[10px] text-gray-500">shot…</span>}
         {item.shotStatus === 'error' && <span className="text-[10px] text-gray-600 text-center px-1">no screenshot</span>}
         {item.shotStatus === 'done' && item.shotDataUrl && (
-          <img src={item.shotDataUrl} alt="" className="w-full h-full object-cover" />
+          <img src={item.shotDataUrl} alt="" className="w-full h-full object-contain" />
         )}
       </div>
       <div className="flex-1 min-w-0">
