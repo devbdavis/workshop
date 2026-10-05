@@ -31,6 +31,33 @@ describe('writeHookSettings', () => {
     expect(settings.enabledPlugins).toBeUndefined();
   });
 
+  it('writes activity hooks with the right status arg', () => {
+    const hooks = readSettings(writeHookSettings(testDir, 'session-a')).hooks as Record<
+      string,
+      { matcher?: string; hooks: { command: string }[] }[]
+    >;
+    const expected: [string, string, string | undefined][] = [
+      ['UserPromptSubmit', 'working', undefined],
+      ['Stop', 'idle', undefined],
+      ['Notification', 'needs-input', 'permission_prompt|elicitation_dialog'],
+      ['PreToolUse', 'needs-input', 'AskUserQuestion'],
+      ['PostToolUse', 'working', 'AskUserQuestion'],
+    ];
+    for (const [event, status, matcher] of expected) {
+      expect(hooks[event][0].matcher).toBe(matcher);
+      expect(hooks[event][0].hooks[0].command).toMatch(
+        new RegExp(`session-activity-hook\\.sh ${status}$`),
+      );
+    }
+  });
+
+  it('omits activity hooks for --print runs', () => {
+    const hooks = readSettings(writeHookSettings(testDir, 'session-p', { skipActivityHooks: true }))
+      .hooks as Record<string, unknown>;
+    expect(hooks.Stop).toBeUndefined();
+    expect(hooks.SessionEnd).toBeDefined();
+  });
+
   it('writes the enabledPlugins map with explicit true and false entries', () => {
     const file = writeHookSettings(testDir, 'session-2', {
       enabledPlugins: { 'ponytail@ponytail': true, 'other@mp': false },

@@ -15,8 +15,9 @@ const WORKSHOP_API_URL = process.env.WORKSHOP_API_URL || `http://localhost:${pro
  * Write a Claude Code settings file with hooks.
  *
  * ALL sessions get SessionStart + SessionEnd hooks so we can track Claude's
- * session ID for --resume support. SubagentStop is added when an
- * executionTicketId is present (workflow progress tracking).
+ * session ID for --resume support, plus activity hooks (UserPromptSubmit, Stop,
+ * Notification, PreToolUse) that report working/idle/needs-input instantly.
+ * SubagentStop is added when an executionTicketId is present (workflow progress tracking).
  *
  * All hooks use type: 'command' (curl scripts) — Claude Code does not support
  * type: 'http' hooks and silently ignores them.
@@ -28,6 +29,8 @@ export function writeHookSettings(
     executionTicketId?: string;
     mcpServers?: Record<string, unknown>;
     enabledPlugins?: Record<string, boolean>;
+    /** --print runs have no TUI to watch; their end-of-run Stop must not raise an idle alert. */
+    skipActivityHooks?: boolean;
   },
 ): string {
   const settingsFile = path.join(sessionDir, 'settings.json');
@@ -62,6 +65,25 @@ export function writeHookSettings(
       ],
     },
   ];
+
+  // Activity hooks: instant working/idle/needs-input, pane scraping is only the fallback
+  const activityScript = path.join(scriptsDir, 'session-activity-hook.sh');
+  const activityHook = (status: string, matcher?: string) => ({
+    ...(matcher ? { matcher } : {}),
+    hooks: [
+      {
+        type: 'command',
+        command: `WORKSHOP_API_URL=${WORKSHOP_API_URL} WORKSHOP_SESSION_ID=${sessionId} ${activityScript} ${status}`,
+      },
+    ],
+  });
+  if (!options?.skipActivityHooks) {
+    hooks.UserPromptSubmit = [activityHook('working')];
+    hooks.Stop = [activityHook('idle')];
+    hooks.Notification = [activityHook('needs-input', 'permission_prompt|elicitation_dialog')];
+    hooks.PreToolUse = [activityHook('needs-input', 'AskUserQuestion')];
+    hooks.PostToolUse = [activityHook('working', 'AskUserQuestion')];
+  }
 
   // --- SubagentStop: workflow progress tracking ---
 
@@ -208,12 +230,15 @@ export function buildClaudeLauncher(
     claudeArgs.push('--add-dir', JSON.stringify(dir));
   }
 
+  const isScheduled =
+    options?.background && !options?.todoId && !options?.interactive && !options?.claudeResumeId;
   // Always write a settings file (SessionStart + SessionEnd hooks for resume tracking,
   // SubagentStop for workflow progress if executionTicketId is present).
   const settingsFile = writeHookSettings(sessionDir, sessionId, {
     executionTicketId: options?.executionTicketId,
     mcpServers: options?.mcpServers,
     enabledPlugins: options?.enabledPlugins,
+    skipActivityHooks: !!isScheduled,
   });
   // Always attach Workshop's own MCP server, so sessions don't depend on a
   // user-scope registration in ~/.claude.json (which can be reset). Must precede
@@ -235,8 +260,6 @@ export function buildClaudeLauncher(
   // always an interactive reattachment, never --print.
   // Bash stays alive (no exec) for scheduled sessions so the tmux pane remains
   // open long enough for the SessionEnd hook to capture output before cleanup.
-  const isScheduled =
-    options?.background && !options?.todoId && !options?.interactive && !options?.claudeResumeId;
   const useExec =
     !options?.background || !!options?.todoId || !!options?.interactive || !!options?.claudeResumeId;
   const cmdPrefix = useExec ? 'exec ' : '';

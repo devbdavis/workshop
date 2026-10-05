@@ -14,7 +14,7 @@ import { toEnabledPluginsMap } from '@domain/plugin/repository.js';
 import { readAgentsRules } from '@infrastructure/plugins/rules-writer.js';
 import {
   capturePaneLines, isSessionIdle, isSessionNeedsInput, isSessionLoggedOut, isSessionExited,
-  trustDialogKey,
+  trustDialogKey, isPaneBusy, hasBackgroundWork,
 } from './pane-detection.js';
 import {
   buildClaudeLauncher, buildGeminiLauncher, buildCodexLauncher, buildCursorLauncher,
@@ -538,13 +538,19 @@ export function createTerminalManager(
   /** Current activity status derived from pane detection, keyed by session ID */
   const activityStatusMap = new Map<string, 'working' | 'idle' | 'needs-input'>();
 
+  /** Last hook-reported status per session; authoritative over pane scraping until contradicted. */
+  const hookStatus = new Map<string, { status: 'working' | 'idle' | 'needs-input'; at: number }>();
+
+  /** Pane capture can lag the TUI repaint right after a hook fires. */
+  const HOOK_GRACE_MS = 5_000;
+
   /** Consecutive sync cycles each session has been observed as idle.
    *  Prevents a single brief clean-state observation (e.g. between thinking
    *  phases) from flipping the orb to idle — requires sustained idle signal. */
   const consecutiveIdleObs = new Map<string, number>();
 
   /** How many consecutive idle observations are required before we report idle.
-   *  At a 30s sync interval this means the session must look idle for ~60s. */
+   *  At a 7.5s sync interval this means the session must look idle for ~15s. */
   const IDLE_CONSECUTIVE_THRESHOLD = 2;
 
   /**
@@ -585,10 +591,29 @@ export function createTerminalManager(
     dyingSince.delete(sessionId);
     exitedSince.delete(sessionId);
     activityStatusMap.delete(sessionId);
+    hookStatus.delete(sessionId);
     consecutiveIdleObs.delete(sessionId);
     firstIdledAt.delete(sessionId);
     notifiedIdle.delete(sessionId);
     attentionMap.delete(sessionId);
+  }
+
+  /** True while a hook-reported status should win over pane scraping for this session. */
+  function hookStatusHolds(session: Session, lines: string[]): boolean {
+    const hook = hookStatus.get(session.id);
+    if (!hook) return false;
+    if (Date.now() - hook.at < HOOK_GRACE_MS) return true;
+    const observed = isSessionNeedsInput(session, lines)
+      ? 'needs-input'
+      : isSessionIdle(session, lines)
+        ? 'idle'
+        : isPaneBusy(lines)
+          ? 'working'
+          : undefined;
+    // Pane only overrides on a positive, contradicting signal (e.g. Esc interrupt fires no Stop hook).
+    if (observed === undefined || observed === hook.status) return true;
+    hookStatus.delete(session.id);
+    return false;
   }
 
   function getSessionDir(sessionId: string): string {
@@ -965,6 +990,29 @@ export function createTerminalManager(
       return attentionMap.get(sessionId);
     },
 
+    reportHookActivity(sessionId: SessionId, status: 'working' | 'idle' | 'needs-input') {
+      const session = sessionRepo.findById(sessionId);
+      if (!session) return undefined;
+      // Stop fires while delegated agents still run; leave that to the pane path, which treats it as working.
+      if (status === 'idle' && hasBackgroundWork(capturePaneLines(session.tmuxSession, 20))) return undefined;
+      hookStatus.set(sessionId, { status, at: Date.now() });
+      consecutiveIdleObs.delete(sessionId);
+      const result = { trackId: session.trackId, sessionName: session.name ?? undefined };
+      if (activityStatusMap.get(sessionId) === status) return { ...result, changed: false };
+      activityStatusMap.set(sessionId, status);
+      if (status === 'working') {
+        firstIdledAt.delete(sessionId);
+        notifiedIdle.delete(sessionId);
+        attentionMap.delete(sessionId);
+        lastActivityAt.set(sessionId, new Date().toISOString());
+      } else {
+        if (!viewerCounts.has(sessionId)) attentionMap.set(sessionId, new Date().toISOString());
+        // Hook already alerts; stop the pane fallback re-alerting this idle stretch.
+        if (status === 'idle') notifiedIdle.add(sessionId);
+      }
+      return { ...result, changed: true };
+    },
+
     clearAttention(sessionId: SessionId): boolean {
       return attentionMap.delete(sessionId);
     },
@@ -1094,7 +1142,9 @@ export function createTerminalManager(
         // --- Activity status tracking (all alive sessions) ---
         // needs-input takes priority: check before idle to catch question prompts
         const prevStatus = activityStatusMap.get(session.id);
-        if (isSessionNeedsInput(session, capturedLines)) {
+        if (hookStatusHolds(session, capturedLines)) {
+          // hook-reported status is authoritative
+        } else if (isSessionNeedsInput(session, capturedLines)) {
           consecutiveIdleObs.delete(session.id);
           firstIdledAt.delete(session.id);
           notifiedIdle.delete(session.id);
