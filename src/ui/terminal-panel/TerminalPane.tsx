@@ -7,6 +7,8 @@ import { useLaunchApps, editorLabel, terminalLabel } from '@ui/hooks/useLaunchAp
 import { useEditorLaunch } from '@ui/hooks/useEditorLaunch';
 import { WorkspaceButtons } from '@ui/workspace/WorkspaceButtons';
 import { InAppShellButton } from './InAppShellButton';
+import { TranscriptView } from '@ui/session-history/TranscriptView';
+import { useIsMobile } from '../use-is-mobile';
 
 interface PaneProps {
   trackId: string;
@@ -26,6 +28,11 @@ export function TerminalPane({ trackId, session, todos, onDestroy, onRename, def
   const inputRef = useRef<HTMLInputElement>(null);
   const launchApps = useLaunchApps();
   const editor = useEditorLaunch();
+  const isMobile = useIsMobile();
+  const [showTranscript, setShowTranscript] = useState(false);
+  // Mobile-only: the terminal is pinned to 120 cols (shared tmux window), so a reflowing transcript reads far better on a phone.
+  const transcriptId = isMobile ? session.claudeResumeId : undefined;
+  const transcriptOpen = showTranscript && !!transcriptId;
   const editorName = editor.uriPrefix ? uriEditorName(editor.uriPrefix) : editorLabel(launchApps);
 
   const displayName = session.name || `session:${session.id.slice(0, 8)}`;
@@ -71,6 +78,15 @@ export function TerminalPane({ trackId, session, todos, onDestroy, onRename, def
           </span>
         )}
         <div className="flex items-center gap-1">
+          {transcriptId && (
+            <button
+              onClick={() => setShowTranscript((v) => !v)}
+              className={`text-[10px] px-1.5 py-0.5 rounded border ${transcriptOpen ? 'border-blue-500 text-blue-300' : 'border-gray-700 text-gray-400'}`}
+              aria-pressed={transcriptOpen}
+            >
+              {transcriptOpen ? 'Terminal' : 'Transcript'}
+            </button>
+          )}
           <SessionLinkButtons
             pullRequests={linkedTodo?.pullRequests}
             issueKey={linkedTodo?.issueKey}
@@ -117,7 +133,12 @@ export function TerminalPane({ trackId, session, todos, onDestroy, onRename, def
         </div>
       </div>
       <div className="flex-1 min-h-0">
-        <TerminalPanel trackId={trackId} sessionId={session.id} autoFocus={autoFocus} focusTrigger={focusTrigger} />
+        {/* Unmount (not hide) xterm so a hidden phone client never sends resizes to the shared tmux window. */}
+        {transcriptOpen && transcriptId ? (
+          <TranscriptView sessionId={transcriptId} live />
+        ) : (
+          <TerminalPanel trackId={trackId} sessionId={session.id} autoFocus={autoFocus} focusTrigger={focusTrigger} />
+        )}
       </div>
     </div>
   );
