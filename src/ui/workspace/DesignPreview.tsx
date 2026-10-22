@@ -16,6 +16,7 @@ export interface Pick {
 
 interface PreviewStatus {
   port: number;
+  self: string;
   screenshots: boolean;
 }
 
@@ -62,7 +63,7 @@ const MAX_PICKS = 10;
 export function DesignPreview({ sessionId, onClose }: Props) {
   const storageKey = `workshop.preview.target.${sessionId}`;
   const [status, setStatus] = useState<PreviewStatus | null | undefined>(undefined);
-  const [targetInput, setTargetInput] = useState(() => readStoredTarget(storageKey));
+  const [targetInput, setTargetInput] = useState(() => readStoredTarget(storageKey) ?? '');
   const [pathInput, setPathInput] = useState('/');
   const [loaded, setLoaded] = useState(() => ({ target: targetInput, path: '/' }));
   const [reloadNonce, setReloadNonce] = useState(0);
@@ -75,8 +76,14 @@ export function DesignPreview({ sessionId, onClose }: Props) {
   const iframeRef = useRef<HTMLIFrameElement>(null);
 
   useEffect(() => {
-    fetchPreviewStatus().then(setStatus);
-  }, []);
+    fetchPreviewStatus().then((s) => {
+      setStatus(s);
+      if (s && !readStoredTarget(storageKey)) {
+        setTargetInput(s.self);
+        setLoaded((l) => ({ ...l, target: s.self }));
+      }
+    });
+  }, [storageKey]);
 
   const previewOrigin = status ? `${location.protocol}//${location.hostname}:${status.port}` : null;
   const atLimit = picks.length >= MAX_PICKS;
@@ -179,7 +186,7 @@ export function DesignPreview({ sessionId, onClose }: Props) {
     }
   }
 
-  const iframeSrc = previewOrigin && loaded ? `${previewOrigin}/__workshop/start?target=${encodeURIComponent(loaded.target)}&path=${encodeURIComponent(loaded.path)}` : null;
+  const iframeSrc = previewOrigin && loaded.target ? `${previewOrigin}/__workshop/start?target=${encodeURIComponent(loaded.target)}&path=${encodeURIComponent(loaded.path)}` : null;
 
   return (
     <div className="fixed inset-0 bg-black/70 z-50 flex items-center justify-center p-2 md:p-6" onClick={(e) => { if (e.target === e.currentTarget && !pickMode) onClose(); }}>
@@ -190,7 +197,7 @@ export function DesignPreview({ sessionId, onClose }: Props) {
             value={targetInput}
             onChange={(e) => setTargetInput(e.target.value)}
             onKeyDown={(e) => { if (e.key === 'Enter') go(); }}
-            placeholder="http://localhost:5173"
+            placeholder={status?.self ?? 'http://localhost:5173'}
             className="flex-1 min-w-0 bg-gray-950 border border-gray-700 rounded text-xs text-gray-200 px-2 py-1 outline-none font-mono"
           />
           <input
@@ -249,10 +256,10 @@ export function DesignPreview({ sessionId, onClose }: Props) {
   );
 }
 
-function readStoredTarget(key: string): string {
+function readStoredTarget(key: string): string | null {
   try {
-    return window.localStorage.getItem(key) ?? 'http://localhost:5173';
+    return window.localStorage.getItem(key);
   } catch {
-    return 'http://localhost:5173';
+    return null;
   }
 }

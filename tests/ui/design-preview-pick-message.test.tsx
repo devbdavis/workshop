@@ -30,7 +30,7 @@ beforeEach(() => {
   root = createRoot(container);
   global.fetch = vi.fn(async (url: any) => {
     if (String(url).includes('/api/preview/status')) {
-      return { ok: true, json: async () => ({ port: 9999, screenshots: false }) } as any;
+      return { ok: true, json: async () => ({ port: 9999, self: 'http://localhost:5173', screenshots: false }) } as any;
     }
     return { ok: true, json: async () => ({}) } as any;
   }) as any;

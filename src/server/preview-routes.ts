@@ -11,7 +11,7 @@ import type { SessionRepository } from '@domain/session/repository';
 import type { TerminalManager } from '@infrastructure/terminal/manager.js';
 import type { SessionId } from '@foundation/types';
 import { ensureAuthToken } from '@foundation/auth.js';
-import { getPreviewPort } from './preview-proxy.js';
+import { getPreviewPort, getSelfOrigin } from './preview-proxy.js';
 
 export interface PreviewRouterDeps {
   sessions: Pick<SessionRepository, 'findById'>;
@@ -156,7 +156,7 @@ export function createPreviewRouter(deps: PreviewRouterDeps): Router {
   const router = Router();
 
   router.get('/preview/status', async (_req, res) => {
-    res.json({ port: getPreviewPort(), screenshots: await sidecarUp() });
+    res.json({ port: getPreviewPort(), self: getSelfOrigin(), screenshots: await sidecarUp() });
   });
 
   router.post('/sessions/:id/preview/shot', async (req, res) => {

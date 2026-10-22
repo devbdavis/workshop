@@ -34,6 +34,10 @@ describe('filterCookieHeader', () => {
     expect(filterCookieHeader('workshop_token=secret')).toBe('');
   });
 
+  it('keeps workshop_token when the target is Workshop itself', () => {
+    expect(filterCookieHeader('workshop_token=secret; workshop_preview_target=x; a=1', true)).toBe('workshop_token=secret; a=1');
+  });
+
   it('leaves unrelated cookies untouched', () => {
     expect(filterCookieHeader('a=1; b=2')).toBe('a=1; b=2');
   });
