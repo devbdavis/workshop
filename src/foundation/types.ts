@@ -176,7 +176,7 @@ export interface ExternalIssue {
   createdAt: string;
 }
 
-// Issue import — hidden issues (user-hidden issues from import UI)
+// Issue import — user-hidden issues
 export type IssueImportIgnoreId = string & { readonly __brand: 'IssueImportIgnoreId' };
 
 export interface IssueImportIgnore {

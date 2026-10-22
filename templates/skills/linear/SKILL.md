@@ -1,6 +1,6 @@
 ---
 name: linear
-description: Creates or edits Linear issues for the ASY team. Use when the user says 'linear issue', 'linear issue', or asks to create or update an issue — even if phrasing is informal.
+description: Creates or edits Linear issues for the ASY team. Use when the user says 'linear issue', or asks to create or update an issue — even if phrasing is informal.
 ---
 
 # Linear Issue Skill
@@ -9,7 +9,7 @@ Create or edit Linear issues for team **ASY** (Core Infrastructure - Async Proce
 
 ## When to use
 
-Triggered by: "linear issue", "linear issue", "create an issue", "update the issue", "file an issue", or any request to track work in Linear.
+Triggered by: "linear issue", "create an issue", "update the issue", "file an issue", or any request to track work in Linear.
 
 ## Behavior
 

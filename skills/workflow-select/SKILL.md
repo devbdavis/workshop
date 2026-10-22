@@ -88,7 +88,7 @@ For trivial work (single-file fix, doc update): create a 2-3 state workflow (rea
 
 ### Companion Task Playbook
 
-Every epic playbook with a splitting/execution phase needs a companion task playbook with ticket_type: 'task'.
+Every epic playbook with a splitting/execution phase needs a companion task playbook with issueType: 'task'.
 
 **IMPORTANT**: Task playbooks MUST include a `blocked` state (semanticRole: `waiting`) with an `all-deps-resolved` trigger. The engine creates tasks with dependencies in `blocked` state. Without this state in the playbook, dependency resolution cannot transition the task and it stays blocked forever.
 

@@ -7,7 +7,7 @@ export function registerPlaybookTools(
 ): void {
   server.tool(
     'workshop_list_playbooks',
-    'List all latest workflow playbooks. Filter by ticket_type (epic/task) or tags.',
+    'List all latest workflow playbooks. Filter by issueType (epic/task) or tags.',
     {
       issueType: z.enum(['epic', 'task']).optional().describe('Filter by issue type'),
       tags: z.array(z.string()).optional().describe('Filter by tags (all must match)'),
