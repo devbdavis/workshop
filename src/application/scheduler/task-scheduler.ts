@@ -62,12 +62,13 @@ interface CronEntry {
 const CATCH_UP_DELAY_MS = 5_000;
 const STAGGER_MS = 3_000;
 const WAKE_CHECK_MS = 60_000;
-const WAKE_GAP_MS = 3 * WAKE_CHECK_MS;
+const WAKE_GAP_MS = WAKE_CHECK_MS + 30_000;
 
 export function createTaskScheduler(deps: TaskSchedulerDeps): TaskScheduler {
   const cronJobs: CronEntry[] = [];
   let wakeTimer: ReturnType<typeof setInterval> | null = null;
-  const pendingCatchUps = new Set<ScheduledTaskId>();
+  // Tasks with a scheduled or catch-up run queued or dispatching; lastRunAt isn't written until dispatch
+  const inFlight = new Set<ScheduledTaskId>();
   let scheduledTrackId: TrackId | null = null;
 
   /** Get or create a system track for freeform scheduled tasks (no track binding). */
@@ -119,7 +120,9 @@ export function createTaskScheduler(deps: TaskSchedulerDeps): TaskScheduler {
     }
 
     const job = cron.schedule(task.cronExpression, () => {
-      void executeTask(task.id);
+      if (inFlight.has(task.id)) return;
+      inFlight.add(task.id);
+      void executeTask(task.id).finally(() => inFlight.delete(task.id));
     });
 
     cronJobs.push({ taskId: task.id, job });
@@ -344,14 +347,17 @@ export function createTaskScheduler(deps: TaskSchedulerDeps): TaskScheduler {
 
       // Reference point: last actual run, or task creation time if never run
       const reference = task.lastRunAt ? new Date(task.lastRunAt) : new Date(task.createdAt);
-      // lastRunAt isn't written until dispatch, so a queued catch-up must not be re-queued meanwhile
-      if (lastScheduled > reference && !pendingCatchUps.has(task.id)) {
+      if (lastScheduled > reference && !inFlight.has(task.id)) {
         const delay = CATCH_UP_DELAY_MS + missedCount * STAGGER_MS;
         console.log(
           `Task "${task.name}" missed scheduled run at ${lastScheduled.toISOString()} — catching up in ${delay}ms`,
         );
-        pendingCatchUps.add(task.id);
-        setTimeout(() => { void executeTask(task.id).finally(() => pendingCatchUps.delete(task.id)); }, delay);
+        inFlight.add(task.id);
+        setTimeout(() => {
+          const lastRunAt = deps.tasks.findById(task.id)?.lastRunAt;
+          if (lastRunAt && new Date(lastRunAt) >= lastScheduled) inFlight.delete(task.id);
+          else void executeTask(task.id).finally(() => inFlight.delete(task.id));
+        }, delay);
         missedCount++;
       }
     }
@@ -375,7 +381,6 @@ export function createTaskScheduler(deps: TaskSchedulerDeps): TaskScheduler {
         if (now - lastTick > WAKE_GAP_MS) catchUpMissed();
         lastTick = now;
       }, WAKE_CHECK_MS);
-      wakeTimer.unref?.();
     },
 
     stop(): void {

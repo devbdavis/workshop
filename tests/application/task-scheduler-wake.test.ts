@@ -18,7 +18,7 @@ function setup() {
     terminal: { createSession },
     broadcast: () => {},
   } as unknown as TaskSchedulerDeps;
-  return { scheduler: createTaskScheduler(deps), createSession };
+  return { scheduler: createTaskScheduler(deps), createSession, task };
 }
 
 describe('task scheduler wake catch-up', () => {
@@ -34,6 +34,19 @@ describe('task scheduler wake catch-up', () => {
     vi.setSystemTime(new Date('2026-10-22T09:00:00'));
     await vi.advanceTimersByTimeAsync(70_000);
     expect(createSession).toHaveBeenCalledOnce();
+    scheduler.stop();
+  });
+});
+
+describe('task scheduler catch-up dedupe', () => {
+  it('skips a queued catch-up once the occurrence has already run', async () => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'setInterval', 'Date'] });
+    vi.setSystemTime(new Date('2026-10-22T09:00:00'));
+    const { scheduler, createSession, task } = setup();
+    scheduler.start(); // queues a catch-up for 07:00 in 5s
+    task.lastRunAt = new Date('2026-10-22T09:00:01').toISOString(); // e.g. a cron fire landed first
+    await vi.advanceTimersByTimeAsync(10_000);
+    expect(createSession).not.toHaveBeenCalled();
     scheduler.stop();
   });
 });
