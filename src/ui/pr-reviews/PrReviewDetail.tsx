@@ -10,6 +10,8 @@ interface Props {
   reviewId: string;
   refreshKey: number;
   onChanged: () => void;
+  /** Configured review team slug, for the "needs your team's input" banner. */
+  team?: string;
 }
 
 interface ReviewSessionInfo {
@@ -32,7 +34,7 @@ const VERDICT_OPTIONS: Array<{ value: PrReviewVerdict; label: string }> = [
   { value: 'request_changes', label: 'Request changes' },
 ];
 
-export function PrReviewDetail({ reviewId, refreshKey, onChanged }: Props) {
+export function PrReviewDetail({ reviewId, refreshKey, onChanged, team }: Props) {
   const [review, setReview] = useState<ReviewWithFindings | null>(null);
   const [summary, setSummary] = useState('');
   const [verdict, setVerdict] = useState<PrReviewVerdict>('comment');
@@ -205,6 +207,21 @@ export function PrReviewDetail({ reviewId, refreshKey, onChanged }: Props) {
       </header>
 
       {error && <div className="px-3 py-2 text-xs text-red-300 bg-red-900/20 border border-red-900/50 rounded">{error}</div>}
+
+      {review.discoveredVia === 'team' && review.state === 'incoming' && (
+        <div className="flex items-center gap-3 px-3 py-2 text-xs text-blue-200 bg-blue-900/20 border border-blue-900/50 rounded">
+          <span className="flex-1">
+            No one from {team || 'your team'} has reviewed or commented on this PR yet, but it needs your team's input.
+          </span>
+          <button
+            onClick={analyze}
+            disabled={busy !== null}
+            className="shrink-0 px-3 py-1 font-medium rounded bg-blue-900/60 text-blue-200 hover:bg-blue-800/60 disabled:opacity-50"
+          >
+            {busy === 'analyze' ? 'Dispatching…' : 'Analyze'}
+          </button>
+        </div>
+      )}
 
       {prChanged && !analyzing && (
         <div className="px-3 py-2 text-xs text-yellow-200 bg-yellow-900/20 border border-yellow-900/50 rounded">

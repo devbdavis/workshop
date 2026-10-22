@@ -10,6 +10,8 @@ import { parsePrUrl } from './pr-url.js';
 export interface ReviewRequestDiscovery {
   prs: DiscoveredPr[];
   hosts: string[];
+  /** Team-requested PRs no teammate has engaged with yet; undefined when the team search failed. */
+  teamPrs?: DiscoveredPr[];
 }
 
 /** A forge we can inspect one PR at a time (GitHub or Gitea). */
@@ -30,6 +32,8 @@ export interface CreateForgeAdapterOptions {
   /** Forwarded to the default GitHub adapter so PR-monitor comments from these
    *  author-login substrings are filtered out. Ignored when `github` is supplied. */
   getIgnoredCommentAuthors?: () => string[];
+  /** GitHub `org/team` whose unanswered review requests are also discovered; read live each pass. */
+  getReviewTeam?: () => string | undefined;
 }
 
 const GITHUB_HOST = 'github.com';
@@ -78,6 +82,17 @@ export function createForgeAdapter(opts: CreateForgeAdapterOptions = {}): ForgeA
         console.warn('[forge] GitHub PR discovery failed:', err instanceof Error ? err.message : err);
       }
 
+      const team = opts.getReviewTeam?.();
+      let teamPrs: DiscoveredPr[] | undefined = [];
+      if (team) {
+        try {
+          teamPrs = await github.searchUnansweredTeamRequests(team);
+        } catch (err) {
+          teamPrs = undefined;
+          console.warn('[forge] GitHub team review discovery failed:', err instanceof Error ? err.message : err);
+        }
+      }
+
       if (giteaConfigured) {
         try {
           const found = await gitea.discoverReviewRequests();
@@ -88,7 +103,7 @@ export function createForgeAdapter(opts: CreateForgeAdapterOptions = {}): ForgeA
         }
       }
 
-      return { prs, hosts };
+      return { prs, hosts, teamPrs };
     },
   };
 }

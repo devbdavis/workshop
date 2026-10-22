@@ -43,10 +43,15 @@ export function createPrReviewDiscoveryPoller(deps: PrReviewDiscoveryPollerDeps)
     if (polling) return 0;
     polling = true;
     try {
-      const { prs: discovered, hosts } = await forge.discoverReviewRequests();
+      const { prs: direct, hosts, teamPrs } = await forge.discoverReviewRequests();
+      // Direct requests first so a PR asked of both you and your team registers as yours.
+      const discovered = [...direct, ...(teamPrs ?? [])];
       let added = 0;
-      for (const pr of discovered) {
-        if (reviews.findByUrl(pr.url)) continue;
+      for (const [i, pr] of discovered.entries()) {
+        const existing = reviews.findByUrl(pr.url);
+        // Asked of you directly now — it's no longer just a team request.
+        if (existing?.discoveredVia === 'team' && i < direct.length) reviews.update(existing.id, { discoveredVia: 'poll' });
+        if (existing) continue;
         reviews.upsertIncoming({
           prUrl: pr.url,
           repoOwner: pr.repoOwner,
@@ -55,7 +60,7 @@ export function createPrReviewDiscoveryPoller(deps: PrReviewDiscoveryPollerDeps)
           prTitle: pr.title,
           prAuthor: pr.author,
           prBody: pr.body,
-          discoveredVia: 'poll',
+          discoveredVia: i >= direct.length ? 'team' : 'poll',
         });
         added++;
       }
@@ -63,7 +68,8 @@ export function createPrReviewDiscoveryPoller(deps: PrReviewDiscoveryPollerDeps)
       // Prune poll-discovered rows the user never touched (still 'incoming')
       // whose review request has vanished from search — PR closed, request
       // withdrawn, or reviewed elsewhere. Rows with user investment
-      // (analyzing/ready/submitted) and manual adds are never pruned. Only hosts
+      // (analyzing/ready/submitted) and manual adds are never pruned. Team rows also go
+      // once a teammate reviews or comments. Only hosts
       // that answered this pass are eligible: a forge that failed to respond
       // reports zero PRs, which must not be read as "everything went away".
       const liveUrls = new Set(discovered.map((pr) => pr.url));
@@ -71,8 +77,10 @@ export function createPrReviewDiscoveryPoller(deps: PrReviewDiscoveryPollerDeps)
       let pruned = 0;
       const rows = reviews.findAll();
       for (const row of rows) {
-        if (row.state !== 'incoming' || row.discoveredVia !== 'poll') continue;
+        if (row.state !== 'incoming' || row.discoveredVia === 'manual') continue;
         if (!searched.has(hostOf(row.prUrl))) continue;
+        // A failed team search must not prune team rows; a teammate engaging (or the request going away) does.
+        if (row.discoveredVia === 'team' && !teamPrs) continue;
         if (liveUrls.has(row.prUrl)) continue;
         reviews.delete(row.id);
         pruned++;

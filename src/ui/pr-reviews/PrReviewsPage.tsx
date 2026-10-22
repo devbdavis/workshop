@@ -21,7 +21,7 @@ export const STATE_BADGE: Record<PrReviewState, { label: string; className: stri
   removed: { label: 'Removed', className: 'text-gray-500 bg-gray-800' },
 };
 
-function SidebarItem({ review, selected, onSelect }: { review: PrReviewListItem; selected: boolean; onSelect: () => void }) {
+function SidebarItem({ review, selected, onSelect, team }: { review: PrReviewListItem; selected: boolean; onSelect: () => void; team: string }) {
   const badge = STATE_BADGE[review.state];
   return (
     <button
@@ -39,6 +39,11 @@ function SidebarItem({ review, selected, onSelect }: { review: PrReviewListItem;
       </div>
       <div className="mt-1 flex items-center gap-1.5">
         <span className={`px-1.5 py-0.5 rounded text-[10px] font-medium ${badge.className}`}>{badge.label}</span>
+        {review.discoveredVia === 'team' && review.state === 'incoming' && (
+          <span className="px-1.5 py-0.5 rounded text-[10px] text-sky-300 bg-sky-900/30" title="Your team was requested and no teammate has responded yet">
+            {team || 'Team'} needs input
+          </span>
+        )}
         {review.findingCounts.total > 0 && (
           <span className="px-1.5 py-0.5 rounded text-[10px] text-gray-400 bg-gray-800">
             {review.findingCounts.open}/{review.findingCounts.total} findings
@@ -56,6 +61,14 @@ export function PrReviewsPage() {
   const [addError, setAddError] = useState<string | null>(null);
   const [adding, setAdding] = useState(false);
   const [refreshKey, setRefreshKey] = useState(0);
+  const [team, setTeam] = useState('');
+
+  useEffect(() => {
+    fetch('/api/settings/pr-review')
+      .then((r) => r.json())
+      .then((d: { team?: string }) => setTeam(d.team?.split('/')[1] ?? ''))
+      .catch(() => {});
+  }, []);
 
   const load = useCallback(async () => {
     try {
@@ -109,8 +122,17 @@ export function PrReviewsPage() {
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(typeof data.error === 'string' ? data.error : `HTTP ${res.status}`);
+      const review = data as PrReview;
       setAddUrl('');
-      setSelectedId((data as PrReview).id);
+      setSelectedId(review.id);
+      // Adding is a request to review it: kick off analysis unless one already ran or is running.
+      if (review.state === 'incoming') {
+        const analyzed = await fetch(`/api/pr-reviews/${review.id}/analyze`, { method: 'POST' });
+        if (!analyzed.ok) {
+          const err = await analyzed.json().catch(() => ({}));
+          setAddError(`Added, but analysis failed to start: ${typeof err.error === 'string' ? err.error : `HTTP ${analyzed.status}`}`);
+        }
+      }
       setRefreshKey((k) => k + 1);
     } catch (err) {
       setAddError(err instanceof Error ? err.message : 'Failed to add PR');
@@ -159,7 +181,7 @@ export function PrReviewsPage() {
             <div className="px-3 py-4 text-xs text-gray-600">No PRs waiting for your review.</div>
           )}
           {active.map((r) => (
-            <SidebarItem key={r.id} review={r} selected={r.id === selectedId} onSelect={() => setSelectedId(r.id)} />
+            <SidebarItem key={r.id} review={r} selected={r.id === selectedId} onSelect={() => setSelectedId(r.id)} team={team} />
           ))}
 
           {completed.length > 0 && (
@@ -168,7 +190,7 @@ export function PrReviewsPage() {
                 Completed
               </div>
               {completed.map((r) => (
-                <SidebarItem key={r.id} review={r} selected={r.id === selectedId} onSelect={() => setSelectedId(r.id)} />
+                <SidebarItem key={r.id} review={r} selected={r.id === selectedId} onSelect={() => setSelectedId(r.id)} team={team} />
               ))}
             </>
           )}
@@ -177,7 +199,7 @@ export function PrReviewsPage() {
 
       <main className="flex-1 min-w-0 overflow-y-auto">
         {selected ? (
-          <PrReviewDetail reviewId={selected.id} refreshKey={refreshKey} onChanged={() => setRefreshKey((k) => k + 1)} />
+          <PrReviewDetail reviewId={selected.id} refreshKey={refreshKey} onChanged={() => setRefreshKey((k) => k + 1)} team={team} />
         ) : (
           <div className="h-full flex items-center justify-center text-sm text-gray-600">
             Select a PR to review — or add one by URL.

@@ -234,6 +234,7 @@ describe('ForgeAdapter', () => {
     fetchPrDiff: vi.fn(async () => 'gh-diff'),
     submitPrReview: vi.fn(async () => {}),
     searchReviewRequestedPrs: vi.fn(async () => []),
+    searchUnansweredTeamRequests: vi.fn(async () => []),
     fetchCheckLog: vi.fn(async () => 'gh-log'),
   };
   const stubGitea = {
@@ -260,6 +261,18 @@ describe('ForgeAdapter', () => {
     stubGithub.searchReviewRequestedPrs.mockRejectedValueOnce(new Error('gh not authenticated'));
     const forge = createForgeAdapter({ github: stubGithub, gitea: stubGitea });
     expect((await forge.discoverReviewRequests()).hosts).toEqual(['git.example.com']);
+  });
+
+  // undefined (not []) tells the poller the team pass didn't answer, so team rows survive.
+  it('reports teamPrs as undefined when the team search fails, [] when no team is set', async () => {
+    stubGithub.searchUnansweredTeamRequests.mockRejectedValueOnce(new Error('missing read:org'));
+    const withTeam = createForgeAdapter({ github: stubGithub, gitea: stubGitea, getReviewTeam: () => 'acme/syseng' });
+    const failed = await withTeam.discoverReviewRequests();
+    expect(failed.teamPrs).toBeUndefined();
+    expect(failed.hosts).toContain('github.com');
+    const noTeam = createForgeAdapter({ github: stubGithub, gitea: stubGitea });
+    expect((await noTeam.discoverReviewRequests()).teamPrs).toEqual([]);
+    expect(stubGithub.searchUnansweredTeamRequests).toHaveBeenCalledTimes(1);
   });
 
   it('isolates a Gitea discovery failure from GitHub', async () => {
