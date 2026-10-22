@@ -14,7 +14,7 @@ There's a common baseline worth having — scheduling tasks, human review checkp
 
 This repo is here as inspiration and a starting point. Read the code, steal the ideas, disagree with half of it, and build something better. Or just clone it and start hacking — it's a solid foundation either way.
 
-New here? The [Setup Guide](docs/setup-guide.md) gets all the external pieces wired up, and [Creating Tracks](docs/creating-tracks.md) walks through actual usage. For a complete picture of what's built: [Feature Index](docs/features.md) and [Architecture Guide](docs/architecture.md). To run Workshop in a container (incl. unraid): [Docker Guide](docs/docker.md).
+New here? The [Setup Guide](docs/setup-guide.md) gets all the external pieces wired up, and [Creating Tracks](docs/creating-tracks.md) walks through actual usage. For a complete picture of what's built: [Feature Index](docs/features.md) and [Architecture Guide](docs/architecture.md). To run Workshop in a container (incl. unraid): [Docker Guide](docs/docker.md). Want to build your own from scratch? [Build Your Own Workshop](docs/build-your-own-workshop.md) is a full design doc plus a ready-to-paste prompt for an AI agent.
 
 ---
 
