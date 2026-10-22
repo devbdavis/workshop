@@ -27,7 +27,7 @@ export function LinearTicketModal({ todoId, onClose }: { todoId: string; onClose
 
     async function poll() {
       try {
-        const res = await fetch(`/api/todos/${todoId}/linear-ticket-status`);
+        const res = await fetch(`/api/todos/${todoId}/ticket-status`);
         const data = (await res.json()) as TicketStatus;
         if (cancelled) return;
         if (data.status === 'done') {

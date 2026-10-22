@@ -119,7 +119,7 @@ export function TodoDetailModal({ todo, tracks, onClose, onSave, onDelete, onDis
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ title, description: description || undefined, status, priority }),
     });
-    const res = await fetch(`/api/todos/${todo!.id}/create-linear-ticket`, {
+    const res = await fetch(`/api/todos/${todo!.id}/create-ticket`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(github ?? {}),

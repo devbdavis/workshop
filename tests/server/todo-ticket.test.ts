@@ -3,9 +3,9 @@ import express from 'express';
 import type { Server } from 'node:http';
 import { createTodoRouter, type TodoRouterDeps } from '@server/todo-routes.js';
 
-// Exercises the "create Linear ticket" round-trip: dispatch seeds a pending job,
+// Exercises the "create ticket" round-trip: dispatch seeds a pending job,
 // the report endpoint marks it done + links the issue key, and status reflects it.
-// Also guards route ordering (POST /todos/report-linear-ticket must not be
+// Also guards route ordering (POST /todos/report-ticket must not be
 // captured by the /todos/:todoId/... routes).
 
 function buildApp() {
@@ -53,7 +53,7 @@ function buildApp() {
   return { app, todoStore, settingsStore, prompts, sessions: () => createdSessions };
 }
 
-describe('create-linear-ticket round-trip', () => {
+describe('create-ticket round-trip', () => {
   let server: Server;
   let base: string;
   let ctx: ReturnType<typeof buildApp>;
@@ -71,17 +71,17 @@ describe('create-linear-ticket round-trip', () => {
   });
 
   it('dispatches onto a lazily-created system track and seeds a pending job', async () => {
-    const res = await fetch(`${base}/todos/todo-1/create-linear-ticket`, { method: 'POST' });
+    const res = await fetch(`${base}/todos/todo-1/create-ticket`, { method: 'POST' });
     expect(res.status).toBe(201);
     expect(ctx.sessions()).toBe(1);
     expect(ctx.settingsStore.get('linear_ticket_track_id')).toBe('sys-track');
 
-    const status = await (await fetch(`${base}/todos/todo-1/linear-ticket-status`)).json();
+    const status = await (await fetch(`${base}/todos/todo-1/ticket-status`)).json();
     expect(status.status).toBe('pending');
   });
 
   it('records the reported ticket and links the issue key to the todo', async () => {
-    const report = await fetch(`${base}/todos/report-linear-ticket`, {
+    const report = await fetch(`${base}/todos/report-ticket`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -94,7 +94,7 @@ describe('create-linear-ticket round-trip', () => {
     });
     expect(report.status).toBe(200);
 
-    const status = await (await fetch(`${base}/todos/todo-1/linear-ticket-status`)).json();
+    const status = await (await fetch(`${base}/todos/todo-1/ticket-status`)).json();
     expect(status).toMatchObject({
       status: 'done',
       issueKey: 'ASY-1402',
@@ -106,7 +106,7 @@ describe('create-linear-ticket round-trip', () => {
   });
 
   it('rejects a report with no todoId', async () => {
-    const res = await fetch(`${base}/todos/report-linear-ticket`, {
+    const res = await fetch(`${base}/todos/report-ticket`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ issueKey: 'ASY-9' }),
@@ -117,7 +117,7 @@ describe('create-linear-ticket round-trip', () => {
   it('files a GitHub issue in the confirmed repo with the confirmed labels', async () => {
     ctx.settingsStore.set('issue_tracker', 'github');
     ctx.settingsStore.set('issue_tracker_github_repo', 'default/repo');
-    const res = await fetch(`${base}/todos/todo-1/create-linear-ticket`, {
+    const res = await fetch(`${base}/todos/todo-1/create-ticket`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ repo: 'me/other', labels: ['bug', 'good first issue'] }),
@@ -134,7 +134,7 @@ describe('create-linear-ticket round-trip', () => {
     ctx.settingsStore.set('issue_tracker', 'github');
     ctx.settingsStore.set('issue_tracker_github_repo', 'default/repo');
     ctx.settingsStore.set('issue_tracker_github_labels', 'triage, ui');
-    const res = await fetch(`${base}/todos/todo-1/create-linear-ticket`, { method: 'POST' });
+    const res = await fetch(`${base}/todos/todo-1/create-ticket`, { method: 'POST' });
     expect(res.status).toBe(201);
     expect(ctx.prompts.at(-1)).toContain('--repo default/repo --label "triage" --label "ui"');
   });
@@ -142,7 +142,7 @@ describe('create-linear-ticket round-trip', () => {
   it('rejects a malformed repo or a shell-unsafe label', async () => {
     ctx.settingsStore.set('issue_tracker', 'github');
     const post = (body: unknown) =>
-      fetch(`${base}/todos/todo-1/create-linear-ticket`, {
+      fetch(`${base}/todos/todo-1/create-ticket`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(body),

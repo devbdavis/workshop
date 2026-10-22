@@ -58,7 +58,7 @@ beforeEach(() => {
     if (u.includes('/settings/issue-tracker'))
       return { ok: true, json: async () => trackerSettings } as any;
     if (u.includes('/api/agents')) return { ok: true, json: async () => [] } as any;
-    if (u.includes('/linear-ticket-status')) return { ok: true, json: async () => ({ status: 'pending' }) } as any;
+    if (u.includes('/ticket-status')) return { ok: true, json: async () => ({ status: 'pending' }) } as any;
     return { ok: true, json: async () => ({}) } as any;
   }) as any;
 });
@@ -120,7 +120,7 @@ describe('Create Linear Ticket flow', () => {
     for (let i = 0; i < 10; i++) await tick();
 
     const call = (global.fetch as any).mock.calls.find((c: any[]) =>
-      String(c[0]).includes('/create-linear-ticket'),
+      String(c[0]).includes('/create-ticket'),
     );
     expect(JSON.parse(call[1].body)).toEqual({ repo: 'me/repo', labels: ['bug'] });
     expect(container.textContent).toContain('Creating ticket');

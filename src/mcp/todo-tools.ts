@@ -50,7 +50,7 @@ export function registerTodoTools(server: McpServer, api: (path: string, options
       title: z.string().optional().describe('New title'),
       description: z.string().optional().describe('New description'),
       resolution: z.string().optional().describe('Resolution notes — what happened or why the todo was completed/stopped. Only meaningful for ready/done status.'),
-      issueKey: z.string().optional().describe('Linear or Jira ticket key to associate with this todo (e.g. "ASY-1402"). Appended to the worktree branch name when dispatched.'),
+      issueKey: z.string().optional().describe('Issue key to associate with this todo: Linear/Jira "ASY-1402" or GitHub "owner/repo#123". Appended to the worktree branch name when dispatched.'),
       pullRequests: z.array(z.object({ url: z.string(), title: z.string().optional() })).optional().describe('Pull requests associated with this todo. Each entry has a url and optional display title.'),
       status: z.enum(['backlog', 'ready', 'in-progress', 'review', 'done']).optional().describe('New status'),
       priority: z.enum(['low', 'medium', 'high']).optional().describe('New priority'),
@@ -77,7 +77,7 @@ export function registerTodoTools(server: McpServer, api: (path: string, options
   );
 
   server.tool(
-    'workshop_report_linear_ticket',
+    'workshop_report_ticket',
     'Report a Linear ticket or GitHub issue created from a todo back to Workshop, so the ticket modal can display it and the ticket links to the todo. Call this once, after the ticket has been filed.',
     {
       todoId: z.string().describe('The Workshop todo id the ticket was created from (given in the task prompt)'),
@@ -89,7 +89,7 @@ export function registerTodoTools(server: McpServer, api: (path: string, options
       body: z.string().describe('The full ticket description/body in Markdown'),
     },
     async (args) => {
-      const result = await api('/todos/report-linear-ticket', { method: 'POST', body: JSON.stringify(args) });
+      const result = await api('/todos/report-ticket', { method: 'POST', body: JSON.stringify(args) });
       return { content: [{ type: 'text' as const, text: JSON.stringify(result, null, 2) }] };
     },
   );
