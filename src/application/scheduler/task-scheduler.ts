@@ -59,8 +59,15 @@ interface CronEntry {
   job: cron.ScheduledTask;
 }
 
+const CATCH_UP_DELAY_MS = 5_000;
+const STAGGER_MS = 3_000;
+const WAKE_CHECK_MS = 60_000;
+const WAKE_GAP_MS = 3 * WAKE_CHECK_MS;
+
 export function createTaskScheduler(deps: TaskSchedulerDeps): TaskScheduler {
   const cronJobs: CronEntry[] = [];
+  let wakeTimer: ReturnType<typeof setInterval> | null = null;
+  const pendingCatchUps = new Set<ScheduledTaskId>();
   let scheduledTrackId: TrackId | null = null;
 
   /** Get or create a system track for freeform scheduled tasks (no track binding). */
@@ -324,44 +331,56 @@ export function createTaskScheduler(deps: TaskSchedulerDeps): TaskScheduler {
     }
   }
 
+  /**
+   * Queue the most recent missed occurrence of each enabled task (at most one per task),
+   * staggered to avoid a thundering herd. Used at startup and after waking from sleep.
+   */
+  function catchUpMissed(): number {
+    const now = new Date();
+    let missedCount = 0;
+    for (const task of deps.tasks.findEnabled()) {
+      const lastScheduled = getLastScheduledBefore(task.cronExpression, now);
+      if (!lastScheduled) continue;
+
+      // Reference point: last actual run, or task creation time if never run
+      const reference = task.lastRunAt ? new Date(task.lastRunAt) : new Date(task.createdAt);
+      // lastRunAt isn't written until dispatch, so a queued catch-up must not be re-queued meanwhile
+      if (lastScheduled > reference && !pendingCatchUps.has(task.id)) {
+        const delay = CATCH_UP_DELAY_MS + missedCount * STAGGER_MS;
+        console.log(
+          `Task "${task.name}" missed scheduled run at ${lastScheduled.toISOString()} — catching up in ${delay}ms`,
+        );
+        pendingCatchUps.add(task.id);
+        setTimeout(() => { void executeTask(task.id).finally(() => pendingCatchUps.delete(task.id)); }, delay);
+        missedCount++;
+      }
+    }
+    return missedCount;
+  }
+
   return {
     start(): void {
       const enabled = deps.tasks.findEnabled();
-      const now = new Date();
-
-      // Detect tasks that fired while the server was offline and schedule them
-      // to run shortly after startup. We fire at most one catch-up run per task
-      // (the most recent missed occurrence), staggered to avoid a thundering herd.
-      const STARTUP_DELAY_MS = 5_000;
-      const STAGGER_MS = 3_000;
-      let missedCount = 0;
-
-      for (const task of enabled) {
-        addCronJob(task);
-
-        const lastScheduled = getLastScheduledBefore(task.cronExpression, now);
-        if (!lastScheduled) continue;
-
-        // Reference point: last actual run, or task creation time if never run
-        const reference = task.lastRunAt ? new Date(task.lastRunAt) : new Date(task.createdAt);
-
-        if (lastScheduled > reference) {
-          const delay = STARTUP_DELAY_MS + missedCount * STAGGER_MS;
-          console.log(
-            `Task "${task.name}" missed scheduled run at ${lastScheduled.toISOString()} — catching up in ${delay}ms`,
-          );
-          setTimeout(() => { void executeTask(task.id); }, delay);
-          missedCount++;
-        }
-      }
-
+      for (const task of enabled) addCronJob(task);
+      const missedCount = catchUpMissed();
       console.log(
         `Task scheduler started: ${enabled.length} task(s) loaded, ${missedCount} missed run(s) queued`,
       );
+
+      // node-cron ticks on a monotonic clock that pauses while the machine sleeps, so an
+      // occurrence that falls inside a sleep is silently skipped. A wall-clock gap means we woke.
+      let lastTick = Date.now();
+      wakeTimer = setInterval(() => {
+        const now = Date.now();
+        if (now - lastTick > WAKE_GAP_MS) catchUpMissed();
+        lastTick = now;
+      }, WAKE_CHECK_MS);
+      wakeTimer.unref?.();
     },
 
     stop(): void {
       clearJobs();
+      if (wakeTimer) clearInterval(wakeTimer);
       console.log('Task scheduler stopped');
     },
 

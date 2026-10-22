@@ -227,24 +227,25 @@ export function createExecutionHookRouter(deps: ExecutionHookRouterDeps): Router
       // Skip if already soft-deleted (user manually deleted, or sync loop retired it).
       // Exception: todo-dispatched background agents (background=true, no task run) stay
       // alive so the user can review or continue the conversation after it finishes.
+      // Complete any scheduled-task run first — the sync loop often retires the session
+      // before this hook lands, and the run must not be left 'running' when it does.
+      let run: ReturnType<typeof taskRuns.findBySessionId> | undefined;
+      try {
+        run = taskRuns.findBySessionId(sessionId);
+        if (run && run.status === 'running') {
+          taskRuns.complete(run.id, 'completed');
+          broadcast('scheduled-task:updated', run.taskId);
+        }
+      } catch (runErr) {
+        console.warn(`Failed to complete scheduled task run for session ${sessionId}:`, runErr);
+      }
+
       const session = sessions.findById(sessionId as SessionId);
       if (session?.deletedAt) {
         console.log(`Session ${sessionId} is already in the recycle bin — skipping`);
       } else if (session) {
         // Capture terminal output to <sessionDir>/output.txt before killing tmux.
         // The session dir persists for 7 days in the recycle bin — no SQLite blobs.
-        // Also complete any associated scheduled-task run with the real end timestamp
-        // (the run was left in 'running' state by the task scheduler so duration is accurate).
-        let run: ReturnType<typeof taskRuns.findBySessionId> | undefined;
-        try {
-          run = taskRuns.findBySessionId(sessionId);
-          if (run && run.status === 'running') {
-            taskRuns.complete(run.id, 'completed');
-          }
-        } catch (runErr) {
-          console.warn(`Failed to complete scheduled task run for session ${sessionId}:`, runErr);
-        }
-
         // Todo-dispatched background agents: stay alive so the user can review the work.
         // Scheduled tasks (identified by a linked task run) and interactive sessions exit normally.
         const isTodoAgent = session.background && !run;
