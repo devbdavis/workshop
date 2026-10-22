@@ -28,7 +28,7 @@ interface TemplateFile {
   id?: string;
   name: string;
   description: string;
-  ticketType?: 'epic' | 'task';
+  issueType?: 'epic' | 'task';
   epicPlaybook: StageDefinition[];
   promptOverrides?: PromptOverrides;
   matchCriteria?: MatchCriteria;
@@ -84,7 +84,7 @@ export function ensurePlaybookForTemplate(
     version: 1,
     name: t.name,
     description: t.description,
-    ticketType: t.ticketType ?? 'epic',
+    issueType: t.issueType ?? 'epic',
     stageDefinitions: t.epicPlaybook,
     promptOverrides: t.promptOverrides,
     matchCriteria: t.matchCriteria,

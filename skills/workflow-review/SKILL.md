@@ -11,7 +11,7 @@ Runs after an epic reaches a terminal state (merged or cancelled).
 
 ### Part 1: Transition Analysis
 
-1. Query the epic's full transition history via `workshop_get_workflow_ticket` (which includes transitions)
+1. Query the epic's full transition history via `workshop_get_workflow_issue` (which includes transitions)
 2. Compute per-state timing from transition timestamps:
    - For each state transition, calculate wall-clock time spent in each state
    - Identify states with unusually long dwell times

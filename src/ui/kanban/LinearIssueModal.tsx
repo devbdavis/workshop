@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import Markdown from 'react-markdown';
 
-interface TicketStatus {
+interface IssueStatus {
   status: 'pending' | 'done';
   issueKey?: string;
   url?: string;
@@ -12,12 +12,12 @@ interface TicketStatus {
 const TIMEOUT_MS = 4 * 60_000;
 
 /**
- * Shown while a background agent drafts and files a Linear ticket or GitHub issue from a todo.
- * Polls the ticket-status endpoint until the agent reports back, then shows the
- * created ticket's link, title, and body.
+ * Shown while a background agent drafts and files a Linear or GitHub issue from a todo.
+ * Polls the issue-status endpoint until the agent reports back, then shows the
+ * created issue's link, title, and body.
  */
-export function LinearTicketModal({ todoId, onClose }: { todoId: string; onClose: () => void }) {
-  const [result, setResult] = useState<TicketStatus>({ status: 'pending' });
+export function LinearIssueModal({ todoId, onClose }: { todoId: string; onClose: () => void }) {
+  const [result, setResult] = useState<IssueStatus>({ status: 'pending' });
   const [timedOut, setTimedOut] = useState(false);
 
   useEffect(() => {
@@ -27,8 +27,8 @@ export function LinearTicketModal({ todoId, onClose }: { todoId: string; onClose
 
     async function poll() {
       try {
-        const res = await fetch(`/api/todos/${todoId}/ticket-status`);
-        const data = (await res.json()) as TicketStatus;
+        const res = await fetch(`/api/todos/${todoId}/issue-status`);
+        const data = (await res.json()) as IssueStatus;
         if (cancelled) return;
         if (data.status === 'done') {
           setResult(data);
@@ -70,7 +70,7 @@ export function LinearTicketModal({ todoId, onClose }: { todoId: string; onClose
       >
         <div className="flex items-center justify-between px-5 py-3 border-b border-gray-800 shrink-0">
           <h2 className="text-sm font-semibold text-gray-200">
-            {done ? 'Ticket created' : 'Creating ticket…'}
+            {done ? 'Issue created' : 'Creating issue…'}
           </h2>
           <button onClick={onClose} className="text-gray-500 hover:text-gray-300 text-lg">&times;</button>
         </div>
@@ -79,14 +79,14 @@ export function LinearTicketModal({ todoId, onClose }: { todoId: string; onClose
           {!done && !timedOut && (
             <div className="flex items-center gap-3 text-sm text-gray-400 py-6">
               <span className="w-4 h-4 rounded-full border-2 border-gray-600 border-t-indigo-400 animate-spin" />
-              An agent is drafting and filing the ticket. This usually takes under a minute.
+              An agent is drafting and filing the issue. This usually takes under a minute.
             </div>
           )}
 
           {!done && timedOut && (
             <p className="text-sm text-gray-400 py-6">
               This is taking longer than expected. The agent may still be working — check the{' '}
-              <span className="text-gray-300">Linear Tickets</span> track for the session, or close this and
+              <span className="text-gray-300">Linear Issues</span> track for the session, or close this and
               refresh the todo later.
             </p>
           )}
@@ -100,7 +100,7 @@ export function LinearTicketModal({ todoId, onClose }: { todoId: string; onClose
                   rel="noopener noreferrer"
                   className="inline-flex items-center gap-1.5 text-sm text-indigo-400 hover:text-indigo-300 hover:underline font-mono"
                 >
-                  {result.issueKey ?? 'View ticket'} ↗
+                  {result.issueKey ?? 'View issue'} ↗
                 </a>
               ) : result.issueKey ? (
                 <span className="text-sm text-gray-300 font-mono">{result.issueKey}</span>

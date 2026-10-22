@@ -4,7 +4,7 @@ type SemanticRole = 'entry' | 'processing' | 'human-gate' | 'terminal' | 'error'
 
 interface Props {
   state: string;
-  ticketType: 'epic' | 'task';
+  issueType: 'epic' | 'task';
   size?: 'sm' | 'md';
   /** Optional stateData for dynamic workflow semantic role lookup */
   stateData?: Record<string, unknown>;
@@ -45,7 +45,7 @@ const SEMANTIC_ROLE_COLORS: Record<SemanticRole, string> = {
 
 function getColorClasses(
   state: string,
-  ticketType: 'epic' | 'task',
+  issueType: 'epic' | 'task',
   stateData?: Record<string, unknown>
 ): string {
   // First check for dynamic workflow semantic role
@@ -65,7 +65,7 @@ function getColorClasses(
 
   // in-progress is blue for tasks (agent working), gray for epics (waiting on children)
   if (state === 'in-progress') {
-    if (ticketType === 'task') return 'bg-blue-100 text-blue-800 dark:bg-blue-900/50 dark:text-blue-300';
+    if (issueType === 'task') return 'bg-blue-100 text-blue-800 dark:bg-blue-900/50 dark:text-blue-300';
     return 'bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-400';
   }
 
@@ -80,8 +80,8 @@ function formatStateName(state: string): string {
   return spaced.charAt(0).toUpperCase() + spaced.slice(1);
 }
 
-export function WorkflowStateIndicator({ state, ticketType, size = 'sm', stateData }: Props) {
-  const colorClasses = getColorClasses(state, ticketType, stateData);
+export function WorkflowStateIndicator({ state, issueType, size = 'sm', stateData }: Props) {
+  const colorClasses = getColorClasses(state, issueType, stateData);
   const sizeClasses = size === 'sm'
     ? 'text-[10px] px-1.5 py-0.5'
     : 'text-xs px-2 py-1';

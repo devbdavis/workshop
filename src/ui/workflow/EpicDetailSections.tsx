@@ -1,6 +1,6 @@
 import { useMemo } from 'react';
 import Markdown from 'react-markdown';
-import type { WorkflowTicket, Session } from '@foundation/types.js';
+import type { WorkflowIssue, Session } from '@foundation/types.js';
 
 // State-specific data interfaces — now defined locally (runtime validated by stateData shape)
 interface NeedsInputData {
@@ -361,9 +361,9 @@ export function ProgressFeedSection({ entries }: { entries: AgentProgressEntry[]
 }
 
 export function MiniTaskBoard({ tasks, sessions, onClickTask, onAttachSession }: {
-  tasks: WorkflowTicket[];
+  tasks: WorkflowIssue[];
   sessions?: Session[];
-  onClickTask: (t: WorkflowTicket) => void;
+  onClickTask: (t: WorkflowIssue) => void;
   onAttachSession?: (session: Session) => void;
 }) {
   // Derive columns dynamically from actual task states
@@ -388,7 +388,7 @@ export function MiniTaskBoard({ tasks, sessions, onClickTask, onAttachSession }:
   }, [sessions]);
 
   /** Find the first live session for a task */
-  function findLiveSession(task: WorkflowTicket): Session | undefined {
+  function findLiveSession(task: WorkflowIssue): Session | undefined {
     const sd = task.stateData as Record<string, unknown> | undefined;
     const ids = (sd?.agentSessionIds as string[] | undefined) ?? [];
     for (const sid of ids) {
@@ -423,7 +423,7 @@ export function MiniTaskBoard({ tasks, sessions, onClickTask, onAttachSession }:
                     >
                       <p className="text-xs text-gray-200 truncate">{task.title}</p>
                       <div className="flex items-center gap-1.5 mt-1">
-                        <WorkflowStateIndicator state={task.state} ticketType="task" size="sm" />
+                        <WorkflowStateIndicator state={task.state} issueType="task" size="sm" />
                         {liveSession && (
                           <span className="w-1.5 h-1.5 rounded-full bg-blue-400 animate-pulse" title="Agent running" />
                         )}

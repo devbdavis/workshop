@@ -9,8 +9,8 @@ interface Props {
   onSave: (todoId: string, data: Partial<Todo>) => void;
   onDelete: (todoId: string) => void;
   onDispatch: (todoId: string, opts: DispatchOptions, formData?: Partial<Todo>) => void;
-  /** Called after a ticket-drafting session has been dispatched; the parent opens the standalone result modal. */
-  onTicketCreationStarted: (todoId: string) => void;
+  /** Called after an issue-drafting session has been dispatched; the parent opens the standalone result modal. */
+  onIssueCreationStarted: (todoId: string) => void;
 }
 
 const STATUSES: { value: TodoStatus; label: string }[] = [
@@ -27,11 +27,11 @@ const PRIORITIES: { value: TodoPriority; label: string }[] = [
   { value: 'low', label: 'Low' },
 ];
 
-export function TodoDetailModal({ todo, tracks, onClose, onSave, onDelete, onDispatch, onTicketCreationStarted }: Props) {
+export function TodoDetailModal({ todo, tracks, onClose, onSave, onDelete, onDispatch, onIssueCreationStarted }: Props) {
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [resolution, setResolution] = useState('');
-  const [issueKey, setTicketKey] = useState('');
+  const [issueKey, setIssueKey] = useState('');
   const [pullRequests, setPullRequests] = useState<PullRequest[]>([]);
   const [prDraft, setPrDraft] = useState<{ url: string; title: string } | null>(null);
   const [editingPrIndex, setEditingPrIndex] = useState<number | null>(null);
@@ -40,7 +40,7 @@ export function TodoDetailModal({ todo, tracks, onClose, onSave, onDelete, onDis
   const [agents, setAgents] = useState<Agent[]>([]);
   const [showDispatch, setShowDispatch] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
-  const [ticketError, setTicketError] = useState<string | null>(null);
+  const [issueError, setIssueError] = useState<string | null>(null);
   const [tracker, setTracker] = useState<{
     tracker?: string;
     githubRepo?: string;
@@ -53,7 +53,7 @@ export function TodoDetailModal({ todo, tracks, onClose, onSave, onDelete, onDis
       setTitle(todo.title);
       setDescription(todo.description || '');
       setResolution(todo.resolution || '');
-      setTicketKey(todo.issueKey || '');
+      setIssueKey(todo.issueKey || '');
       setPullRequests(todo.pullRequests ?? []);
       setPrDraft(null);
       setEditingPrIndex(null);
@@ -61,7 +61,7 @@ export function TodoDetailModal({ todo, tracks, onClose, onSave, onDelete, onDis
       setPriority(todo.priority);
       setShowDispatch(false);
       setConfirmDelete(false);
-      setTicketError(null);
+      setIssueError(null);
       setGhConfirm(null);
     }
   }, [todo]);
@@ -111,28 +111,28 @@ export function TodoDetailModal({ todo, tracks, onClose, onSave, onDelete, onDis
     });
   }
 
-  async function handleCreateTicket(github?: { repo: string; labels: string[] }) {
-    setTicketError(null);
+  async function handleCreateIssue(github?: { repo: string; labels: string[] }) {
+    setIssueError(null);
     // Persist current edits first so the drafting agent sees the latest content.
     await fetch(`/api/todos/${todo!.id}`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ title, description: description || undefined, status, priority }),
     });
-    const res = await fetch(`/api/todos/${todo!.id}/create-ticket`, {
+    const res = await fetch(`/api/todos/${todo!.id}/create-issue`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(github ?? {}),
     }).catch(() => null);
     if (!res || !res.ok) {
       const err = (await res?.json().catch(() => null))?.error;
-      setTicketError(err ?? 'Could not start ticket creation. Try again.');
+      setIssueError(err ?? 'Could not start issue creation. Try again.');
       return;
     }
     // Hand off to the parent-owned standalone modal, then close this one. The
     // result modal must NOT be a child of this modal, or closing the todo modal
     // would tear it down mid-run.
-    onTicketCreationStarted(todo!.id);
+    onIssueCreationStarted(todo!.id);
     onClose();
   }
 
@@ -232,16 +232,16 @@ export function TodoDetailModal({ todo, tracks, onClose, onSave, onDelete, onDis
               const raw = e.target.value;
               const githubMatch = raw.match(/github\.com\/([^/]+)\/([^/]+)\/issues\/(\d+)/i);
               if (githubMatch) {
-                setTicketKey(`${githubMatch[1]}/${githubMatch[2]}#${githubMatch[3]}`);
+                setIssueKey(`${githubMatch[1]}/${githubMatch[2]}#${githubMatch[3]}`);
                 return;
               }
               const linearMatch = raw.match(/\/issue\/([A-Z0-9]+-\d+)/i);
               if (linearMatch) {
-                setTicketKey(linearMatch[1].toUpperCase());
+                setIssueKey(linearMatch[1].toUpperCase());
                 return;
               }
               const trimmed = raw.trim();
-              setTicketKey(/^[a-z0-9]+-\d+$/i.test(trimmed) ? trimmed.toUpperCase() : trimmed);
+              setIssueKey(/^[a-z0-9]+-\d+$/i.test(trimmed) ? trimmed.toUpperCase() : trimmed);
             }}
               placeholder="e.g. ASY-1402"
               className="w-full px-3 py-2 bg-gray-800 border border-gray-700 rounded-lg text-sm text-gray-200 font-mono placeholder:text-gray-600"
@@ -411,7 +411,7 @@ export function TodoDetailModal({ todo, tracks, onClose, onSave, onDelete, onDis
             )}
             {!issueKey && trackerName && (
               <>
-                {ticketError && <span className="text-xs text-red-400 self-center">{ticketError}</span>}
+                {issueError && <span className="text-xs text-red-400 self-center">{issueError}</span>}
                 <button
                   onClick={() =>
                     trackerKind === 'github'
@@ -419,12 +419,12 @@ export function TodoDetailModal({ todo, tracks, onClose, onSave, onDelete, onDis
                           repo: tracker!.githubRepo ?? '',
                           labels: tracker!.githubLabels ?? '',
                         })
-                      : handleCreateTicket()
+                      : handleCreateIssue()
                   }
                   className="px-3 py-1.5 text-xs bg-indigo-700 hover:bg-indigo-600 text-white rounded-lg transition-colors"
-                  title={`Dispatch an agent to draft and file a ${trackerName} ticket from this todo`}
+                  title={`Dispatch an agent to draft and file a ${trackerName} issue from this todo`}
                 >
-                  Create {trackerName} Ticket
+                  Create {trackerName} Issue
                 </button>
               </>
             )}
@@ -468,7 +468,7 @@ export function TodoDetailModal({ todo, tracks, onClose, onSave, onDelete, onDis
               e.preventDefault();
               const { repo, labels } = ghConfirm;
               setGhConfirm(null);
-              handleCreateTicket({
+              handleCreateIssue({
                 repo: repo.trim(),
                 labels: labels
                   .split(',')

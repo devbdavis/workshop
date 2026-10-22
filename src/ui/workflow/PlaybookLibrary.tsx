@@ -47,7 +47,7 @@ interface Playbook {
   version: number;
   name: string;
   description: string;
-  ticketType: 'epic' | 'task';
+  issueType: 'epic' | 'task';
   stageDefinitions: StageDefinition[];
   tags?: string[];
   matchCriteria?: {
@@ -62,7 +62,7 @@ interface Playbook {
   createdAt: string;
 }
 
-type TicketTypeFilter = 'all' | 'epic' | 'task';
+type IssueTypeFilter = 'all' | 'epic' | 'task';
 
 export function PlaybookLibrary() {
   const [playbooks, setPlaybooks] = useState<Playbook[]>([]);
@@ -71,7 +71,7 @@ export function PlaybookLibrary() {
   const [selectedId, setSelectedId] = useState<string | null>(null);
 
   // Filters
-  const [ticketTypeFilter, setTicketTypeFilter] = useState<TicketTypeFilter>('all');
+  const [issueTypeFilter, setIssueTypeFilter] = useState<IssueTypeFilter>('all');
   const [searchQuery, setSearchQuery] = useState('');
 
   // Load playbooks
@@ -95,7 +95,7 @@ export function PlaybookLibrary() {
   // Filter playbooks
   const filteredPlaybooks = useMemo(() => {
     return playbooks.filter((t) => {
-      if (ticketTypeFilter !== 'all' && t.ticketType !== ticketTypeFilter) return false;
+      if (issueTypeFilter !== 'all' && t.issueType !== issueTypeFilter) return false;
       if (searchQuery.trim()) {
         const query = searchQuery.toLowerCase();
         const matchesName = t.name.toLowerCase().includes(query);
@@ -105,7 +105,7 @@ export function PlaybookLibrary() {
       }
       return true;
     });
-  }, [playbooks, ticketTypeFilter, searchQuery]);
+  }, [playbooks, issueTypeFilter, searchQuery]);
 
   const selected = selectedId ? playbooks.find((t) => t.rowId === selectedId) : null;
 
@@ -141,9 +141,9 @@ export function PlaybookLibrary() {
             {(['all', 'epic', 'task'] as const).map((type) => (
               <button
                 key={type}
-                onClick={() => setTicketTypeFilter(type)}
+                onClick={() => setIssueTypeFilter(type)}
                 className={`px-3 py-1 text-xs rounded transition-colors ${
-                  ticketTypeFilter === type
+                  issueTypeFilter === type
                     ? 'bg-gray-700 text-gray-200'
                     : 'text-gray-500 hover:text-gray-300'
                 }`}
@@ -198,7 +198,7 @@ function PlaybookCard({
   onClick: () => void;
 }) {
   const typeColor =
-    playbook.ticketType === 'epic'
+    playbook.issueType === 'epic'
       ? 'bg-purple-900/50 text-purple-300'
       : 'bg-cyan-900/50 text-cyan-300';
 
@@ -214,7 +214,7 @@ function PlaybookCard({
       <div className="flex items-start justify-between gap-2 mb-2">
         <h3 className="text-sm font-medium text-gray-200">{playbook.name}</h3>
         <span className={`text-[10px] px-1.5 py-0.5 rounded shrink-0 ${typeColor}`}>
-          {playbook.ticketType}
+          {playbook.issueType}
         </span>
       </div>
 
@@ -263,7 +263,7 @@ function PlaybookDetailPanel({
   onClose: () => void;
 }) {
   const typeColor =
-    playbook.ticketType === 'epic'
+    playbook.issueType === 'epic'
       ? 'bg-sky-900/50 text-sky-300 border-sky-800'
       : 'bg-teal-900/50 text-teal-300 border-teal-800';
 
@@ -314,7 +314,7 @@ function PlaybookDetailPanel({
         <div className="flex items-center gap-3">
           <h3 className="text-sm font-semibold text-gray-200">{playbook.name}</h3>
           <span className={`text-[10px] px-1.5 py-0.5 rounded border ${typeColor}`}>
-            {playbook.ticketType}
+            {playbook.issueType}
           </span>
           <span className="text-[10px] text-gray-500">v{playbook.version}</span>
         </div>

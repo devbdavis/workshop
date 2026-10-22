@@ -6,7 +6,7 @@ export interface PlaybookRow {
   version: number;
   name: string;
   description: string;
-  ticketType: 'epic' | 'task';
+  issueType: 'epic' | 'task';
   stageDefinitions: StageDefinition[];
   promptOverrides?: PromptOverrides;
   tags?: string[];
@@ -24,7 +24,7 @@ export interface PlaybookRepository {
   findByRowId(rowId: string): PlaybookRow | null;
   findLatest(id: string): PlaybookRow | null;
   findByIdAndVersion(id: string, version: number): PlaybookRow | null;
-  findAllLatest(filters?: { ticketType?: string; tags?: string[] }): PlaybookRow[];
+  findAllLatest(filters?: { issueType?: string; tags?: string[] }): PlaybookRow[];
   /** Find the latest task playbook whose parentPlaybookId matches the given epic playbook ID */
   findTaskPlaybookByParent(parentPlaybookId: string): PlaybookRow | null;
   create(playbook: Omit<PlaybookRow, 'rowId' | 'createdAt' | 'updatedAt' | 'isLatest'>): PlaybookRow;

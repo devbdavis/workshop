@@ -8,13 +8,13 @@ const testDbPath = path.join(os.tmpdir(), `workshop-test-wf-engine-${randomUUID(
 process.env.WORKSHOP_DB_PATH = testDbPath;
 
 import {
-  createWorkflowTicketRepository,
+  createWorkflowIssueRepository,
   createWorkflowTransitionRepository,
 } from '@infrastructure/persistence/workflow-repository';
-import { createTicketDependencyRepository } from '@infrastructure/persistence/workflow-dependency-repository';
+import { createIssueDependencyRepository } from '@infrastructure/persistence/workflow-dependency-repository';
 import { createWorkflowEngine } from '@application/workflow/engine';
 import { resetDatabase } from '@infrastructure/persistence/database';
-import type { WorkflowTicketId, WorkflowTicket } from '@foundation/types';
+import type { WorkflowIssueId, WorkflowIssue } from '@foundation/types';
 import type { TopologyLoader } from '@application/workflow/topology-loader';
 import type { StageDefinition } from '@domain/workflow/types';
 
@@ -112,14 +112,14 @@ const TASK_STAGES: StageDefinition[] = [
 
 function createMockTopologyLoader(): TopologyLoader {
   return {
-    loadForTicket(ticket: WorkflowTicket): StageDefinition[] {
-      if (ticket.type === 'epic') return EPIC_STAGES;
+    loadForIssue(issue: WorkflowIssue): StageDefinition[] {
+      if (issue.type === 'epic') return EPIC_STAGES;
       return TASK_STAGES;
     },
     loadByTemplateRowId(_rowId: string): StageDefinition[] {
       return EPIC_STAGES; // default to epic for template loads
     },
-    loadTemplateForTicket(_ticket: WorkflowTicket) {
+    loadTemplateForIssue(_issue: WorkflowIssue) {
       return null;
     },
     clearCache() {},
@@ -127,11 +127,11 @@ function createMockTopologyLoader(): TopologyLoader {
 }
 
 describe('WorkflowEngine', () => {
-  const tickets = createWorkflowTicketRepository();
+  const issues = createWorkflowIssueRepository();
   const transitions = createWorkflowTransitionRepository();
-  const dependencies = createTicketDependencyRepository();
+  const dependencies = createIssueDependencyRepository();
   const topologyLoader = createMockTopologyLoader();
-  const engine = createWorkflowEngine({ tickets, transitions, dependencies, topologyLoader });
+  const engine = createWorkflowEngine({ issues, transitions, dependencies, topologyLoader });
 
   afterAll(() => {
     resetDatabase();
@@ -152,7 +152,7 @@ describe('WorkflowEngine', () => {
 
     it('should record the auto-transition in audit log', () => {
       const epic = engine.createEpic({ title: 'Audit test', description: 'X' });
-      const history = transitions.findByTicket(epic.id);
+      const history = transitions.findByIssue(epic.id);
       expect(history.length).toBeGreaterThanOrEqual(1);
       const autoTransition = history.find(
         (t) => t.fromState === 'idea' && t.toState === 'triaging',
@@ -208,14 +208,14 @@ describe('WorkflowEngine', () => {
       });
 
       expect(t2.state).toBe('blocked');
-      const deps = dependencies.findByTicket(t2.id);
+      const deps = dependencies.findByIssue(t2.id);
       expect(deps).toHaveLength(1);
       expect(deps[0].dependsOnId).toBe(t1.id);
     });
   });
 
   describe('transition', () => {
-    it('should transition a ticket to a valid state', () => {
+    it('should transition an issue to a valid state', () => {
       const epic = engine.createEpic({ title: 'Trans test', description: 'X' });
       // epic is in triaging, transition to specced (auto-transitions to spec-review)
       const updated = engine.transition(
@@ -234,16 +234,16 @@ describe('WorkflowEngine', () => {
       ).toThrow(/Invalid transition/);
     });
 
-    it('should throw for non-existent ticket', () => {
+    it('should throw for non-existent issue', () => {
       expect(() =>
-        engine.transition('nonexistent' as WorkflowTicketId, 'triaging', { type: 'human' }),
-      ).toThrow(/Ticket not found/);
+        engine.transition('nonexistent' as WorkflowIssueId, 'triaging', { type: 'human' }),
+      ).toThrow(/Issue not found/);
     });
 
     it('should record transition in audit log', () => {
       const epic = engine.createEpic({ title: 'Audit', description: 'X' });
       engine.transition(epic.id, 'specced', { type: 'agent' }, 'Done');
-      const history = transitions.findByTicket(epic.id);
+      const history = transitions.findByIssue(epic.id);
       const specTransition = history.find((t) => t.toState === 'specced');
       expect(specTransition).toBeDefined();
       expect(specTransition!.comment).toBe('Done');
@@ -331,11 +331,11 @@ describe('WorkflowEngine', () => {
       expect(t2.state).toBe('blocked');
 
       // Simulate t1 completing
-      tickets.update(t1.id, { state: 'done' });
+      issues.update(t1.id, { state: 'done' });
       engine.onTaskCompleted(t1.id);
 
       // ready auto-transitions to in-progress
-      const updatedT2 = tickets.findById(t2.id);
+      const updatedT2 = issues.findById(t2.id);
       expect(updatedT2!.state).toBe('in-progress');
     });
 
@@ -353,18 +353,18 @@ describe('WorkflowEngine', () => {
       expect(t3.state).toBe('blocked');
 
       // Complete only t1
-      tickets.update(t1.id, { state: 'done' });
+      issues.update(t1.id, { state: 'done' });
       engine.onTaskCompleted(t1.id);
 
-      const stillBlocked = tickets.findById(t3.id);
+      const stillBlocked = issues.findById(t3.id);
       expect(stillBlocked!.state).toBe('blocked');
 
       // Complete t2
-      tickets.update(t2.id, { state: 'done' });
+      issues.update(t2.id, { state: 'done' });
       engine.onTaskCompleted(t2.id);
 
       // ready auto-transitions to in-progress
-      const nowReady = tickets.findById(t3.id);
+      const nowReady = issues.findById(t3.id);
       expect(nowReady!.state).toBe('in-progress');
     });
 
@@ -378,23 +378,23 @@ describe('WorkflowEngine', () => {
       engine.transition(epic.id, 'plan-review', { type: 'agent' });
       engine.approve(epic.id); // plan-review -> executing
       // Place epic directly into in-progress (execution dispatcher handles this in prod)
-      tickets.update(epic.id, { state: 'in-progress' });
+      issues.update(epic.id, { state: 'in-progress' });
 
       const t1 = engine.createTask({ title: 'T1', description: 'X', parentId: epic.id });
       const t2 = engine.createTask({ title: 'T2', description: 'X', parentId: epic.id });
 
       // Complete both tasks
-      tickets.update(t1.id, { state: 'done' });
+      issues.update(t1.id, { state: 'done' });
       engine.onTaskCompleted(t1.id);
 
       // Epic should still be in-progress
-      expect(tickets.findById(epic.id)!.state).toBe('in-progress');
+      expect(issues.findById(epic.id)!.state).toBe('in-progress');
 
-      tickets.update(t2.id, { state: 'done' });
+      issues.update(t2.id, { state: 'done' });
       engine.onTaskCompleted(t2.id);
 
       // Now epic should advance
-      expect(tickets.findById(epic.id)!.state).toBe('integration-review');
+      expect(issues.findById(epic.id)!.state).toBe('integration-review');
     });
 
     it('should be a no-op for non-done tasks', () => {

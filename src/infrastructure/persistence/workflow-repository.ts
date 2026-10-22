@@ -1,20 +1,20 @@
 import { v4 as uuid } from 'uuid';
 import { getDatabase } from './database.js';
 import type {
-  WorkflowTicket, WorkflowTicketId, WorkflowTransition, WorkflowTransitionId,
-  WorkflowState, WorkflowTicketType, TrackId, TicketId, SessionId,
+  WorkflowIssue, WorkflowIssueId, WorkflowTransition, WorkflowTransitionId,
+  WorkflowState, WorkflowIssueType, TrackId, IssueId, SessionId,
   AgentId, SessionProvider, TransitionActor,
 } from '@foundation/types';
 import type {
-  WorkflowTicketRepository, WorkflowTicketCreate, WorkflowTicketUpdate,
+  WorkflowIssueRepository, WorkflowIssueCreate, WorkflowIssueUpdate,
   WorkflowTransitionRepository, WorkflowTransitionCreate,
-} from '@domain/workflow/ticket-repository.js';
+} from '@domain/workflow/issue-repository.js';
 
 // ---------------------------------------------------------------------------
-// WorkflowTicketRepository
+// WorkflowIssueRepository
 // ---------------------------------------------------------------------------
 
-export function createWorkflowTicketRepository(): WorkflowTicketRepository {
+export function createWorkflowIssueRepository(): WorkflowIssueRepository {
   const db = getDatabase();
 
   // Prepare statements once
@@ -44,12 +44,12 @@ export function createWorkflowTicketRepository(): WorkflowTicketRepository {
   const deleteStmt = db.prepare('DELETE FROM workflow_tickets WHERE id = ?');
 
   return {
-    findById(id: WorkflowTicketId): WorkflowTicket | null {
-      const row = findByIdStmt.get(id) as TicketRow | undefined;
-      return row ? rowToTicket(row) : null;
+    findById(id: WorkflowIssueId): WorkflowIssue | null {
+      const row = findByIdStmt.get(id) as IssueRow | undefined;
+      return row ? rowToIssue(row) : null;
     },
 
-    findAll(filters?): WorkflowTicket[] {
+    findAll(filters?): WorkflowIssue[] {
       // Dynamic query - cannot be pre-prepared due to variable WHERE clauses
       const clauses: string[] = [];
       const params: unknown[] = [];
@@ -58,67 +58,67 @@ export function createWorkflowTicketRepository(): WorkflowTicketRepository {
       if (filters?.trackId) { clauses.push('track_id = ?'); params.push(filters.trackId); }
       if (filters?.parentId) { clauses.push('parent_id = ?'); params.push(filters.parentId); }
       const where = clauses.length > 0 ? ` WHERE ${clauses.join(' AND ')}` : '';
-      const rows = db.prepare(`SELECT * FROM workflow_tickets${where} ORDER BY sort_order ASC, created_at DESC`).all(...params) as TicketRow[];
-      return rows.map(rowToTicket);
+      const rows = db.prepare(`SELECT * FROM workflow_tickets${where} ORDER BY sort_order ASC, created_at DESC`).all(...params) as IssueRow[];
+      return rows.map(rowToIssue);
     },
 
-    findChildren(parentId: WorkflowTicketId): WorkflowTicket[] {
-      const rows = findChildrenStmt.all(parentId) as TicketRow[];
-      return rows.map(rowToTicket);
+    findChildren(parentId: WorkflowIssueId): WorkflowIssue[] {
+      const rows = findChildrenStmt.all(parentId) as IssueRow[];
+      return rows.map(rowToIssue);
     },
 
-    findByState(state: WorkflowState): WorkflowTicket[] {
-      const rows = findByStateStmt.all(state) as TicketRow[];
-      return rows.map(rowToTicket);
+    findByState(state: WorkflowState): WorkflowIssue[] {
+      const rows = findByStateStmt.all(state) as IssueRow[];
+      return rows.map(rowToIssue);
     },
 
-    findByExecutionSessionId(sessionId: string): WorkflowTicket | null {
-      const row = findByExecSessionStmt.get(sessionId) as TicketRow | undefined;
-      return row ? rowToTicket(row) : null;
+    findByExecutionSessionId(sessionId: string): WorkflowIssue | null {
+      const row = findByExecSessionStmt.get(sessionId) as IssueRow | undefined;
+      return row ? rowToIssue(row) : null;
     },
 
-    findHumanGatePending(): WorkflowTicket[] {
-      const rows = findHumanGatePendingStmt.all() as TicketRow[];
-      return rows.map(rowToTicket);
+    findHumanGatePending(): WorkflowIssue[] {
+      const rows = findHumanGatePendingStmt.all() as IssueRow[];
+      return rows.map(rowToIssue);
     },
 
-    create(ticket: WorkflowTicketCreate): WorkflowTicket {
-      const id = uuid() as WorkflowTicketId;
+    create(issue: WorkflowIssueCreate): WorkflowIssue {
+      const id = uuid() as WorkflowIssueId;
       const now = new Date().toISOString();
       insertStmt.run(
-        id, ticket.type, ticket.title, ticket.description, ticket.state,
-        ticket.stateData ? JSON.stringify(ticket.stateData) : null,
-        ticket.parentId || null, ticket.trackId || null,
-        ticket.externalTicketId || null, ticket.assignedAgentRole || null,
-        ticket.assignedAgentIds ? JSON.stringify(ticket.assignedAgentIds) : null,
-        ticket.provider || 'claude', ticket.priority || 'medium',
-        ticket.labels ? JSON.stringify(ticket.labels) : null,
-        ticket.sortOrder ?? 0, ticket.playbookRowId || null,
+        id, issue.type, issue.title, issue.description, issue.state,
+        issue.stateData ? JSON.stringify(issue.stateData) : null,
+        issue.parentId || null, issue.trackId || null,
+        issue.externalIssueId || null, issue.assignedAgentRole || null,
+        issue.assignedAgentIds ? JSON.stringify(issue.assignedAgentIds) : null,
+        issue.provider || 'claude', issue.priority || 'medium',
+        issue.labels ? JSON.stringify(issue.labels) : null,
+        issue.sortOrder ?? 0, issue.playbookRowId || null,
         now, now, now,
       );
       return {
-        id, ...ticket,
-        sortOrder: ticket.sortOrder ?? 0,
-        provider: ticket.provider || 'claude',
-        priority: ticket.priority || 'medium',
+        id, ...issue,
+        sortOrder: issue.sortOrder ?? 0,
+        provider: issue.provider || 'claude',
+        priority: issue.priority || 'medium',
         stateChangedAt: now, createdAt: now, updatedAt: now,
       };
     },
 
-    update(id: WorkflowTicketId, data: WorkflowTicketUpdate): WorkflowTicket | null {
+    update(id: WorkflowIssueId, data: WorkflowIssueUpdate): WorkflowIssue | null {
       const existing = this.findById(id);
       if (!existing) return null;
       const now = new Date().toISOString();
       const stateChanged = data.state !== undefined && data.state !== existing.state;
 
-      const merged: WorkflowTicket = {
+      const merged: WorkflowIssue = {
         ...existing,
         title: data.title ?? existing.title,
         description: data.description ?? existing.description,
         state: data.state ?? existing.state,
         stateData: data.stateData !== undefined ? data.stateData : existing.stateData,
         trackId: data.trackId !== undefined ? data.trackId : existing.trackId,
-        externalTicketId: data.externalTicketId !== undefined ? data.externalTicketId : existing.externalTicketId,
+        externalIssueId: data.externalIssueId !== undefined ? data.externalIssueId : existing.externalIssueId,
         executionSessionId: data.executionSessionId !== undefined ? data.executionSessionId : existing.executionSessionId,
         assignedAgentRole: data.assignedAgentRole !== undefined ? data.assignedAgentRole : existing.assignedAgentRole,
         assignedAgentIds: data.assignedAgentIds !== undefined ? data.assignedAgentIds : existing.assignedAgentIds,
@@ -134,7 +134,7 @@ export function createWorkflowTicketRepository(): WorkflowTicketRepository {
       updateStmt.run(
         merged.title, merged.description, merged.state,
         merged.stateData ? JSON.stringify(merged.stateData) : null,
-        merged.trackId || null, merged.externalTicketId || null,
+        merged.trackId || null, merged.externalIssueId || null,
         merged.executionSessionId || null,
         merged.assignedAgentRole || null,
         merged.assignedAgentIds ? JSON.stringify(merged.assignedAgentIds) : null,
@@ -147,7 +147,7 @@ export function createWorkflowTicketRepository(): WorkflowTicketRepository {
       return merged;
     },
 
-    delete(id: WorkflowTicketId): boolean {
+    delete(id: WorkflowIssueId): boolean {
       const result = deleteStmt.run(id);
       return result.changes > 0;
     },
@@ -162,8 +162,8 @@ export function createWorkflowTransitionRepository(): WorkflowTransitionReposito
   const db = getDatabase();
 
   // Prepare statements once
-  const findByTicketStmt = db.prepare('SELECT * FROM workflow_transitions WHERE ticket_id = ? ORDER BY created_at DESC');
-  const findByTicketWithLimitStmt = db.prepare('SELECT * FROM workflow_transitions WHERE ticket_id = ? ORDER BY created_at DESC LIMIT ?');
+  const findByIssueStmt = db.prepare('SELECT * FROM workflow_transitions WHERE ticket_id = ? ORDER BY created_at DESC');
+  const findByIssueWithLimitStmt = db.prepare('SELECT * FROM workflow_transitions WHERE ticket_id = ? ORDER BY created_at DESC LIMIT ?');
   const findByIdStmt = db.prepare('SELECT * FROM workflow_transitions WHERE id = ?');
   const insertStmt = db.prepare(
     `INSERT INTO workflow_transitions
@@ -172,10 +172,10 @@ export function createWorkflowTransitionRepository(): WorkflowTransitionReposito
   );
 
   return {
-    findByTicket(ticketId: WorkflowTicketId, limit?: number): WorkflowTransition[] {
+    findByIssue(issueId: WorkflowIssueId, limit?: number): WorkflowTransition[] {
       const rows = (limit
-        ? findByTicketWithLimitStmt.all(ticketId, limit)
-        : findByTicketStmt.all(ticketId)) as TransitionRow[];
+        ? findByIssueWithLimitStmt.all(issueId, limit)
+        : findByIssueStmt.all(issueId)) as TransitionRow[];
       return rows.map(rowToTransition);
     },
 
@@ -189,7 +189,7 @@ export function createWorkflowTransitionRepository(): WorkflowTransitionReposito
       const now = new Date().toISOString();
       const actor = transition.actor;
       insertStmt.run(
-        id, transition.ticketId, transition.fromState, transition.toState,
+        id, transition.issueId, transition.fromState, transition.toState,
         actor.type,
         actor.type === 'agent' ? actor.agentId || null : actor.type === 'human' ? actor.userId || null : null,
         actor.type === 'agent' ? actor.sessionId || null : null,
@@ -206,7 +206,7 @@ export function createWorkflowTransitionRepository(): WorkflowTransitionReposito
 // Row types and mappers
 // ---------------------------------------------------------------------------
 
-interface TicketRow {
+interface IssueRow {
   id: string; type: string; title: string; description: string;
   state: string; state_data: string | null; parent_id: string | null;
   track_id: string | null; external_ticket_id: string | null;
@@ -228,22 +228,22 @@ function safeJsonParse<T>(val: string | null): T | undefined {
   try { return JSON.parse(val) as T; } catch { return undefined; }
 }
 
-function rowToTicket(row: TicketRow): WorkflowTicket {
+function rowToIssue(row: IssueRow): WorkflowIssue {
   return {
-    id: row.id as WorkflowTicketId,
-    type: row.type as WorkflowTicketType,
+    id: row.id as WorkflowIssueId,
+    type: row.type as WorkflowIssueType,
     title: row.title,
     description: row.description,
     state: row.state as WorkflowState,
     stateData: safeJsonParse<Record<string, unknown>>(row.state_data),
-    parentId: (row.parent_id as WorkflowTicketId) || undefined,
+    parentId: (row.parent_id as WorkflowIssueId) || undefined,
     trackId: (row.track_id as TrackId) || undefined,
-    externalTicketId: (row.external_ticket_id as TicketId) || undefined,
+    externalIssueId: (row.external_ticket_id as IssueId) || undefined,
     executionSessionId: (row.execution_session_id as SessionId) || undefined,
     assignedAgentRole: row.assigned_agent_role || undefined,
     assignedAgentIds: safeJsonParse<AgentId[]>(row.assigned_agent_ids),
     provider: (row.provider as SessionProvider) || 'claude',
-    priority: row.priority as WorkflowTicket['priority'],
+    priority: row.priority as WorkflowIssue['priority'],
     labels: safeJsonParse<string[]>(row.labels),
     sortOrder: row.sort_order,
     playbookRowId: row.workflow_template_row_id || undefined,
@@ -264,7 +264,7 @@ function rowToTransition(row: TransitionRow): WorkflowTransition {
   }
   return {
     id: row.id as WorkflowTransitionId,
-    ticketId: row.ticket_id as WorkflowTicketId,
+    issueId: row.ticket_id as WorkflowIssueId,
     fromState: row.from_state as WorkflowState,
     toState: row.to_state as WorkflowState,
     actor,

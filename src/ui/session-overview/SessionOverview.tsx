@@ -7,7 +7,7 @@ import { SessionPanel } from '../track-view/SessionPanel';
 import { NewSessionModal, type NewSessionOptions } from '../track-view/NewSessionModal';
 import type { DispatchOptions } from '../track-view/DispatchDropdown';
 import { TodoDetailModal } from '../kanban/TodoDetailModal';
-import { LinearTicketModal } from '../kanban/LinearTicketModal';
+import { LinearIssueModal } from '../kanban/LinearIssueModal';
 import { groupSessionsByTrack, isVisibleTrack, sortTracks } from './group-sessions';
 import { TrackNavigator } from './TrackNavigator';
 import { NewSessionPicker } from './NewSessionPicker';
@@ -39,7 +39,7 @@ export function SessionOverview() {
   const [modalTrack, setModalTrack] = useState<Track | null>(null);
   const [defaultAiCli, setDefaultAiCli] = useState<DefaultAiCli>('claude');
   const [selectedTodo, setSelectedTodo] = useState<Todo | null>(null);
-  const [linearTicketTodoId, setLinearTicketTodoId] = useState<string | null>(null);
+  const [linearIssueTodoId, setLinearIssueTodoId] = useState<string | null>(null);
 
   const loadSessions = useCallback(async () => {
     try {
@@ -315,12 +315,12 @@ export function SessionOverview() {
           onSave={handleSaveTodo}
           onDelete={handleDeleteTodo}
           onDispatch={handleDispatchTodo}
-          onTicketCreationStarted={setLinearTicketTodoId}
+          onIssueCreationStarted={setLinearIssueTodoId}
         />
       )}
 
-      {linearTicketTodoId && (
-        <LinearTicketModal todoId={linearTicketTodoId} onClose={() => setLinearTicketTodoId(null)} />
+      {linearIssueTodoId && (
+        <LinearIssueModal todoId={linearIssueTodoId} onClose={() => setLinearIssueTodoId(null)} />
       )}
     </div>
   );

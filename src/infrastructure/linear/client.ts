@@ -1,5 +1,5 @@
 /**
- * Minimal Linear GraphQL client for the ticket-import feature.
+ * Minimal Linear GraphQL client for the issue-import feature.
  *
  * Uses a Personal API Key (header `Authorization: <key>`) rather than OAuth;
  * this keeps the single-user local tool trivial to configure from the Settings UI.

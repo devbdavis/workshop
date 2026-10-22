@@ -6,7 +6,7 @@ import type { SessionId, TrackId } from '@foundation/types';
  * Settings keys naming the disposable system tracks. Sessions here are one-shot
  * agent runs, not work the user returns to: PR-review analysis (dispatched
  * `interactive` so it parks at its prompt after reporting, and therefore never
- * trips the generic exited-CLI reaper) and Linear ticket drafting. Once cold they
+ * trips the generic exited-CLI reaper) and Linear issue drafting. Once cold they
  * are terminated — re-analyzing or asking a follow-up means a fresh dispatch.
  */
 const DISPOSABLE_TRACK_SETTINGS = ['pr_review_track_id', 'linear_ticket_track_id'];

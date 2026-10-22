@@ -8,17 +8,17 @@ const testDbPath = path.join(os.tmpdir(), `workshop-test-dep-resolver-${randomUU
 process.env.WORKSHOP_DB_PATH = testDbPath;
 
 import {
-  createWorkflowTicketRepository,
+  createWorkflowIssueRepository,
 } from '@infrastructure/persistence/workflow-repository';
-import { createTicketDependencyRepository } from '@infrastructure/persistence/workflow-dependency-repository';
+import { createIssueDependencyRepository } from '@infrastructure/persistence/workflow-dependency-repository';
 import { createDependencyResolver } from '@application/workflow/dependency-resolver';
 import { resetDatabase } from '@infrastructure/persistence/database';
-import type { WorkflowTicketId } from '@foundation/types';
+import type { WorkflowIssueId } from '@foundation/types';
 
 describe('DependencyResolver', () => {
-  const tickets = createWorkflowTicketRepository();
-  const dependencies = createTicketDependencyRepository();
-  const resolver = createDependencyResolver({ tickets, dependencies });
+  const issues = createWorkflowIssueRepository();
+  const dependencies = createIssueDependencyRepository();
+  const resolver = createDependencyResolver({ issues, dependencies });
 
   afterAll(() => {
     resetDatabase();
@@ -26,7 +26,7 @@ describe('DependencyResolver', () => {
   });
 
   function createEpic(title = 'Test Epic') {
-    return tickets.create({
+    return issues.create({
       type: 'epic',
       title,
       description: 'Test',
@@ -37,8 +37,8 @@ describe('DependencyResolver', () => {
     });
   }
 
-  function createTask(parentId: WorkflowTicketId, title: string, state = 'ready' as const) {
-    return tickets.create({
+  function createTask(parentId: WorkflowIssueId, title: string, state = 'ready' as const) {
+    return issues.create({
       type: 'task',
       title,
       description: 'Test task',
@@ -102,7 +102,7 @@ describe('DependencyResolver', () => {
       expect(unblocked).toEqual([]);
     });
 
-    it('should return unblocked ticket when single dependency is resolved', () => {
+    it('should return unblocked issue when single dependency is resolved', () => {
       const epic = createEpic();
       const t1 = createTask(epic.id, 'Dep');
       const t2 = createTask(epic.id, 'Blocked', 'blocked');
@@ -112,7 +112,7 @@ describe('DependencyResolver', () => {
       expect(unblocked).toContain(t2.id);
     });
 
-    it('should not return ticket that is not in blocked state', () => {
+    it('should not return issue that is not in blocked state', () => {
       const epic = createEpic();
       const t1 = createTask(epic.id, 'Dep R');
       const t2 = createTask(epic.id, 'Ready', 'ready'); // Not blocked!

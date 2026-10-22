@@ -8,7 +8,7 @@ export interface TodoContext {
 
 /**
  * Context object used for template variable interpolation.
- * The track must have repos and tickets populated.
+ * The track must have repos and issues populated.
  * The todo is optional — only available when dispatching a todo.
  */
 export interface TrackContext {
@@ -28,7 +28,7 @@ export interface TrackContext {
  *   {{track.repos[N].path}}   - Path of the Nth repo (0-indexed)
  *   {{track.repos[N].branch}} - Branch of the Nth repo (0-indexed)
  *   {{track.paths}}           - Comma-separated list of track paths
- *   {{track.tickets}}         - Comma-separated list of ticket external IDs
+ *   {{track.issues}}         - Comma-separated list of issue external IDs
  *   {{todo.id}}               - Todo UUID (only when dispatching a todo)
  *   {{todo.title}}            - Todo title (only when dispatching a todo)
  *   {{todo.description}}      - Todo description (only when dispatching a todo)
@@ -39,7 +39,7 @@ export function interpolateTemplate(template: string, ctx: TrackContext): string
   const { track, todo } = ctx;
   const repos = track.repos ?? [];
   const paths = track.paths ?? [];
-  const tickets = track.tickets ?? [];
+  const issues = track.issues ?? [];
 
   return template.replace(/\{\{([^}]+)\}\}/g, (_match, rawKey: string) => {
     const key = rawKey.trim();
@@ -61,8 +61,9 @@ export function interpolateTemplate(template: string, ctx: TrackContext): string
     if (key === 'todo.title') return todo?.title ?? _match;
     if (key === 'todo.description') return todo?.description ?? _match;
 
-    if (key === 'track.tickets') {
-      return tickets.map((t) => t.externalId).join(', ');
+    // track.tickets: saved templates predating the rename
+    if (key === 'track.issues' || key === 'track.tickets') {
+      return issues.map((t) => t.externalId).join(', ');
     }
 
     // Handle indexed repo access: track.repos[N].path or track.repos[N].branch

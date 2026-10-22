@@ -57,9 +57,9 @@ export function createPlaybookRepository(): PlaybookRepository {
       return row ? rowToPlaybook(row) : null;
     },
 
-    findAllLatest(filters?: { ticketType?: string; tags?: string[] }): PlaybookRow[] {
+    findAllLatest(filters?: { issueType?: string; tags?: string[] }): PlaybookRow[] {
       // For dynamic filtering, we build the query
-      if (!filters || (!filters.ticketType && !filters.tags?.length)) {
+      if (!filters || (!filters.issueType && !filters.tags?.length)) {
         const rows = findAllLatestStmt.all() as PlaybookDbRow[];
         return rows.map(rowToPlaybook);
       }
@@ -67,9 +67,9 @@ export function createPlaybookRepository(): PlaybookRepository {
       const clauses: string[] = ['is_latest = true'];
       const params: unknown[] = [];
 
-      if (filters.ticketType) {
+      if (filters.issueType) {
         clauses.push('ticket_type = ?');
-        params.push(filters.ticketType);
+        params.push(filters.issueType);
       }
 
       // Tag filtering uses LIKE since tags is stored as JSON array
@@ -94,7 +94,7 @@ export function createPlaybookRepository(): PlaybookRepository {
         playbook.version,
         playbook.name,
         playbook.description,
-        playbook.ticketType,
+        playbook.issueType,
         JSON.stringify(playbook.stageDefinitions),
         playbook.promptOverrides ? JSON.stringify(playbook.promptOverrides) : null,
         playbook.tags ? JSON.stringify(playbook.tags) : null,
@@ -153,7 +153,7 @@ export function createPlaybookRepository(): PlaybookRepository {
           merged.version,
           merged.name,
           merged.description,
-          merged.ticketType,
+          merged.issueType,
           JSON.stringify(merged.stageDefinitions),
           merged.promptOverrides ? JSON.stringify(merged.promptOverrides) : null,
           merged.tags ? JSON.stringify(merged.tags) : null,
@@ -214,7 +214,7 @@ function rowToPlaybook(row: PlaybookDbRow): PlaybookRow {
     version: row.version,
     name: row.name,
     description: row.description,
-    ticketType: row.ticket_type as 'epic' | 'task',
+    issueType: row.ticket_type as 'epic' | 'task',
     stageDefinitions: StageDefinitionsSchema.parse(JSON.parse(row.stage_definitions)),
     promptOverrides: row.prompt_overrides
       ? PromptOverridesSchema.parse(JSON.parse(row.prompt_overrides))

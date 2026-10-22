@@ -17,7 +17,7 @@ const WORKSHOP_API_URL = process.env.WORKSHOP_API_URL || `http://localhost:${pro
  * ALL sessions get SessionStart + SessionEnd hooks so we can track Claude's
  * session ID for --resume support, plus activity hooks (UserPromptSubmit, Stop,
  * Notification, PreToolUse) that report working/idle/needs-input instantly.
- * SubagentStop is added when an executionTicketId is present (workflow progress tracking).
+ * SubagentStop is added when an executionIssueId is present (workflow progress tracking).
  *
  * All hooks use type: 'command' (curl scripts) — Claude Code does not support
  * type: 'http' hooks and silently ignores them.
@@ -26,7 +26,7 @@ export function writeHookSettings(
   sessionDir: string,
   sessionId: string,
   options?: {
-    executionTicketId?: string;
+    executionIssueId?: string;
     mcpServers?: Record<string, unknown>;
     enabledPlugins?: Record<string, boolean>;
     /** --print runs have no TUI to watch; their end-of-run Stop must not raise an idle alert. */
@@ -87,14 +87,14 @@ export function writeHookSettings(
 
   // --- SubagentStop: workflow progress tracking ---
 
-  if (options?.executionTicketId) {
+  if (options?.executionIssueId) {
     const agentProgressScript = path.join(scriptsDir, 'agent-progress-hook.sh');
     hooks.SubagentStop = [
       {
         hooks: [
           {
             type: 'command',
-            command: `WORKSHOP_API_URL=${WORKSHOP_API_URL} WORKSHOP_SESSION_ID=${sessionId} WORKSHOP_TICKET_ID=${options.executionTicketId} ${agentProgressScript}`,
+            command: `WORKSHOP_API_URL=${WORKSHOP_API_URL} WORKSHOP_SESSION_ID=${sessionId} WORKSHOP_ISSUE_ID=${options.executionIssueId} ${agentProgressScript}`,
           },
         ],
       },
@@ -102,7 +102,7 @@ export function writeHookSettings(
 
     // StopFailure (matcher: rate_limit) — Dark Factory usage pacing. When an
     // autonomous run hits the Claude usage wall, calibrate the ceiling and pause
-    // the run until the window resets. No-ops server-side for non-autonomous tickets.
+    // the run until the window resets. No-ops server-side for non-autonomous issues.
     const stopFailureScript = path.join(scriptsDir, 'agent-stopfailure-hook.sh');
     hooks.StopFailure = [
       {
@@ -110,7 +110,7 @@ export function writeHookSettings(
         hooks: [
           {
             type: 'command',
-            command: `WORKSHOP_API_URL=${WORKSHOP_API_URL} WORKSHOP_SESSION_ID=${sessionId} WORKSHOP_TICKET_ID=${options.executionTicketId} ${stopFailureScript}`,
+            command: `WORKSHOP_API_URL=${WORKSHOP_API_URL} WORKSHOP_SESSION_ID=${sessionId} WORKSHOP_ISSUE_ID=${options.executionIssueId} ${stopFailureScript}`,
           },
         ],
       },
@@ -233,9 +233,9 @@ export function buildClaudeLauncher(
   const isScheduled =
     options?.background && !options?.todoId && !options?.interactive && !options?.claudeResumeId;
   // Always write a settings file (SessionStart + SessionEnd hooks for resume tracking,
-  // SubagentStop for workflow progress if executionTicketId is present).
+  // SubagentStop for workflow progress if executionIssueId is present).
   const settingsFile = writeHookSettings(sessionDir, sessionId, {
-    executionTicketId: options?.executionTicketId,
+    executionIssueId: options?.executionIssueId,
     mcpServers: options?.mcpServers,
     enabledPlugins: options?.enabledPlugins,
     skipActivityHooks: !!isScheduled,

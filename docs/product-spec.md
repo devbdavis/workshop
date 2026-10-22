@@ -2,13 +2,13 @@
 
 ## Problem Statement
 
-When working on multiple parallel project tracks, context switching is expensive and error-prone. Existing project management tools (Jira, Linear) impose a rigid ticket-based structure that doesn't always match how work is actually thought about — sometimes a single ticket spans multiple conceptual tracks, and sometimes a single track involves work that's more granular than any ticket captures.
+When working on multiple parallel project tracks, context switching is expensive and error-prone. Existing project management tools (Jira, Linear) impose a rigid issue-based structure that doesn't always match how work is actually thought about — sometimes a single issue spans multiple conceptual tracks, and sometimes a single track involves work that's more granular than any issue captures.
 
 There is no unified place to:
 - See the current state of each active project track at a glance
 - Maintain persistent AI-assisted sessions per track
 - Keep track of which repos, branches, and filesystem locations are involved
-- Flexibly link work tracks to external tickets without being constrained by their hierarchy
+- Flexibly link work tracks to external issues without being constrained by their hierarchy
 
 ## Product Vision
 
@@ -23,16 +23,16 @@ The central organizing unit. A project track represents a stream of work as the 
 - A name and description
 - Current status summary (AI-maintained)
 - Associated context: repos, branches, filesystem paths, configuration
-- Linked external tickets (Jira/Linear) — many-to-many relationship
+- Linked external issues (Jira/Linear) — many-to-many relationship
 - One or more terminal sessions with Claude Code instances
 - Custom system prompts for its agents
 - Event-driven automation rules
 
-### External Ticket Link
+### External Issue Link
 
-A many-to-many association between project tracks and Jira/Linear tickets. A single track can reference multiple tickets, and a single ticket can appear across multiple tracks. The link stores:
+A many-to-many association between project tracks and Jira/Linear issues. A single track can reference multiple issues, and a single issue can appear across multiple tracks. The link stores:
 
-- Ticket ID and source system (Jira/Linear)
+- Issue ID and source system (Jira/Linear)
 - Relationship annotation (e.g., "primary", "related", "blocked-by")
 - Last-synced status snapshot
 
@@ -64,14 +64,14 @@ When opening the web interface, the user sees:
 - A grid or list of all active project tracks
 - Each track shows its name, a short status line, and indicators for active sessions
 - Quick actions: create new track, archive a track
-- A global search/filter across tracks and linked tickets
+- A global search/filter across tracks and linked issues
 
 ### 2. Project Track View
 
 Selecting a track opens its dedicated workspace:
 
 - **Summary Panel** — The current AI-generated status summary. Shows last-updated timestamp. Manual "refresh summary" button available.
-- **Context Panel** — Lists associated repos (with current branch and dirty state), filesystem paths, linked tickets with their current status.
+- **Context Panel** — Lists associated repos (with current branch and dirty state), filesystem paths, linked issues with their current status.
 - **Terminal Area** — One or more resizable terminal panels, each running a Claude Code session. Toolbar to create new sessions, kill sessions, or reattach to backgrounded ones.
 - **Configuration** — System prompts for the track's agents, automation rules, track metadata.
 
@@ -79,17 +79,17 @@ Selecting a track opens its dedicated workspace:
 
 - Provide a name and optional description
 - Optionally link git repos (by path or URL)
-- Optionally link Jira/Linear tickets (search and select via MCP integration)
+- Optionally link Jira/Linear issues (search and select via MCP integration)
 - Optionally set a custom system prompt template for Claude sessions in this track
 - A starter terminal session is created automatically
 
-### 4. Linking External Tickets
+### 4. Linking External Issues
 
-- From within a track, search for Jira/Linear tickets
-- Select one or more tickets to link
+- From within a track, search for Jira/Linear issues
+- Select one or more issues to link
 - Annotate the relationship type
-- Ticket status is synced periodically and displayed in the context panel
-- A ticket can be unlinked without affecting the ticket itself
+- Issue status is synced periodically and displayed in the context panel
+- An issue can be unlinked without affecting the issue itself
 
 ### 5. Managing Terminal Sessions
 
@@ -101,27 +101,27 @@ Selecting a track opens its dedicated workspace:
 
 ### 6. Configuring Automation
 
-- Define event triggers: "on git push", "on ticket status change", "on session end", "on schedule (cron)", "manual"
+- Define event triggers: "on git push", "on issue status change", "on session end", "on schedule (cron)", "manual"
 - Define actions: "regenerate summary", "run agent with prompt X", "send notification"
 - Example: "After any terminal session ends, regenerate the project summary"
-- Example: "Every morning at 9am, pull latest ticket statuses and update summary"
+- Example: "Every morning at 9am, pull latest issue statuses and update summary"
 
 ### 7. Adjusting Agent System Prompts
 
 - Each track has a default system prompt template
 - Individual sessions can override the default
-- Prompts can reference track context variables (repo paths, branch names, ticket IDs)
+- Prompts can reference track context variables (repo paths, branch names, issue IDs)
 - A library of prompt templates is available to start from
 
 ## Integrations
 
 ### Jira / Linear (via MCP)
 
-- Search for tickets
-- Pull ticket details: title, description, status, assignee, labels
-- Display ticket status in the context panel
-- Many-to-many linking between tracks and tickets
-- Periodic or event-driven sync of ticket status
+- Search for issues
+- Pull issue details: title, description, status, assignee, labels
+- Display issue status in the context panel
+- Many-to-many linking between tracks and issues
+- Periodic or event-driven sync of issue status
 
 ### Git
 
@@ -146,7 +146,7 @@ Dashboard
   |     +-- Summary Panel
   |     +-- Context Panel
   |     |     +-- Repos & Branches
-  |     |     +-- Linked Tickets
+  |     |     +-- Linked Issues
   |     |     +-- Filesystem Paths
   |     +-- Terminal Sessions
   |     |     +-- Session 1 (Claude Code)
@@ -173,11 +173,11 @@ All state is local-first:
 - **Project tracks, links, summaries, automation rules** — stored in a local database or structured files
 - **Terminal sessions** — managed by the backend (e.g., via tmux), survive server restarts
 - **Claude Code sessions** — leverage Claude Code's built-in resume/session persistence
-- **Ticket data** — cached locally, synced from external systems on demand or schedule
+- **Issue data** — cached locally, synced from external systems on demand or schedule
 
 ## Key Design Principles
 
-1. **User's mental model first** — The system adapts to how the user thinks about their work, not the other way around. Tracks are flexible and don't enforce ticket-level structure.
+1. **User's mental model first** — The system adapts to how the user thinks about their work, not the other way around. Tracks are flexible and don't enforce issue-level structure.
 
 2. **Persistent by default** — Sessions, summaries, and context survive restarts and page refreshes. No work is lost because a browser tab was closed.
 
@@ -185,16 +185,16 @@ All state is local-first:
 
 4. **Lightweight and local** — Runs on the developer's machine. No cloud deployment needed. Data stays local.
 
-5. **Flexible linking, not rigid hierarchy** — Many-to-many relationships between tracks and tickets. A track can represent anything from a single subtask to a multi-epic initiative.
+5. **Flexible linking, not rigid hierarchy** — Many-to-many relationships between tracks and issues. A track can represent anything from a single subtask to a multi-epic initiative.
 
-6. **Progressive complexity** — Creating a track with a single terminal session should take seconds. Automation, custom prompts, and ticket linking are available but never required.
+6. **Progressive complexity** — Creating a track with a single terminal session should take seconds. Automation, custom prompts, and issue linking are available but never required.
 
 ## Stretch Goals
 
 - **Voice conversations** — Use Claude Code's `/voice` capability to have spoken conversations about a project track. Voice sessions appear alongside terminal sessions.
-- **Cross-track dependency visualization** — See how tracks relate to each other (shared tickets, shared repos, blocking relationships).
-- **Timeline view** — See a chronological view of activity across tracks (commits, ticket changes, summary updates, session transcripts).
-- ability to edit/modify tickets via mcp and agent conversations should easily be doable
+- **Cross-track dependency visualization** — See how tracks relate to each other (shared issues, shared repos, blocking relationships).
+- **Timeline view** — See a chronological view of activity across tracks (commits, issue changes, summary updates, session transcripts).
+- ability to edit/modify issues via mcp and agent conversations should easily be doable
 
 ## Out of Scope (v1)
 

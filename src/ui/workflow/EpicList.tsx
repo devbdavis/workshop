@@ -1,4 +1,4 @@
-import type { WorkflowTicket, Track } from '@foundation/types.js';
+import type { WorkflowIssue, Track } from '@foundation/types.js';
 import { WorkflowStateIndicator } from './WorkflowStateIndicator.js';
 import { RunningDarkPill, PausedPill } from './EpicDetailSections.js';
 
@@ -18,36 +18,36 @@ const FILTER_TABS: { value: FilterTab; label: string }[] = [
   { value: 'done', label: 'Done' },
 ];
 
-// Legacy state sets — kept for backward compatibility with tickets without templates
+// Legacy state sets — kept for backward compatibility with issues without templates
 const LEGACY_TERMINAL_STATES = new Set(['merged', 'cancelled', 'done']);
 const LEGACY_HUMAN_REVIEW_STATES = new Set(['spec-review', 'plan-review', 'final-review', 'code-review', 'needs-input']);
 const LEGACY_DONE_STATES = new Set(['merged', 'approved', 'done']);
 
-/** Check if ticket is in a terminal state (dynamic template or legacy fallback) */
-function isTerminalState(ticket: WorkflowTicket): boolean {
-  const sd = ticket.stateData as Record<string, unknown> | undefined;
+/** Check if issue is in a terminal state (dynamic template or legacy fallback) */
+function isTerminalState(issue: WorkflowIssue): boolean {
+  const sd = issue.stateData as Record<string, unknown> | undefined;
   if (sd?.currentStateSemanticRole === 'terminal') return true;
-  return LEGACY_TERMINAL_STATES.has(ticket.state);
+  return LEGACY_TERMINAL_STATES.has(issue.state);
 }
 
-/** Check if ticket is at a human gate requiring review (dynamic template or legacy fallback) */
-function isHumanReviewState(ticket: WorkflowTicket): boolean {
-  const sd = ticket.stateData as Record<string, unknown> | undefined;
+/** Check if issue is at a human gate requiring review (dynamic template or legacy fallback) */
+function isHumanReviewState(issue: WorkflowIssue): boolean {
+  const sd = issue.stateData as Record<string, unknown> | undefined;
   if (sd?.currentStateHumanGate === true) return true;
-  return LEGACY_HUMAN_REVIEW_STATES.has(ticket.state);
+  return LEGACY_HUMAN_REVIEW_STATES.has(issue.state);
 }
 
-/** Check if ticket is in a done state (successful terminal) */
-function isDoneState(ticket: WorkflowTicket): boolean {
-  const sd = ticket.stateData as Record<string, unknown> | undefined;
-  if (sd?.currentStateSemanticRole === 'terminal' && ticket.state !== 'cancelled') return true;
-  return LEGACY_DONE_STATES.has(ticket.state);
+/** Check if issue is in a done state (successful terminal) */
+function isDoneState(issue: WorkflowIssue): boolean {
+  const sd = issue.stateData as Record<string, unknown> | undefined;
+  if (sd?.currentStateSemanticRole === 'terminal' && issue.state !== 'cancelled') return true;
+  return LEGACY_DONE_STATES.has(issue.state);
 }
 
 interface EpicListProps {
-  epics: WorkflowTicket[];
+  epics: WorkflowIssue[];
   tracks: Track[];
-  allTasks?: WorkflowTicket[];
+  allTasks?: WorkflowIssue[];
   filter: FilterTab;
   onFilterChange: (filter: FilterTab) => void;
   onEpicClick: (epicId: string) => void;
@@ -145,7 +145,7 @@ function EpicCard({
   childReviewCount,
   onClick,
 }: {
-  epic: WorkflowTicket;
+  epic: WorkflowIssue;
   trackName?: string;
   childReviewCount?: number;
   onClick: () => void;
@@ -164,7 +164,7 @@ function EpicCard({
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 mb-1">
             <h3 className="text-sm font-medium text-gray-200 truncate">{epic.title}</h3>
-            <WorkflowStateIndicator state={epic.state} ticketType="epic" stateData={epic.stateData as Record<string, unknown> | undefined} />
+            <WorkflowStateIndicator state={epic.state} issueType="epic" stateData={epic.stateData as Record<string, unknown> | undefined} />
             {stateData?.autonomous === true && <RunningDarkPill />}
             {stateData?.paused === true && <PausedPill until={typeof stateData?.pausedUntil === 'string' ? stateData.pausedUntil : undefined} reason={typeof stateData?.pausedReason === 'string' ? stateData.pausedReason : undefined} />}
             {childReviewCount != null && childReviewCount > 0 && (

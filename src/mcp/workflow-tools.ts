@@ -6,10 +6,10 @@ export function registerWorkflowTools(
   api: (path: string, options?: RequestInit) => Promise<any>,
 ): void {
   server.tool(
-    'workshop_list_workflow_tickets',
-    'List workflow tickets. Optionally filter by type (epic/task), state, trackId, or parentId.',
+    'workshop_list_workflow_issues',
+    'List workflow issues. Optionally filter by type (epic/task), state, trackId, or parentId.',
     {
-      type: z.enum(['epic', 'task']).optional().describe('Filter by ticket type'),
+      type: z.enum(['epic', 'task']).optional().describe('Filter by issue type'),
       state: z.string().optional().describe('Filter by workflow state'),
       trackId: z.string().optional().describe('Filter by track ID'),
       parentId: z.string().optional().describe('Filter by parent epic ID'),
@@ -21,47 +21,47 @@ export function registerWorkflowTools(
       if (trackId) params.set('trackId', trackId);
       if (parentId) params.set('parentId', parentId);
       const qs = params.toString();
-      const path = `/workflow/tickets${qs ? `?${qs}` : ''}`;
+      const path = `/workflow/issues${qs ? `?${qs}` : ''}`;
       const result = await api(path);
       return { content: [{ type: 'text' as const, text: JSON.stringify(result, null, 2) }] };
     },
   );
 
   server.tool(
-    'workshop_get_workflow_ticket',
-    'Get a single workflow ticket with its children and transition history.',
+    'workshop_get_workflow_issue',
+    'Get a single workflow issue with its children and transition history.',
     {
-      ticketId: z.string().describe('The workflow ticket ID'),
+      issueId: z.string().describe('The workflow issue ID'),
     },
-    async ({ ticketId }) => {
-      const ticket = await api(`/workflow/tickets/${ticketId}`);
-      const history = await api(`/workflow/tickets/${ticketId}/transitions`);
-      const deps = await api(`/workflow/tickets/${ticketId}/dependencies`);
-      const result = { ...ticket, transitions: history, dependencies: deps };
+    async ({ issueId }) => {
+      const issue = await api(`/workflow/issues/${issueId}`);
+      const history = await api(`/workflow/issues/${issueId}/transitions`);
+      const deps = await api(`/workflow/issues/${issueId}/dependencies`);
+      const result = { ...issue, transitions: history, dependencies: deps };
       return { content: [{ type: 'text' as const, text: JSON.stringify(result, null, 2) }] };
     },
   );
 
   server.tool(
-    'workshop_update_ticket',
-    'Update a workflow ticket\'s title, description, or stateData. Use this to refine the spec after triage Q&A loops. stateData fields are shallow-merged with existing values (won\'t wipe other fields).',
+    'workshop_update_issue',
+    'Update a workflow issue\'s title, description, or stateData. Use this to refine the spec after triage Q&A loops. stateData fields are shallow-merged with existing values (won\'t wipe other fields).',
     {
-      ticketId: z.string().describe('The workflow ticket ID'),
+      issueId: z.string().describe('The workflow issue ID'),
       title: z.string().optional().describe('Updated title'),
       description: z.string().optional().describe('Updated description / spec text'),
       stateData: z.record(z.unknown()).optional().describe('State data fields to merge (shallow merge with existing stateData)'),
     },
-    async ({ ticketId, title, description, stateData }) => {
+    async ({ issueId, title, description, stateData }) => {
       const body: Record<string, unknown> = {};
       if (title !== undefined) body.title = title;
       if (description !== undefined) body.description = description;
       // Merge stateData with existing to avoid wiping other fields
       if (stateData !== undefined) {
-        const existing = await api(`/workflow/tickets/${ticketId}`);
+        const existing = await api(`/workflow/issues/${issueId}`);
         const existingStateData = (existing?.stateData ?? {}) as Record<string, unknown>;
         body.stateData = { ...existingStateData, ...stateData };
       }
-      const result = await api(`/workflow/tickets/${ticketId}`, {
+      const result = await api(`/workflow/issues/${issueId}`, {
         method: 'PUT',
         body: JSON.stringify(body),
       });
@@ -84,7 +84,7 @@ export function registerWorkflowTools(
       if (trackId) body.trackId = trackId;
       if (provider) body.provider = provider;
       if (priority) body.priority = priority;
-      const result = await api('/workflow/tickets', {
+      const result = await api('/workflow/issues', {
         method: 'POST',
         body: JSON.stringify(body),
       });
@@ -101,14 +101,14 @@ export function registerWorkflowTools(
       parentId: z.string().describe('Parent epic ID'),
       provider: z.enum(['claude', 'codex']).optional().describe('AI CLI (default: claude)'),
       priority: z.enum(['low', 'medium', 'high', 'critical']).optional().describe('Priority'),
-      dependsOn: z.array(z.string()).optional().describe('IDs of tickets this task depends on'),
+      dependsOn: z.array(z.string()).optional().describe('IDs of issues this task depends on'),
     },
     async ({ title, description, parentId, provider, priority, dependsOn }) => {
       const body: Record<string, unknown> = { type: 'task', title, description, parentId };
       if (provider) body.provider = provider;
       if (priority) body.priority = priority;
       if (dependsOn) body.dependsOn = dependsOn;
-      const result = await api('/workflow/tickets', {
+      const result = await api('/workflow/issues', {
         method: 'POST',
         body: JSON.stringify(body),
       });
@@ -117,19 +117,19 @@ export function registerWorkflowTools(
   );
 
   server.tool(
-    'workshop_transition_ticket',
-    'Transition a workflow ticket to a new state. Use the data param to pass structured state data (e.g. pendingQuestions for needs-input).',
+    'workshop_transition_issue',
+    'Transition a workflow issue to a new state. Use the data param to pass structured state data (e.g. pendingQuestions for needs-input).',
     {
-      ticketId: z.string().describe('The workflow ticket ID'),
+      issueId: z.string().describe('The workflow issue ID'),
       toState: z.string().describe('Target state'),
       comment: z.string().optional().describe('Transition comment'),
-      data: z.record(z.unknown()).optional().describe('Structured state data to merge into ticket stateData (e.g. { pendingQuestions: [{ text: "..." }] })'),
+      data: z.record(z.unknown()).optional().describe('Structured state data to merge into issue stateData (e.g. { pendingQuestions: [{ text: "..." }] })'),
     },
-    async ({ ticketId, toState, comment, data }) => {
+    async ({ issueId, toState, comment, data }) => {
       const body: Record<string, unknown> = { toState };
       if (comment) body.comment = comment;
       if (data) body.data = data;
-      const result = await api(`/workflow/tickets/${ticketId}/transition`, {
+      const result = await api(`/workflow/issues/${issueId}/transition`, {
         method: 'POST',
         body: JSON.stringify(body),
       });
@@ -138,16 +138,16 @@ export function registerWorkflowTools(
   );
 
   server.tool(
-    'workshop_approve_ticket',
-    'Approve a workflow ticket at a human gate (spec-review, plan-review, final-review).',
+    'workshop_approve_issue',
+    'Approve a workflow issue at a human gate (spec-review, plan-review, final-review).',
     {
-      ticketId: z.string().describe('The workflow ticket ID'),
+      issueId: z.string().describe('The workflow issue ID'),
       comment: z.string().optional().describe('Approval comment'),
     },
-    async ({ ticketId, comment }) => {
+    async ({ issueId, comment }) => {
       const body: Record<string, unknown> = {};
       if (comment) body.comment = comment;
-      const result = await api(`/workflow/tickets/${ticketId}/approve`, {
+      const result = await api(`/workflow/issues/${issueId}/approve`, {
         method: 'POST',
         body: JSON.stringify(body),
       });
@@ -156,16 +156,16 @@ export function registerWorkflowTools(
   );
 
   server.tool(
-    'workshop_reject_ticket',
-    'Reject a workflow ticket at a human gate, sending it back for revision.',
+    'workshop_reject_issue',
+    'Reject a workflow issue at a human gate, sending it back for revision.',
     {
-      ticketId: z.string().describe('The workflow ticket ID'),
+      issueId: z.string().describe('The workflow issue ID'),
       comment: z.string().optional().describe('Rejection feedback'),
     },
-    async ({ ticketId, comment }) => {
+    async ({ issueId, comment }) => {
       const body: Record<string, unknown> = {};
       if (comment) body.comment = comment;
-      const result = await api(`/workflow/tickets/${ticketId}/reject`, {
+      const result = await api(`/workflow/issues/${issueId}/reject`, {
         method: 'POST',
         body: JSON.stringify(body),
       });
@@ -175,13 +175,13 @@ export function registerWorkflowTools(
 
   server.tool(
     'workshop_add_dependency',
-    'Add a blocked-by dependency between two workflow tickets.',
+    'Add a blocked-by dependency between two workflow issues.',
     {
-      ticketId: z.string().describe('The ticket that is blocked'),
-      dependsOnId: z.string().describe('The ticket it depends on'),
+      issueId: z.string().describe('The issue that is blocked'),
+      dependsOnId: z.string().describe('The issue it depends on'),
     },
-    async ({ ticketId, dependsOnId }) => {
-      const result = await api(`/workflow/tickets/${ticketId}/dependencies`, {
+    async ({ issueId, dependsOnId }) => {
+      const result = await api(`/workflow/issues/${issueId}/dependencies`, {
         method: 'POST',
         body: JSON.stringify({ dependsOnId }),
       });
@@ -205,7 +205,7 @@ export function registerWorkflowTools(
       if (trackId) body.trackId = trackId;
       if (provider) body.provider = provider;
       if (priority) body.priority = priority;
-      const result = await api('/workflow/tickets/from-plan', {
+      const result = await api('/workflow/issues/from-plan', {
         method: 'POST',
         body: JSON.stringify(body),
       });
@@ -236,7 +236,7 @@ export function registerWorkflowTools(
       if (priority) body.priority = priority;
       if (autonomous !== undefined) body.autonomous = autonomous;
       if (budget) body.budget = budget;
-      const result = await api('/workflow/tickets/from-template', {
+      const result = await api('/workflow/issues/from-template', {
         method: 'POST',
         body: JSON.stringify(body),
       });
@@ -246,12 +246,12 @@ export function registerWorkflowTools(
 
   server.tool(
     'workshop_list_workflow_pending',
-    'List workflow tickets at human gates needing approval.',
+    'List workflow issues at human gates needing approval.',
     {},
     async () => {
-      const result = await api('/workflow/tickets?state=spec-review');
-      const planReview = await api('/workflow/tickets?state=plan-review');
-      const finalReview = await api('/workflow/tickets?state=final-review');
+      const result = await api('/workflow/issues?state=spec-review');
+      const planReview = await api('/workflow/issues?state=plan-review');
+      const finalReview = await api('/workflow/issues?state=final-review');
       const all = [...result, ...planReview, ...finalReview];
       return { content: [{ type: 'text' as const, text: JSON.stringify(all, null, 2) }] };
     },

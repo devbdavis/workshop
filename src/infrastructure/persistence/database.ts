@@ -714,7 +714,7 @@ function runMigrations(db: Database.Database): void {
     // Column already exists — safe to ignore
   }
 
-  // Migration: create ticket_import_ignores table — tracks external tickets the
+  // Migration: create ticket_import_ignores table — tracks external issues the
   // user has hidden from the Import modal so they don't keep reappearing. Kept
   // in a dedicated table (not the settings K/V store) so ignores carry metadata
   // (cached title/url) and can be browsed/unhidden from the UI.
@@ -998,7 +998,7 @@ function seedDefaultTemplates(db: Database.Database): void {
 
 Repositories: {{track.repos}}
 Track Paths: {{track.paths}}
-Linked tickets: {{track.tickets}}
+Linked issues: {{track.issues}}
 
 Follow best practices for code quality, testing, and documentation. Be concise and actionable in your responses.`,
     now,
@@ -1036,7 +1036,7 @@ Provide specific, actionable feedback with code examples where helpful.`,
 
 {{track.description}}
 
-Linked tickets: {{track.tickets}}
+Linked issues: {{track.issues}}
 
 Focus on:
 - Breaking down requirements into concrete tasks

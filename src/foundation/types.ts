@@ -1,7 +1,7 @@
 // Branded ID types for type safety
 export type TrackId = string & { readonly __brand: 'TrackId' };
 export type SessionId = string & { readonly __brand: 'SessionId' };
-export type TicketId = string & { readonly __brand: 'TicketId' };
+export type IssueId = string & { readonly __brand: 'IssueId' };
 export type AutomationRuleId = string & { readonly __brand: 'AutomationRuleId' };
 export type RepoId = string & { readonly __brand: 'RepoId' };
 export type PathId = string & { readonly __brand: 'PathId' };
@@ -9,7 +9,7 @@ export type TemplateId = string & { readonly __brand: 'TemplateId' };
 export type TodoId = string & { readonly __brand: 'TodoId' };
 export type AgentId = string & { readonly __brand: 'AgentId' };
 export type ScheduledTaskId = string & { readonly __brand: 'ScheduledTaskId' };
-export type WorkflowTicketId = string & { readonly __brand: 'WorkflowTicketId' };
+export type WorkflowIssueId = string & { readonly __brand: 'WorkflowIssueId' };
 export type WorkflowTransitionId = string & { readonly __brand: 'WorkflowTransitionId' };
 export type UserId = string & { readonly __brand: 'UserId' };
 
@@ -57,7 +57,7 @@ export interface Track {
   // Populated relations
   repos?: TrackRepo[];
   paths?: TrackPath[];
-  tickets?: ExternalTicket[];
+  issues?: ExternalIssue[];
   // Per-current-user prefs, enriched at API time from user_track_prefs
   /** True if the current profile has favorited this track. */
   favorite?: boolean;
@@ -159,16 +159,16 @@ export interface Session {
   attentionSince?: string;
 }
 
-// External ticket
-export type TicketSource = 'jira' | 'linear' | 'github';
-export type TicketRelationship = 'primary' | 'related' | 'blocked-by';
+// External issue
+export type IssueSource = 'jira' | 'linear' | 'github';
+export type IssueRelationship = 'primary' | 'related' | 'blocked-by';
 
-export interface ExternalTicket {
-  id: TicketId;
+export interface ExternalIssue {
+  id: IssueId;
   trackId: TrackId;
-  source: TicketSource;
+  source: IssueSource;
   externalId: string;
-  relationship: TicketRelationship;
+  relationship: IssueRelationship;
   cachedTitle?: string;
   cachedStatus?: string;
   cachedData?: string;
@@ -176,12 +176,12 @@ export interface ExternalTicket {
   createdAt: string;
 }
 
-// Ticket import — hidden tickets (user-hidden issues from import UI)
-export type TicketImportIgnoreId = string & { readonly __brand: 'TicketImportIgnoreId' };
+// Issue import — hidden issues (user-hidden issues from import UI)
+export type IssueImportIgnoreId = string & { readonly __brand: 'IssueImportIgnoreId' };
 
-export interface TicketImportIgnore {
-  id: TicketImportIgnoreId;
-  source: TicketSource;
+export interface IssueImportIgnore {
+  id: IssueImportIgnoreId;
+  source: IssueSource;
   externalId: string;
   cachedTitle?: string;
   cachedUrl?: string;
@@ -193,7 +193,7 @@ export interface TicketImportIgnore {
  * Kept purposefully narrow — only fields that matter for the import UI.
  */
 export interface ImportableIssue {
-  source: TicketSource;
+  source: IssueSource;
   externalId: string;
   title: string;
   description?: string;
@@ -208,8 +208,8 @@ export interface ImportableIssue {
 }
 
 // Automation
-export type TriggerType = 'schedule' | 'git-change' | 'ticket-status-change' | 'session-end' | 'manual';
-export type ActionType = 'run-agent-prompt' | 'sync-tickets';
+export type TriggerType = 'schedule' | 'git-change' | 'issue-status-change' | 'session-end' | 'manual';
+export type ActionType = 'run-agent-prompt' | 'sync-issues';
 
 export interface AutomationRule {
   id: AutomationRuleId;
@@ -472,8 +472,8 @@ export interface ScheduledTaskRun {
   completedAt?: string;
 }
 
-// Workflow Ticket
-export type WorkflowTicketType = 'epic' | 'task';
+// Workflow Issue
+export type WorkflowIssueType = 'epic' | 'task';
 
 // Dynamic workflow types — all validation is runtime via Zod schemas
 export type WorkflowState = string;
@@ -493,21 +493,21 @@ export interface ExecutionData {
   deviations?: string;
 }
 
-export interface WorkflowTicket {
-  id: WorkflowTicketId;
-  type: WorkflowTicketType;
+export interface WorkflowIssue {
+  id: WorkflowIssueId;
+  type: WorkflowIssueType;
   title: string;
   description: string;
   state: WorkflowState;
   stateData?: Record<string, unknown>;
 
   // Hierarchy
-  parentId?: WorkflowTicketId;
-  childIds?: WorkflowTicketId[];
+  parentId?: WorkflowIssueId;
+  childIds?: WorkflowIssueId[];
 
   // Relationships
   trackId?: TrackId;
-  externalTicketId?: TicketId;
+  externalIssueId?: IssueId;
   executionSessionId?: SessionId;
 
   // Assignment — now string-based for dynamic roles
@@ -538,7 +538,7 @@ export type TransitionActor =
 
 export interface WorkflowTransition {
   id: WorkflowTransitionId;
-  ticketId: WorkflowTicketId;
+  issueId: WorkflowIssueId;
   fromState: WorkflowState;
   toState: WorkflowState;
   actor: TransitionActor;
@@ -547,10 +547,10 @@ export interface WorkflowTransition {
   createdAt: string;
 }
 
-export interface TicketDependency {
+export interface IssueDependency {
   id: string;
-  ticketId: WorkflowTicketId;
-  dependsOnId: WorkflowTicketId;
+  issueId: WorkflowIssueId;
+  dependsOnId: WorkflowIssueId;
   createdAt: string;
   resolvedAt?: string;
 }

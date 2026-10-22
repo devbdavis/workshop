@@ -125,7 +125,7 @@ function SessionCard({
               <TodoStatusBadge status={todo.status} />
             </div>
 
-            {/* Meta: ticket + PRs */}
+            {/* Meta: issue + PRs */}
             <div className="space-y-2">
               {todo.issueKey && (
                 <div className="flex items-center gap-2">

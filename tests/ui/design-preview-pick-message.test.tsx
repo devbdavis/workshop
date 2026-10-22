@@ -3,7 +3,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { createRoot, type Root } from 'react-dom/client';
 import { DesignPreview, type Pick } from '../../src/ui/workspace/DesignPreview';
 
-// Mirrors the raw react-dom render pattern used in todo-detail-modal-ticket.test.tsx
+// Mirrors the raw react-dom render pattern used in todo-detail-modal-issue.test.tsx
 // (no @testing-library in this repo). Exercises the postMessage origin/source guard,
 // which is the one piece of non-obvious logic in the picker wiring.
 

@@ -12,7 +12,7 @@ You have access to Workshop MCP tools that let you interact with the Workshop pr
 | Tool | Purpose |
 |---|---|
 | `mcp__workshop__workshop_list_tracks` | List all active tracks |
-| `mcp__workshop__workshop_get_track` | Get track details (repos, paths, tickets) |
+| `mcp__workshop__workshop_get_track` | Get track details (repos, paths, issues) |
 | `mcp__workshop__workshop_set_context` | Set freeform context text for a track |
 | `mcp__workshop__workshop_get_context` | Get track context + latest summary |
 | `mcp__workshop__workshop_get_summary` | Get the latest AI-generated summary |

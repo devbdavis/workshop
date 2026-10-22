@@ -77,7 +77,7 @@ export function ImportFromLinearModal({ tracks, onClose, onImported }: Props) {
     setLoading(true);
     setError(null);
     try {
-      const res = await fetch(`/api/ticket-import/${source}`);
+      const res = await fetch(`/api/issue-import/${source}`);
       if (!res.ok) {
         const body = (await res.json().catch(() => ({}))) as { error?: string };
         setError(body.error ?? `Request failed: ${res.status}`);
@@ -133,7 +133,7 @@ export function ImportFromLinearModal({ tracks, onClose, onImported }: Props) {
     }
     setRow(issue.externalId, { busy: true });
     try {
-      const res = await fetch(`/api/ticket-import/${source}/import`, {
+      const res = await fetch(`/api/issue-import/${source}/import`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ externalId: issue.externalId, trackId: state.trackId }),
@@ -154,7 +154,7 @@ export function ImportFromLinearModal({ tracks, onClose, onImported }: Props) {
     if (!source) return;
     setRow(issue.externalId, { busy: true });
     try {
-      const res = await fetch(`/api/ticket-import/${source}/ignore`, {
+      const res = await fetch(`/api/issue-import/${source}/ignore`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -178,7 +178,7 @@ export function ImportFromLinearModal({ tracks, onClose, onImported }: Props) {
     if (!source) return;
     setRow(issue.externalId, { busy: true });
     try {
-      const res = await fetch(`/api/ticket-import/${source}/ignore/${encodeURIComponent(issue.externalId)}`, {
+      const res = await fetch(`/api/issue-import/${source}/ignore/${encodeURIComponent(issue.externalId)}`, {
         method: 'DELETE',
       });
       if (!res.ok && res.status !== 404) {

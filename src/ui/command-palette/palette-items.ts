@@ -1,4 +1,4 @@
-import type { PrReview, Session, Todo, Track, WorkflowTicket } from '@foundation/types';
+import type { PrReview, Session, Todo, Track, WorkflowIssue } from '@foundation/types';
 import { groupSessionsByTrack, isVisibleTrack } from '../session-overview/group-sessions';
 
 export type PaletteKind = 'Page' | 'Settings' | 'Track' | 'Session' | 'Todo' | 'Epic' | 'PR';
@@ -18,7 +18,7 @@ export interface PaletteData {
   tracks: Track[];
   sessions: Session[];
   todos: Todo[];
-  epics: WorkflowTicket[];
+  epics: WorkflowIssue[];
   reviews: PrReview[];
 }
 

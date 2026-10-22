@@ -7,12 +7,12 @@
  * automation rules).
  */
 import type {
-  WorkflowTicket,
-  WorkflowTicketId,
+  WorkflowIssue,
+  WorkflowIssueId,
   WorkflowState,
   TransitionActor,
 } from '@foundation/types.js';
-import type { WorkflowTicketRepository } from '@domain/workflow/ticket-repository.js';
+import type { WorkflowIssueRepository } from '@domain/workflow/issue-repository.js';
 import type { WorkflowEngine } from './engine.js';
 import type { ExecutionDispatcher } from './execution-dispatcher.js';
 import type { AgentDispatcher } from './agent-dispatcher.js';
@@ -25,39 +25,39 @@ import { isAutonomous } from './autonomy.js';
 // ---------------------------------------------------------------------------
 
 export interface DispatchCoordinator {
-  /** Transition a ticket and auto-dispatch agents if the target state is agent-actionable */
+  /** Transition an issue and auto-dispatch agents if the target state is agent-actionable */
   transitionWithDispatch(
-    ticketId: WorkflowTicketId,
+    issueId: WorkflowIssueId,
     toState: WorkflowState,
     actor: TransitionActor,
     comment?: string,
     data?: Record<string, unknown>,
-  ): Promise<WorkflowTicket>;
+  ): Promise<WorkflowIssue>;
 
   /** Approve at human gate and dispatch if result state needs agents */
-  approveWithDispatch(ticketId: WorkflowTicketId, comment?: string): Promise<WorkflowTicket>;
+  approveWithDispatch(issueId: WorkflowIssueId, comment?: string): Promise<WorkflowIssue>;
 
   /** Reject at human gate — may dispatch if target state is agent-actionable */
-  reject(ticketId: WorkflowTicketId, comment?: string): Promise<WorkflowTicket>;
+  reject(issueId: WorkflowIssueId, comment?: string): Promise<WorkflowIssue>;
 
-  /** Dispatch agents for a ticket that is already in an agent-actionable state (e.g. retry) */
-  dispatchForCurrentState(ticketId: WorkflowTicketId): Promise<void>;
+  /** Dispatch agents for an issue that is already in an agent-actionable state (e.g. retry) */
+  dispatchForCurrentState(issueId: WorkflowIssueId): Promise<void>;
 }
 
 export interface DispatchCoordinatorDeps {
   engine: WorkflowEngine;
-  tickets: WorkflowTicketRepository;
+  issues: WorkflowIssueRepository;
   executionDispatcher: ExecutionDispatcher;
   agentDispatcher: AgentDispatcher;
   topologyLoader: TopologyLoader;
   /** Called when an epic advances (used to re-wire engine callback) */
-  onEpicAdvanced?: (ticket: WorkflowTicket) => Promise<void>;
-  /** Dark Factory: called when an autonomous ticket comes to rest at a human gate or terminal state */
-  onAutonomousRest?: (ticketId: WorkflowTicketId) => Promise<void>;
+  onEpicAdvanced?: (issue: WorkflowIssue) => Promise<void>;
+  /** Dark Factory: called when an autonomous issue comes to rest at a human gate or terminal state */
+  onAutonomousRest?: (issueId: WorkflowIssueId) => Promise<void>;
   /** Dark Factory usage pacing: returns whether autonomous work should pause now, and until when */
   usageGate?: () => { over: boolean; resumeAt?: string };
-  /** Dark Factory: called when an autonomous ticket is paused for usage pacing */
-  onPaused?: (ticketId: WorkflowTicketId, until?: string) => Promise<void>;
+  /** Dark Factory: called when an autonomous issue is paused for usage pacing */
+  onPaused?: (issueId: WorkflowIssueId, until?: string) => Promise<void>;
 }
 
 // ---------------------------------------------------------------------------
@@ -69,17 +69,17 @@ export interface DispatchCoordinatorDeps {
  */
 function isExecutionStage(
   topologyLoader: TopologyLoader,
-  ticket: WorkflowTicket,
+  issue: WorkflowIssue,
 ): boolean {
   try {
-    const stages = topologyLoader.loadForTicket(ticket);
-    const stage = getStageDefinition(stages, ticket.state);
+    const stages = topologyLoader.loadForIssue(issue);
+    const stage = getStageDefinition(stages, issue.state);
     return stage?.validTransitions.some(
       (t) => t.trigger === 'execution-complete' || t.trigger === 'execution-failed',
     ) ?? false;
   } catch {
     // No playbook — fallback to hardcoded check for backward compat
-    return ticket.state === 'executing';
+    return issue.state === 'executing';
   }
 }
 
@@ -88,12 +88,12 @@ function isExecutionStage(
  */
 function findTransitionTarget(
   topologyLoader: TopologyLoader,
-  ticket: WorkflowTicket,
+  issue: WorkflowIssue,
   trigger: string,
 ): string | null {
   try {
-    const stages = topologyLoader.loadForTicket(ticket);
-    const stage = getStageDefinition(stages, ticket.state);
+    const stages = topologyLoader.loadForIssue(issue);
+    const stage = getStageDefinition(stages, issue.state);
     const transition = stage?.validTransitions.find((t) => t.trigger === trigger);
     return transition?.to ?? null;
   } catch {
@@ -111,40 +111,40 @@ const MAX_AUTO_ADVANCE_DEPTH = 8;
 export function createDispatchCoordinator(
   deps: DispatchCoordinatorDeps,
 ): DispatchCoordinator {
-  const { engine, tickets, executionDispatcher, agentDispatcher, topologyLoader } = deps;
+  const { engine, issues, executionDispatcher, agentDispatcher, topologyLoader } = deps;
 
-  async function dispatchIfNeeded(ticket: WorkflowTicket): Promise<void> {
+  async function dispatchIfNeeded(issue: WorkflowIssue): Promise<void> {
     // Dark Factory usage pacing: don't spawn new autonomous work while over the
-    // usage threshold — pause the ticket instead; the poller resumes it later.
-    if (deps.usageGate && isAutonomous(ticket, tickets)) {
+    // usage threshold — pause the issue instead; the poller resumes it later.
+    if (deps.usageGate && isAutonomous(issue, issues)) {
       const gate = deps.usageGate();
       if (gate.over) {
-        tickets.update(ticket.id, {
-          stateData: { ...(ticket.stateData || {}), paused: true, pausedUntil: gate.resumeAt },
+        issues.update(issue.id, {
+          stateData: { ...(issue.stateData || {}), paused: true, pausedUntil: gate.resumeAt },
         });
-        await deps.onPaused?.(ticket.id, gate.resumeAt);
+        await deps.onPaused?.(issue.id, gate.resumeAt);
         return;
       }
     }
 
     // Check if this is an execution stage
-    if (isExecutionStage(topologyLoader, ticket)) {
+    if (isExecutionStage(topologyLoader, issue)) {
       try {
-        await executionDispatcher.dispatch(ticket.id);
+        await executionDispatcher.dispatch(issue.id);
       } catch (err) {
         console.error('Execution dispatch failed:', err);
         // Find the execution-failed target from topology
-        const failedTarget = findTransitionTarget(topologyLoader, ticket, 'execution-failed');
+        const failedTarget = findTransitionTarget(topologyLoader, issue, 'execution-failed');
         if (failedTarget) {
           try {
             engine.transition(
-              ticket.id,
+              issue.id,
               failedTarget,
               { type: 'system', reason: 'Dispatch failed' },
               err instanceof Error ? err.message : 'Failed to dispatch execution session',
             );
           } catch {
-            console.error('Failed to mark ticket as execution-failed:', ticket.id);
+            console.error('Failed to mark issue as execution-failed:', issue.id);
           }
         }
       }
@@ -152,15 +152,15 @@ export function createDispatchCoordinator(
     }
 
     // General agent dispatch for all other agent-actionable states
-    await agentDispatcher.onTransition(ticket);
+    await agentDispatcher.onTransition(issue);
   }
 
   /**
    * Check if a state is terminal for task completion handling.
    */
-  function checkIsTerminal(ticket: WorkflowTicket, state: WorkflowState): boolean {
+  function checkIsTerminal(issue: WorkflowIssue, state: WorkflowState): boolean {
     try {
-      const stages = topologyLoader.loadForTicket(ticket);
+      const stages = topologyLoader.loadForIssue(issue);
       return isTerminal(stages, state);
     } catch {
       // No playbook — fallback to hardcoded check
@@ -169,22 +169,22 @@ export function createDispatchCoordinator(
   }
 
   /**
-   * Dark Factory: for autonomous tickets, auto-approve through human gates
+   * Dark Factory: for autonomous issues, auto-approve through human gates
    * (except merge/terminal gates and any gate an escalation is waiting on).
    */
-  async function autoAdvanceGates(ticketId: WorkflowTicketId): Promise<void> {
-    let ticket = tickets.findById(ticketId);
-    if (!ticket || !isAutonomous(ticket, tickets)) return;
+  async function autoAdvanceGates(issueId: WorkflowIssueId): Promise<void> {
+    let issue = issues.findById(issueId);
+    if (!issue || !isAutonomous(issue, issues)) return;
 
     for (let i = 0; i < MAX_AUTO_ADVANCE_DEPTH; i++) {
-      ticket = tickets.findById(ticketId);
-      if (!ticket) return;
+      issue = issues.findById(issueId);
+      if (!issue) return;
 
-      const stages = topologyLoader.loadForTicket(ticket);
-      const stage = getStageDefinition(stages, ticket.state);
+      const stages = topologyLoader.loadForIssue(issue);
+      const stage = getStageDefinition(stages, issue.state);
       if (!stage || !stage.humanGate) return;
 
-      const stateData = (ticket.stateData || {}) as Record<string, unknown>;
+      const stateData = (issue.stateData || {}) as Record<string, unknown>;
       if (stateData.needsHuman === true) return;
       if (!canAutoApprove(stage)) return;
 
@@ -192,81 +192,81 @@ export function createDispatchCoordinator(
       if (!approveTransition) return;
       if (isTerminal(stages, approveTransition.to)) return;
 
-      const updated = engine.approve(ticketId, 'Dark Factory: auto-approved', {
+      const updated = engine.approve(issueId, 'Dark Factory: auto-approved', {
         type: 'system',
         reason: 'dark-factory-auto-approve',
       });
       await dispatchIfNeeded(updated);
     }
 
-    const rested = tickets.findById(ticketId);
+    const rested = issues.findById(issueId);
     if (!rested) return;
-    const restedStages = topologyLoader.loadForTicket(rested);
+    const restedStages = topologyLoader.loadForIssue(rested);
     const restedStage = getStageDefinition(restedStages, rested.state);
     const atRest = restedStage?.humanGate === true || isTerminal(restedStages, rested.state);
     if (atRest) {
       try {
-        await deps.onAutonomousRest?.(ticketId);
+        await deps.onAutonomousRest?.(issueId);
       } catch (err) {
-        console.warn(`[dark-factory] onAutonomousRest failed for ticket ${ticketId}:`, err);
+        console.warn(`[dark-factory] onAutonomousRest failed for issue ${issueId}:`, err);
       }
     }
   }
 
   return {
     async transitionWithDispatch(
-      ticketId: WorkflowTicketId,
+      issueId: WorkflowIssueId,
       toState: WorkflowState,
       actor: TransitionActor,
       comment?: string,
       data?: Record<string, unknown>,
-    ): Promise<WorkflowTicket> {
-      const updated = engine.transition(ticketId, toState, actor, comment, data);
+    ): Promise<WorkflowIssue> {
+      const updated = engine.transition(issueId, toState, actor, comment, data);
 
       // If a task reached a terminal state, resolve dependencies and check epic progress
       if (updated.type === 'task' && checkIsTerminal(updated, toState)) {
-        engine.onTaskCompleted(ticketId);
+        engine.onTaskCompleted(issueId);
       }
 
       await dispatchIfNeeded(updated);
-      await autoAdvanceGates(ticketId);
+      await autoAdvanceGates(issueId);
 
       // Re-read in case dispatchIfNeeded updated stateData
-      return tickets.findById(ticketId) ?? updated;
+      return issues.findById(issueId) ?? updated;
     },
 
     async approveWithDispatch(
-      ticketId: WorkflowTicketId,
+      issueId: WorkflowIssueId,
       comment?: string,
-    ): Promise<WorkflowTicket> {
-      const updated = engine.approve(ticketId, comment);
+    ): Promise<WorkflowIssue> {
+      const updated = engine.approve(issueId, comment);
 
       // If a task reached a terminal state via approval, resolve dependencies
       if (updated.type === 'task' && checkIsTerminal(updated, updated.state)) {
-        engine.onTaskCompleted(ticketId);
+        engine.onTaskCompleted(issueId);
       }
 
       await dispatchIfNeeded(updated);
-      await autoAdvanceGates(ticketId);
+      await autoAdvanceGates(issueId);
 
-      return tickets.findById(ticketId) ?? updated;
+      return issues.findById(issueId) ?? updated;
     },
 
-    async reject(ticketId: WorkflowTicketId, comment?: string): Promise<WorkflowTicket> {
-      const updated = engine.reject(ticketId, comment);
+    async reject(issueId: WorkflowIssueId, comment?: string): Promise<WorkflowIssue> {
+      const updated = engine.reject(issueId, comment);
 
       // Rejection can land on agent-actionable states (e.g. final-review -> integration-fix)
       await dispatchIfNeeded(updated);
-      await autoAdvanceGates(ticketId);
+      await autoAdvanceGates(issueId);
 
-      return tickets.findById(ticketId) ?? updated;
+      return issues.findById(issueId) ?? updated;
     },
 
-    async dispatchForCurrentState(ticketId: WorkflowTicketId): Promise<void> {
-      const ticket = tickets.findById(ticketId);
-      if (!ticket) throw new Error(`Ticket not found: ${ticketId}`);
-      await dispatchIfNeeded(ticket);
-      await autoAdvanceGates(ticketId);
+    async dispatchForCurrentState(issueId: WorkflowIssueId): Promise<void> {
+      const issue = issues.findById(issueId);
+      if (!issue) throw new Error(`Issue not found: ${issueId}`);
+      await dispatchIfNeeded(issue);
+      await autoAdvanceGates(issueId);
     },
   };
 }

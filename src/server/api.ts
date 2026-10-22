@@ -2,12 +2,12 @@ import { existsSync, readFileSync, writeFileSync } from 'fs';
 import { homedir } from 'os';
 import path from 'path';
 import { Router } from 'express';
-import type { TrackId, SessionId, SessionProvider, RepoId, PathId, AgentId, AutomationRuleId, TemplateId, TerminalLayout, TodoId, WorkflowTicket } from '@foundation/types';
+import type { TrackId, SessionId, SessionProvider, RepoId, PathId, AgentId, AutomationRuleId, TemplateId, TerminalLayout, TodoId, WorkflowIssue } from '@foundation/types';
 import { resolveSessionProvider } from '@foundation/types.js';
 import { VAULT_ROOT } from '@foundation/config.js';
 import { createTrackRepository } from '@infrastructure/persistence/track-repository.js';
 import { createSessionRepository } from '@infrastructure/persistence/session-repository.js';
-import { createTicketRepository } from '@infrastructure/persistence/ticket-repository.js';
+import { createIssueRepository } from '@infrastructure/persistence/issue-repository.js';
 import { createAutomationRuleRepository } from '@infrastructure/persistence/automation-repository.js';
 import { createPromptTemplateRepository } from '@infrastructure/persistence/prompt-template-repository.js';
 import { createTodoRepository } from '@infrastructure/persistence/todo-repository.js';
@@ -36,8 +36,8 @@ import { createScheduledTaskRouter } from './scheduled-task-routes.js';
 import { createWorkflowRouter } from './workflow-routes.js';
 import { createPlaybookRouter } from './workflow-playbook-routes.js';
 import { createWorkflowProposalRouter } from './workflow-proposal-routes.js';
-import { createWorkflowTicketRepository, createWorkflowTransitionRepository } from '@infrastructure/persistence/workflow-repository.js';
-import { createTicketDependencyRepository } from '@infrastructure/persistence/workflow-dependency-repository.js';
+import { createWorkflowIssueRepository, createWorkflowTransitionRepository } from '@infrastructure/persistence/workflow-repository.js';
+import { createIssueDependencyRepository } from '@infrastructure/persistence/workflow-dependency-repository.js';
 import { createWorkflowEngine } from '@application/workflow/engine.js';
 import { createExecutionDispatcher } from '@application/workflow/execution-dispatcher.js';
 import { createAgentDispatcher } from '@application/workflow/agent-dispatcher.js';
@@ -50,7 +50,7 @@ import { createPlaybookRepository } from '@infrastructure/persistence/workflow-p
 import { createAgentRoleRepository } from '@infrastructure/persistence/workflow-agent-role-repository.js';
 import { createExecutionHookRouter } from './execution-hook-routes.js';
 import { createActivityHookRouter } from './activity-hook-routes.js';
-import { recoverStuckTickets } from '@application/workflow/startup-recovery.js';
+import { recoverStuckIssues } from '@application/workflow/startup-recovery.js';
 import { broadcast } from './events.js';
 import { createDiscussionTeamRepository } from '@infrastructure/persistence/discussion-team-repository.js';
 import { createDiscussionRepository } from '@infrastructure/persistence/discussion-repository.js';
@@ -79,8 +79,8 @@ import { createUserRouter } from './user-routes.js';
 import { getProfileId } from './profile.js';
 import { createBackupRouter } from './backup-routes.js';
 import { createBackupScheduler } from '@application/backup/backup-scheduler.js';
-import { createTicketImportIgnoreRepository } from '@infrastructure/persistence/ticket-import-ignore-repository.js';
-import { createTicketImportRouter } from './ticket-import-routes.js';
+import { createIssueImportIgnoreRepository } from '@infrastructure/persistence/issue-import-ignore-repository.js';
+import { createIssueImportRouter } from './issue-import-routes.js';
 import { createClaudeAdapter } from '@infrastructure/mcp-tools/claude-adapter.js';
 import { createCodexAdapter } from '@infrastructure/mcp-tools/codex-adapter.js';
 import { createGeminiAdapter } from '@infrastructure/mcp-tools/gemini-adapter.js';
@@ -119,7 +119,7 @@ export function createApiRouter(deps: ApiRouterDeps = {}): Router {
   const router = Router();
   const tracks = createTrackRepository();
   const sessions = createSessionRepository();
-  const tickets = createTicketRepository();
+  const issues = createIssueRepository();
   const automationRules = createAutomationRuleRepository();
   const promptTemplates = createPromptTemplateRepository();
   const todos = createTodoRepository();
@@ -279,7 +279,7 @@ export function createApiRouter(deps: ApiRouterDeps = {}): Router {
   process.on('SIGINT', () => prReviewDiscovery.stop());
   process.on('SIGTERM', () => prReviewDiscovery.stop());
 
-  // Terminate PR-review / Linear-ticket agent sessions older than 48h — those
+  // Terminate PR-review / Linear-issue agent sessions older than 48h — those
   // system tracks otherwise accumulate parked one-shot agents forever.
   const staleAgentReaper = createStaleAgentReaper({
     sessions,
@@ -296,7 +296,7 @@ export function createApiRouter(deps: ApiRouterDeps = {}): Router {
     todos,
     tracks,
     sessions,
-    tickets,
+    issues,
     promptTemplates,
     agents,
     settings: settingsRepo,
@@ -360,7 +360,7 @@ export function createApiRouter(deps: ApiRouterDeps = {}): Router {
     runs: scheduledTaskRuns,
     tracks,
     sessions,
-    tickets,
+    issues,
     promptTemplates,
     agents,
     filesystemScanner,
@@ -380,42 +380,42 @@ export function createApiRouter(deps: ApiRouterDeps = {}): Router {
   router.use(scheduledTaskRouter);
 
   // Mount workflow sub-router
-  const workflowTickets = createWorkflowTicketRepository();
+  const workflowIssues = createWorkflowIssueRepository();
   const workflowTransitions = createWorkflowTransitionRepository();
-  const ticketDependencies = createTicketDependencyRepository();
+  const issueDependencies = createIssueDependencyRepository();
   const workflowPlaybooks = createPlaybookRepository();
   const workflowAgentRoles = createAgentRoleRepository();
   const topologyLoader = createTopologyLoader({ playbooks: workflowPlaybooks });
 
   // Create a mutable callback holder for epic advanced events (circular dependency resolution)
-  let epicAdvancedCallback: ((ticket: WorkflowTicket) => Promise<void>) | undefined;
-  let taskUnblockedCallback: ((ticket: WorkflowTicket) => Promise<void>) | undefined;
+  let epicAdvancedCallback: ((issue: WorkflowIssue) => Promise<void>) | undefined;
+  let taskUnblockedCallback: ((issue: WorkflowIssue) => Promise<void>) | undefined;
 
   const workflowEngine = createWorkflowEngine({
-    tickets: workflowTickets,
+    issues: workflowIssues,
     transitions: workflowTransitions,
-    dependencies: ticketDependencies,
+    dependencies: issueDependencies,
     topologyLoader,
     playbooks: workflowPlaybooks,
-    onEpicAdvanced: async (ticket) => {
-      if (epicAdvancedCallback) await epicAdvancedCallback(ticket);
+    onEpicAdvanced: async (issue) => {
+      if (epicAdvancedCallback) await epicAdvancedCallback(issue);
     },
-    onTaskUnblocked: async (ticket) => {
-      if (taskUnblockedCallback) await taskUnblockedCallback(ticket);
+    onTaskUnblocked: async (issue) => {
+      if (taskUnblockedCallback) await taskUnblockedCallback(issue);
     },
-    onTerminalState: async (ticket) => {
+    onTerminalState: async (issue) => {
       console.log(
-        `[workflow] Ticket ${ticket.id} reached terminal state "${ticket.state}"` +
-        (ticket.playbookRowId ? ` (playbook: ${ticket.playbookRowId})` : ''),
+        `[workflow] Issue ${issue.id} reached terminal state "${issue.state}"` +
+        (issue.playbookRowId ? ` (playbook: ${issue.playbookRowId})` : ''),
       );
-      broadcast('workflow:terminal', ticket.trackId ?? ticket.id);
+      broadcast('workflow:terminal', issue.trackId ?? issue.id);
     },
   });
 
   // Execution dispatcher — handles plan-review → executing dispatch
   const executionDispatcher = createExecutionDispatcher({
     engine: workflowEngine,
-    tickets: workflowTickets,
+    issues: workflowIssues,
     tracks,
     terminal,
     topologyLoader,
@@ -423,7 +423,7 @@ export function createApiRouter(deps: ApiRouterDeps = {}): Router {
 
   // Agent dispatcher — handles all other agent-actionable states
   const agentDispatcher = createAgentDispatcher({
-    tickets: workflowTickets,
+    issues: workflowIssues,
     tracks,
     terminal,
     topologyLoader,
@@ -437,7 +437,7 @@ export function createApiRouter(deps: ApiRouterDeps = {}): Router {
 
   const dispatchCoordinator = createDispatchCoordinator({
     engine: workflowEngine,
-    tickets: workflowTickets,
+    issues: workflowIssues,
     executionDispatcher,
     agentDispatcher,
     topologyLoader,
@@ -447,20 +447,20 @@ export function createApiRouter(deps: ApiRouterDeps = {}): Router {
       over: usageTracker.isOverThreshold(USAGE_THRESHOLD),
       resumeAt: new Date(Date.now() + 15 * 60 * 1000).toISOString(),
     }),
-    onPaused: async (ticketId) => { broadcast('workflow:updated', ticketId); },
-    // Dark Factory: when an autonomous ticket comes to rest (awaiting merge,
+    onPaused: async (issueId) => { broadcast('workflow:updated', issueId); },
+    // Dark Factory: when an autonomous issue comes to rest (awaiting merge,
     // escalated, or done), generate a shift report and surface it to the UI.
-    onAutonomousRest: async (ticketId) => {
-      const t = workflowTickets.findById(ticketId);
+    onAutonomousRest: async (issueId) => {
+      const t = workflowIssues.findById(issueId);
       if (!t) return;
       const report = generateShiftReport(t, {
         transitions: workflowTransitions,
         topologyLoader,
       });
-      workflowTickets.update(ticketId, {
+      workflowIssues.update(issueId, {
         stateData: { ...(t.stateData || {}), shiftReport: report },
       });
-      broadcast('workflow:updated', ticketId);
+      broadcast('workflow:updated', issueId);
     },
   });
 
@@ -475,9 +475,9 @@ export function createApiRouter(deps: ApiRouterDeps = {}): Router {
 
   const workflowRouter = createWorkflowRouter({
     engine: workflowEngine,
-    tickets: workflowTickets,
+    issues: workflowIssues,
     transitions: workflowTransitions,
-    dependencies: ticketDependencies,
+    dependencies: issueDependencies,
     dispatcher: dispatchCoordinator,
     topologyLoader,
     playbooks: workflowPlaybooks,
@@ -495,7 +495,7 @@ export function createApiRouter(deps: ApiRouterDeps = {}): Router {
   // Workflow proposal routes (propose and approve workflow assignments)
   const workflowProposalRouter = createWorkflowProposalRouter({
     engine: workflowEngine,
-    tickets: workflowTickets,
+    issues: workflowIssues,
     playbooks: workflowPlaybooks,
     agentRoles: workflowAgentRoles,
     topologyLoader,
@@ -506,7 +506,7 @@ export function createApiRouter(deps: ApiRouterDeps = {}): Router {
   // Execution hook routes (SubagentStop + SessionEnd + SessionStart callbacks)
   const executionHookRouter = createExecutionHookRouter({
     engine: workflowEngine,
-    tickets: workflowTickets,
+    issues: workflowIssues,
     terminal,
     sessions,
     taskRuns: scheduledTaskRuns,
@@ -518,7 +518,7 @@ export function createApiRouter(deps: ApiRouterDeps = {}): Router {
   // Dark Factory usage-pacing poller — resumes paused autonomous epics once the
   // usage window drains back under threshold. (Proactive pause happens at dispatch.)
   const usagePacingPoller = createUsagePacingPoller({
-    tickets: workflowTickets,
+    issues: workflowIssues,
     usageTracker,
     dispatcher: dispatchCoordinator,
     onResumed: (id) => broadcast('workflow:updated', id),
@@ -528,18 +528,18 @@ export function createApiRouter(deps: ApiRouterDeps = {}): Router {
   process.on('SIGINT', () => usagePacingPoller.stop());
   process.on('SIGTERM', () => usagePacingPoller.stop());
 
-  // Recover stuck workflow tickets on startup (delay to let session sync finish first)
+  // Recover stuck workflow issues on startup (delay to let session sync finish first)
   setTimeout(async () => {
     try {
-      const result = await recoverStuckTickets({
-        tickets: workflowTickets,
+      const result = await recoverStuckIssues({
+        issues: workflowIssues,
         sessions,
         dispatcher: dispatchCoordinator,
         topologyLoader,
       });
       if (result.redispatched.length > 0) {
         console.log(
-          `[workflow-recovery] Startup recovery complete: ${result.redispatched.length} ticket(s) re-dispatched`,
+          `[workflow-recovery] Startup recovery complete: ${result.redispatched.length} issue(s) re-dispatched`,
         );
         for (const id of result.redispatched) {
           broadcast('workflow:dispatched', id);
@@ -547,7 +547,7 @@ export function createApiRouter(deps: ApiRouterDeps = {}): Router {
       }
       if (result.errors.length > 0) {
         console.warn(
-          `[workflow-recovery] ${result.errors.length} ticket(s) failed to re-dispatch`,
+          `[workflow-recovery] ${result.errors.length} issue(s) failed to re-dispatch`,
         );
       }
     } catch (err) {
@@ -556,14 +556,14 @@ export function createApiRouter(deps: ApiRouterDeps = {}): Router {
   }, 5_000);
 
   // Periodic workflow recovery — check every 2 minutes for agent-actionable
-  // tickets whose sessions have died mid-operation
-  const recoveryDeps = { tickets: workflowTickets, sessions, dispatcher: dispatchCoordinator, topologyLoader };
+  // issues whose sessions have died mid-operation
+  const recoveryDeps = { issues: workflowIssues, sessions, dispatcher: dispatchCoordinator, topologyLoader };
   const recoveryInterval = setInterval(async () => {
     try {
-      const result = await recoverStuckTickets(recoveryDeps);
+      const result = await recoverStuckIssues(recoveryDeps);
       if (result.redispatched.length > 0) {
         console.log(
-          `[workflow-recovery] Periodic recovery: ${result.redispatched.length} ticket(s) re-dispatched`,
+          `[workflow-recovery] Periodic recovery: ${result.redispatched.length} issue(s) re-dispatched`,
         );
         for (const id of result.redispatched) {
           broadcast('workflow:dispatched', id);
@@ -640,15 +640,15 @@ export function createApiRouter(deps: ApiRouterDeps = {}): Router {
   process.on('SIGINT', () => backupScheduler.stop());
   process.on('SIGTERM', () => backupScheduler.stop());
 
-  // Mount ticket-import sub-router (Linear import modal)
-  const ticketImportIgnores = createTicketImportIgnoreRepository();
-  const ticketImportRouter = createTicketImportRouter({
+  // Mount issue-import sub-router (Linear import modal)
+  const issueImportIgnores = createIssueImportIgnoreRepository();
+  const issueImportRouter = createIssueImportRouter({
     settings: settingsRepo,
     tracks,
     todos,
-    ignores: ticketImportIgnores,
+    ignores: issueImportIgnores,
   });
-  router.use(ticketImportRouter);
+  router.use(issueImportRouter);
 
   // Mount marketplace plugin sub-router
   const pluginRouter = createPluginRouter({ plugins });
@@ -689,7 +689,7 @@ export function createApiRouter(deps: ApiRouterDeps = {}): Router {
   const matrixRouter = createMatrixRouter({
     tracks,
     sessions,
-    tickets,
+    issues,
     promptTemplates,
     terminal,
     vaultReader,
@@ -780,7 +780,7 @@ export function createApiRouter(deps: ApiRouterDeps = {}): Router {
       res.status(404).json({ error: 'No track bound to this room' });
       return;
     }
-    track.tickets = tickets.findByTrack(track.id);
+    track.issues = issues.findByTrack(track.id);
     res.json(track);
   });
 
@@ -790,8 +790,8 @@ export function createApiRouter(deps: ApiRouterDeps = {}): Router {
       res.status(404).json({ error: 'Track not found' });
       return;
     }
-    // Attach tickets
-    track.tickets = tickets.findByTrack(track.id);
+    // Attach issues
+    track.issues = issues.findByTrack(track.id);
     res.json(track);
   });
 
@@ -1023,7 +1023,7 @@ export function createApiRouter(deps: ApiRouterDeps = {}): Router {
           if (template) {
             templateHasRepos = template.content.includes('{{track.repos');
             templateHasTask = template.content.includes('{{todo.title}}');
-            track.tickets = tickets.findByTrack(trackId);
+            track.issues = issues.findByTrack(trackId);
             const interpolated = interpolateTemplate(template.content, {
               track,
               todo: todo ? { id: todo.id, title: todo.title, description: todo.description ?? '' } : undefined,
@@ -1275,20 +1275,20 @@ export function createApiRouter(deps: ApiRouterDeps = {}): Router {
     }
   });
 
-  // --- Tickets ---
+  // --- Issues ---
 
-  router.get('/tracks/:id/tickets', (req, res) => {
-    const trackTickets = tickets.findByTrack(req.params.id as TrackId);
-    res.json(trackTickets);
+  router.get('/tracks/:id/issues', (req, res) => {
+    const trackIssues = issues.findByTrack(req.params.id as TrackId);
+    res.json(trackIssues);
   });
 
-  router.post('/tracks/:id/tickets', (req, res) => {
+  router.post('/tracks/:id/issues', (req, res) => {
     const { source, externalId, relationship, cachedTitle, cachedStatus } = req.body;
     if (!source || !externalId) {
       res.status(400).json({ error: 'source and externalId are required' });
       return;
     }
-    const ticket = tickets.create({
+    const issue = issues.create({
       trackId: req.params.id as TrackId,
       source,
       externalId,
@@ -1296,13 +1296,13 @@ export function createApiRouter(deps: ApiRouterDeps = {}): Router {
       cachedTitle,
       cachedStatus,
     });
-    res.status(201).json(ticket);
+    res.status(201).json(issue);
   });
 
-  router.delete('/tracks/:trackId/tickets/:ticketId', (req, res) => {
-    const deleted = tickets.delete(req.params.ticketId as any);
+  router.delete('/tracks/:trackId/issues/:issueId', (req, res) => {
+    const deleted = issues.delete(req.params.issueId as any);
     if (!deleted) {
-      res.status(404).json({ error: 'Ticket not found' });
+      res.status(404).json({ error: 'Issue not found' });
       return;
     }
     res.status(204).send();
@@ -1434,8 +1434,8 @@ export function createApiRouter(deps: ApiRouterDeps = {}): Router {
       return;
     }
 
-    // Populate tickets for interpolation
-    track.tickets = tickets.findByTrack(track.id);
+    // Populate issues for interpolation
+    track.issues = issues.findByTrack(track.id);
     const interpolated = interpolateTemplate(template.content, { track });
     res.json({ templateId: template.id, raw: template.content, interpolated });
   });

@@ -1,7 +1,7 @@
 import { useEffect, useState, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import type {
-  WorkflowTicket, WorkflowTransition, Track, Session,
+  WorkflowIssue, WorkflowTransition, Track, Session,
 } from '@foundation/types.js';
 
 // State-specific data interfaces — now defined locally (runtime validated by stateData shape)
@@ -42,30 +42,30 @@ const PRIORITY_STYLES: Record<string, string> = {
   low: 'bg-gray-800 text-gray-400',
 };
 
-// Legacy state sets — kept for backward compatibility with tickets without playbooks
+// Legacy state sets — kept for backward compatibility with issues without playbooks
 const LEGACY_HUMAN_GATES = new Set(['spec-review', 'plan-review', 'final-review']);
 const LEGACY_TERMINAL_STATES = new Set(['merged', 'cancelled', 'done']);
 
-/** Check if ticket is at a human gate (dynamic playbook or legacy fallback) */
-function isAtHumanGate(ticket: WorkflowTicket): boolean {
-  const sd = ticket.stateData as Record<string, unknown> | undefined;
+/** Check if issue is at a human gate (dynamic playbook or legacy fallback) */
+function isAtHumanGate(issue: WorkflowIssue): boolean {
+  const sd = issue.stateData as Record<string, unknown> | undefined;
   if (sd?.currentStateHumanGate === true) return true;
-  return LEGACY_HUMAN_GATES.has(ticket.state);
+  return LEGACY_HUMAN_GATES.has(issue.state);
 }
 
-/** Check if ticket is in a terminal state (dynamic playbook or legacy fallback) */
-function isTerminalState(ticket: WorkflowTicket): boolean {
-  const sd = ticket.stateData as Record<string, unknown> | undefined;
+/** Check if issue is in a terminal state (dynamic playbook or legacy fallback) */
+function isTerminalState(issue: WorkflowIssue): boolean {
+  const sd = issue.stateData as Record<string, unknown> | undefined;
   if (sd?.currentStateSemanticRole === 'terminal') return true;
-  return LEGACY_TERMINAL_STATES.has(ticket.state);
+  return LEGACY_TERMINAL_STATES.has(issue.state);
 }
 
 export function EpicDetail() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
-  const [ticket, setTicket] = useState<WorkflowTicket | null>(null);
+  const [issue, setIssue] = useState<WorkflowIssue | null>(null);
   const [transitions, setTransitions] = useState<WorkflowTransition[]>([]);
-  const [childTasks, setChildTasks] = useState<WorkflowTicket[]>([]);
+  const [childTasks, setChildTasks] = useState<WorkflowIssue[]>([]);
   const [tracks, setTracks] = useState<Track[]>([]);
   const [sessions, setSessions] = useState<Session[]>([]);
   const [attachedSession, setAttachedSession] = useState<Session | null>(null);
@@ -75,14 +75,14 @@ export function EpicDetail() {
   const loadData = useCallback(async () => {
     if (!id) return;
     try {
-      const [ticketRes, transRes, tracksRes, childRes, sessionsRes] = await Promise.all([
-        fetch(`/api/workflow/tickets/${id}`),
-        fetch(`/api/workflow/tickets/${id}/transitions`),
+      const [issueRes, transRes, tracksRes, childRes, sessionsRes] = await Promise.all([
+        fetch(`/api/workflow/issues/${id}`),
+        fetch(`/api/workflow/issues/${id}/transitions`),
         fetch('/api/tracks'),
-        fetch(`/api/workflow/tickets?parentId=${id}`),
+        fetch(`/api/workflow/issues?parentId=${id}`),
         fetch('/api/sessions'),
       ]);
-      if (ticketRes.ok) setTicket(await ticketRes.json());
+      if (issueRes.ok) setIssue(await issueRes.json());
       if (transRes.ok) setTransitions(await transRes.json());
       if (tracksRes.ok) setTracks(await tracksRes.json());
       if (childRes.ok) setChildTasks(await childRes.json());
@@ -111,7 +111,7 @@ export function EpicDetail() {
 
   async function handleApprove(comment?: string) {
     if (!id) return;
-    await fetch(`/api/workflow/tickets/${id}/approve`, {
+    await fetch(`/api/workflow/issues/${id}/approve`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ comment }),
@@ -121,7 +121,7 @@ export function EpicDetail() {
 
   async function handleApproveWorkflow() {
     if (!id) return;
-    const res = await fetch(`/api/workflow/tickets/${id}/approve-workflow`, {
+    const res = await fetch(`/api/workflow/issues/${id}/approve-workflow`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
     });
@@ -134,7 +134,7 @@ export function EpicDetail() {
 
   async function handleReject(comment?: string) {
     if (!id) return;
-    await fetch(`/api/workflow/tickets/${id}/reject`, {
+    await fetch(`/api/workflow/issues/${id}/reject`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ comment }),
@@ -144,7 +144,7 @@ export function EpicDetail() {
 
   async function handleTransition(toState: string, comment?: string) {
     if (!id) return;
-    await fetch(`/api/workflow/tickets/${id}/transition`, {
+    await fetch(`/api/workflow/issues/${id}/transition`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ toState, comment }),
@@ -158,10 +158,10 @@ export function EpicDetail() {
   }
 
   async function handleSubmitAnswers() {
-    if (!id || !ticket) return;
+    if (!id || !issue) return;
     // Collect answers: either per-question or as a single freeform response
     const hasStructuredAnswers = Object.keys(inputAnswers).length > 1 ||
-      (ticket.stateData as NeedsInputData | undefined)?.pendingQuestions?.length;
+      (issue.stateData as NeedsInputData | undefined)?.pendingQuestions?.length;
     const answered = hasStructuredAnswers
       ? Object.entries(inputAnswers).map(([idx, answer]) => ({
           text: `Question ${Number(idx) + 1}`,
@@ -169,21 +169,21 @@ export function EpicDetail() {
         }))
       : [{ text: 'Response', answer: inputAnswers[0] ?? '' }];
 
-    await fetch(`/api/workflow/tickets/${id}`, {
+    await fetch(`/api/workflow/issues/${id}`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ stateData: { ...ticket.stateData, answers: answered } }),
+      body: JSON.stringify({ stateData: { ...issue.stateData, answers: answered } }),
     });
     await handleTransition('triaging');
   }
 
   if (loading) return <div className="p-8 text-gray-400">Loading...</div>;
-  if (!ticket) return <div className="p-8 text-red-400">Ticket not found.</div>;
+  if (!issue) return <div className="p-8 text-red-400">Issue not found.</div>;
 
-  const trackName = ticket.trackId
-    ? tracks.find((t) => t.id === ticket.trackId)?.name
+  const trackName = issue.trackId
+    ? tracks.find((t) => t.id === issue.trackId)?.name
     : undefined;
-  const sd = ticket.stateData as Record<string, unknown> | undefined;
+  const sd = issue.stateData as Record<string, unknown> | undefined;
 
   return (
     <div className="h-full overflow-y-auto">
@@ -197,16 +197,16 @@ export function EpicDetail() {
             &larr; Workflow
           </button>
           <div className="flex items-center gap-3 flex-wrap">
-            <h1 className="text-lg font-semibold text-gray-100">{ticket.title}</h1>
-            <WorkflowStateIndicator state={ticket.state} ticketType={ticket.type} size="md" stateData={sd} />
-            <span className={`text-xs px-2 py-0.5 rounded ${PRIORITY_STYLES[ticket.priority]}`}>
-              {ticket.priority}
+            <h1 className="text-lg font-semibold text-gray-100">{issue.title}</h1>
+            <WorkflowStateIndicator state={issue.state} issueType={issue.type} size="md" stateData={sd} />
+            <span className={`text-xs px-2 py-0.5 rounded ${PRIORITY_STYLES[issue.priority]}`}>
+              {issue.priority}
             </span>
             {sd?.autonomous === true && <RunningDarkPill />}
             {sd?.paused === true && <PausedPill until={typeof sd?.pausedUntil === 'string' ? sd.pausedUntil : undefined} reason={typeof sd?.pausedReason === 'string' ? sd.pausedReason : undefined} />}
           </div>
           <ActionButtons
-            ticket={ticket}
+            issue={issue}
             onApprove={handleApprove}
             onReject={handleReject}
             onTransition={handleTransition}
@@ -214,18 +214,18 @@ export function EpicDetail() {
         </div>
 
         {/* Workflow playbook proposal (shown for epics in 'idea' state without a playbook) */}
-        {ticket.type === 'epic' && !ticket.playbookRowId && (
-          <WorkflowAssignmentPanel ticket={ticket} onApprove={handleApproveWorkflow} />
+        {issue.type === 'epic' && !issue.playbookRowId && (
+          <WorkflowAssignmentPanel issue={issue} onApprove={handleApproveWorkflow} />
         )}
 
         {/* Human gate panel */}
-        {isAtHumanGate(ticket) && (
-          <HumanGatePanel ticket={ticket} transitions={transitions} onApprove={handleApprove} onReject={handleReject} />
+        {isAtHumanGate(issue) && (
+          <HumanGatePanel issue={issue} transitions={transitions} onApprove={handleApprove} onReject={handleReject} />
         )}
 
         {/* Agent sessions */}
         <AgentSessionsBar
-          ticket={ticket}
+          issue={issue}
           sessions={sessions}
           onAttach={setAttachedSession}
           onKill={handleKillSession}
@@ -248,14 +248,14 @@ export function EpicDetail() {
                 </CollapsibleSection>
                 <CollapsibleSection title="Original Description" defaultOpen={false}>
                   <div className="text-sm text-gray-300 whitespace-pre-wrap bg-gray-900/50 rounded p-3">
-                    {ticket.description || 'No description.'}
+                    {issue.description || 'No description.'}
                   </div>
                 </CollapsibleSection>
               </>
             ) : (
               <CollapsibleSection title="Description" defaultOpen={!sd?.planDraft}>
                 <div className="text-sm text-gray-300 whitespace-pre-wrap bg-gray-900/50 rounded p-3">
-                  {ticket.description || 'No description.'}
+                  {issue.description || 'No description.'}
                 </div>
               </CollapsibleSection>
             )}
@@ -270,7 +270,7 @@ export function EpicDetail() {
 
             <ProgressFeedSection entries={sd?.agentProgress as AgentProgressEntry[] | undefined} />
 
-            {ticket.state === 'needs-input' && (
+            {issue.state === 'needs-input' && (
               <NeedsInputSection
                 data={sd as unknown as NeedsInputData | undefined}
                 answers={inputAnswers}
@@ -282,13 +282,13 @@ export function EpicDetail() {
               />
             )}
 
-            {(ticket.state === 'plan-critique' || ticket.state === 'integration-review') && (
+            {(issue.state === 'plan-critique' || issue.state === 'integration-review') && (
               <FindingsSection
                 data={sd as unknown as (PlanCritiqueData | IntegrationReviewData) | undefined}
               />
             )}
 
-            {ticket.state === 'final-review' && sd && (
+            {issue.state === 'final-review' && sd && (
               <FinalReviewSection data={sd as unknown as FinalReviewData | undefined} />
             )}
 
@@ -307,18 +307,18 @@ export function EpicDetail() {
           {/* Right column (1/3) */}
           <div className="w-full md:w-80 space-y-4 shrink-0">
             <Section title="Status Timeline">
-              <StateTimeline transitions={transitions} ticketType={ticket.type} />
+              <StateTimeline transitions={transitions} issueType={issue.type} />
             </Section>
 
             <Section title="Details">
               <dl className="space-y-2 text-xs">
                 <DetailRow label="Track" value={trackName ?? 'Unbound'} />
-                <DetailRow label="Provider" value={ticket.provider} />
-                <DetailRow label="Priority" value={ticket.priority} />
-                <DetailRow label="Created" value={new Date(ticket.createdAt).toLocaleString()} />
-                <DetailRow label="Last state change" value={new Date(ticket.stateChangedAt).toLocaleString()} />
-                {ticket.assignedAgentRole && (
-                  <DetailRow label="Agent role" value={ticket.assignedAgentRole} />
+                <DetailRow label="Provider" value={issue.provider} />
+                <DetailRow label="Priority" value={issue.priority} />
+                <DetailRow label="Created" value={new Date(issue.createdAt).toLocaleString()} />
+                <DetailRow label="Last state change" value={new Date(issue.stateChangedAt).toLocaleString()} />
+                {issue.assignedAgentRole && (
+                  <DetailRow label="Agent role" value={issue.assignedAgentRole} />
                 )}
               </dl>
             </Section>
@@ -338,14 +338,14 @@ export function EpicDetail() {
   );
 }
 
-function ActionButtons({ ticket, onApprove, onReject, onTransition }: {
-  ticket: WorkflowTicket;
+function ActionButtons({ issue, onApprove, onReject, onTransition }: {
+  issue: WorkflowIssue;
   onApprove: (comment?: string) => void;
   onReject: (comment?: string) => void;
   onTransition: (toState: string, comment?: string) => void;
 }) {
-  const isTerminal = isTerminalState(ticket);
-  const isHumanGate = isAtHumanGate(ticket);
+  const isTerminal = isTerminalState(issue);
+  const isHumanGate = isAtHumanGate(issue);
 
   return (
     <div className="flex items-center gap-2 mt-2 flex-wrap">
@@ -365,7 +365,7 @@ function ActionButtons({ ticket, onApprove, onReject, onTransition }: {
           </button>
         </>
       )}
-      {ticket.state === 'needs-input' && (
+      {issue.state === 'needs-input' && (
         <button
           onClick={() => onTransition('triaging')}
           className="px-3 py-1 text-xs bg-blue-800 hover:bg-blue-700 text-blue-200 rounded transition-colors"
@@ -373,7 +373,7 @@ function ActionButtons({ ticket, onApprove, onReject, onTransition }: {
           Submit Answers
         </button>
       )}
-      {ticket.state === 'approved' && (
+      {issue.state === 'approved' && (
         <button
           onClick={() => onTransition('merged')}
           className="px-3 py-1 text-xs bg-green-800 hover:bg-green-700 text-green-200 rounded transition-colors"
@@ -406,16 +406,16 @@ const AGENT_STATE_DESCRIPTIONS: Record<string, string> = {
   'changes-requested': 'Agent is addressing review feedback',
 };
 
-function AgentSessionsBar({ ticket, sessions, onAttach, onKill }: {
-  ticket: WorkflowTicket;
+function AgentSessionsBar({ issue, sessions, onAttach, onKill }: {
+  issue: WorkflowIssue;
   sessions: Session[];
   onAttach: (session: Session) => void;
   onKill: (sessionId: string, trackId: string) => void;
 }) {
-  // Collect all session IDs associated with this ticket
-  const sd = ticket.stateData as Record<string, unknown> | undefined;
+  // Collect all session IDs associated with this issue
+  const sd = issue.stateData as Record<string, unknown> | undefined;
   const agentSessionIds = (sd?.agentSessionIds as string[] | undefined) ?? [];
-  const execSessionId = ticket.executionSessionId;
+  const execSessionId = issue.executionSessionId;
   const allIds = new Set([...agentSessionIds, ...(execSessionId ? [execSessionId] : [])]);
 
   // Match against live sessions
@@ -423,8 +423,8 @@ function AgentSessionsBar({ ticket, sessions, onAttach, onKill }: {
   const alive = matched.filter((s) => s.state === 'active');
   const dead = matched.filter((s) => s.state !== 'active');
 
-  const stateDesc = AGENT_STATE_DESCRIPTIONS[ticket.state];
-  const agentRole = ticket.assignedAgentRole;
+  const stateDesc = AGENT_STATE_DESCRIPTIONS[issue.state];
+  const agentRole = issue.assignedAgentRole;
   const hasActivity = alive.length > 0 || stateDesc;
 
   if (!hasActivity && dead.length === 0 && allIds.size === 0) return null;

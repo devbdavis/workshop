@@ -1,6 +1,6 @@
 import { useEffect, useState, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import type { WorkflowTicket, Track } from '@foundation/types.js';
+import type { WorkflowIssue, Track } from '@foundation/types.js';
 import { CreateEpicModal, type CreateEpicData } from './CreateEpicModal.js';
 import { EpicList, type FilterTab } from './EpicList.js';
 import { PlaybookLibrary } from './PlaybookLibrary.js';
@@ -10,21 +10,21 @@ type SubTab = 'epics' | 'playbooks';
 export function WorkflowPage() {
   const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState<SubTab>('epics');
-  const [epics, setEpics] = useState<WorkflowTicket[]>([]);
+  const [epics, setEpics] = useState<WorkflowIssue[]>([]);
   const [tracks, setTracks] = useState<Track[]>([]);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState<FilterTab>('all');
   const [showCreateForm, setShowCreateForm] = useState(false);
 
   // Also fetch all tasks so we can surface child-level human gates on epics
-  const [allTasks, setAllTasks] = useState<WorkflowTicket[]>([]);
+  const [allTasks, setAllTasks] = useState<WorkflowIssue[]>([]);
 
   const loadData = useCallback(async () => {
     try {
       const [epicsRes, tracksRes, tasksRes] = await Promise.all([
-        fetch('/api/workflow/tickets?type=epic'),
+        fetch('/api/workflow/issues?type=epic'),
         fetch('/api/tracks'),
-        fetch('/api/workflow/tickets?type=task'),
+        fetch('/api/workflow/issues?type=task'),
       ]);
       if (epicsRes.ok) setEpics(await epicsRes.json());
       if (tracksRes.ok) setTracks(await tracksRes.json());
@@ -59,10 +59,10 @@ export function WorkflowPage() {
     const isFromPlan = !!data.planDraft;
     const isFromTemplate = !!data.templateSlug;
     const endpoint = isFromTemplate
-      ? '/api/workflow/tickets/from-template'
+      ? '/api/workflow/issues/from-template'
       : isFromPlan
-        ? '/api/workflow/tickets/from-plan'
-        : '/api/workflow/tickets';
+        ? '/api/workflow/issues/from-plan'
+        : '/api/workflow/issues';
     const body = isFromTemplate
       ? {
           title: data.title,

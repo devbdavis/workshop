@@ -88,7 +88,7 @@ CREATE INDEX idx_wf_agent_roles_name ON workflow_agent_roles(name);
 
 **Prompt composition from building blocks (Blocking Finding #2 resolution):** Instead of a single freeform `system_prompt` field, agent roles are composed from structured sections:
 - `prompt_preamble` — Who you are and your core purpose (from vetted building blocks)
-- `prompt_task_framing` — How to interpret the ticket/context (template-able with `{{ticket.title}}` etc.)
+- `prompt_task_framing` — How to interpret the issue/context (template-able with `{{issue.title}}` etc.)
 - `prompt_completion_instructions` — What MCP tools to call when done, what states to transition to
 - `prompt_constraints` — Forbidden actions, scope limits, required confirmations
 
@@ -122,7 +122,7 @@ ALTER TABLE workflow_tickets ADD COLUMN workflow_template_row_id TEXT;
 ALTER TABLE workflow_tickets ADD COLUMN workflow_template_snapshot TEXT;
 ```
 
-`workflow_template_row_id` binds a ticket to its governing template version. `workflow_template_snapshot` stores a full JSON copy of the template at bind time — this is the **rollback escape hatch**. If the referenced template row is somehow broken, the engine can fall back to the snapshot. A human can also manually re-bind a ticket to a different template version via the API.
+`workflow_template_row_id` binds an issue to its governing template version. `workflow_template_snapshot` stores a full JSON copy of the template at bind time — this is the **rollback escape hatch**. If the referenced template row is somehow broken, the engine can fall back to the snapshot. A human can also manually re-bind an issue to a different template version via the API.
 
 ### 1.2 JSON Schema Contracts
 
@@ -235,7 +235,7 @@ export const stageDefinitionSchema = z.object({
 export const workflowTemplatePayloadSchema = z.object({
   name: z.string().min(1).max(200),
   description: z.string().optional(),
-  ticketType: z.enum(['epic', 'task']),
+  issueType: z.enum(['epic', 'task']),
   stageDefinitions: z.array(stageDefinitionSchema).min(1).max(50),
   promptOverrides: z.record(z.string()).optional(),
   tags: z.array(z.string()).optional(),
@@ -302,7 +302,7 @@ export interface GraphValidationResult {
 
 export function validateWorkflowGraph(
   stages: DynamicStageDefinition[],
-  ticketType: string,
+  issueType: string,
 ): GraphValidationResult;
 ```
 
@@ -313,7 +313,7 @@ export function validateWorkflowGraph(
 3. **No orphan nodes:** Every non-entry state has at least one incoming transition
 4. **No infinite auto-transition loops:** Follow all `auto` trigger chains; detect cycles. Maximum auto-chain depth: 10.
 5. **Complexity bounds:** Max 50 states, max 8 transitions per state (fan-out limit)
-6. **Human gate invariant (prompt injection defense):** For `ticketType === 'epic'`, every workflow with more than 3 states must include at least one `human-gate` nodeType. This prevents an injected prompt from generating workflows that skip all human oversight.
+6. **Human gate invariant (prompt injection defense):** For `issueType === 'epic'`, every workflow with more than 3 states must include at least one `human-gate` nodeType. This prevents an injected prompt from generating workflows that skip all human oversight.
 7. **Capability tier gate:** Any state that references an agent role with `capability_tier` above `'advisory'` must have a `human-gate` state reachable within 2 transitions upstream (before the agent can act). This is validated at persist time by querying the agent role's tier.
 8. **State name format:** All state names match `^[a-z][a-z0-9-]*$`, max 64 chars
 
@@ -337,15 +337,15 @@ export function validateWorkflowGraph(
 
 Extends the file from Sub-Epic 1. Core responsibilities:
 
-1. **Load template for ticket:** Given a `WorkflowTicketId`, read `workflow_template_row_id` from the ticket, fetch the template row, parse `stage_definitions` JSON, validate with Zod
+1. **Load template for issue:** Given a `WorkflowIssueId`, read `workflow_template_row_id` from the issue, fetch the template row, parse `stage_definitions` JSON, validate with Zod
 2. **Load template by ID+version:** Direct lookup for template browsing
 3. **Cache:** In-memory LRU cache (keyed by `row_id`) since templates are immutable once written. Invalidate on server restart.
-4. **Fallback:** If `workflow_template_row_id` is null (legacy ticket or binding failure), try `workflow_template_snapshot`. If both null, throw descriptive error.
+4. **Fallback:** If `workflow_template_row_id` is null (legacy issue or binding failure), try `workflow_template_snapshot`. If both null, throw descriptive error.
 
 ```typescript
 export interface TopologyLoader {
-  /** Load parsed, validated stages for a ticket's bound template */
-  loadForTicket(ticketId: WorkflowTicketId): DynamicStageDefinition[];
+  /** Load parsed, validated stages for an issue's bound template */
+  loadForIssue(issueId: WorkflowIssueId): DynamicStageDefinition[];
 
   /** Load parsed stages for a specific template row */
   loadByRowId(rowId: string): DynamicStageDefinition[];
@@ -360,34 +360,34 @@ export interface TopologyLoader {
 
 ### 2.2 Engine Refactor (`src/application/workflow/engine.ts`)
 
-**Current:** `isValidTransition(ticket.type, ticket.state, toState)` — looks up from hardcoded `EPIC_STAGES`/`TASK_STAGES`.
+**Current:** `isValidTransition(issue.type, issue.state, toState)` — looks up from hardcoded `EPIC_STAGES`/`TASK_STAGES`.
 
-**New:** Every transition validation loads the ticket's bound template:
+**New:** Every transition validation loads the issue's bound template:
 
 ```typescript
 function applyTransition(
-  ticket: WorkflowTicket,
+  issue: WorkflowIssue,
   toState: string,
   actor: TransitionActor,
   comment?: string,
   data?: Record<string, unknown>,
   _depth: number = 0,  // runtime recursion guard
-): WorkflowTicket {
+): WorkflowIssue {
   // BLOCKING FINDING #5: Runtime recursion depth guard
   const MAX_AUTO_TRANSITION_DEPTH = 10;
   if (_depth >= MAX_AUTO_TRANSITION_DEPTH) {
     throw new Error(
       `Auto-transition depth limit (${MAX_AUTO_TRANSITION_DEPTH}) exceeded ` +
-      `for ticket ${ticket.id} at state '${ticket.state}'. ` +
+      `for issue ${issue.id} at state '${issue.state}'. ` +
       `Likely infinite loop in workflow template.`
     );
   }
 
-  const stages = topologyLoader.loadForTicket(ticket.id);
+  const stages = topologyLoader.loadForIssue(issue.id);
 
-  if (!isValidTransition(stages, ticket.state, toState)) {
+  if (!isValidTransition(stages, issue.state, toState)) {
     throw new Error(
-      `Invalid transition: cannot go from '${ticket.state}' to '${toState}'`
+      `Invalid transition: cannot go from '${issue.state}' to '${toState}'`
     );
   }
 
@@ -406,20 +406,20 @@ function applyTransition(
 }
 ```
 
-**Circuit breaker update:** The existing plan-critique circuit breaker becomes generic. Instead of checking `ticket.state === 'plan-critique' && toState === 'planning'`, count consecutive transitions between the same pair of states from the audit log. If any state-pair loop exceeds N iterations (configurable per-template, default 3), redirect to the nearest upstream human-gate or halt.
+**Circuit breaker update:** The existing plan-critique circuit breaker becomes generic. Instead of checking `issue.state === 'plan-critique' && toState === 'planning'`, count consecutive transitions between the same pair of states from the audit log. If any state-pair loop exceeds N iterations (configurable per-template, default 3), redirect to the nearest upstream human-gate or halt.
 
 **`approve()` / `reject()` refactor:**
 
 ```typescript
-approve(ticketId: WorkflowTicketId, comment?: string): WorkflowTicket {
-  const ticket = requireTicket(ticketId);
-  const stages = topologyLoader.loadForTicket(ticketId);
+approve(issueId: WorkflowIssueId, comment?: string): WorkflowIssue {
+  const issue = requireIssue(issueId);
+  const stages = topologyLoader.loadForIssue(issueId);
 
-  if (!isHumanGate(stages, ticket.state)) {
-    throw new Error(`Ticket '${ticket.id}' is not at a human gate (state: ${ticket.state})`);
+  if (!isHumanGate(stages, issue.state)) {
+    throw new Error(`Issue '${issue.id}' is not at a human gate (state: ${issue.state})`);
   }
 
-  const stage = stages.find(s => s.state === ticket.state);
+  const stage = stages.find(s => s.state === issue.state);
   const approvalTarget = stage?.validTransitions.find(t => t.trigger === 'human-approve');
   // ... same pattern as current, but using dynamic stages
 }
@@ -434,7 +434,7 @@ approve(ticketId: WorkflowTicketId, comment?: string): WorkflowTicket {
 ```typescript
 export function composeWorkflowPrompt(
   agentRole: AgentRoleRecord,    // loaded from workflow_agent_roles table
-  ticket: WorkflowTicket,
+  issue: WorkflowIssue,
   context: PromptContext,
   promptOverrides?: Record<string, string>,  // from template's prompt_overrides
 ): string {
@@ -445,18 +445,18 @@ export function composeWorkflowPrompt(
 
   // 2. Task framing (interpolated from role record)
   if (agentRole.promptTaskFraming) {
-    parts.push(interpolateTemplate(agentRole.promptTaskFraming, { ticket, context }));
+    parts.push(interpolateTemplate(agentRole.promptTaskFraming, { issue, context }));
   }
 
   // 3. Template-level prompt overrides (per-state customization)
-  const stateOverride = promptOverrides?.[ticket.state];
+  const stateOverride = promptOverrides?.[issue.state];
   if (stateOverride) {
     parts.push(stateOverride);
   }
 
   // 4. Completion instructions
   if (agentRole.promptCompletionInstructions) {
-    parts.push(interpolateTemplate(agentRole.promptCompletionInstructions, { ticket, context }));
+    parts.push(interpolateTemplate(agentRole.promptCompletionInstructions, { issue, context }));
   }
 
   // 5. Constraints
@@ -472,30 +472,30 @@ export function composeWorkflowPrompt(
 }
 ```
 
-The `interpolateTemplate()` function handles `{{ticket.title}}`, `{{ticket.id}}`, `{{context.planDraft}}` etc. — simple Mustache-style interpolation, no code execution.
+The `interpolateTemplate()` function handles `{{issue.title}}`, `{{issue.id}}`, `{{context.planDraft}}` etc. — simple Mustache-style interpolation, no code execution.
 
 ### 2.4 Agent Dispatcher Refactor (`src/application/workflow/agent-dispatcher.ts`)
 
-**Current:** `getStageDefinition(ticket.type, ticket.state)` from hardcoded stages.
+**Current:** `getStageDefinition(issue.type, issue.state)` from hardcoded stages.
 
 **New:** Load stages from topology loader, load agent role from DB:
 
 ```typescript
-async onTransition(ticket: WorkflowTicket): Promise<void> {
-  const stages = topologyLoader.loadForTicket(ticket.id);
-  const stage = stages.find(s => s.state === ticket.state);
+async onTransition(issue: WorkflowIssue): Promise<void> {
+  const stages = topologyLoader.loadForIssue(issue.id);
+  const stage = stages.find(s => s.state === issue.state);
 
   if (!stage || !stage.agentRoleId) return;
 
   // Load the agent role definition from DB
   const agentRole = agentRoleRepo.findById(stage.agentRoleId);
   if (!agentRole) {
-    console.warn(`Agent role '${stage.agentRoleId}' not found for state '${ticket.state}'`);
+    console.warn(`Agent role '${stage.agentRoleId}' not found for state '${issue.state}'`);
     return;
   }
 
   const count = stage.agentCount || 1;
-  const systemPrompt = composeWorkflowPrompt(agentRole, ticket, context, template.promptOverrides);
+  const systemPrompt = composeWorkflowPrompt(agentRole, issue, context, template.promptOverrides);
   // ... rest is same dispatch logic
 }
 ```
@@ -505,14 +505,14 @@ async onTransition(ticket: WorkflowTicket): Promise<void> {
 Replace `isAgentActionable(t.type, t.state)` and `isTerminal(t.type, t.state)` with dynamic lookups:
 
 ```typescript
-for (const ticket of allTickets) {
+for (const issue of allIssues) {
   try {
-    const stages = topologyLoader.loadForTicket(ticket.id);
-    if (isTerminal(stages, ticket.state)) continue;
-    if (!isAgentActionable(stages, ticket.state)) continue;
+    const stages = topologyLoader.loadForIssue(issue.id);
+    if (isTerminal(stages, issue.state)) continue;
+    if (!isAgentActionable(stages, issue.state)) continue;
     // ... same recovery logic
   } catch {
-    // Template not found — skip this ticket, log warning
+    // Template not found — skip this issue, log warning
   }
 }
 ```
@@ -521,7 +521,7 @@ for (const ticket of allTickets) {
 
 The current `findHumanGatePending()` hardcodes `WHERE state IN ('spec-review', 'plan-review', 'final-review')`. This must become dynamic:
 
-**Option chosen:** Query all non-terminal tickets, then filter in-memory by loading their template and checking `nodeType === 'human-gate'`. This is acceptable because the ticket count is small (Workshop is local-first, not multi-tenant).
+**Option chosen:** Query all non-terminal issues, then filter in-memory by loading their template and checking `nodeType === 'human-gate'`. This is acceptable because the issue count is small (Workshop is local-first, not multi-tenant).
 
 Alternatively, add a `is_human_gate BOOLEAN` column to `workflow_tickets` that is set on every state transition by the engine. This avoids the in-memory filter. **Go with this approach** — add the column in the migration.
 
@@ -571,7 +571,7 @@ A Claude Code skill that runs when a new epic is created. Per Human Answer 4, th
 
 **Skill behavior:**
 1. Receives the epic description, track context, and available template list via MCP tools
-2. Queries the template registry: `workshop_list_workflow_templates({ tags, ticketType: 'epic' })`
+2. Queries the template registry: `workshop_list_workflow_templates({ tags, issueType: 'epic' })`
 3. Scores templates against the epic description using tag matching + semantic similarity
 4. Either selects the best match OR designs a new workflow template
 5. If creating new: validates via `workshop_validate_workflow_template({ stageDefinitions })` MCP tool
@@ -616,7 +616,7 @@ Per Human Answer 4, this is also a Claude skill.
 **Trigger:** Fired asynchronously when an epic reaches a terminal state (`merged`, `cancelled`, `done`). The dispatch coordinator calls a `scheduleReview(epicId)` function that creates a background session.
 
 **Skill behavior:**
-1. Reads the epic's full transition history via `workshop_get_workflow_ticket(epicId)` (includes transitions)
+1. Reads the epic's full transition history via `workshop_get_workflow_issue(epicId)` (includes transitions)
 2. Computes metrics: wall-clock time per state, retry loops, human interventions, stuck states
 3. Compares the executed workflow against the template's expected flow
 4. Produces a `workflow_review` record with structured findings and suggested template changes
@@ -707,27 +707,27 @@ Per Human Answer 6: "we will simply implement the new system. this will not affe
 
 1. **Create new tables:** `workflow_templates`, `workflow_agent_roles`, `workflow_reviews` (idempotent `CREATE TABLE IF NOT EXISTS`)
 2. **Add new columns to `workflow_tickets`:** `workflow_template_row_id`, `workflow_template_snapshot`, `is_human_gate` (idempotent `ALTER TABLE ... ADD COLUMN`)
-3. **Backfill in-flight tickets:** A one-time migration function runs on startup:
+3. **Backfill in-flight issues:** A one-time migration function runs on startup:
    - Query all `workflow_tickets` where `workflow_template_row_id IS NULL`
    - For each, snapshot the current hardcoded stage definitions (the old `EPIC_STAGES`/`TASK_STAGES`) into `workflow_template_snapshot` as JSON
    - Set `is_human_gate` based on current state
-   - These tickets continue to run using the snapshot fallback path in the topology loader
-4. **No template row is created for legacy tickets** — they run on snapshot until completion. New epics use the dynamic system.
+   - These issues continue to run using the snapshot fallback path in the topology loader
+4. **No template row is created for legacy issues** — they run on snapshot until completion. New epics use the dynamic system.
 
 This migration is safe because:
 - New tables are additive (no existing data modified)
 - New columns are nullable (no existing rows broken)
-- Backfill is a one-time read+write that doesn't change ticket state
+- Backfill is a one-time read+write that doesn't change issue state
 - The topology loader's fallback path handles `workflow_template_row_id IS NULL`
 
 ```typescript
 // In database.ts migration section:
-function migrateInFlightTickets(db: Database): void {
-  const tickets = db.prepare(
+function migrateInFlightIssues(db: Database): void {
+  const issues = db.prepare(
     "SELECT id, type, state FROM workflow_tickets WHERE workflow_template_row_id IS NULL"
   ).all() as Array<{ id: string; type: string; state: string }>;
 
-  if (tickets.length === 0) return;
+  if (issues.length === 0) return;
 
   // Import the OLD stage definitions one last time for snapshot
   const legacyStages = getLegacyStageDefinitions(); // hardcoded copy preserved for migration
@@ -736,17 +736,17 @@ function migrateInFlightTickets(db: Database): void {
     "UPDATE workflow_tickets SET workflow_template_snapshot = ?, is_human_gate = ? WHERE id = ?"
   );
 
-  for (const ticket of tickets) {
-    const stages = ticket.type === 'epic' ? legacyStages.epic : legacyStages.task;
-    const isGate = ['spec-review', 'plan-review', 'final-review'].includes(ticket.state);
-    updateStmt.run(JSON.stringify(stages), isGate ? 1 : 0, ticket.id);
+  for (const issue of issues) {
+    const stages = issue.type === 'epic' ? legacyStages.epic : legacyStages.task;
+    const isGate = ['spec-review', 'plan-review', 'final-review'].includes(issue.state);
+    updateStmt.run(JSON.stringify(stages), isGate ? 1 : 0, issue.id);
   }
 
-  console.log(`[migration] Backfilled ${tickets.length} in-flight tickets with template snapshots`);
+  console.log(`[migration] Backfilled ${issues.length} in-flight issues with template snapshots`);
 }
 ```
 
-A frozen copy of `EPIC_STAGES` and `TASK_STAGES` is preserved in `src/application/workflow/legacy-stages.ts` solely for migration backfill. This file is used only by `migrateInFlightTickets()` and can be deleted once all legacy tickets have reached terminal states.
+A frozen copy of `EPIC_STAGES` and `TASK_STAGES` is preserved in `src/application/workflow/legacy-stages.ts` solely for migration backfill. This file is used only by `migrateInFlightIssues()` and can be deleted once all legacy issues have reached terminal states.
 
 ---
 
@@ -754,11 +754,11 @@ A frozen copy of `EPIC_STAGES` and `TASK_STAGES` is preserved in `src/applicatio
 
 Dynamic workflows need better observability than the current `console.warn`:
 
-1. **Structured logging:** All engine operations (transitions, auto-transitions, circuit breaker activations, dispatch events) log as structured JSON with `ticketId`, `templateId`, `fromState`, `toState`, `actor`, `durationMs`
+1. **Structured logging:** All engine operations (transitions, auto-transitions, circuit breaker activations, dispatch events) log as structured JSON with `issueId`, `templateId`, `fromState`, `toState`, `actor`, `durationMs`
 2. **Per-state timing:** Transition records already capture timestamps. The review skill computes wall-clock per state. The UI shows this in the state timeline.
 3. **Circuit breaker events:** Logged at `warn` level with full context
 4. **Template load failures:** Logged at `error` level; metric counter for monitoring
-5. **Skill execution:** Selection and review skill sessions are tracked as regular Workshop sessions with `executionTicketId` linkage
+5. **Skill execution:** Selection and review skill sessions are tracked as regular Workshop sessions with `executionIssueId` linkage
 
 No new external monitoring infrastructure — this uses Workshop's existing logging + the structured data in DB tables. The review skill aggregates metrics post-hoc.
 
@@ -769,8 +769,8 @@ No new external monitoring infrastructure — this uses Workshop's existing logg
 If an epic is pinned to a broken template version:
 
 1. **Automatic fallback:** The topology loader checks `workflow_template_snapshot` if the template row fails to load or validate
-2. **Manual re-binding:** New API endpoint `POST /workflow/tickets/:id/rebind-template` accepts a `templateRowId` and rebinds the ticket. Only allowed at human-gate states or when the ticket is in a non-agent-actionable state (to avoid mid-flight confusion)
-3. **Manual state override:** Existing `POST /workflow/tickets/:id/transition` with `manual` trigger allows moving to any state defined in the bound template. This is the escape hatch for truly stuck tickets.
+2. **Manual re-binding:** New API endpoint `POST /workflow/issues/:id/rebind-template` accepts a `templateRowId` and rebinds the issue. Only allowed at human-gate states or when the issue is in a non-agent-actionable state (to avoid mid-flight confusion)
+3. **Manual state override:** Existing `POST /workflow/issues/:id/transition` with `manual` trigger allows moving to any state defined in the bound template. This is the escape hatch for truly stuck issues.
 
 ---
 

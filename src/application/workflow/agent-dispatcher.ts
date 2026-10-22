@@ -9,12 +9,12 @@
  * in-progress, code-review, changes-requested.
  */
 import type {
-  WorkflowTicket,
-  WorkflowTicketId,
+  WorkflowIssue,
+  WorkflowIssueId,
   TrackId,
   SessionId,
 } from '@foundation/types.js';
-import type { WorkflowTicketRepository } from '@domain/workflow/ticket-repository.js';
+import type { WorkflowIssueRepository } from '@domain/workflow/issue-repository.js';
 import type { TrackRepository } from '@domain/track/repository.js';
 import type { TerminalManager } from '@domain/terminal/manager.js';
 import type { TopologyLoader } from './topology-loader.js';
@@ -33,11 +33,11 @@ export interface AgentDispatcher {
    * Called after any state transition. If the target state is agent-actionable
    * (and not an execution stage), dispatches the appropriate agent sessions.
    */
-  onTransition(ticket: WorkflowTicket): Promise<void>;
+  onTransition(issue: WorkflowIssue): Promise<void>;
 }
 
 export interface AgentDispatcherDeps {
-  tickets: WorkflowTicketRepository;
+  issues: WorkflowIssueRepository;
   tracks: TrackRepository;
   terminal: TerminalManager;
   topologyLoader: TopologyLoader;
@@ -53,17 +53,17 @@ export interface AgentDispatcherDeps {
  */
 function isExecutionStage(
   topologyLoader: TopologyLoader,
-  ticket: WorkflowTicket,
+  issue: WorkflowIssue,
 ): boolean {
   try {
-    const stages = topologyLoader.loadForTicket(ticket);
-    const stage = getStageDefinition(stages, ticket.state);
+    const stages = topologyLoader.loadForIssue(issue);
+    const stage = getStageDefinition(stages, issue.state);
     return stage?.validTransitions.some(
       (t) => t.trigger === 'execution-complete' || t.trigger === 'execution-failed',
     ) ?? false;
   } catch {
     // No playbook — fallback to hardcoded check
-    return ticket.state === 'executing';
+    return issue.state === 'executing';
   }
 }
 
@@ -72,9 +72,9 @@ function isExecutionStage(
 // ---------------------------------------------------------------------------
 
 export function createAgentDispatcher(deps: AgentDispatcherDeps): AgentDispatcher {
-  const { tickets, tracks, terminal, topologyLoader, agentRoles } = deps;
+  const { issues, tracks, terminal, topologyLoader, agentRoles } = deps;
 
-  /** Lazily find-or-create a _Workflow track for tickets without a track */
+  /** Lazily find-or-create a _Workflow track for issues without a track */
   let workflowTrackId: TrackId | null = null;
   function getOrCreateWorkflowTrack(): TrackId {
     if (workflowTrackId) {
@@ -97,23 +97,23 @@ export function createAgentDispatcher(deps: AgentDispatcherDeps): AgentDispatche
     return track.id;
   }
 
-  function resolveWorkingDir(ticket: WorkflowTicket): string | undefined {
-    const trackId = ticket.trackId ?? resolveTrackIdFromParent(ticket);
+  function resolveWorkingDir(issue: WorkflowIssue): string | undefined {
+    const trackId = issue.trackId ?? resolveTrackIdFromParent(issue);
     if (!trackId) return undefined;
 
     const repos = tracks.findReposByTrack(trackId);
     return repos.length > 0 ? repos[0].path : undefined;
   }
 
-  function resolveTrackIdFromParent(ticket: WorkflowTicket): TrackId | undefined {
-    if (!ticket.parentId) return undefined;
-    const parent = tickets.findById(ticket.parentId);
+  function resolveTrackIdFromParent(issue: WorkflowIssue): TrackId | undefined {
+    if (!issue.parentId) return undefined;
+    const parent = issues.findById(issue.parentId);
     return parent?.trackId;
   }
 
-  function buildPromptContext(ticket: WorkflowTicket): PromptContext {
+  function buildPromptContext(issue: WorkflowIssue): PromptContext {
     const ctx: PromptContext = {};
-    const stateData = ticket.stateData as Record<string, unknown> | undefined;
+    const stateData = issue.stateData as Record<string, unknown> | undefined;
 
     if (stateData?.planDraft && typeof stateData.planDraft === 'string') {
       ctx.planDraft = stateData.planDraft;
@@ -150,7 +150,7 @@ export function createAgentDispatcher(deps: AgentDispatcherDeps): AgentDispatche
       ctx.answers = stateData.answers as PromptContext['answers'];
     }
 
-    const trackId = ticket.trackId ?? resolveTrackIdFromParent(ticket);
+    const trackId = issue.trackId ?? resolveTrackIdFromParent(issue);
     if (trackId) {
       const track = tracks.findById(trackId);
       if (track?.context) {
@@ -165,17 +165,17 @@ export function createAgentDispatcher(deps: AgentDispatcherDeps): AgentDispatche
    * Build the initial prompt for the agent, using role from DB if available.
    */
   function buildInitialPrompt(
-    ticket: WorkflowTicket,
+    issue: WorkflowIssue,
     roleName: string,
     agentRole: AgentRoleRow | null,
   ): string {
     const lines = [
-      `You are working on workflow ticket ${ticket.id} as a ${roleName} agent.`,
+      `You are working on workflow issue ${issue.id} as a ${roleName} agent.`,
       '',
-      `Ticket: ${ticket.title}`,
+      `Issue: ${issue.title}`,
       '',
       'When you have completed your work, report the result by calling:',
-      `  workshop_transition_ticket("${ticket.id}", "<target_state>")`,
+      `  workshop_transition_issue("${issue.id}", "<target_state>")`,
       '',
     ];
 
@@ -185,8 +185,8 @@ export function createAgentDispatcher(deps: AgentDispatcherDeps): AgentDispatche
     } else {
       // Fallback to hardcoded role-specific completion instructions
       const completionMap: Record<string, string> = {
-        'workflow-designer': 'When your workflow proposal is ready, call workshop_propose_playbook with the epicId, epicPlaybook, taskPlaybook (if needed), agentRoles, and rationale. The proposal will be stored for human approval — do NOT transition the ticket yourself.',
-        'triage': 'When the spec is complete: (1) optionally update the description via workshop_update_ticket to reflect any Q&A refinements, (2) transition to "specced" with the refined spec: workshop_transition_ticket(ticketId, "specced", "summary", { refinedSpec: "full spec text..." }). If you have questions: transition to "needs-input" with: workshop_transition_ticket(ticketId, "needs-input", "summary", { pendingQuestions: [{ text: "question?" }] })',
+        'workflow-designer': 'When your workflow proposal is ready, call workshop_propose_playbook with the epicId, epicPlaybook, taskPlaybook (if needed), agentRoles, and rationale. The proposal will be stored for human approval — do NOT transition the issue yourself.',
+        'triage': 'When the spec is complete: (1) optionally update the description via workshop_update_issue to reflect any Q&A refinements, (2) transition to "specced" with the refined spec: workshop_transition_issue(issueId, "specced", "summary", { refinedSpec: "full spec text..." }). If you have questions: transition to "needs-input" with: workshop_transition_issue(issueId, "needs-input", "summary", { pendingQuestions: [{ text: "question?" }] })',
         'planner': 'Transition to "plan-critique" when the plan is ready for review.',
         'plan-critic': 'Transition to "plan-review" if no blocking findings, or "planning" if blocking findings exist.',
         'splitter': 'Create child tasks via workshop_create_task, then transition to "in-progress".',
@@ -205,16 +205,16 @@ export function createAgentDispatcher(deps: AgentDispatcherDeps): AgentDispatche
     return lines.join('\n');
   }
 
-  /** Kill any previously dispatched agent sessions for a ticket */
-  async function killPreviousSessions(ticket: WorkflowTicket): Promise<void> {
-    const stateData = (ticket.stateData || {}) as Record<string, unknown>;
+  /** Kill any previously dispatched agent sessions for an issue */
+  async function killPreviousSessions(issue: WorkflowIssue): Promise<void> {
+    const stateData = (issue.stateData || {}) as Record<string, unknown>;
     const previousIds = stateData.agentSessionIds;
     if (!Array.isArray(previousIds)) return;
 
     for (const sid of previousIds) {
       try {
         await terminal.destroySession(sid as SessionId);
-        console.log(`Cleaned up previous agent session ${sid} for ticket ${ticket.id}`);
+        console.log(`Cleaned up previous agent session ${sid} for issue ${issue.id}`);
       } catch {
         // Session might already be dead - that's fine
       }
@@ -224,15 +224,15 @@ export function createAgentDispatcher(deps: AgentDispatcherDeps): AgentDispatche
   /**
    * Derive agent role from stage definition (topology-driven).
    */
-  function getStageRole(ticket: WorkflowTicket): {
+  function getStageRole(issue: WorkflowIssue): {
     roleName: string;
     agentCount: number;
     agentRole: AgentRoleRow | null;
     stage: StageDefinition | null;
   } | null {
     try {
-      const stages = topologyLoader.loadForTicket(ticket);
-      const stage = getStageDefinition(stages, ticket.state);
+      const stages = topologyLoader.loadForIssue(issue);
+      const stage = getStageDefinition(stages, issue.state);
       if (!stage || !stage.agentActionable) return null;
 
       // Load agent role from DB if agentRoleId is set
@@ -242,14 +242,14 @@ export function createAgentDispatcher(deps: AgentDispatcherDeps): AgentDispatche
       }
 
       // Role name: from DB role, or from stage.agentRoleId, or derive from state
-      const roleName = agentRole?.name ?? stage.agentRoleId ?? deriveRoleFromState(ticket.state);
+      const roleName = agentRole?.name ?? stage.agentRoleId ?? deriveRoleFromState(issue.state);
       const agentCount = stage.agentCount ?? 1;
 
       return { roleName, agentCount, agentRole, stage };
     } catch {
       // No playbook — fallback to hardcoded role derivation
       return {
-        roleName: deriveRoleFromState(ticket.state),
+        roleName: deriveRoleFromState(issue.state),
         agentCount: 1,
         agentRole: null,
         stage: null,
@@ -258,7 +258,7 @@ export function createAgentDispatcher(deps: AgentDispatcherDeps): AgentDispatche
   }
 
   /**
-   * Derive role name from state (backward compat for tickets without playbooks).
+   * Derive role name from state (backward compat for issues without playbooks).
    */
   function deriveRoleFromState(state: string): string {
     const roleMap: Record<string, string> = {
@@ -278,58 +278,58 @@ export function createAgentDispatcher(deps: AgentDispatcherDeps): AgentDispatche
   }
 
   /**
-   * Check if ticket state is agent-actionable.
+   * Check if issue state is agent-actionable.
    */
-  function checkAgentActionable(ticket: WorkflowTicket): boolean {
+  function checkAgentActionable(issue: WorkflowIssue): boolean {
     try {
-      const stages = topologyLoader.loadForTicket(ticket);
-      return isAgentActionable(stages, ticket.state);
+      const stages = topologyLoader.loadForIssue(issue);
+      return isAgentActionable(stages, issue.state);
     } catch {
       // No playbook — fallback to hardcoded check
       const agentActionableStates: Record<string, string[]> = {
         epic: ['idea', 'triaging', 'planning', 'plan-critique', 'splitting', 'integration-review', 'integration-fix'],
         task: ['ready', 'in-progress', 'code-review', 'changes-requested'],
       };
-      return agentActionableStates[ticket.type]?.includes(ticket.state) ?? false;
+      return agentActionableStates[issue.type]?.includes(issue.state) ?? false;
     }
   }
 
   return {
-    async onTransition(ticket: WorkflowTicket): Promise<void> {
+    async onTransition(issue: WorkflowIssue): Promise<void> {
       // Skip execution stages (handled by ExecutionDispatcher)
-      if (isExecutionStage(topologyLoader, ticket)) return;
+      if (isExecutionStage(topologyLoader, issue)) return;
 
       // Check if agent-actionable
-      if (!checkAgentActionable(ticket)) return;
+      if (!checkAgentActionable(issue)) return;
 
-      const roleInfo = getStageRole(ticket);
+      const roleInfo = getStageRole(issue);
       if (!roleInfo) {
-        console.warn(`Agent-actionable state '${ticket.state}' has no role defined`);
+        console.warn(`Agent-actionable state '${issue.state}' has no role defined`);
         return;
       }
 
       const { roleName, agentCount, agentRole, stage } = roleInfo;
 
       // Kill previous agent sessions before dispatching new ones
-      await killPreviousSessions(ticket);
+      await killPreviousSessions(issue);
 
-      const workingDir = resolveWorkingDir(ticket);
-      const context = buildPromptContext(ticket);
+      const workingDir = resolveWorkingDir(issue);
+      const context = buildPromptContext(issue);
 
       // Data-driven prompt composition when a stage definition is available
       // (agentRole may be null if the role isn't in the DB yet).
       // Legacy switch-based composer is only used when there's no stage at all.
       let systemPrompt: string;
       if (stage) {
-        const playbook = topologyLoader.loadPlaybookForTicket(ticket);
+        const playbook = topologyLoader.loadPlaybookForIssue(issue);
         const playbookOverrides = playbook?.promptOverrides;
-        systemPrompt = composeDataDrivenPrompt(agentRole, ticket, stage, playbookOverrides, context);
+        systemPrompt = composeDataDrivenPrompt(agentRole, issue, stage, playbookOverrides, context);
       } else {
-        systemPrompt = composeWorkflowPrompt(roleName, ticket, context);
+        systemPrompt = composeWorkflowPrompt(roleName, issue, context);
       }
 
-      const initialPrompt = buildInitialPrompt(ticket, roleName, agentRole);
-      const trackId = ticket.trackId ?? resolveTrackIdFromParent(ticket) ?? getOrCreateWorkflowTrack();
+      const initialPrompt = buildInitialPrompt(issue, roleName, agentRole);
+      const trackId = issue.trackId ?? resolveTrackIdFromParent(issue) ?? getOrCreateWorkflowTrack();
 
       const sessionIds: string[] = [];
 
@@ -340,23 +340,23 @@ export function createAgentDispatcher(deps: AgentDispatcherDeps): AgentDispatche
             background: true,
             initialPrompt,
             workingDirectory: workingDir,
-            executionTicketId: ticket.id,
-            dangerouslySkipPermissions: isAutonomous(ticket, tickets),
+            executionIssueId: issue.id,
+            dangerouslySkipPermissions: isAutonomous(issue, issues),
             model: stage?.model,
           });
           sessionIds.push(session.id);
           console.log(
-            `Agent dispatched: ${roleName} (${i + 1}/${agentCount}) for ticket ${ticket.id} -> session ${session.id}`,
+            `Agent dispatched: ${roleName} (${i + 1}/${agentCount}) for issue ${issue.id} -> session ${session.id}`,
           );
         } catch (err) {
-          console.error(`Failed to dispatch ${roleName} agent for ticket ${ticket.id}:`, err);
+          console.error(`Failed to dispatch ${roleName} agent for issue ${issue.id}:`, err);
         }
       }
 
       // Store dispatched session IDs in stateData
       if (sessionIds.length > 0) {
-        const existingData = (ticket.stateData || {}) as Record<string, unknown>;
-        tickets.update(ticket.id, {
+        const existingData = (issue.stateData || {}) as Record<string, unknown>;
+        issues.update(issue.id, {
           assignedAgentRole: roleName,
           stateData: {
             ...existingData,

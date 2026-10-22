@@ -46,7 +46,7 @@ enforces boundaries mechanically.
 Standard harness engineering doctrine says "anything not in the repo doesn't
 exist." That principle applies to **structural knowledge** — architecture,
 conventions, constraints, and pitfalls. But Project Tracks exists precisely
-because valuable context lives *outside* the repo: in Jira tickets, Slack
+because valuable context lives *outside* the repo: in Jira issues, Slack
 threads, Google Docs, Confluence pages, and design documents.
 
 **For Project Tracks**: The repo is the source of truth for *how to build*.
@@ -58,7 +58,7 @@ This means:
   (`docs/`, `AGENTS.md`, linter rules)
 - **Requirements, context, prior art, domain knowledge** → accessed via MCP at
   runtime (Glean for GDrive/Slack/Confluence, Atlassian for Jira, etc.)
-- **Cached external context** → synced snapshots of ticket state, relevant
+- **Cached external context** → synced snapshots of issue state, relevant
   docs, and conversation threads stored locally per-track for offline access
   and reduced latency
 
@@ -111,7 +111,7 @@ explicit **Providers**, never through direct imports.
 │  (use cases, workflows, automation rules)   │
 ├─────────────────────────────────────────────┤
 │  Domain                                     │
-│  (tracks, sessions, tickets, summaries)     │
+│  (tracks, sessions, issues, summaries)     │
 ├─────────────────────────────────────────────┤
 │  Infrastructure / Adapters                  │
 │  (persistence, git, MCP, terminal mgmt)     │
@@ -151,7 +151,7 @@ workshop/
 │   ├── domain/                  # Business entities and logic
 │   │   ├── track/               # Project Track aggregate
 │   │   ├── session/             # Terminal Session aggregate
-│   │   ├── ticket/              # External Ticket Link aggregate
+│   │   ├── issue/              # External Issue Link aggregate
 │   │   ├── summary/             # Project Summary aggregate
 │   │   └── automation/          # Automation rule aggregate
 │   ├── infrastructure/          # Adapters for external systems
@@ -167,7 +167,7 @@ workshop/
 │   ├── application/             # Use cases, orchestration
 │   │   ├── track-management/
 │   │   ├── session-lifecycle/
-│   │   ├── ticket-sync/
+│   │   ├── issue-sync/
 │   │   ├── summary-generation/
 │   │   └── automation-engine/
 │   └── ui/                      # Presentation layer
@@ -203,9 +203,9 @@ The five core bounded contexts are:
 
 | Context        | Primary Entity   | Key Relationships                       |
 |----------------|------------------|-----------------------------------------|
-| `track`        | ProjectTrack     | owns sessions, links tickets, has summary |
+| `track`        | ProjectTrack     | owns sessions, links issues, has summary |
 | `session`      | TerminalSession  | belongs to track, wraps Claude instance |
-| `ticket`       | ExternalTicket   | many-to-many with tracks                |
+| `issue`       | ExternalIssue   | many-to-many with tracks                |
 | `summary`      | ProjectSummary   | belongs to track, versioned             |
 | `automation`   | AutomationRule   | belongs to track, triggers actions      |
 
@@ -265,8 +265,8 @@ external knowledge systems.
 | MCP Server   | What It Provides | Use Case |
 |-------------|-----------------|----------|
 | Glean       | Search across GDrive, Slack, Confluence, email | Domain understanding, prior art, decisions made in conversations |
-| Atlassian   | Jira tickets, Confluence pages | Requirements, acceptance criteria, related work |
-| Linear      | Linear issues and projects | Alternative ticket source |
+| Atlassian   | Jira issues, Confluence pages | Requirements, acceptance criteria, related work |
+| Linear      | Linear issues and projects | Alternative issue source |
 | Gmail       | Email threads | Stakeholder communication context |
 | Google Calendar | Meeting context | Timeline and scheduling awareness |
 
@@ -283,7 +283,7 @@ external knowledge systems.
    decision.
 
 3. **Cite your sources** — When an implementation decision is based on
-   information from an MCP (a Slack thread, a Confluence doc, a Jira ticket),
+   information from an MCP (a Slack thread, a Confluence doc, a Jira issue),
    reference it in the commit message or ADR. This makes decisions traceable.
 
 4. **Don't replicate what MCPs provide** — If Glean can search Confluence, don't
@@ -497,20 +497,20 @@ Agents developing Project Tracks use MCPs to pull in requirements, design
 context, and domain knowledge. These are used during development sessions.
 
 **Role 2: Runtime MCPs (the product itself consuming MCPs)**
-The running product uses MCPs to sync ticket state, pull context for summaries,
+The running product uses MCPs to sync issue state, pull context for summaries,
 and feed information into managed Claude sessions. These are a core feature.
 
 **Architecture for both roles**:
 
 - All MCP adapters live in `infrastructure/mcp/`, organized by server
 - Each adapter exposes a **domain-friendly interface** — translating raw MCP
-  responses into domain types (e.g., a Jira response becomes a `TicketSnapshot`)
+  responses into domain types (e.g., a Jira response becomes a `IssueSnapshot`)
 - A **registry** (`infrastructure/mcp/registry`) tracks available MCP servers,
   their capabilities, and connection config
 - **Response caching** with explicit TTL in `infrastructure/context-cache/` —
   per-track isolation so different tracks don't pollute each other's context
 - **Graceful degradation** — MCP unavailability must never block core
-  operations. Ticket sync fails? Show last cached state. Glean down? The track
+  operations. Issue sync fails? Show last cached state. Glean down? The track
   still works, just without search.
 
 **MCP-specific constraints**:
@@ -620,7 +620,7 @@ This is not optional maintenance — it is a scheduled harness activity.
   top-down.
 - **Taste review** — Humans review for patterns that can't be linted.
 - **External integration decisions** — Humans choose which MCP servers, which
-  ticket systems.
+  issue systems.
 
 ### 11.2 What Agents Own
 

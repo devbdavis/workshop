@@ -3,9 +3,9 @@ import express from 'express';
 import type { Server } from 'node:http';
 import { createTodoRouter, type TodoRouterDeps } from '@server/todo-routes.js';
 
-// Exercises the "create ticket" round-trip: dispatch seeds a pending job,
+// Exercises the "create issue" round-trip: dispatch seeds a pending job,
 // the report endpoint marks it done + links the issue key, and status reflects it.
-// Also guards route ordering (POST /todos/report-ticket must not be
+// Also guards route ordering (POST /todos/report-issue must not be
 // captured by the /todos/:todoId/... routes).
 
 function buildApp() {
@@ -53,7 +53,7 @@ function buildApp() {
   return { app, todoStore, settingsStore, prompts, sessions: () => createdSessions };
 }
 
-describe('create-ticket round-trip', () => {
+describe('create-issue round-trip', () => {
   let server: Server;
   let base: string;
   let ctx: ReturnType<typeof buildApp>;
@@ -71,17 +71,17 @@ describe('create-ticket round-trip', () => {
   });
 
   it('dispatches onto a lazily-created system track and seeds a pending job', async () => {
-    const res = await fetch(`${base}/todos/todo-1/create-ticket`, { method: 'POST' });
+    const res = await fetch(`${base}/todos/todo-1/create-issue`, { method: 'POST' });
     expect(res.status).toBe(201);
     expect(ctx.sessions()).toBe(1);
     expect(ctx.settingsStore.get('linear_ticket_track_id')).toBe('sys-track');
 
-    const status = await (await fetch(`${base}/todos/todo-1/ticket-status`)).json();
+    const status = await (await fetch(`${base}/todos/todo-1/issue-status`)).json();
     expect(status.status).toBe('pending');
   });
 
-  it('records the reported ticket and links the issue key to the todo', async () => {
-    const report = await fetch(`${base}/todos/report-ticket`, {
+  it('records the reported issue and links the issue key to the todo', async () => {
+    const report = await fetch(`${base}/todos/report-issue`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -94,7 +94,7 @@ describe('create-ticket round-trip', () => {
     });
     expect(report.status).toBe(200);
 
-    const status = await (await fetch(`${base}/todos/todo-1/ticket-status`)).json();
+    const status = await (await fetch(`${base}/todos/todo-1/issue-status`)).json();
     expect(status).toMatchObject({
       status: 'done',
       issueKey: 'ASY-1402',
@@ -106,7 +106,7 @@ describe('create-ticket round-trip', () => {
   });
 
   it('rejects a report with no todoId', async () => {
-    const res = await fetch(`${base}/todos/report-ticket`, {
+    const res = await fetch(`${base}/todos/report-issue`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ issueKey: 'ASY-9' }),
@@ -117,7 +117,7 @@ describe('create-ticket round-trip', () => {
   it('files a GitHub issue in the confirmed repo with the confirmed labels', async () => {
     ctx.settingsStore.set('issue_tracker', 'github');
     ctx.settingsStore.set('issue_tracker_github_repo', 'default/repo');
-    const res = await fetch(`${base}/todos/todo-1/create-ticket`, {
+    const res = await fetch(`${base}/todos/todo-1/create-issue`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ repo: 'me/other', labels: ['bug', 'good first issue'] }),
@@ -125,7 +125,7 @@ describe('create-ticket round-trip', () => {
     expect(res.status).toBe(201);
     const prompt = ctx.prompts.at(-1)!;
     expect(prompt).toContain(
-      'gh issue create --repo me/other --label "bug" --label "good first issue"',
+      'gh issue create --repo me/other --assignee @me --label "bug" --label "good first issue"',
     );
     expect(prompt).not.toContain('/linear');
   });
@@ -134,15 +134,15 @@ describe('create-ticket round-trip', () => {
     ctx.settingsStore.set('issue_tracker', 'github');
     ctx.settingsStore.set('issue_tracker_github_repo', 'default/repo');
     ctx.settingsStore.set('issue_tracker_github_labels', 'triage, ui');
-    const res = await fetch(`${base}/todos/todo-1/create-ticket`, { method: 'POST' });
+    const res = await fetch(`${base}/todos/todo-1/create-issue`, { method: 'POST' });
     expect(res.status).toBe(201);
-    expect(ctx.prompts.at(-1)).toContain('--repo default/repo --label "triage" --label "ui"');
+    expect(ctx.prompts.at(-1)).toContain('--repo default/repo --assignee @me --label "triage" --label "ui"');
   });
 
   it('rejects a malformed repo or a shell-unsafe label', async () => {
     ctx.settingsStore.set('issue_tracker', 'github');
     const post = (body: unknown) =>
-      fetch(`${base}/todos/todo-1/create-ticket`, {
+      fetch(`${base}/todos/todo-1/create-issue`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(body),

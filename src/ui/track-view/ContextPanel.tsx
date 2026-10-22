@@ -35,20 +35,20 @@ export function ContextPanel({ track, onUpdate }: Props) {
         )}
       </div>
 
-{track.tickets && track.tickets.length > 0 && (
+{track.issues && track.issues.length > 0 && (
         <div className="mb-4">
           <h4 className="text-xs font-medium text-gray-500 uppercase tracking-wide mb-1">
-            Tickets
+            Issues
           </h4>
           <ul className="space-y-1">
-            {track.tickets.map((ticket) => (
-              <li key={ticket.id} className="text-sm text-gray-400">
-                <span className="font-mono text-xs">{ticket.externalId}</span>
-                {ticket.cachedTitle && (
-                  <span className="ml-2">{ticket.cachedTitle}</span>
+            {track.issues.map((issue) => (
+              <li key={issue.id} className="text-sm text-gray-400">
+                <span className="font-mono text-xs">{issue.externalId}</span>
+                {issue.cachedTitle && (
+                  <span className="ml-2">{issue.cachedTitle}</span>
                 )}
-                {ticket.cachedStatus && (
-                  <span className="ml-2 text-xs text-gray-500">{ticket.cachedStatus}</span>
+                {issue.cachedStatus && (
+                  <span className="ml-2 text-xs text-gray-500">{issue.cachedStatus}</span>
                 )}
               </li>
             ))}

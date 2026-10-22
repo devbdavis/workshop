@@ -3,9 +3,9 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { useState } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { TodoDetailModal } from '../../src/ui/kanban/TodoDetailModal';
-import { LinearTicketModal } from '../../src/ui/kanban/LinearTicketModal';
+import { LinearIssueModal } from '../../src/ui/kanban/LinearIssueModal';
 
-// Reproduces the click -> "Create Linear Ticket" flow with the SAME parent
+// Reproduces the click -> "Create Linear Issue" flow with the SAME parent
 // wiring the real views use, to prove the standalone loading modal survives the
 // todo modal closing (it must not be a child of the todo modal).
 
@@ -24,7 +24,7 @@ const todo = {
 // Mirrors how KanbanBoard/TrackView/TodoPanel own both modals as siblings.
 function Parent() {
   const [selected, setSelected] = useState<any>(todo);
-  const [ticketTodoId, setTicketTodoId] = useState<string | null>(null);
+  const [issueTodoId, setIssueTodoId] = useState<string | null>(null);
   return (
     <>
       {selected && (
@@ -35,10 +35,10 @@ function Parent() {
           onSave={() => setSelected(null)}
           onDelete={() => setSelected(null)}
           onDispatch={() => setSelected(null)}
-          onTicketCreationStarted={setTicketTodoId}
+          onIssueCreationStarted={setIssueTodoId}
         />
       )}
-      {ticketTodoId && <LinearTicketModal todoId={ticketTodoId} onClose={() => setTicketTodoId(null)} />}
+      {issueTodoId && <LinearIssueModal todoId={issueTodoId} onClose={() => setIssueTodoId(null)} />}
     </>
   );
 }
@@ -58,7 +58,7 @@ beforeEach(() => {
     if (u.includes('/settings/issue-tracker'))
       return { ok: true, json: async () => trackerSettings } as any;
     if (u.includes('/api/agents')) return { ok: true, json: async () => [] } as any;
-    if (u.includes('/ticket-status')) return { ok: true, json: async () => ({ status: 'pending' }) } as any;
+    if (u.includes('/issue-status')) return { ok: true, json: async () => ({ status: 'pending' }) } as any;
     return { ok: true, json: async () => ({}) } as any;
   }) as any;
 });
@@ -71,7 +71,7 @@ afterEach(() => {
 
 const tick = () => new Promise((r) => setTimeout(r, 0));
 
-describe('Create Linear Ticket flow', () => {
+describe('Create Linear Issue flow', () => {
   it('closes the todo modal and shows the standalone loading modal in its place', async () => {
     root.render(<Parent />);
     for (let i = 0; i < 5; i++) await tick();
@@ -79,16 +79,16 @@ describe('Create Linear Ticket flow', () => {
     expect(container.textContent).toContain('Edit Todo'); // todo modal open
 
     const btn = [...container.querySelectorAll('button')].find(
-      (b) => b.textContent?.trim() === 'Create Linear Ticket',
+      (b) => b.textContent?.trim() === 'Create Linear Issue',
     );
-    expect(btn, 'Create Linear Ticket button should render').toBeTruthy();
+    expect(btn, 'Create Linear Issue button should render').toBeTruthy();
 
     btn!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
     for (let i = 0; i < 10; i++) await tick();
 
     // The todo modal is gone, but the loading modal (a sibling, not a child) lives on.
     expect(container.textContent, 'todo modal should close').not.toContain('Edit Todo');
-    expect(container.textContent, 'loading modal should appear').toContain('Creating ticket');
+    expect(container.textContent, 'loading modal should appear').toContain('Creating issue');
   });
 
   it('asks to confirm repo/labels prefilled from settings when the tracker is GitHub', async () => {
@@ -97,9 +97,9 @@ describe('Create Linear Ticket flow', () => {
     for (let i = 0; i < 5; i++) await tick();
 
     const btn = [...container.querySelectorAll('button')].find(
-      (b) => b.textContent?.trim() === 'Create GitHub Ticket',
+      (b) => b.textContent?.trim() === 'Create GitHub Issue',
     );
-    expect(btn, 'Create GitHub Ticket button should render').toBeTruthy();
+    expect(btn, 'Create GitHub Issue button should render').toBeTruthy();
     btn!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
     for (let i = 0; i < 3; i++) await tick();
 
@@ -120,9 +120,9 @@ describe('Create Linear Ticket flow', () => {
     for (let i = 0; i < 10; i++) await tick();
 
     const call = (global.fetch as any).mock.calls.find((c: any[]) =>
-      String(c[0]).includes('/create-ticket'),
+      String(c[0]).includes('/create-issue'),
     );
     expect(JSON.parse(call[1].body)).toEqual({ repo: 'me/repo', labels: ['bug'] });
-    expect(container.textContent).toContain('Creating ticket');
+    expect(container.textContent).toContain('Creating issue');
   });
 });

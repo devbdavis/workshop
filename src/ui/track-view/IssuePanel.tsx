@@ -1,26 +1,26 @@
 import { useState } from 'react';
-import type { ExternalTicket, TicketSource, TicketRelationship } from '@foundation/types';
+import type { ExternalIssue, IssueSource, IssueRelationship } from '@foundation/types';
 
 interface Props {
   trackId: string;
-  tickets: ExternalTicket[];
+  issues: ExternalIssue[];
   onUpdate: () => void;
 }
 
-export function TicketPanel({ trackId, tickets, onUpdate }: Props) {
+export function IssuePanel({ trackId, issues, onUpdate }: Props) {
   const [showAdd, setShowAdd] = useState(false);
 
-  async function removeTicket(ticketId: string) {
-    await fetch(`/api/tracks/${trackId}/tickets/${ticketId}`, { method: 'DELETE' });
+  async function removeIssue(issueId: string) {
+    await fetch(`/api/tracks/${trackId}/issues/${issueId}`, { method: 'DELETE' });
     onUpdate();
   }
 
-  async function addTicket(
-    source: TicketSource,
+  async function addIssue(
+    source: IssueSource,
     externalId: string,
-    relationship: TicketRelationship,
+    relationship: IssueRelationship,
   ) {
-    await fetch(`/api/tracks/${trackId}/tickets`, {
+    await fetch(`/api/tracks/${trackId}/issues`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ source, externalId, relationship }),
@@ -32,7 +32,7 @@ export function TicketPanel({ trackId, tickets, onUpdate }: Props) {
   return (
     <div className="p-4 border-b border-gray-800">
       <div className="flex items-center justify-between mb-2">
-        <h3 className="text-sm font-semibold text-gray-300">Tickets</h3>
+        <h3 className="text-sm font-semibold text-gray-300">Issues</h3>
         <button
           onClick={() => setShowAdd(!showAdd)}
           className="text-xs text-blue-400 hover:text-blue-300"
@@ -41,32 +41,32 @@ export function TicketPanel({ trackId, tickets, onUpdate }: Props) {
         </button>
       </div>
 
-      {showAdd && <AddTicketForm onAdd={addTicket} onCancel={() => setShowAdd(false)} />}
+      {showAdd && <AddIssueForm onAdd={addIssue} onCancel={() => setShowAdd(false)} />}
 
-      {tickets.length > 0 ? (
+      {issues.length > 0 ? (
         <ul className="space-y-2">
-          {tickets.map((ticket) => (
+          {issues.map((issue) => (
             <li
-              key={ticket.id}
+              key={issue.id}
               className="flex items-start justify-between group text-sm"
             >
               <div>
                 <div className="flex items-center gap-2">
-                  <span className="text-xs font-mono text-blue-400">{ticket.externalId}</span>
+                  <span className="text-xs font-mono text-blue-400">{issue.externalId}</span>
                   <span className="text-xs text-gray-600 bg-gray-800 px-1.5 py-0.5 rounded">
-                    {ticket.source}
+                    {issue.source}
                   </span>
-                  <span className="text-xs text-gray-600">{ticket.relationship}</span>
+                  <span className="text-xs text-gray-600">{issue.relationship}</span>
                 </div>
-                {ticket.cachedTitle && (
-                  <p className="text-xs text-gray-400 mt-0.5">{ticket.cachedTitle}</p>
+                {issue.cachedTitle && (
+                  <p className="text-xs text-gray-400 mt-0.5">{issue.cachedTitle}</p>
                 )}
-                {ticket.cachedStatus && (
-                  <span className="text-xs text-gray-500">{ticket.cachedStatus}</span>
+                {issue.cachedStatus && (
+                  <span className="text-xs text-gray-500">{issue.cachedStatus}</span>
                 )}
               </div>
               <button
-                onClick={() => removeTicket(ticket.id)}
+                onClick={() => removeIssue(issue.id)}
                 className="text-xs text-gray-600 hover:text-red-400 opacity-0 group-hover:opacity-100 shrink-0 ml-2"
               >
                 Unlink
@@ -75,29 +75,29 @@ export function TicketPanel({ trackId, tickets, onUpdate }: Props) {
           ))}
         </ul>
       ) : (
-        <p className="text-xs text-gray-600 italic">No tickets linked.</p>
+        <p className="text-xs text-gray-600 italic">No issues linked.</p>
       )}
     </div>
   );
 }
 
-function AddTicketForm({
+function AddIssueForm({
   onAdd,
   onCancel,
 }: {
-  onAdd: (source: TicketSource, externalId: string, relationship: TicketRelationship) => void;
+  onAdd: (source: IssueSource, externalId: string, relationship: IssueRelationship) => void;
   onCancel: () => void;
 }) {
-  const [source, setSource] = useState<TicketSource>('jira');
+  const [source, setSource] = useState<IssueSource>('jira');
   const [externalId, setExternalId] = useState('');
-  const [relationship, setRelationship] = useState<TicketRelationship>('related');
+  const [relationship, setRelationship] = useState<IssueRelationship>('related');
 
   return (
     <div className="mb-3 space-y-2 p-2 bg-gray-800/50 rounded">
       <div className="flex gap-2">
         <select
           value={source}
-          onChange={(e) => setSource(e.target.value as TicketSource)}
+          onChange={(e) => setSource(e.target.value as IssueSource)}
           className="px-2 py-1 bg-gray-800 border border-gray-700 rounded text-xs"
         >
           <option value="jira">Jira</option>
@@ -114,7 +114,7 @@ function AddTicketForm({
       </div>
       <select
         value={relationship}
-        onChange={(e) => setRelationship(e.target.value as TicketRelationship)}
+        onChange={(e) => setRelationship(e.target.value as IssueRelationship)}
         className="w-full px-2 py-1 bg-gray-800 border border-gray-700 rounded text-xs"
       >
         <option value="primary">Primary</option>

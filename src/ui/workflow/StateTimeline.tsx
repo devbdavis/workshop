@@ -11,7 +11,7 @@ interface TransitionEntry {
 
 interface Props {
   transitions: TransitionEntry[];
-  ticketType: 'epic' | 'task';
+  issueType: 'epic' | 'task';
 }
 
 function getDotColor(actorType: string): string {
@@ -52,7 +52,7 @@ function formatTimestamp(iso: string): string {
   return date.toLocaleDateString();
 }
 
-export function StateTimeline({ transitions, ticketType }: Props) {
+export function StateTimeline({ transitions, issueType }: Props) {
   // Most recent first
   const sorted = [...transitions].sort(
     (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
@@ -83,9 +83,9 @@ export function StateTimeline({ transitions, ticketType }: Props) {
             {/* Content */}
             <div className="flex-1 min-w-0">
               <div className="flex items-center gap-1.5 flex-wrap">
-                <WorkflowStateIndicator state={t.fromState} ticketType={ticketType} size="sm" />
+                <WorkflowStateIndicator state={t.fromState} issueType={issueType} size="sm" />
                 <span className="text-[10px] text-gray-500">&rarr;</span>
-                <WorkflowStateIndicator state={t.toState} ticketType={ticketType} size="sm" />
+                <WorkflowStateIndicator state={t.toState} issueType={issueType} size="sm" />
               </div>
               <div className="flex items-center gap-2 mt-1">
                 <span className="text-[10px] text-gray-500">

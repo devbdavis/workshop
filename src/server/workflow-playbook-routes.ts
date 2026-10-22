@@ -19,11 +19,11 @@ export function createPlaybookRouter(deps: PlaybookRouterDeps): Router {
   // --- List all latest playbooks ---
 
   router.get('/workflow/playbooks', (req, res) => {
-    const { ticketType, tags } = req.query;
-    const filters: { ticketType?: string; tags?: string[] } = {};
+    const { issueType, tags } = req.query;
+    const filters: { issueType?: string; tags?: string[] } = {};
 
-    if (ticketType && typeof ticketType === 'string') {
-      filters.ticketType = ticketType;
+    if (issueType && typeof issueType === 'string') {
+      filters.issueType = issueType;
     }
     if (tags && typeof tags === 'string') {
       filters.tags = tags.split(',').map((t) => t.trim());

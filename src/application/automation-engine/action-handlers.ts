@@ -8,9 +8,9 @@ import type { AutomationEngine, ActionHandler } from './engine.js';
 export function registerActionHandlers(
   engine: AutomationEngine,
 ): void {
-  // sync-tickets: placeholder
-  const syncTickets: ActionHandler = async (rule, _event) => {
-    console.log(`sync-tickets: ticket sync not yet implemented (rule "${rule.name}", track ${rule.trackId})`);
+  // sync-issues: placeholder
+  const syncIssues: ActionHandler = async (rule, _event) => {
+    console.log(`sync-issues: issue sync not yet implemented (rule "${rule.name}", track ${rule.trackId})`);
   };
 
   // run-agent-prompt: placeholder
@@ -18,6 +18,6 @@ export function registerActionHandlers(
     console.log(`run-agent-prompt: agent prompt not yet implemented (rule "${rule.name}", track ${rule.trackId})`);
   };
 
-  engine.registerActionHandler('sync-tickets', syncTickets);
+  engine.registerActionHandler('sync-issues', syncIssues);
   engine.registerActionHandler('run-agent-prompt', runAgentPrompt);
 }

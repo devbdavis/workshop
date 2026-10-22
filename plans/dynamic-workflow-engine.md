@@ -324,11 +324,11 @@ ALTER TABLE workflow_tickets ADD COLUMN workflow_template_row_id TEXT;
 ALTER TABLE workflow_tickets ADD COLUMN workflow_template_version INTEGER;
 ```
 
-These bind each ticket to its governing template version. Nullable for backward compat during the transition period (existing rows won't have them).
+These bind each issue to its governing template version. Nullable for backward compat during the transition period (existing rows won't have them).
 
 ### 2B. Repository Interfaces
 
-> **[Architecture — B3 Fix]**: All new repository interfaces live in `src/application/workflow/`. The existing `WorkflowTicketRepository`, `WorkflowTransitionRepository`, and `TicketDependencyRepository` from `src/domain/workflow/repository.ts` will be moved to `src/application/workflow/ticket-repository.ts` during Phase 3D. No domain-layer file will import from infrastructure. Infrastructure implementations in `src/infrastructure/persistence/` import from application-layer interfaces only.
+> **[Architecture — B3 Fix]**: All new repository interfaces live in `src/application/workflow/`. The existing `WorkflowIssueRepository`, `WorkflowTransitionRepository`, and `IssueDependencyRepository` from `src/domain/workflow/repository.ts` will be moved to `src/application/workflow/issue-repository.ts` during Phase 3D. No domain-layer file will import from infrastructure. Infrastructure implementations in `src/infrastructure/persistence/` import from application-layer interfaces only.
 
 Create `src/application/workflow/template-repository.ts`:
 
@@ -339,7 +339,7 @@ export interface WorkflowTemplateRow {
   version: number;
   name: string;
   description: string;
-  ticketType: 'epic' | 'task';
+  issueType: 'epic' | 'task';
   stageDefinitions: StageDefinition[];  // parsed from JSON
   promptOverrides?: PromptOverrides;    // parsed from JSON, keyed by agentRoleId
   tags?: string[];
@@ -357,7 +357,7 @@ export interface WorkflowTemplateRepository {
   findByRowId(rowId: string): WorkflowTemplateRow | null;
   findLatest(id: string): WorkflowTemplateRow | null;
   findByIdAndVersion(id: string, version: number): WorkflowTemplateRow | null;
-  findAllLatest(filters?: { ticketType?: string; tags?: string[] }): WorkflowTemplateRow[];
+  findAllLatest(filters?: { issueType?: string; tags?: string[] }): WorkflowTemplateRow[];
   create(template: Omit<WorkflowTemplateRow, 'rowId' | 'createdAt' | 'updatedAt' | 'isLatest'>): WorkflowTemplateRow;
   createNewVersion(id: string, changes: Partial<WorkflowTemplateRow>): WorkflowTemplateRow;
   incrementUsage(rowId: string): void;
@@ -442,18 +442,18 @@ Create `src/infrastructure/persistence/workflow-review-repository.ts` — implem
 
 Create `src/application/workflow/topology-loader.ts`:
 
-Responsible for loading the stage definitions for a given ticket from the DB. Two paths:
-1. **Ticket has `workflow_template_row_id`** → load from `workflow_templates` by `row_id`
-2. **Ticket has no template** → fallback: treat the ticket as stuck, surface error
+Responsible for loading the stage definitions for a given issue from the DB. Two paths:
+1. **Issue has `workflow_template_row_id`** → load from `workflow_templates` by `row_id`
+2. **Issue has no template** → fallback: treat the issue as stuck, surface error
 
 ```typescript
 export interface TopologyLoader {
-  /** Load stage definitions for a ticket, resolving its pinned template version */
-  loadForTicket(ticket: WorkflowTicket): StageDefinition[];
+  /** Load stage definitions for an issue, resolving its pinned template version */
+  loadForIssue(issue: WorkflowIssue): StageDefinition[];
   /** Load stage definitions directly from a template row_id */
   loadByTemplateRowId(rowId: string): StageDefinition[];
   /** Load the full template row (for prompt overrides, etc.) */
-  loadTemplateForTicket(ticket: WorkflowTicket): WorkflowTemplateRow | null;
+  loadTemplateForIssue(issue: WorkflowIssue): WorkflowTemplateRow | null;
 }
 ```
 
@@ -475,21 +475,21 @@ Modify `src/application/workflow/engine.ts`:
 const MAX_AUTO_TRANSITION_DEPTH = 10;
 
 function applyTransition(
-  ticket: WorkflowTicket,
+  issue: WorkflowIssue,
   toState: string,
   actor: TransitionActor,
   comment?: string,
   data?: Record<string, unknown>,
   _depth: number = 0,                    // <-- new parameter
-): WorkflowTicket {
+): WorkflowIssue {
   if (_depth >= MAX_AUTO_TRANSITION_DEPTH) {
     throw new Error(
-      `Auto-transition depth limit (${MAX_AUTO_TRANSITION_DEPTH}) exceeded for ticket ${ticket.id}. ` +
+      `Auto-transition depth limit (${MAX_AUTO_TRANSITION_DEPTH}) exceeded for issue ${issue.id}. ` +
       `Chain: reached state '${toState}' at depth ${_depth}. Halting to prevent stack overflow.`
     );
   }
 
-  const stages = topologyLoader.loadForTicket(ticket);
+  const stages = topologyLoader.loadForIssue(issue);
   // ... existing transition logic using runtime helpers ...
 
   // Auto-transition recursion with depth tracking
@@ -515,34 +515,34 @@ Concrete approach — **callback pattern** to avoid circular dependency between 
 
 ```typescript
 export interface WorkflowEngineDeps {
-  tickets: WorkflowTicketRepository;
+  issues: WorkflowIssueRepository;
   transitions: WorkflowTransitionRepository;
-  dependencies: TicketDependencyRepository;
+  dependencies: IssueDependencyRepository;
   topologyLoader: TopologyLoader;
   /** Called when a parent epic transitions due to task completion.
    *  The coordinator sets this after construction to wire dispatch. */
-  onEpicAdvanced?: (ticket: WorkflowTicket) => Promise<void>;
+  onEpicAdvanced?: (issue: WorkflowIssue) => Promise<void>;
 }
 ```
 
 In `onTaskCompleted`, after `applyTransition` advances the epic:
 
 ```typescript
-onTaskCompleted(ticketId: WorkflowTicketId): void {
-  const ticket = requireTicket(ticketId);
-  const stages = topologyLoader.loadForTicket(ticket);
+onTaskCompleted(issueId: WorkflowIssueId): void {
+  const issue = requireIssue(issueId);
+  const stages = topologyLoader.loadForIssue(issue);
 
   // Only process tasks that reached a terminal state
-  if (!isTerminal(stages, ticket.state)) return;
+  if (!isTerminal(stages, issue.state)) return;
 
   // Resolve dependencies
-  const unblockedIds = resolver.resolveAndUnblock(ticketId);
+  const unblockedIds = resolver.resolveAndUnblock(issueId);
 
   // Auto-transition unblocked tasks
   for (const unblockedId of unblockedIds) {
-    const blocked = tickets.findById(unblockedId);
+    const blocked = issues.findById(unblockedId);
     if (blocked) {
-      const blockedStages = topologyLoader.loadForTicket(blocked);
+      const blockedStages = topologyLoader.loadForIssue(blocked);
       const blockedStage = getStageDefinition(blockedStages, blocked.state);
       // Find the 'all-deps-resolved' transition dynamically
       const unblockTransition = blockedStage?.validTransitions.find(
@@ -556,10 +556,10 @@ onTaskCompleted(ticketId: WorkflowTicketId): void {
   }
 
   // Check if parent epic should advance
-  if (ticket.parentId) {
-    const epic = tickets.findById(ticket.parentId);
+  if (issue.parentId) {
+    const epic = issues.findById(issue.parentId);
     if (epic) {
-      const epicStages = topologyLoader.loadForTicket(epic);
+      const epicStages = topologyLoader.loadForIssue(epic);
       const epicStage = getStageDefinition(epicStages, epic.state);
       // Find the 'all-tasks-done' transition dynamically
       const advanceTransition = epicStage?.validTransitions.find(
@@ -596,23 +596,23 @@ Modify `src/foundation/types.ts`:
 
 - **Remove**: `EpicState`, `TaskState`, `WorkflowState` union types, `HumanGateState`, `AgentRole` union type
 - **Replace with**: `type WorkflowState = string;` and `type AgentRoleId = string;`
-- **Keep**: `WorkflowTicket`, `WorkflowTransition`, `TransitionActor`, `TicketDependency` — these are unchanged structurally
+- **Keep**: `WorkflowIssue`, `WorkflowTransition`, `TransitionActor`, `IssueDependency` — these are unchanged structurally
 - **Remove**: The old `StageDefinition` interface (replaced by the Zod-derived type in `application/workflow/types.ts`)
 - **Remove**: All the state-specific data interfaces (`TriagingData`, `PlanningData`, `NeedsInputData`, `PlanCritiqueData`, `SplittingData`, `EpicInProgressData`, `IntegrationReviewData`, `FinalReviewData`, `CodeReviewData`, `ChangesRequestedData`, `ExecutionData`) — these become freeform since each workflow defines its own states. The `stateData` field remains `Record<string, unknown>`.
-- **Add**: `workflowTemplateRowId?: string` and `workflowTemplateVersion?: number` to `WorkflowTicket`
+- **Add**: `workflowTemplateRowId?: string` and `workflowTemplateVersion?: number` to `WorkflowIssue`
 
-The `WorkflowTicket.assignedAgentRole` field changes type from `AgentRole` (union) to `string`.
-The `WorkflowTicket.state` field changes type from `WorkflowState` (union) to `string`.
+The `WorkflowIssue.assignedAgentRole` field changes type from `AgentRole` (union) to `string`.
+The `WorkflowIssue.state` field changes type from `WorkflowState` (union) to `string`.
 The `WorkflowTransition.fromState` and `toState` change from `WorkflowState` to `string`.
 
 ### 3D. Delete Old Files and Move Repository Interfaces
 
-> **[B3 Fix — Architecture layering]**: The existing repository interfaces live in `src/domain/workflow/repository.ts`. Per human answer #1 and the architecture rule, we move them to `src/application/workflow/ticket-repository.ts`. This ensures no domain-layer code remains that would create an import violation.
+> **[B3 Fix — Architecture layering]**: The existing repository interfaces live in `src/domain/workflow/repository.ts`. Per human answer #1 and the architecture rule, we move them to `src/application/workflow/issue-repository.ts`. This ensures no domain-layer code remains that would create an import violation.
 
 Steps:
-1. Create `src/application/workflow/ticket-repository.ts` — copy `WorkflowTicketRepository`, `WorkflowTransitionRepository`, `TicketDependencyRepository` and their associated types from `src/domain/workflow/repository.ts`
-2. Update `WorkflowTicketUpdate` to include the new `workflowTemplateRowId` and `workflowTemplateVersion` fields
-3. Update ALL imports across the codebase that reference `@domain/workflow/repository` to use `@application/workflow/ticket-repository.js`
+1. Create `src/application/workflow/issue-repository.ts` — copy `WorkflowIssueRepository`, `WorkflowTransitionRepository`, `IssueDependencyRepository` and their associated types from `src/domain/workflow/repository.ts`
+2. Update `WorkflowIssueUpdate` to include the new `workflowTemplateRowId` and `workflowTemplateVersion` fields
+3. Update ALL imports across the codebase that reference `@domain/workflow/repository` to use `@application/workflow/issue-repository.js`
 4. **Delete** `src/domain/workflow/state-machine.ts` — replaced by topology loader + DB
 5. **Delete** `src/domain/workflow/templates.ts` — replaced by DB-stored templates (if this file exists)
 6. **Delete** `src/domain/workflow/repository.ts` — moved to application layer
@@ -639,7 +639,7 @@ The current system is a giant `switch` over hardcoded `AgentRole` values. Replac
 ```typescript
 export function composeWorkflowPrompt(
   agentRole: AgentRoleRow,
-  ticket: WorkflowTicket,
+  issue: WorkflowIssue,
   stage: StageDefinition,
   templateOverrides?: PromptOverrides,
   context?: PromptContext,
@@ -659,13 +659,13 @@ export function composeWorkflowPrompt(
     parts.push(stage.promptOverride);
   }
 
-  // 4. Ticket context (title, description)
-  parts.push(`## Ticket\n\n**${ticket.title}**\n\n${ticket.description}`);
+  // 4. Issue context (title, description)
+  parts.push(`## Issue\n\n**${issue.title}**\n\n${issue.description}`);
 
   // 5. State data context (plan drafts, findings, answers, etc.)
   // Dynamically assembled from stateData keys — no hardcoded structure
-  if (ticket.stateData && Object.keys(ticket.stateData).length > 0) {
-    parts.push(formatStateData(ticket.stateData));
+  if (issue.stateData && Object.keys(issue.stateData).length > 0) {
+    parts.push(formatStateData(issue.stateData));
   }
 
   // 6. Constraints from the agent role
@@ -694,7 +694,7 @@ Modify `src/application/workflow/agent-dispatcher.ts`:
 
 - Load stage definitions from topology loader instead of `getStageDefinition` static import
 - Load agent role from `AgentRoleRepository` using `stage.agentRoleId`
-- Load template (via `topologyLoader.loadTemplateForTicket`) to pass `promptOverrides` to the composer
+- Load template (via `topologyLoader.loadTemplateForIssue`) to pass `promptOverrides` to the composer
 - Use refactored prompt composer with template overrides
 - Everything else (session creation, stateData updates) stays the same
 
@@ -704,7 +704,7 @@ Modify `src/application/workflow/agent-dispatcher.ts`:
 
 | File | Location | Hardcoded States | Replacement |
 |------|----------|-----------------|-------------|
-| `engine.ts` | `onTaskCompleted()` L219 | `'done'` | Check `isTerminal(stages, ticket.state)` via topology loader |
+| `engine.ts` | `onTaskCompleted()` L219 | `'done'` | Check `isTerminal(stages, issue.state)` via topology loader |
 | `engine.ts` | `onTaskCompleted()` L228-229 | `'blocked'`, `'ready'` | Find `all-deps-resolved` transition dynamically from stage definition |
 | `engine.ts` | `onTaskCompleted()` L236 | `'in-progress'` | Find `all-tasks-done` transition dynamically from stage definition |
 | `engine.ts` | `onTaskCompleted()` L242 | `'integration-review'` | Use transition target from `all-tasks-done` trigger, not hardcoded state name |
@@ -731,7 +731,7 @@ Modify `src/application/workflow/agent-dispatcher.ts`:
 
 **Strategy for each category:**
 - **State string comparisons in engine/coordinator/dispatchers**: Replace with trigger-based lookups on the stage definition. Instead of `if (state === 'executing')`, check `if (stageHasTrigger(stage, 'execution-complete'))`.
-- **State sets in UI components**: Replace with `semanticRole` from the stage definition (served via API). The API response for ticket lists includes `semanticRole` for the current state.
+- **State sets in UI components**: Replace with `semanticRole` from the stage definition (served via API). The API response for issue lists includes `semanticRole` for the current state.
 - **Type guard functions**: The static `isHumanGate()`, `isTerminal()`, `isAgentActionable()` are replaced by runtime helpers in `types.ts` that take the stage definitions array as a parameter.
 
 ### 3H. Task Lifecycle Under Dynamic System
@@ -754,13 +754,13 @@ Tasks are bound to templates via the same `workflow_template_row_id` column as e
 createTask(data: {
   title: string;
   description: string;
-  parentId: WorkflowTicketId;
+  parentId: WorkflowIssueId;
   provider?: SessionProvider;
   priority?: 'low' | 'medium' | 'high' | 'critical';
-  dependsOn?: WorkflowTicketId[];
+  dependsOn?: WorkflowIssueId[];
   /** Explicit task template. If omitted, inherited from parent epic. */
   workflowTemplateRowId?: string;
-}): WorkflowTicket {
+}): WorkflowIssue {
   // Resolve task template
   const templateRowId = data.workflowTemplateRowId
     ?? resolveTaskTemplate(data.parentId);
@@ -788,7 +788,7 @@ createTask(data: {
     initialState = stages[0].state;
   }
 
-  const task = tickets.create({
+  const task = issues.create({
     type: 'task',
     title: data.title,
     description: data.description,
@@ -823,11 +823,11 @@ createTask(data: {
 4. **`resolveTaskTemplate()` helper**:
 
 ```typescript
-function resolveTaskTemplate(parentId: WorkflowTicketId): string | undefined {
-  const parent = tickets.findById(parentId);
+function resolveTaskTemplate(parentId: WorkflowIssueId): string | undefined {
+  const parent = issues.findById(parentId);
   if (!parent?.workflowTemplateRowId) return undefined;
 
-  const parentTemplate = topologyLoader.loadTemplateForTicket(parent);
+  const parentTemplate = topologyLoader.loadTemplateForIssue(parent);
   if (!parentTemplate) return undefined;
 
   // Look for companion task template reference
@@ -851,7 +851,7 @@ function resolveTaskTemplate(parentId: WorkflowTicketId): string | undefined {
 
 **Files created/modified in Phase 3:**
 - `src/application/workflow/topology-loader.ts` (new)
-- `src/application/workflow/ticket-repository.ts` (new — moved from domain)
+- `src/application/workflow/issue-repository.ts` (new — moved from domain)
 - `src/application/workflow/engine.ts` (major refactor)
 - `src/foundation/types.ts` (remove union types, add template fields)
 - `src/domain/workflow/state-machine.ts` (delete)
@@ -903,10 +903,10 @@ Add to `src/mcp/server.ts` and `src/server/api.ts`:
 - `workshop_validate_workflow` — accepts a stage definitions JSON, runs graph validator, returns result
 
 **Write endpoints (for skill to propose):**
-- `workshop_propose_workflow` — accepts: epic template + task template + agent role definitions + epic ID + rationale. Stores a pending proposal in the ticket's stateData. Does NOT auto-apply — human must approve via the Workflow Assignment Panel.
+- `workshop_propose_workflow` — accepts: epic template + task template + agent role definitions + epic ID + rationale. Stores a pending proposal in the issue's stateData. Does NOT auto-apply — human must approve via the Workflow Assignment Panel.
 
 **Human approval endpoint (existing pattern):**
-- `workshop_approve_workflow_assignment` — takes the pending proposal, persists the template (and any new agent roles), binds the ticket, and transitions the epic into its entry state.
+- `workshop_approve_workflow_assignment` — takes the pending proposal, persists the template (and any new agent roles), binds the issue, and transitions the epic into its entry state.
 
 ### 4C. Skill Logic (what the LLM does)
 
@@ -954,8 +954,8 @@ The review skill runs asynchronously after an epic reaches a terminal state (`me
 
 ### 5B. Trigger Mechanism
 
-In the engine's `applyTransition`, when a ticket reaches a terminal state:
-1. Check if the ticket has a `workflowTemplateRowId`
+In the engine's `applyTransition`, when an issue reaches a terminal state:
+1. Check if the issue has a `workflowTemplateRowId`
 2. If yes, fire-and-forget: create a background session with the review skill prompt
 3. The skill reads the transition audit log, computes per-state timing, identifies patterns
 4. Creates a `workflow_review` record with findings and suggested changes
@@ -1006,13 +1006,13 @@ Appears after epic creation (when the epic has a pending workflow proposal in st
 
 New component: `src/ui/workflow/TemplateLibrary.tsx`
 
-Card-based layout. Each card shows: name, description, ticket type (epic/task), usage count, last-used date, tag pills, average rating. Click opens a detail view with:
+Card-based layout. Each card shows: name, description, issue type (epic/task), usage count, last-used date, tag pills, average rating. Click opens a detail view with:
 - Full SVG state diagram (reuse StateDiagram component with dynamic data)
 - Agent roles used
 - Version history
 - Reviews history
 
-Filter by tags, ticket type, search by name/description.
+Filter by tags, issue type, search by name/description.
 
 ### 6C. StateDiagram Updates
 
@@ -1028,13 +1028,13 @@ interface StateDiagramProps {
 }
 ```
 
-The component fetches stage definitions from the API for the ticket's pinned template version.
+The component fetches stage definitions from the API for the issue's pinned template version.
 
 ### 6D. Live Execution Progress
 
 Update `src/ui/workflow/EpicDetail.tsx`:
 
-The current progress display is hardcoded to the static state list. Refactor to use the dynamic stage definitions from the ticket's template. Show:
+The current progress display is hardcoded to the static state list. Refactor to use the dynamic stage definitions from the issue's template. Show:
 - Current state highlighted
 - Completed states marked with checkmarks
 - Per-state timing (from transition audit log)
@@ -1055,12 +1055,12 @@ When a new epic has no template yet (skill is running), show:
 
 ### 6G. Dynamic State Filtering in EpicList
 
-> **[S3 Fix]**: The API response for ticket listings includes a `semanticRole` field for the ticket's current state. This replaces the hardcoded `TERMINAL_STATES`, `HUMAN_REVIEW_STATES`, `DONE_STATES` sets in `EpicList.tsx`.
+> **[S3 Fix]**: The API response for issue listings includes a `semanticRole` field for the issue's current state. This replaces the hardcoded `TERMINAL_STATES`, `HUMAN_REVIEW_STATES`, `DONE_STATES` sets in `EpicList.tsx`.
 
-The API endpoint `GET /api/workflow/tickets` adds to each ticket response:
+The API endpoint `GET /api/workflow/issues` adds to each issue response:
 ```typescript
 {
-  ...ticket,
+  ...issue,
   currentStateSemanticRole: 'processing' | 'human-gate' | 'terminal' | 'error' | 'waiting' | 'entry',
   currentStateHumanGate: boolean,
 }
@@ -1116,10 +1116,10 @@ Confirm that `src/domain/workflow/` is fully deleted (done in Phase 3D). Verify 
 > **Human answer #6**: "We will simply implement the new system. This will not affect the production deployment until a rebuild and restart is done, so that's ok."
 
 This means:
-1. **No runtime migration of in-flight tickets** — existing tickets in the old system will break when the new code deploys, but this is acceptable per the human stakeholder.
+1. **No runtime migration of in-flight issues** — existing issues in the old system will break when the new code deploys, but this is acceptable per the human stakeholder.
 2. **Database migration is additive** — new tables are added alongside existing ones. The `workflow_tickets` table gets two new nullable columns (`workflow_template_row_id`, `workflow_template_version`).
-3. **On first deploy**: existing `workflow_tickets` rows will have NULL template references. The engine will fail to load topology for these tickets. This is expected — they were created under the old system.
-4. **Manual cleanup**: after deploy, either cancel old in-flight tickets or manually assign them a template via the UI. The Workflow Assignment Panel allows manually binding a template to an existing ticket.
+3. **On first deploy**: existing `workflow_tickets` rows will have NULL template references. The engine will fail to load topology for these issues. This is expected — they were created under the old system.
+4. **Manual cleanup**: after deploy, either cancel old in-flight issues or manually assign them a template via the UI. The Workflow Assignment Panel allows manually binding a template to an existing issue.
 5. **The old code is deleted, not deprecated** — no compatibility shim.
 
 ---
@@ -1128,9 +1128,9 @@ This means:
 
 Dynamic workflows need better observability than the current `console.warn`:
 
-1. **Structured logging** — all engine operations (transitions, auto-transitions, depth guard hits, dispatch failures) log structured JSON with `ticketId`, `templateRowId`, `fromState`, `toState`, `depth`, `durationMs`
+1. **Structured logging** — all engine operations (transitions, auto-transitions, depth guard hits, dispatch failures) log structured JSON with `issueId`, `templateRowId`, `fromState`, `toState`, `depth`, `durationMs`
 2. **Per-state timing** — the engine records `enteredAt` timestamp in stateData when entering a state, and the transition audit log captures `exitedAt`. The review skill aggregates these.
-3. **Health endpoint** — `GET /api/workflow/health` returns: total active tickets, tickets in error states, templates in use, average state dwell time
+3. **Health endpoint** — `GET /api/workflow/health` returns: total active issues, issues in error states, templates in use, average state dwell time
 4. **WebSocket events** — existing `workflow:*` event pattern extended with `workflow:template-created`, `workflow:review-completed`, `workflow:assignment-proposed`
 
 ---
@@ -1222,11 +1222,11 @@ This is a large scope. Recommended phasing:
 | `src/application/workflow/schemas.ts` | Zod schemas for all workflow data structures |
 | `src/application/workflow/types.ts` | TypeScript types derived from Zod + runtime helpers |
 | `src/application/workflow/graph-validator.ts` | Pure function to validate workflow graph topology |
-| `src/application/workflow/topology-loader.ts` | Loads stage definitions from DB for a ticket |
+| `src/application/workflow/topology-loader.ts` | Loads stage definitions from DB for an issue |
 | `src/application/workflow/template-repository.ts` | Repository interface for workflow templates |
 | `src/application/workflow/agent-role-repository.ts` | Repository interface for agent roles |
 | `src/application/workflow/review-repository.ts` | Repository interface for workflow reviews |
-| `src/application/workflow/ticket-repository.ts` | Moved from domain layer — ticket/transition/dependency repos |
+| `src/application/workflow/issue-repository.ts` | Moved from domain layer — issue/transition/dependency repos |
 | `src/infrastructure/persistence/workflow-template-repository.ts` | SQLite implementation |
 | `src/infrastructure/persistence/workflow-agent-role-repository.ts` | SQLite implementation |
 | `src/infrastructure/persistence/workflow-review-repository.ts` | SQLite implementation |
@@ -1239,7 +1239,7 @@ This is a large scope. Recommended phasing:
 ### Modified Files
 | File | Change |
 |------|--------|
-| `src/foundation/types.ts` | Remove union types, remove old StageDefinition, add template fields to WorkflowTicket |
+| `src/foundation/types.ts` | Remove union types, remove old StageDefinition, add template fields to WorkflowIssue |
 | `src/application/workflow/engine.ts` | Dynamic topology loading, runtime depth guard, B4 callback for parent epic dispatch, dynamic task creation |
 | `src/application/workflow/prompt-composer.ts` | Data-driven prompt assembly from PromptBlocks + template promptOverrides |
 | `src/application/workflow/agent-dispatcher.ts` | Use topology loader + agent role repo + template overrides |
@@ -1249,7 +1249,7 @@ This is a large scope. Recommended phasing:
 | `src/application/workflow/dependency-resolver.ts` | Import updates (domain → application) |
 | `src/infrastructure/persistence/database.ts` | New tables + migrations |
 | `src/infrastructure/persistence/workflow-repository.ts` | Add template fields, update imports |
-| `src/server/api.ts` | New endpoints for templates/roles/reviews, add semanticRole to ticket responses |
+| `src/server/api.ts` | New endpoints for templates/roles/reviews, add semanticRole to issue responses |
 | `src/mcp/server.ts` | New MCP tools |
 | `src/ui/workflow/StateDiagram.tsx` | Accept dynamic stage definitions as props |
 | `src/ui/workflow/EpicDetail.tsx` | Dynamic stage rendering |
@@ -1264,7 +1264,7 @@ This is a large scope. Recommended phasing:
 |------|--------|
 | `src/domain/workflow/state-machine.ts` | Replaced by DB-stored templates + topology loader |
 | `src/domain/workflow/templates.ts` | Replaced by DB-stored templates (if exists) |
-| `src/domain/workflow/repository.ts` | Moved to `src/application/workflow/ticket-repository.ts` |
+| `src/domain/workflow/repository.ts` | Moved to `src/application/workflow/issue-repository.ts` |
 | `src/domain/workflow/` (directory) | Empty after above moves/deletes |
 
 ---
@@ -1275,7 +1275,7 @@ This is a large scope. Recommended phasing:
 |---|---------|------------|
 | B1 | Hardcoded state replacement table incomplete — misses ~12 locations across engine.ts, dispatch-coordinator.ts, EpicList.tsx, HumanGatePanel.tsx, execution-dispatcher.ts | Added comprehensive 25-row replacement table in Phase 3G covering every hardcoded state literal across all files. Each entry specifies the dynamic replacement strategy (trigger-based lookup, semanticRole check, or topology loader query). |
 | B2 | Task lifecycle completely unspecified — createTask() hardcodes states, no task template selection, splitter unaware of task templates | Added Phase 3H: task template binding via `ticket_type: 'task'` templates, companion task template referenced from epic templates, refactored createTask() with dynamic entry state resolution, splitter agent awareness, review skill covers task metrics. |
-| B3 | Domain layer imports from Infrastructure layer — architectural violation | Phase 2B explicitly states all new repos live in application layer. Phase 3D adds new step: move existing `WorkflowTicketRepository`/`WorkflowTransitionRepository`/`TicketDependencyRepository` from `@domain/workflow/repository` to `@application/workflow/ticket-repository.ts`, update all imports, delete domain/workflow/ entirely. |
+| B3 | Domain layer imports from Infrastructure layer — architectural violation | Phase 2B explicitly states all new repos live in application layer. Phase 3D adds new step: move existing `WorkflowIssueRepository`/`WorkflowTransitionRepository`/`IssueDependencyRepository` from `@domain/workflow/repository` to `@application/workflow/issue-repository.ts`, update all imports, delete domain/workflow/ entirely. |
 | B4 | onTaskCompleted() parent-epic dispatch gap — applyTransition bypasses coordinator, no agent dispatch for epic's new state | Phase 3B adds `onEpicAdvanced` callback on WorkflowEngineDeps. onTaskCompleted() calls this after advancing the parent epic. Coordinator wires the callback to `dispatchIfNeeded()` during construction. Full code shown in Phase 3B. |
 
 ## Suggestions Resolution Summary

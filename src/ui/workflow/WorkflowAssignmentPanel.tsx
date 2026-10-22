@@ -1,9 +1,9 @@
 /**
- * WorkflowAssignmentPanel — Shows workflow template proposal for a ticket
+ * WorkflowAssignmentPanel — Shows workflow template proposal for an issue
  * and allows approval to start the workflow.
  */
 import { useState } from 'react';
-import type { WorkflowTicket } from '@foundation/types.js';
+import type { WorkflowIssue } from '@foundation/types.js';
 
 // Capability tier colors (from schema definition)
 const TIER_COLORS: Record<string, string> = {
@@ -34,21 +34,21 @@ interface WorkflowProposal {
 }
 
 interface Props {
-  ticket: WorkflowTicket;
+  issue: WorkflowIssue;
   onApprove: () => Promise<void>;
   onSelectManually?: () => void;
 }
 
-export function WorkflowAssignmentPanel({ ticket, onApprove, onSelectManually }: Props) {
+export function WorkflowAssignmentPanel({ issue, onApprove, onSelectManually }: Props) {
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const sd = ticket.stateData as Record<string, unknown> | undefined;
+  const sd = issue.stateData as Record<string, unknown> | undefined;
   const proposal = sd?.workflowProposal as WorkflowProposal | undefined;
   const proposalStatus = sd?.workflowProposalStatus as string | undefined;
 
-  // If ticket already has a playbook assigned, don't show the panel
-  if (ticket.playbookRowId) {
+  // If issue already has a playbook assigned, don't show the panel
+  if (issue.playbookRowId) {
     return null;
   }
 
@@ -75,7 +75,7 @@ export function WorkflowAssignmentPanel({ ticket, onApprove, onSelectManually }:
           <div>
             <h3 className="text-sm font-medium text-gray-300">Designing workflow...</h3>
             <p className="text-xs text-gray-500">
-              Analyzing ticket to select the best workflow playbook
+              Analyzing issue to select the best workflow playbook
             </p>
           </div>
         </div>
@@ -92,7 +92,7 @@ export function WorkflowAssignmentPanel({ ticket, onApprove, onSelectManually }:
           <h3 className="text-sm font-semibold text-red-300">Workflow selection failed</h3>
         </div>
         <p className="text-xs text-gray-400 mb-3">
-          Could not automatically select a workflow playbook for this ticket.
+          Could not automatically select a workflow playbook for this issue.
         </p>
         {onSelectManually && (
           <button

@@ -223,13 +223,13 @@ export function IssueTracking() {
                   >
                     linear.app/{config.orgName.trim()}/settings/account/security
                   </a>
-                  . Used to list and import tickets assigned to you.
+                  . Used to list and import issues assigned to you.
                 </>
               ) : (
                 <>
                   Generate a Personal API key from Linear: open Linear, then go to
                   Settings → Account → Security &amp; access → Personal API keys.
-                  Used to list and import tickets assigned to you.
+                  Used to list and import issues assigned to you.
                 </>
               )}
             </p>

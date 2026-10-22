@@ -9,17 +9,17 @@ const testDbPath = path.join(os.tmpdir(), `workshop-test-workflow-${randomUUID()
 process.env.WORKSHOP_DB_PATH = testDbPath;
 
 import {
-  createWorkflowTicketRepository,
+  createWorkflowIssueRepository,
   createWorkflowTransitionRepository,
 } from '@infrastructure/persistence/workflow-repository';
-import { createTicketDependencyRepository } from '@infrastructure/persistence/workflow-dependency-repository';
+import { createIssueDependencyRepository } from '@infrastructure/persistence/workflow-dependency-repository';
 import { resetDatabase } from '@infrastructure/persistence/database';
-import type { WorkflowTicketId, TrackId } from '@foundation/types';
+import type { WorkflowIssueId, TrackId } from '@foundation/types';
 
 describe('Workflow Repositories', () => {
-  const ticketRepo = createWorkflowTicketRepository();
+  const issueRepo = createWorkflowIssueRepository();
   const transitionRepo = createWorkflowTransitionRepository();
-  const depRepo = createTicketDependencyRepository();
+  const depRepo = createIssueDependencyRepository();
 
   afterAll(() => {
     resetDatabase();
@@ -29,12 +29,12 @@ describe('Workflow Repositories', () => {
   });
 
   // ---------------------------------------------------------------------------
-  // WorkflowTicketRepository
+  // WorkflowIssueRepository
   // ---------------------------------------------------------------------------
-  describe('WorkflowTicketRepository', () => {
+  describe('WorkflowIssueRepository', () => {
     describe('create', () => {
       it('should create an epic with required fields', () => {
-        const ticket = ticketRepo.create({
+        const issue = issueRepo.create({
           type: 'epic',
           title: 'Build feature X',
           description: 'Full description of feature X',
@@ -44,19 +44,19 @@ describe('Workflow Repositories', () => {
           sortOrder: 0,
         });
 
-        expect(ticket).toBeDefined();
-        expect(ticket.id).toBeDefined();
-        expect(ticket.type).toBe('epic');
-        expect(ticket.title).toBe('Build feature X');
-        expect(ticket.description).toBe('Full description of feature X');
-        expect(ticket.state).toBe('idea');
-        expect(ticket.provider).toBe('claude');
-        expect(ticket.priority).toBe('high');
-        expect(ticket.sortOrder).toBe(0);
+        expect(issue).toBeDefined();
+        expect(issue.id).toBeDefined();
+        expect(issue.type).toBe('epic');
+        expect(issue.title).toBe('Build feature X');
+        expect(issue.description).toBe('Full description of feature X');
+        expect(issue.state).toBe('idea');
+        expect(issue.provider).toBe('claude');
+        expect(issue.priority).toBe('high');
+        expect(issue.sortOrder).toBe(0);
       });
 
       it('should create a task with parent ID', () => {
-        const epic = ticketRepo.create({
+        const epic = issueRepo.create({
           type: 'epic',
           title: 'Parent epic',
           description: 'Epic for child tasks',
@@ -66,7 +66,7 @@ describe('Workflow Repositories', () => {
           sortOrder: 0,
         });
 
-        const task = ticketRepo.create({
+        const task = issueRepo.create({
           type: 'task',
           title: 'Child task 1',
           description: 'A task under the epic',
@@ -82,7 +82,7 @@ describe('Workflow Repositories', () => {
       });
 
       it('should generate unique IDs', () => {
-        const t1 = ticketRepo.create({
+        const t1 = issueRepo.create({
           type: 'epic',
           title: 'Epic 1',
           description: 'Desc 1',
@@ -91,7 +91,7 @@ describe('Workflow Repositories', () => {
           priority: 'low',
           sortOrder: 0,
         });
-        const t2 = ticketRepo.create({
+        const t2 = issueRepo.create({
           type: 'epic',
           title: 'Epic 2',
           description: 'Desc 2',
@@ -105,7 +105,7 @@ describe('Workflow Repositories', () => {
       });
 
       it('should set createdAt, updatedAt, stateChangedAt', () => {
-        const ticket = ticketRepo.create({
+        const issue = issueRepo.create({
           type: 'epic',
           title: 'Timestamp test',
           description: 'Testing timestamps',
@@ -115,15 +115,15 @@ describe('Workflow Repositories', () => {
           sortOrder: 0,
         });
 
-        expect(ticket.createdAt).toBeDefined();
-        expect(ticket.updatedAt).toBeDefined();
-        expect(ticket.stateChangedAt).toBeDefined();
+        expect(issue.createdAt).toBeDefined();
+        expect(issue.updatedAt).toBeDefined();
+        expect(issue.stateChangedAt).toBeDefined();
       });
     });
 
     describe('findById', () => {
-      it('should find a ticket by ID', () => {
-        const created = ticketRepo.create({
+      it('should find an issue by ID', () => {
+        const created = issueRepo.create({
           type: 'epic',
           title: 'Findable epic',
           description: 'Can be found',
@@ -133,18 +133,18 @@ describe('Workflow Repositories', () => {
           sortOrder: 0,
         });
 
-        const found = ticketRepo.findById(created.id);
+        const found = issueRepo.findById(created.id);
         expect(found).not.toBeNull();
         expect(found!.id).toBe(created.id);
         expect(found!.title).toBe('Findable epic');
       });
 
       it('should return null for non-existent ID', () => {
-        expect(ticketRepo.findById('nonexistent' as WorkflowTicketId)).toBeNull();
+        expect(issueRepo.findById('nonexistent' as WorkflowIssueId)).toBeNull();
       });
 
       it('should deserialize stateData correctly', () => {
-        const ticket = ticketRepo.create({
+        const issue = issueRepo.create({
           type: 'epic',
           title: 'StateData test',
           description: 'Has state data',
@@ -155,14 +155,14 @@ describe('Workflow Repositories', () => {
           sortOrder: 0,
         });
 
-        const found = ticketRepo.findById(ticket.id);
+        const found = issueRepo.findById(issue.id);
         expect(found!.stateData).toBeDefined();
         expect(found!.stateData!.iteration).toBe(1);
         expect(Array.isArray(found!.stateData!.questions)).toBe(true);
       });
 
       it('should deserialize labels and assignedAgentIds correctly', () => {
-        const ticket = ticketRepo.create({
+        const issue = issueRepo.create({
           type: 'task',
           title: 'Labels test',
           description: 'Has labels',
@@ -174,20 +174,20 @@ describe('Workflow Repositories', () => {
           sortOrder: 0,
         });
 
-        const found = ticketRepo.findById(ticket.id);
+        const found = issueRepo.findById(issue.id);
         expect(found!.labels).toEqual(['frontend', 'urgent']);
         expect(found!.assignedAgentIds).toEqual(['agent-1', 'agent-2']);
       });
     });
 
     describe('findAll', () => {
-      it('should return all tickets with no filters', () => {
-        const all = ticketRepo.findAll();
+      it('should return all issues with no filters', () => {
+        const all = issueRepo.findAll();
         expect(all.length).toBeGreaterThan(0);
       });
 
       it('should filter by type', () => {
-        ticketRepo.create({
+        issueRepo.create({
           type: 'task',
           title: 'Filter type task',
           description: 'Task for filter test',
@@ -197,13 +197,13 @@ describe('Workflow Repositories', () => {
           sortOrder: 0,
         });
 
-        const tasks = ticketRepo.findAll({ type: 'task' });
+        const tasks = issueRepo.findAll({ type: 'task' });
         expect(tasks.every((t) => t.type === 'task')).toBe(true);
         expect(tasks.length).toBeGreaterThan(0);
       });
 
       it('should filter by state', () => {
-        ticketRepo.create({
+        issueRepo.create({
           type: 'epic',
           title: 'Filter state epic',
           description: 'Epic in idea state',
@@ -213,25 +213,25 @@ describe('Workflow Repositories', () => {
           sortOrder: 0,
         });
 
-        const ideas = ticketRepo.findAll({ state: 'idea' });
+        const ideas = issueRepo.findAll({ state: 'idea' });
         expect(ideas.every((t) => t.state === 'idea')).toBe(true);
         expect(ideas.length).toBeGreaterThan(0);
       });
 
       it('should filter by trackId', () => {
         // trackId FK references tracks table, so create without trackId
-        // and test filtering on tickets that have no track (undefined)
-        const withTrack = ticketRepo.findAll({ trackId: 'nonexistent' as TrackId });
+        // and test filtering on issues that have no track (undefined)
+        const withTrack = issueRepo.findAll({ trackId: 'nonexistent' as TrackId });
         expect(withTrack).toHaveLength(0);
 
-        // All tickets created in tests have no trackId
-        const all = ticketRepo.findAll();
+        // All issues created in tests have no trackId
+        const all = issueRepo.findAll();
         expect(all.length).toBeGreaterThan(0);
         expect(all.every((t) => t.trackId === undefined)).toBe(true);
       });
 
       it('should filter by parentId', () => {
-        const epic = ticketRepo.create({
+        const epic = issueRepo.create({
           type: 'epic',
           title: 'Parent for filter test',
           description: 'Parent',
@@ -241,7 +241,7 @@ describe('Workflow Repositories', () => {
           sortOrder: 0,
         });
 
-        ticketRepo.create({
+        issueRepo.create({
           type: 'task',
           title: 'Child for filter test',
           description: 'Child',
@@ -252,13 +252,13 @@ describe('Workflow Repositories', () => {
           sortOrder: 0,
         });
 
-        const children = ticketRepo.findAll({ parentId: epic.id });
+        const children = issueRepo.findAll({ parentId: epic.id });
         expect(children.every((t) => t.parentId === epic.id)).toBe(true);
         expect(children.length).toBeGreaterThanOrEqual(1);
       });
 
       it('should support multiple filters', () => {
-        const epic = ticketRepo.create({
+        const epic = issueRepo.create({
           type: 'epic',
           title: 'Multi-filter parent',
           description: 'Parent',
@@ -268,7 +268,7 @@ describe('Workflow Repositories', () => {
           sortOrder: 0,
         });
 
-        ticketRepo.create({
+        issueRepo.create({
           type: 'task',
           title: 'Multi-filter child',
           description: 'Child task in ready state',
@@ -279,15 +279,15 @@ describe('Workflow Repositories', () => {
           sortOrder: 0,
         });
 
-        const results = ticketRepo.findAll({ type: 'task', parentId: epic.id });
+        const results = issueRepo.findAll({ type: 'task', parentId: epic.id });
         expect(results.length).toBeGreaterThanOrEqual(1);
         expect(results.every((t) => t.type === 'task' && t.parentId === epic.id)).toBe(true);
       });
     });
 
     describe('findChildren', () => {
-      it('should return all child tickets', () => {
-        const epic = ticketRepo.create({
+      it('should return all child issues', () => {
+        const epic = issueRepo.create({
           type: 'epic',
           title: 'Parent with children',
           description: 'Has kids',
@@ -297,7 +297,7 @@ describe('Workflow Repositories', () => {
           sortOrder: 0,
         });
 
-        ticketRepo.create({
+        issueRepo.create({
           type: 'task',
           title: 'Child A',
           description: 'A',
@@ -308,7 +308,7 @@ describe('Workflow Repositories', () => {
           sortOrder: 0,
         });
 
-        ticketRepo.create({
+        issueRepo.create({
           type: 'task',
           title: 'Child B',
           description: 'B',
@@ -319,13 +319,13 @@ describe('Workflow Repositories', () => {
           sortOrder: 1,
         });
 
-        const children = ticketRepo.findChildren(epic.id);
+        const children = issueRepo.findChildren(epic.id);
         expect(children).toHaveLength(2);
         expect(children.every((c) => c.parentId === epic.id)).toBe(true);
       });
 
-      it('should return empty for ticket with no children', () => {
-        const solo = ticketRepo.create({
+      it('should return empty for issue with no children', () => {
+        const solo = issueRepo.create({
           type: 'epic',
           title: 'Solo epic',
           description: 'No children',
@@ -335,13 +335,13 @@ describe('Workflow Repositories', () => {
           sortOrder: 0,
         });
 
-        expect(ticketRepo.findChildren(solo.id)).toHaveLength(0);
+        expect(issueRepo.findChildren(solo.id)).toHaveLength(0);
       });
     });
 
     describe('findByState', () => {
-      it('should find all tickets in a given state', () => {
-        ticketRepo.create({
+      it('should find all issues in a given state', () => {
+        issueRepo.create({
           type: 'task',
           title: 'In ready state',
           description: 'Ready',
@@ -351,15 +351,15 @@ describe('Workflow Repositories', () => {
           sortOrder: 0,
         });
 
-        const readyTickets = ticketRepo.findByState('ready');
-        expect(readyTickets.length).toBeGreaterThan(0);
-        expect(readyTickets.every((t) => t.state === 'ready')).toBe(true);
+        const readyIssues = issueRepo.findByState('ready');
+        expect(readyIssues.length).toBeGreaterThan(0);
+        expect(readyIssues.every((t) => t.state === 'ready')).toBe(true);
       });
     });
 
     describe('findHumanGatePending', () => {
-      it('should find tickets in spec-review, plan-review, final-review states', () => {
-        ticketRepo.create({
+      it('should find issues in spec-review, plan-review, final-review states', () => {
+        issueRepo.create({
           type: 'epic',
           title: 'In spec-review',
           description: 'Needs spec review',
@@ -369,7 +369,7 @@ describe('Workflow Repositories', () => {
           sortOrder: 0,
         });
 
-        ticketRepo.create({
+        issueRepo.create({
           type: 'epic',
           title: 'In plan-review',
           description: 'Needs plan review',
@@ -379,14 +379,14 @@ describe('Workflow Repositories', () => {
           sortOrder: 0,
         });
 
-        const pending = ticketRepo.findHumanGatePending();
+        const pending = issueRepo.findHumanGatePending();
         expect(pending.length).toBeGreaterThanOrEqual(2);
         const validStates = ['spec-review', 'plan-review', 'final-review'];
         expect(pending.every((t) => validStates.includes(t.state))).toBe(true);
       });
 
-      it('should not include tickets in other states', () => {
-        const pending = ticketRepo.findHumanGatePending();
+      it('should not include issues in other states', () => {
+        const pending = issueRepo.findHumanGatePending();
         const invalidStates = ['idea', 'triaging', 'in-progress', 'done', 'ready'];
         expect(pending.every((t) => !invalidStates.includes(t.state))).toBe(true);
       });
@@ -394,7 +394,7 @@ describe('Workflow Repositories', () => {
 
     describe('update', () => {
       it('should update title', () => {
-        const ticket = ticketRepo.create({
+        const issue = issueRepo.create({
           type: 'epic',
           title: 'Original title',
           description: 'Desc',
@@ -404,13 +404,13 @@ describe('Workflow Repositories', () => {
           sortOrder: 0,
         });
 
-        const updated = ticketRepo.update(ticket.id, { title: 'Updated title' });
+        const updated = issueRepo.update(issue.id, { title: 'Updated title' });
         expect(updated).not.toBeNull();
         expect(updated!.title).toBe('Updated title');
       });
 
       it('should update state and stateChangedAt', () => {
-        const ticket = ticketRepo.create({
+        const issue = issueRepo.create({
           type: 'epic',
           title: 'State change test',
           description: 'Desc',
@@ -422,7 +422,7 @@ describe('Workflow Repositories', () => {
 
         // Use a clearly different timestamp to avoid same-millisecond races
         const newStateChangedAt = '2099-01-01T00:00:00.000Z';
-        const updated = ticketRepo.update(ticket.id, {
+        const updated = issueRepo.update(issue.id, {
           state: 'triaging',
           stateChangedAt: newStateChangedAt,
         });
@@ -432,7 +432,7 @@ describe('Workflow Repositories', () => {
       });
 
       it('should update stateData (JSON)', () => {
-        const ticket = ticketRepo.create({
+        const issue = issueRepo.create({
           type: 'epic',
           title: 'StateData update test',
           description: 'Desc',
@@ -442,7 +442,7 @@ describe('Workflow Repositories', () => {
           sortOrder: 0,
         });
 
-        const updated = ticketRepo.update(ticket.id, {
+        const updated = issueRepo.update(issue.id, {
           stateData: { questions: [{ text: 'How big?', answered: true, answer: 'Large' }], iteration: 2 },
         });
 
@@ -451,7 +451,7 @@ describe('Workflow Repositories', () => {
       });
 
       it('should preserve existing fields on partial update', () => {
-        const ticket = ticketRepo.create({
+        const issue = issueRepo.create({
           type: 'epic',
           title: 'Preserve fields',
           description: 'Important description',
@@ -462,7 +462,7 @@ describe('Workflow Repositories', () => {
           sortOrder: 5,
         });
 
-        const updated = ticketRepo.update(ticket.id, { title: 'New title only' });
+        const updated = issueRepo.update(issue.id, { title: 'New title only' });
 
         expect(updated!.description).toBe('Important description');
         expect(updated!.provider).toBe('codex');
@@ -470,14 +470,14 @@ describe('Workflow Repositories', () => {
         expect(updated!.sortOrder).toBe(5);
       });
 
-      it('should return null for non-existent ticket', () => {
-        expect(ticketRepo.update('nonexistent' as WorkflowTicketId, { title: 'X' })).toBeNull();
+      it('should return null for non-existent issue', () => {
+        expect(issueRepo.update('nonexistent' as WorkflowIssueId, { title: 'X' })).toBeNull();
       });
     });
 
     describe('delete', () => {
-      it('should delete a ticket', () => {
-        const ticket = ticketRepo.create({
+      it('should delete an issue', () => {
+        const issue = issueRepo.create({
           type: 'epic',
           title: 'Delete me',
           description: 'To be deleted',
@@ -487,12 +487,12 @@ describe('Workflow Repositories', () => {
           sortOrder: 0,
         });
 
-        expect(ticketRepo.delete(ticket.id)).toBe(true);
-        expect(ticketRepo.findById(ticket.id)).toBeNull();
+        expect(issueRepo.delete(issue.id)).toBe(true);
+        expect(issueRepo.findById(issue.id)).toBeNull();
       });
 
       it('should cascade delete children', () => {
-        const epic = ticketRepo.create({
+        const epic = issueRepo.create({
           type: 'epic',
           title: 'Delete with children',
           description: 'Parent to delete',
@@ -502,7 +502,7 @@ describe('Workflow Repositories', () => {
           sortOrder: 0,
         });
 
-        const child = ticketRepo.create({
+        const child = issueRepo.create({
           type: 'task',
           title: 'Cascade child',
           description: 'Should be deleted too',
@@ -513,12 +513,12 @@ describe('Workflow Repositories', () => {
           sortOrder: 0,
         });
 
-        ticketRepo.delete(epic.id);
-        expect(ticketRepo.findById(child.id)).toBeNull();
+        issueRepo.delete(epic.id);
+        expect(issueRepo.findById(child.id)).toBeNull();
       });
 
-      it('should return false for non-existent ticket', () => {
-        expect(ticketRepo.delete('nonexistent' as WorkflowTicketId)).toBe(false);
+      it('should return false for non-existent issue', () => {
+        expect(issueRepo.delete('nonexistent' as WorkflowIssueId)).toBe(false);
       });
     });
   });
@@ -529,7 +529,7 @@ describe('Workflow Repositories', () => {
   describe('WorkflowTransitionRepository', () => {
     describe('create', () => {
       it('should create a transition record', () => {
-        const ticket = ticketRepo.create({
+        const issue = issueRepo.create({
           type: 'epic',
           title: 'Transition test epic',
           description: 'For transitions',
@@ -540,21 +540,21 @@ describe('Workflow Repositories', () => {
         });
 
         const transition = transitionRepo.create({
-          ticketId: ticket.id,
+          issueId: issue.id,
           fromState: 'idea',
           toState: 'triaging',
           actor: { type: 'system', reason: 'auto-advance' },
         });
 
         expect(transition.id).toBeDefined();
-        expect(transition.ticketId).toBe(ticket.id);
+        expect(transition.issueId).toBe(issue.id);
         expect(transition.fromState).toBe('idea');
         expect(transition.toState).toBe('triaging');
         expect(transition.createdAt).toBeDefined();
       });
 
       it('should store actor as JSON', () => {
-        const ticket = ticketRepo.create({
+        const issue = issueRepo.create({
           type: 'epic',
           title: 'Actor test epic',
           description: 'For actor test',
@@ -566,7 +566,7 @@ describe('Workflow Repositories', () => {
 
         const humanActor = { type: 'human' as const, userId: 'user-42' };
         const transition = transitionRepo.create({
-          ticketId: ticket.id,
+          issueId: issue.id,
           fromState: 'idea',
           toState: 'triaging',
           actor: humanActor,
@@ -578,9 +578,9 @@ describe('Workflow Repositories', () => {
       });
     });
 
-    describe('findByTicket', () => {
+    describe('findByIssue', () => {
       it('should return transitions ordered by created_at DESC', () => {
-        const ticket = ticketRepo.create({
+        const issue = issueRepo.create({
           type: 'epic',
           title: 'Ordered transitions',
           description: 'Multiple transitions',
@@ -591,20 +591,20 @@ describe('Workflow Repositories', () => {
         });
 
         transitionRepo.create({
-          ticketId: ticket.id,
+          issueId: issue.id,
           fromState: 'idea',
           toState: 'triaging',
           actor: { type: 'system', reason: 'auto' },
         });
 
         transitionRepo.create({
-          ticketId: ticket.id,
+          issueId: issue.id,
           fromState: 'triaging',
           toState: 'specced',
           actor: { type: 'agent', agentId: 'triage-agent' },
         });
 
-        const transitions = transitionRepo.findByTicket(ticket.id);
+        const transitions = transitionRepo.findByIssue(issue.id);
         expect(transitions).toHaveLength(2);
         // Both transitions present (order may vary for same-ms inserts)
         const toStates = transitions.map((t) => t.toState);
@@ -613,7 +613,7 @@ describe('Workflow Repositories', () => {
       });
 
       it('should respect limit parameter', () => {
-        const ticket = ticketRepo.create({
+        const issue = issueRepo.create({
           type: 'epic',
           title: 'Limited transitions',
           description: 'Many transitions',
@@ -624,37 +624,37 @@ describe('Workflow Repositories', () => {
         });
 
         transitionRepo.create({
-          ticketId: ticket.id,
+          issueId: issue.id,
           fromState: 'idea',
           toState: 'triaging',
           actor: { type: 'system', reason: 'auto' },
         });
         transitionRepo.create({
-          ticketId: ticket.id,
+          issueId: issue.id,
           fromState: 'triaging',
           toState: 'specced',
           actor: { type: 'agent' },
         });
         transitionRepo.create({
-          ticketId: ticket.id,
+          issueId: issue.id,
           fromState: 'specced',
           toState: 'spec-review',
           actor: { type: 'system', reason: 'auto' },
         });
 
-        const limited = transitionRepo.findByTicket(ticket.id, 2);
+        const limited = transitionRepo.findByIssue(issue.id, 2);
         expect(limited).toHaveLength(2);
       });
     });
   });
 
   // ---------------------------------------------------------------------------
-  // TicketDependencyRepository
+  // IssueDependencyRepository
   // ---------------------------------------------------------------------------
-  describe('TicketDependencyRepository', () => {
+  describe('IssueDependencyRepository', () => {
     describe('create', () => {
       it('should create a dependency', () => {
-        const t1 = ticketRepo.create({
+        const t1 = issueRepo.create({
           type: 'task',
           title: 'Depends on t2',
           description: 'Task 1',
@@ -663,7 +663,7 @@ describe('Workflow Repositories', () => {
           priority: 'medium',
           sortOrder: 0,
         });
-        const t2 = ticketRepo.create({
+        const t2 = issueRepo.create({
           type: 'task',
           title: 'Depended upon',
           description: 'Task 2',
@@ -675,12 +675,12 @@ describe('Workflow Repositories', () => {
 
         const dep = depRepo.create(t1.id, t2.id);
         expect(dep).toBeDefined();
-        expect(dep.ticketId).toBe(t1.id);
+        expect(dep.issueId).toBe(t1.id);
         expect(dep.dependsOnId).toBe(t2.id);
       });
 
       it('should set createdAt', () => {
-        const t1 = ticketRepo.create({
+        const t1 = issueRepo.create({
           type: 'task',
           title: 'Dep createdAt 1',
           description: 'D1',
@@ -689,7 +689,7 @@ describe('Workflow Repositories', () => {
           priority: 'medium',
           sortOrder: 0,
         });
-        const t2 = ticketRepo.create({
+        const t2 = issueRepo.create({
           type: 'task',
           title: 'Dep createdAt 2',
           description: 'D2',
@@ -704,9 +704,9 @@ describe('Workflow Repositories', () => {
       });
     });
 
-    describe('findByTicket', () => {
-      it('should find dependencies for a ticket', () => {
-        const t1 = ticketRepo.create({
+    describe('findByIssue', () => {
+      it('should find dependencies for an issue', () => {
+        const t1 = issueRepo.create({
           type: 'task',
           title: 'Has deps',
           description: 'D',
@@ -715,7 +715,7 @@ describe('Workflow Repositories', () => {
           priority: 'medium',
           sortOrder: 0,
         });
-        const t2 = ticketRepo.create({
+        const t2 = issueRepo.create({
           type: 'task',
           title: 'Dep target A',
           description: 'D',
@@ -724,7 +724,7 @@ describe('Workflow Repositories', () => {
           priority: 'medium',
           sortOrder: 0,
         });
-        const t3 = ticketRepo.create({
+        const t3 = issueRepo.create({
           type: 'task',
           title: 'Dep target B',
           description: 'D',
@@ -737,24 +737,24 @@ describe('Workflow Repositories', () => {
         depRepo.create(t1.id, t2.id);
         depRepo.create(t1.id, t3.id);
 
-        const deps = depRepo.findByTicket(t1.id);
+        const deps = depRepo.findByIssue(t1.id);
         expect(deps).toHaveLength(2);
-        expect(deps.every((d) => d.ticketId === t1.id)).toBe(true);
+        expect(deps.every((d) => d.issueId === t1.id)).toBe(true);
       });
     });
 
     describe('findDependents', () => {
-      it('should find tickets that depend on a given ticket', () => {
-        const target = ticketRepo.create({
+      it('should find issues that depend on a given issue', () => {
+        const target = issueRepo.create({
           type: 'task',
-          title: 'Target ticket',
+          title: 'Target issue',
           description: 'Others depend on this',
           state: 'in-progress',
           provider: 'claude',
           priority: 'medium',
           sortOrder: 0,
         });
-        const dep1 = ticketRepo.create({
+        const dep1 = issueRepo.create({
           type: 'task',
           title: 'Dependent 1',
           description: 'Depends on target',
@@ -763,7 +763,7 @@ describe('Workflow Repositories', () => {
           priority: 'medium',
           sortOrder: 0,
         });
-        const dep2 = ticketRepo.create({
+        const dep2 = issueRepo.create({
           type: 'task',
           title: 'Dependent 2',
           description: 'Also depends on target',
@@ -784,7 +784,7 @@ describe('Workflow Repositories', () => {
 
     describe('findUnresolved', () => {
       it('should only return unresolved dependencies', () => {
-        const t1 = ticketRepo.create({
+        const t1 = issueRepo.create({
           type: 'task',
           title: 'Unresolved test',
           description: 'D',
@@ -793,7 +793,7 @@ describe('Workflow Repositories', () => {
           priority: 'medium',
           sortOrder: 0,
         });
-        const t2 = ticketRepo.create({
+        const t2 = issueRepo.create({
           type: 'task',
           title: 'Resolved dep',
           description: 'D',
@@ -802,7 +802,7 @@ describe('Workflow Repositories', () => {
           priority: 'medium',
           sortOrder: 0,
         });
-        const t3 = ticketRepo.create({
+        const t3 = issueRepo.create({
           type: 'task',
           title: 'Unresolved dep',
           description: 'D',
@@ -827,7 +827,7 @@ describe('Workflow Repositories', () => {
 
     describe('resolve', () => {
       it('should set resolvedAt', () => {
-        const t1 = ticketRepo.create({
+        const t1 = issueRepo.create({
           type: 'task',
           title: 'Resolve test A',
           description: 'D',
@@ -836,7 +836,7 @@ describe('Workflow Repositories', () => {
           priority: 'medium',
           sortOrder: 0,
         });
-        const t2 = ticketRepo.create({
+        const t2 = issueRepo.create({
           type: 'task',
           title: 'Resolve test B',
           description: 'D',
@@ -850,15 +850,15 @@ describe('Workflow Repositories', () => {
         const result = depRepo.resolve(t1.id, t2.id);
         expect(result).toBe(true);
 
-        // Verify via findByTicket that resolvedAt is set
-        const deps = depRepo.findByTicket(t1.id);
+        // Verify via findByIssue that resolvedAt is set
+        const deps = depRepo.findByIssue(t1.id);
         const resolved = deps.find((d) => d.dependsOnId === t2.id);
         expect(resolved).toBeDefined();
         expect(resolved!.resolvedAt).toBeDefined();
       });
 
       it('should return true on success', () => {
-        const t1 = ticketRepo.create({
+        const t1 = issueRepo.create({
           type: 'task',
           title: 'Resolve success A',
           description: 'D',
@@ -867,7 +867,7 @@ describe('Workflow Repositories', () => {
           priority: 'medium',
           sortOrder: 0,
         });
-        const t2 = ticketRepo.create({
+        const t2 = issueRepo.create({
           type: 'task',
           title: 'Resolve success B',
           description: 'D',
@@ -884,7 +884,7 @@ describe('Workflow Repositories', () => {
 
     describe('delete', () => {
       it('should remove a dependency', () => {
-        const t1 = ticketRepo.create({
+        const t1 = issueRepo.create({
           type: 'task',
           title: 'Delete dep A',
           description: 'D',
@@ -893,7 +893,7 @@ describe('Workflow Repositories', () => {
           priority: 'medium',
           sortOrder: 0,
         });
-        const t2 = ticketRepo.create({
+        const t2 = issueRepo.create({
           type: 'task',
           title: 'Delete dep B',
           description: 'D',
@@ -906,14 +906,14 @@ describe('Workflow Repositories', () => {
         depRepo.create(t1.id, t2.id);
         expect(depRepo.delete(t1.id, t2.id)).toBe(true);
 
-        const deps = depRepo.findByTicket(t1.id);
+        const deps = depRepo.findByIssue(t1.id);
         expect(deps).toHaveLength(0);
       });
     });
 
     describe('cascade on parent delete', () => {
       it('when parent epic is deleted, child tasks should be deleted', () => {
-        const epic = ticketRepo.create({
+        const epic = issueRepo.create({
           type: 'epic',
           title: 'Cascade parent',
           description: 'Will be deleted',
@@ -923,7 +923,7 @@ describe('Workflow Repositories', () => {
           sortOrder: 0,
         });
 
-        const child = ticketRepo.create({
+        const child = issueRepo.create({
           type: 'task',
           title: 'Cascade child',
           description: 'Should vanish',
@@ -934,14 +934,14 @@ describe('Workflow Repositories', () => {
           sortOrder: 0,
         });
 
-        ticketRepo.delete(epic.id);
-        expect(ticketRepo.findById(child.id)).toBeNull();
+        issueRepo.delete(epic.id);
+        expect(issueRepo.findById(child.id)).toBeNull();
       });
 
-      it('when a ticket is deleted, its transitions should be deleted', () => {
-        const ticket = ticketRepo.create({
+      it('when an issue is deleted, its transitions should be deleted', () => {
+        const issue = issueRepo.create({
           type: 'epic',
-          title: 'Cascade transition ticket',
+          title: 'Cascade transition issue',
           description: 'Has transitions',
           state: 'triaging',
           provider: 'claude',
@@ -950,28 +950,28 @@ describe('Workflow Repositories', () => {
         });
 
         transitionRepo.create({
-          ticketId: ticket.id,
+          issueId: issue.id,
           fromState: 'idea',
           toState: 'triaging',
           actor: { type: 'system', reason: 'auto' },
         });
 
-        ticketRepo.delete(ticket.id);
-        const transitions = transitionRepo.findByTicket(ticket.id);
+        issueRepo.delete(issue.id);
+        const transitions = transitionRepo.findByIssue(issue.id);
         expect(transitions).toHaveLength(0);
       });
 
-      it('when a ticket is deleted, its dependencies should be deleted', () => {
-        const t1 = ticketRepo.create({
+      it('when an issue is deleted, its dependencies should be deleted', () => {
+        const t1 = issueRepo.create({
           type: 'task',
-          title: 'Cascade dep ticket',
+          title: 'Cascade dep issue',
           description: 'Has deps',
           state: 'blocked',
           provider: 'claude',
           priority: 'medium',
           sortOrder: 0,
         });
-        const t2 = ticketRepo.create({
+        const t2 = issueRepo.create({
           type: 'task',
           title: 'Cascade dep target',
           description: 'Target',
@@ -982,9 +982,9 @@ describe('Workflow Repositories', () => {
         });
 
         depRepo.create(t1.id, t2.id);
-        ticketRepo.delete(t1.id);
+        issueRepo.delete(t1.id);
 
-        const deps = depRepo.findByTicket(t1.id);
+        const deps = depRepo.findByIssue(t1.id);
         expect(deps).toHaveLength(0);
       });
     });

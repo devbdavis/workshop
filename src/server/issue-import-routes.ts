@@ -1,9 +1,9 @@
 import { Router } from 'express';
-import type { ImportableIssue, TicketSource, TrackId, TodoId } from '@foundation/types';
+import type { ImportableIssue, IssueSource, TrackId, TodoId } from '@foundation/types';
 import type { SettingsRepository } from '@domain/repo/repository';
 import type { TrackRepository } from '@domain/track/repository';
 import type { TodoRepository } from '@domain/todo/repository';
-import type { TicketImportIgnoreRepository } from '@domain/ticket-import/repository';
+import type { IssueImportIgnoreRepository } from '@domain/issue-import/repository';
 import {
   LinearApiError,
   getIssueByIdentifier as getLinearIssueByIdentifier,
@@ -18,14 +18,14 @@ import {
 } from '@infrastructure/github/issues-client.js';
 import { broadcast } from './events.js';
 
-export interface TicketImportRouterDeps {
+export interface IssueImportRouterDeps {
   settings: SettingsRepository;
   tracks: TrackRepository;
   todos: TodoRepository;
-  ignores: TicketImportIgnoreRepository;
+  ignores: IssueImportIgnoreRepository;
 }
 
-interface TicketImportListResponse {
+interface IssueImportListResponse {
   available: ImportableIssue[];
   ignored: ImportableIssue[];
   imported: ImportableIssue[];
@@ -130,7 +130,7 @@ function indexTodosByIssueKey(todos: TodoRepository, source: SupportedSource): M
   return index;
 }
 
-function handleFetchError(source: TicketSource, err: unknown, res: import('express').Response, action: string): void {
+function handleFetchError(source: IssueSource, err: unknown, res: import('express').Response, action: string): void {
   if (err instanceof MissingConfigError) {
     res.status(400).json({ error: err.message });
     return;
@@ -147,13 +147,13 @@ function handleFetchError(source: TicketSource, err: unknown, res: import('expre
   res.status(500).json({ error: `Failed to ${action} ${source} issue(s)` });
 }
 
-export function createTicketImportRouter(deps: TicketImportRouterDeps): Router {
+export function createIssueImportRouter(deps: IssueImportRouterDeps): Router {
   const router = Router();
   const { settings, tracks, todos, ignores } = deps;
 
   // --- List issues ---
 
-  router.get('/ticket-import/:source', async (req, res) => {
+  router.get('/issue-import/:source', async (req, res) => {
     const { source } = req.params;
     if (!isSupportedSource(source)) {
       res.status(400).json({ error: `Unsupported issue tracker: ${source}` });
@@ -195,7 +195,7 @@ export function createTicketImportRouter(deps: TicketImportRouterDeps): Router {
         };
       });
 
-      const response: TicketImportListResponse = { available, ignored, imported };
+      const response: IssueImportListResponse = { available, ignored, imported };
       res.json(response);
     } catch (err) {
       handleFetchError(source, err, res, 'list');
@@ -204,7 +204,7 @@ export function createTicketImportRouter(deps: TicketImportRouterDeps): Router {
 
   // --- Import one issue as a Todo ---
 
-  router.post('/ticket-import/:source/import', async (req, res) => {
+  router.post('/issue-import/:source/import', async (req, res) => {
     const { source } = req.params;
     if (!isSupportedSource(source)) {
       res.status(400).json({ error: `Unsupported issue tracker: ${source}` });
@@ -266,7 +266,7 @@ export function createTicketImportRouter(deps: TicketImportRouterDeps): Router {
 
   // --- Ignore an issue (hide from Available tab) ---
 
-  router.post('/ticket-import/:source/ignore', (req, res) => {
+  router.post('/issue-import/:source/ignore', (req, res) => {
     const { source } = req.params;
     if (!isSupportedSource(source)) {
       res.status(400).json({ error: `Unsupported issue tracker: ${source}` });
@@ -293,7 +293,7 @@ export function createTicketImportRouter(deps: TicketImportRouterDeps): Router {
 
   // --- Unignore (restore to Available tab) ---
 
-  router.delete('/ticket-import/:source/ignore/:externalId', (req, res) => {
+  router.delete('/issue-import/:source/ignore/:externalId', (req, res) => {
     const { source } = req.params;
     if (!isSupportedSource(source)) {
       res.status(400).json({ error: `Unsupported issue tracker: ${source}` });

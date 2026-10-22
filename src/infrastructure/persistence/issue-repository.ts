@@ -1,15 +1,15 @@
 import { v4 as uuid } from 'uuid';
 import { getDatabase } from './database.js';
-import type { TicketRepository } from '@domain/ticket/repository';
+import type { IssueRepository } from '@domain/issue/repository';
 import type {
-  ExternalTicket,
-  TicketId,
+  ExternalIssue,
+  IssueId,
   TrackId,
-  TicketSource,
-  TicketRelationship,
+  IssueSource,
+  IssueRelationship,
 } from '@foundation/types';
 
-export function createTicketRepository(): TicketRepository {
+export function createIssueRepository(): IssueRepository {
   const db = getDatabase();
 
   // Prepare statements once
@@ -26,23 +26,23 @@ export function createTicketRepository(): TicketRepository {
   const deleteStmt = db.prepare('DELETE FROM tickets WHERE id = ?');
 
   return {
-    findById(id: TicketId): ExternalTicket | null {
-      const row = findByIdStmt.get(id) as TicketRow | undefined;
-      return row ? rowToTicket(row) : null;
+    findById(id: IssueId): ExternalIssue | null {
+      const row = findByIdStmt.get(id) as IssueRow | undefined;
+      return row ? rowToIssue(row) : null;
     },
 
-    findByTrack(trackId: TrackId): ExternalTicket[] {
-      const rows = findByTrackStmt.all(trackId) as TicketRow[];
-      return rows.map(rowToTicket);
+    findByTrack(trackId: TrackId): ExternalIssue[] {
+      const rows = findByTrackStmt.all(trackId) as IssueRow[];
+      return rows.map(rowToIssue);
     },
 
-    findByExternalId(source: TicketSource, externalId: string): ExternalTicket[] {
-      const rows = findByExternalIdStmt.all(source, externalId) as TicketRow[];
-      return rows.map(rowToTicket);
+    findByExternalId(source: IssueSource, externalId: string): ExternalIssue[] {
+      const rows = findByExternalIdStmt.all(source, externalId) as IssueRow[];
+      return rows.map(rowToIssue);
     },
 
-    create(data): ExternalTicket {
-      const id = uuid() as TicketId;
+    create(data): ExternalIssue {
+      const id = uuid() as IssueId;
       const now = new Date().toISOString();
       insertStmt.run(
         id,
@@ -59,7 +59,7 @@ export function createTicketRepository(): TicketRepository {
       return { ...data, id, createdAt: now };
     },
 
-    updateCachedData(id, data): ExternalTicket | null {
+    updateCachedData(id, data): ExternalIssue | null {
       const now = new Date().toISOString();
       const existing = this.findById(id);
       if (!existing) return null;
@@ -81,20 +81,20 @@ export function createTicketRepository(): TicketRepository {
       };
     },
 
-    updateRelationship(id, relationship): ExternalTicket | null {
+    updateRelationship(id, relationship): ExternalIssue | null {
       const result = updateRelationshipStmt.run(relationship, id);
       if (result.changes === 0) return null;
       return this.findById(id);
     },
 
-    delete(id: TicketId): boolean {
+    delete(id: IssueId): boolean {
       const result = deleteStmt.run(id);
       return result.changes > 0;
     },
   };
 }
 
-interface TicketRow {
+interface IssueRow {
   id: string;
   track_id: string;
   source: string;
@@ -107,13 +107,13 @@ interface TicketRow {
   created_at: string;
 }
 
-function rowToTicket(row: TicketRow): ExternalTicket {
+function rowToIssue(row: IssueRow): ExternalIssue {
   return {
-    id: row.id as TicketId,
+    id: row.id as IssueId,
     trackId: row.track_id as TrackId,
-    source: row.source as TicketSource,
+    source: row.source as IssueSource,
     externalId: row.external_id,
-    relationship: row.relationship as TicketRelationship,
+    relationship: row.relationship as IssueRelationship,
     cachedTitle: row.cached_title || undefined,
     cachedStatus: row.cached_status || undefined,
     cachedData: row.cached_data || undefined,

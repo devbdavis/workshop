@@ -5,11 +5,11 @@
  * stays thin and any caller of approveWithExecution gets consistent behavior.
  */
 import type {
-  WorkflowTicket,
-  WorkflowTicketId,
+  WorkflowIssue,
+  WorkflowIssueId,
   TrackId,
 } from '@foundation/types.js';
-import type { WorkflowTicketRepository } from '@domain/workflow/ticket-repository.js';
+import type { WorkflowIssueRepository } from '@domain/workflow/issue-repository.js';
 import type { TrackRepository } from '@domain/track/repository.js';
 import type { TerminalManager } from '@domain/terminal/manager.js';
 import type { WorkflowEngine } from './engine.js';
@@ -24,16 +24,16 @@ import { isAutonomous } from './autonomy.js';
 // ---------------------------------------------------------------------------
 
 export interface ExecutionDispatcher {
-  /** Approve a ticket at a human gate — if the result is an execution stage, dispatch automatically. */
-  approveWithExecution(ticketId: WorkflowTicketId, comment?: string): Promise<WorkflowTicket>;
+  /** Approve an issue at a human gate — if the result is an execution stage, dispatch automatically. */
+  approveWithExecution(issueId: WorkflowIssueId, comment?: string): Promise<WorkflowIssue>;
 
-  /** Dispatch execution for a ticket already in an execution stage (e.g. retry). */
-  dispatch(ticketId: WorkflowTicketId): Promise<void>;
+  /** Dispatch execution for an issue already in an execution stage (e.g. retry). */
+  dispatch(issueId: WorkflowIssueId): Promise<void>;
 }
 
 export interface ExecutionDispatcherDeps {
   engine: WorkflowEngine;
-  tickets: WorkflowTicketRepository;
+  issues: WorkflowIssueRepository;
   tracks: TrackRepository;
   terminal: TerminalManager;
   topologyLoader: TopologyLoader;
@@ -48,17 +48,17 @@ export interface ExecutionDispatcherDeps {
  */
 function isExecutionStage(
   topologyLoader: TopologyLoader,
-  ticket: WorkflowTicket,
+  issue: WorkflowIssue,
 ): boolean {
   try {
-    const stages = topologyLoader.loadForTicket(ticket);
-    const stage = getStageDefinition(stages, ticket.state);
+    const stages = topologyLoader.loadForIssue(issue);
+    const stage = getStageDefinition(stages, issue.state);
     return stage?.validTransitions.some(
       (t) => t.trigger === 'execution-complete' || t.trigger === 'execution-failed',
     ) ?? false;
   } catch {
     // No playbook — fallback to hardcoded check for backward compat
-    return ticket.state === 'executing';
+    return issue.state === 'executing';
   }
 }
 
@@ -67,12 +67,12 @@ function isExecutionStage(
  */
 function findTransitionTarget(
   topologyLoader: TopologyLoader,
-  ticket: WorkflowTicket,
+  issue: WorkflowIssue,
   trigger: string,
 ): string | null {
   try {
-    const stages = topologyLoader.loadForTicket(ticket);
-    const stage = getStageDefinition(stages, ticket.state);
+    const stages = topologyLoader.loadForIssue(issue);
+    const stage = getStageDefinition(stages, issue.state);
     const transition = stage?.validTransitions.find((t) => t.trigger === trigger);
     return transition?.to ?? null;
   } catch {
@@ -90,9 +90,9 @@ function findTransitionTarget(
 export function createExecutionDispatcher(
   deps: ExecutionDispatcherDeps,
 ): ExecutionDispatcher {
-  const { engine, tickets, tracks, terminal, topologyLoader } = deps;
+  const { engine, issues, tracks, terminal, topologyLoader } = deps;
 
-  /** Lazily find-or-create a _Workflow track for tickets without a track */
+  /** Lazily find-or-create a _Workflow track for issues without a track */
   let workflowTrackId: TrackId | null = null;
   function getOrCreateWorkflowTrack(): TrackId {
     if (workflowTrackId) {
@@ -115,62 +115,62 @@ export function createExecutionDispatcher(
     return created.id;
   }
 
-  async function dispatchExecution(ticket: WorkflowTicket): Promise<void> {
-    const systemPrompt = composeExecutionPrompt(ticket, deps);
+  async function dispatchExecution(issue: WorkflowIssue): Promise<void> {
+    const systemPrompt = composeExecutionPrompt(issue, deps);
 
-    const repos = ticket.trackId
-      ? tracks.findReposByTrack(ticket.trackId)
+    const repos = issue.trackId
+      ? tracks.findReposByTrack(issue.trackId)
       : [];
     if (repos.length === 0) {
       throw new Error(
-        `Cannot dispatch execution for ticket ${ticket.id}: no repositories configured on track`,
+        `Cannot dispatch execution for issue ${issue.id}: no repositories configured on track`,
       );
     }
     const workingDir = repos[0].path;
 
     // Find the completion target from topology
-    const completionTarget = findTransitionTarget(topologyLoader, ticket, 'execution-complete');
-    const failedTarget = findTransitionTarget(topologyLoader, ticket, 'execution-failed');
+    const completionTarget = findTransitionTarget(topologyLoader, issue, 'execution-complete');
+    const failedTarget = findTransitionTarget(topologyLoader, issue, 'execution-failed');
 
     let stage: StageDefinition | undefined;
     try {
-      stage = getStageDefinition(topologyLoader.loadForTicket(ticket), ticket.state);
+      stage = getStageDefinition(topologyLoader.loadForIssue(issue), issue.state);
     } catch {
       stage = undefined;
     }
 
     const session = await terminal.createSession(
-      ticket.trackId || getOrCreateWorkflowTrack(),
+      issue.trackId || getOrCreateWorkflowTrack(),
       {
         systemPrompt,
         background: true,
-        initialPrompt: buildInitialPrompt(ticket, completionTarget, failedTarget),
+        initialPrompt: buildInitialPrompt(issue, completionTarget, failedTarget),
         workingDirectory: workingDir,
-        executionTicketId: ticket.id,
-        dangerouslySkipPermissions: isAutonomous(ticket, tickets),
+        executionIssueId: issue.id,
+        dangerouslySkipPermissions: isAutonomous(issue, issues),
         model: stage?.model,
       },
     );
 
-    tickets.update(ticket.id, {
+    issues.update(issue.id, {
       executionSessionId: session.id,
       stateData: {
-        ...(ticket.stateData || {}),
+        ...(issue.stateData || {}),
         agentProgress: [],
       } as Record<string, unknown>,
     });
 
     console.log(
-      `Execution dispatched for ticket ${ticket.id} -> session ${session.id}`,
+      `Execution dispatched for issue ${issue.id} -> session ${session.id}`,
     );
   }
 
   return {
     async approveWithExecution(
-      ticketId: WorkflowTicketId,
+      issueId: WorkflowIssueId,
       comment?: string,
-    ): Promise<WorkflowTicket> {
-      let current = engine.approve(ticketId, comment);
+    ): Promise<WorkflowIssue> {
+      let current = engine.approve(issueId, comment);
 
       if (!isExecutionStage(topologyLoader, current)) {
         return current;
@@ -179,7 +179,7 @@ export function createExecutionDispatcher(
       try {
         await dispatchExecution(current);
         // Re-read to get the updated executionSessionId
-        current = tickets.findById(ticketId) || current;
+        current = issues.findById(issueId) || current;
       } catch (dispatchErr) {
         console.error('Failed to dispatch execution:', dispatchErr);
         const failedTarget = findTransitionTarget(topologyLoader, current, 'execution-failed');
@@ -194,7 +194,7 @@ export function createExecutionDispatcher(
                 : 'Failed to dispatch execution session',
             );
           } catch {
-            console.error('Failed to mark ticket as execution-failed:', ticketId);
+            console.error('Failed to mark issue as execution-failed:', issueId);
           }
         }
       }
@@ -202,16 +202,16 @@ export function createExecutionDispatcher(
       return current;
     },
 
-    async dispatch(ticketId: WorkflowTicketId): Promise<void> {
-      const ticket = tickets.findById(ticketId);
-      if (!ticket) throw new Error(`Ticket not found: ${ticketId}`);
+    async dispatch(issueId: WorkflowIssueId): Promise<void> {
+      const issue = issues.findById(issueId);
+      if (!issue) throw new Error(`Issue not found: ${issueId}`);
 
-      if (!isExecutionStage(topologyLoader, ticket)) {
+      if (!isExecutionStage(topologyLoader, issue)) {
         throw new Error(
-          `Ticket ${ticketId} is not in an execution stage (current: ${ticket.state})`,
+          `Issue ${issueId} is not in an execution stage (current: ${issue.state})`,
         );
       }
-      await dispatchExecution(ticket);
+      await dispatchExecution(issue);
     },
   };
 }
@@ -221,7 +221,7 @@ export function createExecutionDispatcher(
 // ---------------------------------------------------------------------------
 
 function composeExecutionPrompt(
-  ticket: WorkflowTicket,
+  issue: WorkflowIssue,
   deps: ExecutionDispatcherDeps,
 ): string {
   const { tracks } = deps;
@@ -230,27 +230,27 @@ function composeExecutionPrompt(
   parts.push(
     '# Execution Context',
     '',
-    `You are executing the approved implementation plan for: **${ticket.title}**`,
+    `You are executing the approved implementation plan for: **${issue.title}**`,
     '',
-    `Workflow Ticket ID: ${ticket.id}`,
+    `Workflow Issue ID: ${issue.id}`,
   );
 
-  parts.push('', '## Approved Specification', '', ticket.description || '(no description)');
+  parts.push('', '## Approved Specification', '', issue.description || '(no description)');
 
-  const stateData = ticket.stateData as Record<string, unknown> | undefined;
+  const stateData = issue.stateData as Record<string, unknown> | undefined;
   const planDraft = stateData?.planDraft;
   if (planDraft && typeof planDraft === 'string') {
     parts.push('', formatPlanContent(planDraft, 'Approved Implementation Plan'));
   }
 
-  if (ticket.trackId) {
-    const track = tracks.findById(ticket.trackId);
+  if (issue.trackId) {
+    const track = tracks.findById(issue.trackId);
     if (track) {
       if (track.context) {
         parts.push('', '## Project Context', '', track.context);
       }
 
-      const repos = tracks.findReposByTrack(ticket.trackId);
+      const repos = tracks.findReposByTrack(issue.trackId);
       if (repos.length > 0) {
         parts.push(
           '',
@@ -262,7 +262,7 @@ function composeExecutionPrompt(
         );
       }
 
-      const trackPaths = tracks.findPathsByTrack(ticket.trackId);
+      const trackPaths = tracks.findPathsByTrack(issue.trackId);
       if (trackPaths.length > 0) {
         parts.push(
           '',
@@ -305,7 +305,7 @@ function composeExecutionPrompt(
 }
 
 function buildInitialPrompt(
-  ticket: WorkflowTicket,
+  issue: WorkflowIssue,
   completionTarget: string | null,
   failedTarget: string | null,
 ): string {
@@ -313,7 +313,7 @@ function buildInitialPrompt(
   const failState = failedTarget || 'execution-failed';
 
   return [
-    `Execute the approved implementation plan for workflow ticket ${ticket.id}.`,
+    `Execute the approved implementation plan for workflow issue ${issue.id}.`,
     '',
     'Your system prompt contains the spec, plan, and project context.',
     'Read the plan carefully. Break it into work units and delegate to sub-agents.',
@@ -327,7 +327,7 @@ function buildInitialPrompt(
     '',
     'For small/simple plans, you may implement directly. For multi-phase plans, you MUST delegate.',
     '',
-    `When done, report results via: workshop_transition_ticket("${ticket.id}", "${successState}", ...)`,
-    `On failure: workshop_transition_ticket("${ticket.id}", "${failState}", ...)`,
+    `When done, report results via: workshop_transition_issue("${issue.id}", "${successState}", ...)`,
+    `On failure: workshop_transition_issue("${issue.id}", "${failState}", ...)`,
   ].join('\n');
 }

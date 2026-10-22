@@ -55,7 +55,7 @@ sudo apt-get install tmux     # Ubuntu/Debian
 
 ### tmux
 
-Terminal sessions in Workshop are backed by tmux. Without it, you can still use the web UI, workflow tickets, and MCP tools — but terminal sessions won't work.
+Terminal sessions in Workshop are backed by tmux. Without it, you can still use the web UI, workflow issues, and MCP tools — but terminal sessions won't work.
 
 If you've never used tmux: don't worry, Workshop manages the sessions for you. You never need to run tmux commands directly.
 
