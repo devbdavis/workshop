@@ -28,6 +28,10 @@ interface LinearTicketJob {
   body?: string;
 }
 
+// Values are interpolated into a gh command in the agent prompt, so keep them shell-inert.
+const GITHUB_REPO_RE = /^[\w.-]+\/[\w.-]+$/;
+const GITHUB_LABEL_RE = /^[^"'`$\\,\n\r]+$/;
+
 export interface TodoRouterDeps {
   todos: TodoRepository;
   tracks: TrackRepository;
@@ -408,7 +412,7 @@ export function createTodoRouter(deps: TodoRouterDeps): Router {
     }
   });
 
-  // --- Create a Linear ticket from a todo (one-shot background agent) ---
+  // --- Create a Linear ticket or GitHub issue from a todo (one-shot background agent) ---
 
   router.post('/todos/:todoId/create-linear-ticket', async (req, res) => {
     try {
@@ -418,14 +422,51 @@ export function createTodoRouter(deps: TodoRouterDeps): Router {
         return;
       }
 
-      const model: string | undefined = (settings.get('dispatch_model') ?? 'opus').trim() || undefined;
+      const github = settings.get('issue_tracker') === 'github';
+      const body = (req.body ?? {}) as { repo?: unknown; labels?: unknown };
+      const repo = (
+        typeof body.repo === 'string'
+          ? body.repo
+          : (settings.get('issue_tracker_github_repo') ?? '')
+      ).trim();
+      const labels = (
+        Array.isArray(body.labels)
+          ? body.labels
+          : (settings.get('issue_tracker_github_labels') ?? '').split(',')
+      )
+        .filter((l): l is string => typeof l === 'string')
+        .map((l) => l.trim())
+        .filter(Boolean);
+      if (github && !GITHUB_REPO_RE.test(repo)) {
+        res.status(400).json({ error: 'repo must be in owner/name form' });
+        return;
+      }
+      if (github && labels.some((l) => !GITHUB_LABEL_RE.test(l))) {
+        res.status(400).json({ error: 'labels may not contain quotes, commas, or newlines' });
+        return;
+      }
+
+      const model: string | undefined =
+        (settings.get('dispatch_model') ?? 'opus').trim() || undefined;
 
       // Canonical (non-worktree) repo clones from the todo's track, so the agent
       // can deep-dive into the code while drafting the ticket. Read-only by intent.
       const repoPaths = (tracks.findById(todo.trackId)?.repos ?? []).map((r) => r.path);
 
+      const fileSteps = github
+        ? [
+            `2. Write the body to a temp file, then create the issue with the gh CLI: \`gh issue create --repo ${repo}${labels.map((l) => ` --label "${l}"`).join('')} --title <title> --body-file <file>\`.`,
+            `3. After the issue is filed, call the workshop_report_linear_ticket MCP tool with todoId "${todo.id}", issueKey "${repo}#<number>", the issue url, the title, and the full body. This links the issue to the todo and lets Workshop show it.`,
+          ]
+        : [
+            '2. Use the /linear skill to create the ticket for team ASY with that content.',
+            `3. After the ticket is filed, call the workshop_report_linear_ticket MCP tool with todoId "${todo.id}", the resulting issueKey (e.g. "ASY-1234"), the ticket url, the title, and the full body. This links the ticket to the todo and lets Workshop show it.`,
+          ];
+
       const prompt = [
-        'Turn this Workshop todo into a Linear ticket.',
+        github
+          ? `Turn this Workshop todo into a GitHub issue in ${repo}.`
+          : 'Turn this Workshop todo into a Linear ticket.',
         '',
         `Todo title: ${todo.title}`,
         '',
@@ -441,8 +482,7 @@ export function createTodoRouter(deps: TodoRouterDeps): Router {
           : []),
         'Do the following:',
         '1. Expand the todo into a well-structured ticket body — a brief Description, concrete Implementation Details, and Acceptance Criteria — inferred from the todo above. This is not a full implementation plan; stay within the scope the todo implies and do not invent extra work.',
-        '2. Use the /linear skill to create the ticket for team ASY with that content.',
-        `3. After the ticket is filed, call the workshop_report_linear_ticket MCP tool with todoId "${todo.id}", the resulting issueKey (e.g. "ASY-1234"), the ticket url, the title, and the full body. This links the ticket to the todo and lets Workshop show it.`,
+        ...fileSteps,
       ].join('\n');
 
       // One-shot background session on a dedicated system track: no todoId → runs
@@ -455,7 +495,7 @@ export function createTodoRouter(deps: TodoRouterDeps): Router {
         initialPrompt: prompt,
         provider: 'claude',
         model,
-        name: `Linear: ${todo.title}`,
+        name: `${github ? 'GitHub' : 'Linear'}: ${todo.title}`,
         worktreeMode: false,
         additionalDirs: repoPaths,
         dangerouslySkipPermissions: true,

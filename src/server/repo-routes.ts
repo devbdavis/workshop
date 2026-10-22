@@ -305,6 +305,8 @@ export function createRepoRouter(deps: RepoRouterDeps): Router {
     res.json({
       tracker,
       orgName,
+      githubRepo: settings.get('issue_tracker_github_repo') ?? '',
+      githubLabels: settings.get('issue_tracker_github_labels') ?? '',
       linearApiKeyConfigured: !!(linearKey && linearKey.trim().length > 0),
     });
   });
@@ -312,10 +314,12 @@ export function createRepoRouter(deps: RepoRouterDeps): Router {
   // --- Update issue tracker setting ---
 
   router.put('/settings/issue-tracker', (req, res) => {
-    const { tracker, orgName, linearApiKey } = req.body as {
+    const { tracker, orgName, linearApiKey, githubRepo, githubLabels } = req.body as {
       tracker: unknown;
       orgName: unknown;
       linearApiKey: unknown;
+      githubRepo: unknown;
+      githubLabels: unknown;
     };
     if (!tracker || !['linear', 'jira', 'github', 'none'].includes(tracker as string)) {
       res.status(400).json({ error: 'tracker must be linear, jira, github, or none' });
@@ -323,6 +327,10 @@ export function createRepoRouter(deps: RepoRouterDeps): Router {
     }
     settings.set('issue_tracker', tracker as string);
     settings.set('issue_tracker_org', typeof orgName === 'string' ? orgName : '');
+    if (typeof githubRepo === 'string')
+      settings.set('issue_tracker_github_repo', githubRepo.trim());
+    if (typeof githubLabels === 'string')
+      settings.set('issue_tracker_github_labels', githubLabels.trim());
     // Empty string clears the key; undefined/null leaves it unchanged so the UI
     // can save other fields without forcing the user to re-enter the secret.
     if (typeof linearApiKey === 'string') {
@@ -332,6 +340,8 @@ export function createRepoRouter(deps: RepoRouterDeps): Router {
     res.json({
       tracker,
       orgName: typeof orgName === 'string' ? orgName : '',
+      githubRepo: settings.get('issue_tracker_github_repo') ?? '',
+      githubLabels: settings.get('issue_tracker_github_labels') ?? '',
       linearApiKeyConfigured: !!(currentKey && currentKey.trim().length > 0),
     });
   });

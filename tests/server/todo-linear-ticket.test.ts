@@ -15,6 +15,7 @@ function buildApp() {
   const trackStore = new Map<string, any>([['track-1', { id: 'track-1' }]]);
   const settingsStore = new Map<string, string>();
   let createdSessions = 0;
+  const prompts: string[] = [];
 
   const deps = {
     todos: {
@@ -38,8 +39,9 @@ function buildApp() {
       set: (k: string, v: string) => settingsStore.set(k, v),
     },
     terminal: {
-      createSession: async () => {
+      createSession: async (_t: string, opts: any) => {
         createdSessions += 1;
+        prompts.push(opts.initialPrompt);
         return { id: 'sess-1', trackId: 'sys-track', tmuxSession: 't', state: 'active' };
       },
     },
@@ -48,7 +50,7 @@ function buildApp() {
   const app = express();
   app.use(express.json());
   app.use(createTodoRouter(deps));
-  return { app, todoStore, settingsStore, sessions: () => createdSessions };
+  return { app, todoStore, settingsStore, prompts, sessions: () => createdSessions };
 }
 
 describe('create-linear-ticket round-trip', () => {
@@ -110,5 +112,42 @@ describe('create-linear-ticket round-trip', () => {
       body: JSON.stringify({ issueKey: 'ASY-9' }),
     });
     expect(res.status).toBe(400);
+  });
+
+  it('files a GitHub issue in the confirmed repo with the confirmed labels', async () => {
+    ctx.settingsStore.set('issue_tracker', 'github');
+    ctx.settingsStore.set('issue_tracker_github_repo', 'default/repo');
+    const res = await fetch(`${base}/todos/todo-1/create-linear-ticket`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ repo: 'me/other', labels: ['bug', 'good first issue'] }),
+    });
+    expect(res.status).toBe(201);
+    const prompt = ctx.prompts.at(-1)!;
+    expect(prompt).toContain(
+      'gh issue create --repo me/other --label "bug" --label "good first issue"',
+    );
+    expect(prompt).not.toContain('/linear');
+  });
+
+  it('falls back to the default repo and labels from settings', async () => {
+    ctx.settingsStore.set('issue_tracker', 'github');
+    ctx.settingsStore.set('issue_tracker_github_repo', 'default/repo');
+    ctx.settingsStore.set('issue_tracker_github_labels', 'triage, ui');
+    const res = await fetch(`${base}/todos/todo-1/create-linear-ticket`, { method: 'POST' });
+    expect(res.status).toBe(201);
+    expect(ctx.prompts.at(-1)).toContain('--repo default/repo --label "triage" --label "ui"');
+  });
+
+  it('rejects a malformed repo or a shell-unsafe label', async () => {
+    ctx.settingsStore.set('issue_tracker', 'github');
+    const post = (body: unknown) =>
+      fetch(`${base}/todos/todo-1/create-linear-ticket`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+    expect((await post({ repo: 'not a repo; rm -rf /' })).status).toBe(400);
+    expect((await post({ repo: 'me/repo', labels: ['x" && echo pwned "'] })).status).toBe(400);
   });
 });

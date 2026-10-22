@@ -12,7 +12,7 @@ interface TicketStatus {
 const TIMEOUT_MS = 4 * 60_000;
 
 /**
- * Shown while a background agent drafts and files a Linear ticket from a todo.
+ * Shown while a background agent drafts and files a Linear ticket or GitHub issue from a todo.
  * Polls the ticket-status endpoint until the agent reports back, then shows the
  * created ticket's link, title, and body.
  */
@@ -70,7 +70,7 @@ export function LinearTicketModal({ todoId, onClose }: { todoId: string; onClose
       >
         <div className="flex items-center justify-between px-5 py-3 border-b border-gray-800 shrink-0">
           <h2 className="text-sm font-semibold text-gray-200">
-            {done ? 'Linear ticket created' : 'Creating Linear ticket…'}
+            {done ? 'Ticket created' : 'Creating ticket…'}
           </h2>
           <button onClick={onClose} className="text-gray-500 hover:text-gray-300 text-lg">&times;</button>
         </div>

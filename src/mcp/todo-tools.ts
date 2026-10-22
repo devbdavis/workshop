@@ -78,11 +78,13 @@ export function registerTodoTools(server: McpServer, api: (path: string, options
 
   server.tool(
     'workshop_report_linear_ticket',
-    'Report a Linear ticket created from a todo back to Workshop, so the "Create Linear Ticket" modal can display it and the ticket links to the todo. Call this once, after the ticket has been filed in Linear.',
+    'Report a Linear ticket or GitHub issue created from a todo back to Workshop, so the ticket modal can display it and the ticket links to the todo. Call this once, after the ticket has been filed.',
     {
       todoId: z.string().describe('The Workshop todo id the ticket was created from (given in the task prompt)'),
-      issueKey: z.string().describe('The created Linear ticket key, e.g. "ASY-1402"'),
-      url: z.string().describe('The full URL of the created Linear ticket'),
+      issueKey: z
+        .string()
+        .describe('The created ticket key: Linear "ASY-1402" or GitHub "owner/repo#123"'),
+      url: z.string().describe('The full URL of the created ticket'),
       title: z.string().describe('The ticket title'),
       body: z.string().describe('The full ticket description/body in Markdown'),
     },
