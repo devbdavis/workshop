@@ -4,6 +4,7 @@ import path from 'path';
 import os from 'os';
 import type { ScheduledTaskId, TrackId, AgentId, SessionProvider } from '@foundation/types';
 import type { ScheduledTaskRepository, ScheduledTaskRunRepository } from '@domain/scheduled-task/repository';
+import type { SessionRepository } from '@domain/session/repository';
 import type { TaskScheduler } from '@application/scheduler/task-scheduler.js';
 import { scheduleConfigToCron, describeSchedule, validateScheduleConfig, getNextScheduledAfter } from '@application/scheduler/cron-utils.js';
 import type { ScheduledTask } from '@foundation/types';
@@ -66,6 +67,7 @@ function deleteScript(scriptPath: string): void {
 export interface ScheduledTaskRouterDeps {
   tasks: ScheduledTaskRepository;
   runs: ScheduledTaskRunRepository;
+  sessions: SessionRepository;
   scheduler: TaskScheduler;
   projectRoot: string;
 }
@@ -79,7 +81,7 @@ function withNextRunAt(task: ScheduledTask): ScheduledTask {
 
 export function createScheduledTaskRouter(deps: ScheduledTaskRouterDeps): Router {
   const router = Router();
-  const { tasks, runs, scheduler, projectRoot } = deps;
+  const { tasks, runs, sessions, scheduler, projectRoot } = deps;
 
   // --- Bundled schedule templates (schedules/*.json not yet in DB) ---
 
@@ -528,7 +530,13 @@ Return ONLY the JSON object, no other text or markdown.`;
   router.get('/scheduled-tasks/:id/runs', (req, res) => {
     const taskId = req.params.id as ScheduledTaskId;
     const limit = req.query.limit ? parseInt(req.query.limit as string, 10) : 50;
-    const taskRuns = runs.findByTask(taskId, limit);
+    const taskRuns = runs.findByTask(taskId, limit).map((run) => {
+      if (run.status !== 'running') return run;
+      const session = run.sessionId ? sessions.findById(run.sessionId) : null;
+      if (session && !session.deletedAt) return run;
+      // Session is gone but the SessionEnd hook never closed the run (server was down, or legacy rows).
+      return runs.complete(run.id, 'completed', undefined, session?.deletedAt) ?? run;
+    });
     res.json(taskRuns);
   });
 

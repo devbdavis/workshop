@@ -212,10 +212,8 @@ export function createScheduledTaskRunRepository(): ScheduledTaskRunRepository {
       return { id, ...data };
     },
 
-    complete(id, status, error): ScheduledTaskRun | null {
-      const now = new Date().toISOString();
-
-      const result = completeStmt.run(status, error || null, now, id);
+    complete(id, status, error, completedAt): ScheduledTaskRun | null {
+      const result = completeStmt.run(status, error || null, completedAt ?? new Date().toISOString(), id);
 
       if (result.changes === 0) return null;
 

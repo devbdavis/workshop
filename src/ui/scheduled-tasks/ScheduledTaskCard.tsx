@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import type { ScheduledTask, ScheduledTaskRun } from '@foundation/types';
 import { DiffModal } from '@ui/shared/DiffModal.js';
 
@@ -36,22 +36,32 @@ export function ScheduledTaskCard({
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [showDiff, setShowDiff] = useState(false);
 
-  async function loadRuns() {
-    if (showRuns) {
-      setShowRuns(false);
-      return;
-    }
-    setRunsLoading(true);
+  const fetchRuns = useCallback(async () => {
     try {
       const res = await fetch(`/api/scheduled-tasks/${task.id}/runs?limit=5`);
       if (res.ok) setRuns(await res.json());
     } catch {
       // ignore
-    } finally {
-      setRunsLoading(false);
-      setShowRuns(true);
     }
+  }, [task.id]);
+
+  function loadRuns() {
+    if (!showRuns) setRunsLoading(true);
+    setShowRuns(!showRuns);
   }
+
+  // The page reloads `task` on every scheduled-task:* event, so an open history follows along.
+  useEffect(() => {
+    if (showRuns) void fetchRuns().finally(() => setRunsLoading(false));
+  }, [task, showRuns, fetchRuns]);
+
+  // Poll while a run is live so its status and elapsed time keep moving.
+  const hasRunning = showRuns && runs.some((r) => r.status === 'running');
+  useEffect(() => {
+    if (!hasRunning) return;
+    const id = setInterval(() => void fetchRuns(), 5_000);
+    return () => clearInterval(id);
+  }, [hasRunning, fetchRuns]);
 
   const scheduleStatus = deriveScheduleStatus(task);
 
@@ -256,7 +266,9 @@ function RunRow({ run }: { run: ScheduledTaskRun }) {
   const [showError, setShowError] = useState(false);
   const duration = run.completedAt
     ? formatDuration(new Date(run.startedAt), new Date(run.completedAt))
-    : null;
+    : run.status === 'running'
+      ? formatDuration(new Date(run.startedAt), new Date())
+      : null;
 
   async function toggleOutput() {
     if (showOutput) {
@@ -378,6 +390,7 @@ function formatDuration(start: Date, end: Date): string {
   const seconds = Math.round((end.getTime() - start.getTime()) / 1000);
   if (seconds < 60) return `${seconds}s`;
   const mins = Math.floor(seconds / 60);
+  if (mins >= 60) return `${Math.floor(mins / 60)}h ${mins % 60}m`;
   const secs = seconds % 60;
   return secs > 0 ? `${mins}m ${secs}s` : `${mins}m`;
 }
