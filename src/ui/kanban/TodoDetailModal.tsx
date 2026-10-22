@@ -41,6 +41,12 @@ export function TodoDetailModal({ todo, tracks, onClose, onSave, onDelete, onDis
   const [showDispatch, setShowDispatch] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [ticketError, setTicketError] = useState<string | null>(null);
+  const [tracker, setTracker] = useState<{
+    tracker?: string;
+    githubRepo?: string;
+    githubLabels?: string;
+  } | null>(null);
+  const [ghConfirm, setGhConfirm] = useState<{ repo: string; labels: string } | null>(null);
 
   useEffect(() => {
     if (todo) {
@@ -56,7 +62,16 @@ export function TodoDetailModal({ todo, tracks, onClose, onSave, onDelete, onDis
       setShowDispatch(false);
       setConfirmDelete(false);
       setTicketError(null);
+      setGhConfirm(null);
     }
+  }, [todo]);
+
+  useEffect(() => {
+    if (!todo) return;
+    fetch('/api/settings/issue-tracker')
+      .then((res) => (res.ok ? res.json() : null))
+      .then(setTracker)
+      .catch(() => {});
   }, [todo]);
 
   // Load agents when dispatch might be needed
@@ -70,16 +85,19 @@ export function TodoDetailModal({ todo, tracks, onClose, onSave, onDelete, onDis
 
   useEffect(() => {
     const handleEscape = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose();
+      if (e.key === 'Escape') (ghConfirm ? setGhConfirm(null) : onClose());
     };
     window.addEventListener('keydown', handleEscape);
     return () => window.removeEventListener('keydown', handleEscape);
-  }, [onClose]);
+  }, [onClose, ghConfirm]);
 
   if (!todo) return null;
 
   const trackName = tracks.find((t) => t.id === todo.trackId)?.name || 'Unknown';
   const canDispatch = status === 'ready' || status === 'backlog';
+  // Unset means Linear (server default); Jira has no create flow; hidden until settings load.
+  const trackerKind = tracker && (tracker.tracker ?? 'linear');
+  const trackerName = trackerKind === 'github' ? 'GitHub' : trackerKind === 'linear' ? 'Linear' : undefined;
 
   function handleSave() {
     onSave(todo!.id, {
@@ -93,7 +111,7 @@ export function TodoDetailModal({ todo, tracks, onClose, onSave, onDelete, onDis
     });
   }
 
-  async function handleCreateLinearTicket() {
+  async function handleCreateTicket(github?: { repo: string; labels: string[] }) {
     setTicketError(null);
     // Persist current edits first so the drafting agent sees the latest content.
     await fetch(`/api/todos/${todo!.id}`, {
@@ -101,9 +119,14 @@ export function TodoDetailModal({ todo, tracks, onClose, onSave, onDelete, onDis
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ title, description: description || undefined, status, priority }),
     });
-    const res = await fetch(`/api/todos/${todo!.id}/create-linear-ticket`, { method: 'POST' }).catch(() => null);
+    const res = await fetch(`/api/todos/${todo!.id}/create-ticket`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(github ?? {}),
+    }).catch(() => null);
     if (!res || !res.ok) {
-      setTicketError('Could not start ticket creation. Try again.');
+      const err = (await res?.json().catch(() => null))?.error;
+      setTicketError(err ?? 'Could not start ticket creation. Try again.');
       return;
     }
     // Hand off to the parent-owned standalone modal, then close this one. The
@@ -386,15 +409,22 @@ export function TodoDetailModal({ todo, tracks, onClose, onSave, onDelete, onDis
                 )}
               </div>
             )}
-            {!issueKey && (
+            {!issueKey && trackerName && (
               <>
                 {ticketError && <span className="text-xs text-red-400 self-center">{ticketError}</span>}
                 <button
-                  onClick={handleCreateLinearTicket}
+                  onClick={() =>
+                    trackerKind === 'github'
+                      ? setGhConfirm({
+                          repo: tracker!.githubRepo ?? '',
+                          labels: tracker!.githubLabels ?? '',
+                        })
+                      : handleCreateTicket()
+                  }
                   className="px-3 py-1.5 text-xs bg-indigo-700 hover:bg-indigo-600 text-white rounded-lg transition-colors"
-                  title="Dispatch an agent to draft and file a Linear ticket from this todo"
+                  title={`Dispatch an agent to draft and file a ${trackerName} ticket from this todo`}
                 >
-                  Create Linear Ticket
+                  Create {trackerName} Ticket
                 </button>
               </>
             )}
@@ -423,6 +453,70 @@ export function TodoDetailModal({ todo, tracks, onClose, onSave, onDelete, onDis
           </div>
         </div>
       </div>
+      {ghConfirm && (
+        <div
+          className="fixed inset-0 bg-black/60 flex items-center justify-center z-[60]"
+          onClick={(e) => {
+            e.stopPropagation();
+            setGhConfirm(null);
+          }}
+        >
+          <form
+            className="bg-gray-900 border border-gray-700 rounded-xl w-[min(90vw,28rem)] p-5 space-y-4"
+            onClick={(e) => e.stopPropagation()}
+            onSubmit={(e) => {
+              e.preventDefault();
+              const { repo, labels } = ghConfirm;
+              setGhConfirm(null);
+              handleCreateTicket({
+                repo: repo.trim(),
+                labels: labels
+                  .split(',')
+                  .map((l) => l.trim())
+                  .filter(Boolean),
+              });
+            }}
+          >
+            <h3 className="text-sm font-semibold text-gray-200">Create GitHub issue</h3>
+            <label className="block">
+              <span className="block text-xs text-gray-400 mb-1.5">Repo</span>
+              <input
+                value={ghConfirm.repo}
+                onChange={(e) => setGhConfirm({ ...ghConfirm, repo: e.target.value })}
+                placeholder="owner/repo"
+                pattern="[\w.\-]+/[\w.\-]+"
+                required
+                autoFocus
+                className="w-full bg-gray-800 border border-gray-700 rounded px-3 py-1.5 text-sm text-gray-200 font-mono focus:outline-none focus:border-blue-500"
+              />
+            </label>
+            <label className="block">
+              <span className="block text-xs text-gray-400 mb-1.5">Labels (comma-separated)</span>
+              <input
+                value={ghConfirm.labels}
+                onChange={(e) => setGhConfirm({ ...ghConfirm, labels: e.target.value })}
+                placeholder="e.g. enhancement"
+                className="w-full bg-gray-800 border border-gray-700 rounded px-3 py-1.5 text-sm text-gray-200 focus:outline-none focus:border-blue-500"
+              />
+            </label>
+            <div className="flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setGhConfirm(null)}
+                className="px-3 py-1.5 text-xs bg-gray-700 hover:bg-gray-600 text-gray-200 rounded-lg transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                type="submit"
+                className="px-3 py-1.5 text-xs bg-indigo-700 hover:bg-indigo-600 text-white rounded-lg transition-colors"
+              >
+                Create Issue
+              </button>
+            </div>
+          </form>
+        </div>
+      )}
     </div>
   );
 }

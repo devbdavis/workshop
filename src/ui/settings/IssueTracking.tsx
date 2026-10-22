@@ -5,12 +5,16 @@ type IssueTracker = 'linear' | 'jira' | 'github' | 'none';
 interface TrackerConfig {
   tracker: IssueTracker;
   orgName: string;
+  githubRepo: string;
+  githubLabels: string;
   linearApiKeyConfigured: boolean;
 }
 
 interface SavePayload {
   tracker: IssueTracker;
   orgName: string;
+  githubRepo: string;
+  githubLabels: string;
   linearApiKey?: string;
 }
 
@@ -23,7 +27,13 @@ function buildPreviewUrl(tracker: IssueTracker, orgName: string): string | null 
 }
 
 export function IssueTracking() {
-  const [config, setConfig] = useState<TrackerConfig>({ tracker: 'linear', orgName: '', linearApiKeyConfigured: false });
+  const [config, setConfig] = useState<TrackerConfig>({
+    tracker: 'linear',
+    orgName: '',
+    githubRepo: '',
+    githubLabels: '',
+    linearApiKeyConfigured: false,
+  });
   const [linearApiKey, setLinearApiKey] = useState('');
   const [loading, setLoading] = useState(true);
   const [saved, setSaved] = useState(false);
@@ -36,7 +46,12 @@ export function IssueTracking() {
   }, []);
 
   async function handleSave() {
-    const payload: SavePayload = { tracker: config.tracker, orgName: config.orgName };
+    const payload: SavePayload = {
+      tracker: config.tracker,
+      orgName: config.orgName,
+      githubRepo: config.githubRepo,
+      githubLabels: config.githubLabels,
+    };
     // Only send the key when the user has typed something — lets them save
     // other fields without re-entering the secret.
     if (linearApiKey.length > 0) {
@@ -60,7 +75,13 @@ export function IssueTracking() {
     const res = await fetch('/api/settings/issue-tracker', {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ tracker: config.tracker, orgName: config.orgName, linearApiKey: '' } as SavePayload),
+      body: JSON.stringify({
+        tracker: config.tracker,
+        orgName: config.orgName,
+        githubRepo: config.githubRepo,
+        githubLabels: config.githubLabels,
+        linearApiKey: '',
+      } as SavePayload),
     });
     if (res.ok) {
       const data = (await res.json()) as TrackerConfig;
@@ -134,6 +155,39 @@ export function IssueTracking() {
                 <span className="text-blue-400 font-mono">{previewUrl}</span>
               </p>
             )}
+          </div>
+        )}
+
+        {config.tracker === 'github' && (
+          <div className="space-y-3">
+            <div>
+              <label className="block text-xs text-gray-400 mb-1.5">
+                Default repo for new issues
+              </label>
+              <input
+                type="text"
+                value={config.githubRepo}
+                onChange={(e) => setConfig((prev) => ({ ...prev, githubRepo: e.target.value }))}
+                placeholder="e.g. owner/repo"
+                className="bg-gray-800 border border-gray-700 rounded px-3 py-1.5 text-sm text-gray-200 focus:outline-none focus:border-blue-500 w-72 font-mono"
+              />
+            </div>
+            <div>
+              <label className="block text-xs text-gray-400 mb-1.5">
+                Default labels (comma-separated)
+              </label>
+              <input
+                type="text"
+                value={config.githubLabels}
+                onChange={(e) => setConfig((prev) => ({ ...prev, githubLabels: e.target.value }))}
+                placeholder="e.g. enhancement, triage"
+                className="bg-gray-800 border border-gray-700 rounded px-3 py-1.5 text-sm text-gray-200 focus:outline-none focus:border-blue-500 w-72"
+              />
+              <p className="text-[11px] text-gray-500 mt-2">
+                Prefilled when creating a GitHub issue from a todo; you confirm or change them each
+                time.
+              </p>
+            </div>
           </div>
         )}
 

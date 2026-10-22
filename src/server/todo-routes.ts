@@ -19,14 +19,18 @@ import { broadcast } from './events.js';
 /** Settings key caching the dedicated system track that hosts ticket-drafting sessions. */
 const LINEAR_TICKET_TRACK_SETTING = 'linear_ticket_track_id';
 
-/** Result of a "create Linear ticket" agent run, surfaced to the modal. */
-interface LinearTicketJob {
+/** Result of a "create ticket" agent run, surfaced to the modal. */
+interface TicketJob {
   status: 'pending' | 'done';
   issueKey?: string;
   url?: string;
   title?: string;
   body?: string;
 }
+
+// Values are interpolated into a gh command in the agent prompt, so keep them shell-inert.
+const GITHUB_REPO_RE = /^[\w.-]+\/[\w.-]+$/;
+const GITHUB_LABEL_RE = /^[^"'`$\\,\n\r]+$/;
 
 export interface TodoRouterDeps {
   todos: TodoRepository;
@@ -72,12 +76,12 @@ export function createTodoRouter(deps: TodoRouterDeps): Router {
     prMonitorRegistrar,
   } = deps;
 
-  // Ephemeral results of "create Linear ticket" runs, keyed by todoId. In-memory
+  // Ephemeral results of "create ticket" runs, keyed by todoId. In-memory
   // on purpose — a transient aid for the modal, fine to lose on server restart.
-  const linearTicketJobs = new Map<string, LinearTicketJob>();
+  const ticketJobs = new Map<string, TicketJob>();
 
   /** The dedicated system track that hosts ticket-drafting sessions (lazily created, id cached in settings). */
-  function ensureLinearTicketTrack(): TrackId {
+  function ensureTicketTrack(): TrackId {
     const cached = settings.get(LINEAR_TICKET_TRACK_SETTING);
     if (cached && tracks.findById(cached as TrackId)) return cached as TrackId;
     const track = tracks.create({
@@ -408,9 +412,9 @@ export function createTodoRouter(deps: TodoRouterDeps): Router {
     }
   });
 
-  // --- Create a Linear ticket from a todo (one-shot background agent) ---
+  // --- Create a Linear ticket or GitHub issue from a todo (one-shot background agent) ---
 
-  router.post('/todos/:todoId/create-linear-ticket', async (req, res) => {
+  router.post('/todos/:todoId/create-ticket', async (req, res) => {
     try {
       const todo = todos.findById(req.params.todoId as TodoId);
       if (!todo) {
@@ -418,14 +422,51 @@ export function createTodoRouter(deps: TodoRouterDeps): Router {
         return;
       }
 
-      const model: string | undefined = (settings.get('dispatch_model') ?? 'opus').trim() || undefined;
+      const github = settings.get('issue_tracker') === 'github';
+      const body = (req.body ?? {}) as { repo?: unknown; labels?: unknown };
+      const repo = (
+        typeof body.repo === 'string'
+          ? body.repo
+          : (settings.get('issue_tracker_github_repo') ?? '')
+      ).trim();
+      const labels = (
+        Array.isArray(body.labels)
+          ? body.labels
+          : (settings.get('issue_tracker_github_labels') ?? '').split(',')
+      )
+        .filter((l): l is string => typeof l === 'string')
+        .map((l) => l.trim())
+        .filter(Boolean);
+      if (github && !GITHUB_REPO_RE.test(repo)) {
+        res.status(400).json({ error: 'repo must be in owner/name form' });
+        return;
+      }
+      if (github && labels.some((l) => !GITHUB_LABEL_RE.test(l))) {
+        res.status(400).json({ error: 'labels may not contain quotes, commas, or newlines' });
+        return;
+      }
+
+      const model: string | undefined =
+        (settings.get('dispatch_model') ?? 'opus').trim() || undefined;
 
       // Canonical (non-worktree) repo clones from the todo's track, so the agent
       // can deep-dive into the code while drafting the ticket. Read-only by intent.
       const repoPaths = (tracks.findById(todo.trackId)?.repos ?? []).map((r) => r.path);
 
+      const fileSteps = github
+        ? [
+            `2. Write the body to a temp file, then create the issue with the gh CLI: \`gh issue create --repo ${repo}${labels.map((l) => ` --label "${l}"`).join('')} --title <title> --body-file <file>\`.`,
+            `3. After the issue is filed, call the workshop_report_ticket MCP tool with todoId "${todo.id}", issueKey "${repo}#<number>", the issue url, the title, and the full body. This links the issue to the todo and lets Workshop show it.`,
+          ]
+        : [
+            '2. Use the /linear skill to create the ticket for team ASY with that content.',
+            `3. After the ticket is filed, call the workshop_report_ticket MCP tool with todoId "${todo.id}", the resulting issueKey (e.g. "ASY-1234"), the ticket url, the title, and the full body. This links the ticket to the todo and lets Workshop show it.`,
+          ];
+
       const prompt = [
-        'Turn this Workshop todo into a Linear ticket.',
+        github
+          ? `Turn this Workshop todo into a GitHub issue in ${repo}.`
+          : 'Turn this Workshop todo into a Linear ticket.',
         '',
         `Todo title: ${todo.title}`,
         '',
@@ -441,21 +482,20 @@ export function createTodoRouter(deps: TodoRouterDeps): Router {
           : []),
         'Do the following:',
         '1. Expand the todo into a well-structured ticket body — a brief Description, concrete Implementation Details, and Acceptance Criteria — inferred from the todo above. This is not a full implementation plan; stay within the scope the todo implies and do not invent extra work.',
-        '2. Use the /linear skill to create the ticket for team ASY with that content.',
-        `3. After the ticket is filed, call the workshop_report_linear_ticket MCP tool with todoId "${todo.id}", the resulting issueKey (e.g. "ASY-1234"), the ticket url, the title, and the full body. This links the ticket to the todo and lets Workshop show it.`,
+        ...fileSteps,
       ].join('\n');
 
       // One-shot background session on a dedicated system track: no todoId → runs
       // with --print and auto-exits (mirrors the PR-review analyze dispatch).
       // Claude-only because /linear is a Claude skill. Does NOT change the todo's status.
-      const trackId = ensureLinearTicketTrack();
-      linearTicketJobs.set(todo.id, { status: 'pending' });
+      const trackId = ensureTicketTrack();
+      ticketJobs.set(todo.id, { status: 'pending' });
       const session = await terminal.createSession(trackId, {
         background: true,
         initialPrompt: prompt,
         provider: 'claude',
         model,
-        name: `Linear: ${todo.title}`,
+        name: `${github ? 'GitHub' : 'Linear'}: ${todo.title}`,
         worktreeMode: false,
         additionalDirs: repoPaths,
         dangerouslySkipPermissions: true,
@@ -465,20 +505,20 @@ export function createTodoRouter(deps: TodoRouterDeps): Router {
       broadcast('session:created', trackId, { sessionId: session.id });
       res.status(201).json({ session });
     } catch (err) {
-      console.error('Failed to create Linear ticket from todo:', err);
-      res.status(500).json({ error: 'Failed to dispatch Linear ticket session' });
+      console.error('Failed to create ticket from todo:', err);
+      res.status(500).json({ error: 'Failed to dispatch ticket session' });
     }
   });
 
-  // --- Poll the result of a "create Linear ticket" run (drives the modal) ---
+  // --- Poll the result of a "create ticket" run (drives the modal) ---
 
-  router.get('/todos/:todoId/linear-ticket-status', (req, res) => {
-    res.json(linearTicketJobs.get(req.params.todoId) ?? { status: 'pending' });
+  router.get('/todos/:todoId/ticket-status', (req, res) => {
+    res.json(ticketJobs.get(req.params.todoId) ?? { status: 'pending' });
   });
 
-  // --- Ticket result arrives here (via the workshop_report_linear_ticket MCP tool) ---
+  // --- Ticket result arrives here (via the workshop_report_ticket MCP tool) ---
 
-  router.post('/todos/report-linear-ticket', (req, res) => {
+  router.post('/todos/report-ticket', (req, res) => {
     const { todoId, issueKey, url, title, body } = (req.body ?? {}) as Record<string, unknown>;
     if (typeof todoId !== 'string') {
       res.status(400).json({ error: 'todoId is required' });
@@ -490,7 +530,7 @@ export function createTodoRouter(deps: TodoRouterDeps): Router {
       return;
     }
     const key = typeof issueKey === 'string' && issueKey.trim() ? issueKey.trim() : undefined;
-    linearTicketJobs.set(todoId, {
+    ticketJobs.set(todoId, {
       status: 'done',
       issueKey: key,
       url: typeof url === 'string' ? url : undefined,

@@ -44,6 +44,7 @@ function Parent() {
 }
 
 let container: HTMLDivElement;
+let trackerSettings: Record<string, string> = {};
 let root: Root;
 
 beforeEach(() => {
@@ -51,10 +52,13 @@ beforeEach(() => {
   container = document.createElement('div');
   document.body.appendChild(container);
   root = createRoot(container);
+  trackerSettings = {};
   global.fetch = vi.fn(async (url: any) => {
     const u = String(url);
+    if (u.includes('/settings/issue-tracker'))
+      return { ok: true, json: async () => trackerSettings } as any;
     if (u.includes('/api/agents')) return { ok: true, json: async () => [] } as any;
-    if (u.includes('/linear-ticket-status')) return { ok: true, json: async () => ({ status: 'pending' }) } as any;
+    if (u.includes('/ticket-status')) return { ok: true, json: async () => ({ status: 'pending' }) } as any;
     return { ok: true, json: async () => ({}) } as any;
   }) as any;
 });
@@ -84,6 +88,41 @@ describe('Create Linear Ticket flow', () => {
 
     // The todo modal is gone, but the loading modal (a sibling, not a child) lives on.
     expect(container.textContent, 'todo modal should close').not.toContain('Edit Todo');
-    expect(container.textContent, 'loading modal should appear').toContain('Creating Linear ticket');
+    expect(container.textContent, 'loading modal should appear').toContain('Creating ticket');
+  });
+
+  it('asks to confirm repo/labels prefilled from settings when the tracker is GitHub', async () => {
+    trackerSettings = { tracker: 'github', githubRepo: 'me/repo', githubLabels: 'bug' };
+    root.render(<Parent />);
+    for (let i = 0; i < 5; i++) await tick();
+
+    const btn = [...container.querySelectorAll('button')].find(
+      (b) => b.textContent?.trim() === 'Create GitHub Ticket',
+    );
+    expect(btn, 'Create GitHub Ticket button should render').toBeTruthy();
+    btn!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    for (let i = 0; i < 3; i++) await tick();
+
+    const inputs = [...container.querySelectorAll('form input')] as HTMLInputElement[];
+    expect(inputs.map((i) => i.value)).toEqual(['me/repo', 'bug']);
+
+    // Escape dismisses only the confirm dialog, not the todo modal.
+    window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }));
+    for (let i = 0; i < 3; i++) await tick();
+    expect(container.querySelector('form')).toBeNull();
+    expect(container.textContent).toContain('Edit Todo');
+    btn!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    for (let i = 0; i < 3; i++) await tick();
+
+    container
+      .querySelector('form')!
+      .dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
+    for (let i = 0; i < 10; i++) await tick();
+
+    const call = (global.fetch as any).mock.calls.find((c: any[]) =>
+      String(c[0]).includes('/create-ticket'),
+    );
+    expect(JSON.parse(call[1].body)).toEqual({ repo: 'me/repo', labels: ['bug'] });
+    expect(container.textContent).toContain('Creating ticket');
   });
 });
