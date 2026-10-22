@@ -56,7 +56,7 @@ export function PrAttentionPanel({ todo, monitor, sessionActive, onRefresh }: Pr
         const data = await res.json().catch(() => ({}));
         throw new Error(typeof data.error === 'string' ? data.error : `HTTP ${res.status}`);
       }
-      setSuccess('Monitoring resumed. Fresh state fetched from GitHub.');
+      setSuccess('Monitoring resumed.');
       onRefresh();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to resume monitoring');
@@ -237,29 +237,18 @@ export function PrAttentionPanel({ todo, monitor, sessionActive, onRefresh }: Pr
       )}
 
       {isStalePaused && (
-        <div className="rounded border border-gray-700 bg-gray-900/60 p-2 space-y-2">
-          <p className="text-xs text-gray-400">
-            Monitoring paused — no push observed in the last hour and no outstanding CI failures or unresolved comments.
-            Resume if you're expecting late review feedback.
-          </p>
-          <button
-            onClick={resumeMonitoring}
-            disabled={dispatching !== null}
-            className="w-full text-xs px-2 py-1.5 rounded bg-blue-700/80 hover:bg-blue-700 disabled:opacity-50 text-blue-50 font-medium transition-colors"
-          >
-            {dispatching === 'resume' ? 'Resuming…' : 'Resume monitoring'}
-          </button>
-        </div>
+        <button
+          onClick={resumeMonitoring}
+          disabled={dispatching !== null}
+          title="Paused: no push in the last hour, no CI failures or unresolved comments"
+          className="text-[11px] text-blue-400 hover:text-blue-300 disabled:opacity-50 transition-colors"
+        >
+          {dispatching === 'resume' ? 'Resuming…' : 'Resume monitoring'}
+        </button>
       )}
-      {!needsAttention && !isFinished && !isStalePaused && (
-        <p className="text-xs text-gray-500 italic">
-          Waiting on CI checks. Last polled{' '}
-          {monitor.lastPolledAt ? new Date(monitor.lastPolledAt).toLocaleTimeString() : 'never'}.
-        </p>
-      )}
-      {isFinished && (
-        <p className="text-xs text-gray-500 italic">
-          PR is {monitor.state}. Monitoring stopped.
+      {!needsAttention && !isFinished && !isStalePaused && monitor.lastPolledAt && (
+        <p className="text-[11px] text-gray-500">
+          Polled {new Date(monitor.lastPolledAt).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}
         </p>
       )}
 

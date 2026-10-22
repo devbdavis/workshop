@@ -219,13 +219,6 @@ function SessionCard({
                   ✓ Mark Done
                 </button>
               ))}
-
-            <button
-              onClick={() => onOpenTodo(todo)}
-              className="w-full text-xs text-center text-gray-500 hover:text-gray-300 py-1.5 border border-gray-700 hover:border-gray-600 rounded transition-colors"
-            >
-              Open Todo →
-            </button>
           </div>
         </div>
       ) : (
