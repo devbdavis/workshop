@@ -66,3 +66,37 @@ describe('PUT /scheduled-tasks/:id templateName', () => {
     expect(task.templateName).toBeUndefined();
   });
 });
+
+describe('GET /scheduled-tasks/:id/runs', () => {
+  it('closes running runs whose session is gone, keeps live ones', async () => {
+    const rows = [
+      { id: 'live', taskId: 't1', sessionId: 's-live', status: 'running', startedAt: 'a' },
+      { id: 'dead', taskId: 't1', sessionId: 's-dead', status: 'running', startedAt: 'a' },
+      { id: 'legacy', taskId: 't1', status: 'running', startedAt: 'a' },
+    ];
+    const completed: [string, string | undefined][] = [];
+    const deps = {
+      tasks: {},
+      runs: {
+        findByTask: () => rows,
+        complete: (id: string, status: string, _e: unknown, at?: string) => {
+          completed.push([id, at]);
+          return { ...rows.find((r) => r.id === id), status, completedAt: at };
+        },
+      },
+      sessions: {
+        findById: (id: string) =>
+          id === 's-live' ? { id } : id === 's-dead' ? { id, deletedAt: 'gone-at' } : null,
+      },
+      scheduler: {},
+      projectRoot: tmpdir(),
+    } as unknown as ScheduledTaskRouterDeps;
+    const app = express().use(createScheduledTaskRouter(deps));
+    const server = await new Promise<Server>((r) => { const s = app.listen(0, () => r(s)); });
+    const port = (server.address() as { port: number }).port;
+    const body = await (await fetch(`http://127.0.0.1:${port}/scheduled-tasks/t1/runs`)).json();
+    server.close();
+    expect(body.map((r: { status: string }) => r.status)).toEqual(['running', 'completed', 'completed']);
+    expect(completed).toEqual([['dead', 'gone-at'], ['legacy', undefined]]);
+  });
+});

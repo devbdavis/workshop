@@ -373,6 +373,7 @@ export function createApiRouter(deps: ApiRouterDeps = {}): Router {
   const scheduledTaskRouter = createScheduledTaskRouter({
     tasks: scheduledTasks,
     runs: scheduledTaskRuns,
+    sessions,
     scheduler: taskScheduler,
     projectRoot,
   });
