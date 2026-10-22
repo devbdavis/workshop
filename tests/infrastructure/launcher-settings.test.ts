@@ -4,7 +4,7 @@ import path from 'path';
 import fs from 'fs';
 import os from 'os';
 
-import { writeHookSettings, buildClaudeLauncher, buildCodexLauncher } from '@infrastructure/terminal/launcher-builders';
+import { writeHookSettings, buildClaudeLauncher, buildCodexLauncher, buildGeminiLauncher } from '@infrastructure/terminal/launcher-builders';
 
 const testDir = path.join(os.tmpdir(), `workshop-test-launcher-${randomUUID()}`);
 
@@ -56,6 +56,20 @@ describe('writeHookSettings', () => {
       .hooks as Record<string, unknown>;
     expect(hooks.Stop).toBeUndefined();
     expect(hooks.SessionEnd).toBeDefined();
+  });
+
+  it('installs PermissionDenied and a catch-all PreToolUse hook, even for --print runs', () => {
+    for (const skipActivityHooks of [false, true]) {
+      const hooks = readSettings(writeHookSettings(testDir, 'session-perm', { skipActivityHooks }))
+        .hooks as Record<string, { matcher?: string; hooks: { command: string; timeout: number }[] }[]>;
+      const denied = hooks.PermissionDenied[0];
+      expect(denied.hooks[0].command).toMatch(/WORKSHOP_SESSION_ID=session-perm .*permission-hook\.mjs"? claude-denied$/);
+      expect(denied.hooks[0].timeout).toBe(600);
+      const pre = hooks.PreToolUse.at(-1)!;
+      expect(pre.matcher).toBeUndefined();
+      expect(pre.hooks[0].command).toMatch(/permission-hook\.mjs"? claude-pretool$/);
+      expect(pre.hooks[0].timeout).toBe(5);
+    }
   });
 
   it('writes the enabledPlugins map with explicit true and false entries', () => {
@@ -135,5 +149,29 @@ describe('buildCodexLauncher activity hooks', () => {
     const lines: string[] = [];
     buildCodexLauncher(lines, 'sess-y', testDir, '/tmp/cwd', { background: true, initialPrompt: 'hi' });
     expect(lines.join('\n')).not.toContain('hooks.');
+  });
+});
+
+describe('permission hooks for codex and gemini', () => {
+  it('runs both the activity hook and permission-hook for Codex PermissionRequest', () => {
+    const lines: string[] = [];
+    buildCodexLauncher(lines, 'sess-x', testDir, '/tmp/cwd');
+    const arg = lines[1].match(/'hooks\.PermissionRequest=[^']*(?:'\\''[^']*)*'/)![0];
+    expect(arg).toContain('session-activity-hook.sh needs-input');
+    expect(arg).toMatch(/permission-hook\.mjs\\" codex-request.*timeout=600/);
+  });
+
+  it('writes a Gemini BeforeTool settings file and exports its path', () => {
+    fs.mkdirSync(testDir, { recursive: true });
+    const lines: string[] = [];
+    buildGeminiLauncher(lines, 'sess-g', testDir, '/tmp/cwd');
+    const file = path.join(testDir, 'gemini-settings.json');
+    const cfg = JSON.parse(fs.readFileSync(file, 'utf-8'));
+    expect(cfg.hooks.BeforeTool[0].matcher).toBe('.*');
+    expect(cfg.hooks.BeforeTool[0].hooks[0]).toMatchObject({ type: 'command', timeout: 5000 });
+    expect(cfg.hooks.BeforeTool[0].hooks[0].command).toMatch(/permission-hook\.mjs"? gemini-before-tool$/);
+    const script = lines.join('\n');
+    expect(script).toContain(`export GEMINI_CLI_SYSTEM_SETTINGS_PATH=${JSON.stringify(file)}`);
+    expect(script).toContain('WORKSHOP_SESSION_ID=sess-g');
   });
 });

@@ -9,6 +9,7 @@ import { Repositories } from './Repositories';
 import { AgentsSettings } from './AgentsSettings';
 import { SkillsSettings } from './SkillsSettings';
 import { IssueTracking } from './IssueTracking';
+import { PermissionSettings } from './PermissionSettings';
 import { DefaultAiCliSettings } from './DefaultAiCliSettings';
 import { DispatchModelSettings } from './DispatchModelSettings';
 import { PrReviewSettings } from './PrReviewSettings';
@@ -153,6 +154,9 @@ export function Settings() {
         <div className="space-y-6">
           <section className="bg-gray-900 border border-gray-800 rounded-lg p-6">
             <IssueTracking />
+          </section>
+          <section className="bg-gray-900 border border-gray-800 rounded-lg p-6">
+            <PermissionSettings />
           </section>
         </div>
       )}
