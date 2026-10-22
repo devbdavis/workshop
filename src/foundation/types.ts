@@ -699,7 +699,7 @@ export type PrReviewFindingId = string & { readonly __brand: 'PrReviewFindingId'
  *  `needs_rereview` when the author pushes past the analyzed head SHA. */
 export type PrReviewState = 'incoming' | 'analyzing' | 'ready' | 'submitted' | 'needs_rereview' | 'dismissed' | 'removed';
 export type PrReviewVerdict = 'approve' | 'request_changes' | 'comment';
-export type PrReviewDiscoveredVia = 'poll' | 'manual';
+export type PrReviewDiscoveredVia = 'poll' | 'manual' | 'team';
 
 /** A PR the user has been asked to review (or added by hand). */
 export interface PrReview {

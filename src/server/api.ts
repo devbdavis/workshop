@@ -260,6 +260,7 @@ export function createApiRouter(deps: ApiRouterDeps = {}): Router {
   // One adapter fronting both GitHub (`gh`) and Gitea/Forgejo (`tea` logins).
   const forgeAdapter = createForgeAdapter({
     getIgnoredCommentAuthors: () => parsePrMonitorIgnoredAuthors(settingsRepo.get('pr_monitor_ignored_authors')),
+    getReviewTeam: () => settingsRepo.get('pr_review_team') || undefined,
   });
   const prRegistrar = createPrMonitorRegistrar(prMonitors);
   const prPoller = createPrMonitorPoller({

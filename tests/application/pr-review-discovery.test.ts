@@ -235,4 +235,35 @@ describe('PR review discovery poller', () => {
     expect(fetchPrSnapshot).toHaveBeenCalledTimes(1);
     expect(fetchPrSnapshot).toHaveBeenCalledWith(submittedReview.prUrl);
   });
+
+  it('registers team requests as team rows, keeps them through a failed team pass, and prunes once a teammate engages', async () => {
+    const reviews = createPrReviewRepository();
+    const passes: { prs: DiscoveredPr[]; teamPrs?: DiscoveredPr[] }[] = [
+      { prs: [discovered(1)], teamPrs: [discovered(1), discovered(2)] }, // #1 asked of you AND your team
+      { prs: [discovered(1)], teamPrs: undefined }, // team search failed
+      { prs: [discovered(1)], teamPrs: [] }, // a teammate reviewed #2
+      { prs: [discovered(1)], teamPrs: [discovered(3)] },
+      { prs: [discovered(1), discovered(3)], teamPrs: [] }, // now asked of you directly
+    ];
+    const poller = createPrReviewDiscoveryPoller({
+      reviews,
+      forge: {
+        discoverReviewRequests: async () => ({ ...passes.shift()!, hosts: ['github.com'] }),
+        fetchPrSnapshot: async () => ({}),
+      },
+      broadcast: vi.fn(),
+    });
+
+    expect(await poller.pollNow()).toBe(2);
+    const via = () => Object.fromEntries(reviews.findAll().map((r) => [r.prNumber, r.discoveredVia]));
+    expect(via()).toEqual({ 1: 'poll', 2: 'team' });
+    await poller.pollNow();
+    expect(via()).toEqual({ 1: 'poll', 2: 'team' });
+    await poller.pollNow();
+    expect(via()).toEqual({ 1: 'poll' });
+    await poller.pollNow();
+    expect(via()).toEqual({ 1: 'poll', 3: 'team' });
+    await poller.pollNow();
+    expect(via()).toEqual({ 1: 'poll', 3: 'poll' });
+  });
 });

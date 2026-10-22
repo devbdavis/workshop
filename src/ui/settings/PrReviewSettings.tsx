@@ -4,10 +4,11 @@ import { useAvailableClis } from '../hooks/useAvailableClis';
 interface PrReviewSettingsData {
   provider: string;
   model: string;
+  team: string;
 }
 
 export function PrReviewSettings() {
-  const [data, setData] = useState<PrReviewSettingsData>({ provider: '', model: '' });
+  const [data, setData] = useState<PrReviewSettingsData>({ provider: '', model: '', team: '' });
   const [loading, setLoading] = useState(true);
   const [saved, setSaved] = useState(false);
   const { clis } = useAvailableClis();
@@ -82,6 +83,20 @@ export function PrReviewSettings() {
       <p className="text-[11px] text-gray-600 mt-2">
         Passed to the claude CLI as <code>--model</code> (e.g. "opus", "sonnet", or a full model id). Leave empty for the CLI's default.
       </p>
+      <div className="mt-4">
+        <label className="block text-xs text-gray-400 mb-1.5">Review team (GitHub)</label>
+        <input
+          value={data.team}
+          onChange={(e) => setData((d) => ({ ...d, team: e.target.value }))}
+          onBlur={(e) => save({ team: e.target.value })}
+          placeholder="grafana/syseng"
+          className="bg-gray-800 border border-gray-700 rounded px-3 py-1.5 text-sm text-gray-200 placeholder-gray-600 focus:outline-none focus:border-blue-500 w-52"
+        />
+        <p className="text-[11px] text-gray-600 mt-2">
+          PRs requesting this team show up on the dashboard while no teammate has reviewed or commented. Needs the
+          <code> read:org</code> gh scope.
+        </p>
+      </div>
     </div>
   );
 }

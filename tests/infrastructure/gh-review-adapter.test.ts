@@ -42,6 +42,37 @@ describe('GhReviewAdapter', () => {
     });
   });
 
+  it('keeps only team-requested PRs no teammate other than the author has reviewed or commented on', async () => {
+    const pr = (n: number, author: string) => ({
+      url: `https://github.com/acme/widgets/pull/${n}`,
+      author: { login: author },
+      repository: { nameWithOwner: 'acme/widgets' },
+      number: n,
+    });
+    const activity: Record<string, object> = {
+      // Only the author (a teammate) has commented — still unanswered.
+      'https://github.com/acme/widgets/pull/1': { reviews: [], comments: [{ author: { login: 'Bob' } }] },
+      // A teammate reviewed.
+      'https://github.com/acme/widgets/pull/2': { reviews: [{ author: { login: 'carol' } }], comments: [] },
+      // Only an outsider commented.
+      'https://github.com/acme/widgets/pull/3': { reviews: [], comments: [{ author: { login: 'mallory' } }] },
+    };
+    const calls: string[][] = [];
+    const adapter = createGhReviewAdapter({
+      exec: async (_binary, args) => {
+        calls.push(args);
+        if (args[0] === 'search') return { stdout: JSON.stringify([pr(1, 'bob'), pr(2, 'dave'), pr(3, 'dave')]), stderr: '' };
+        if (args[0] === 'api') return { stdout: 'bob\ncarol\n', stderr: '' };
+        return { stdout: JSON.stringify(activity[args[2]]), stderr: '' };
+      },
+    });
+
+    const prs = await adapter.searchUnansweredTeamRequests('acme/syseng');
+    expect(prs.map((p) => p.number)).toEqual([1, 3]);
+    expect(calls.find((a) => a[0] === 'search')).toContain('team-review-requested:acme/syseng');
+    expect(calls.find((a) => a[0] === 'api')?.[1]).toBe('orgs/acme/teams/syseng/members?per_page=100');
+  });
+
   it('submits a review with the GitHub API payload shape on stdin', async () => {
     let capturedArgs: string[] = [];
     let capturedStdin = '';

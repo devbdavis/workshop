@@ -44,6 +44,8 @@ export interface GhReviewSubmission {
 export interface GhReviewAdapter {
   /** Open PRs across GitHub where the authed user's review is requested. */
   searchReviewRequestedPrs(): Promise<DiscoveredPr[]>;
+  /** Open PRs requesting `org/team` that no team member (other than the author) has reviewed or commented on. */
+  searchUnansweredTeamRequests(team: string): Promise<DiscoveredPr[]>;
   /** Raw unified diff of the PR (`gh pr diff`). */
   fetchPrDiff(prUrl: string): Promise<string>;
   /** Posts ONE review (body + verdict + inline comments) via the forge's reviews API. */
@@ -210,39 +212,67 @@ export function createGhReviewAdapter(opts: CreateGhReviewAdapterOptions = {}): 
     }
   }
 
+  async function searchPrs(query: string, limit: number): Promise<DiscoveredPr[]> {
+    const { stdout } = await exec(ghBinary, [
+      'search',
+      'prs',
+      query,
+      '--state=open',
+      '--limit',
+      String(limit),
+      '--json',
+      'url,title,author,repository,number,body,updatedAt',
+    ]);
+    const out: DiscoveredPr[] = [];
+    for (const node of JSON.parse(stdout) as GhSearchPrNode[]) {
+      if (!node.url || !node.number) continue;
+      const nameWithOwner = node.repository?.nameWithOwner ?? '';
+      const [owner, name] = nameWithOwner.includes('/') ? nameWithOwner.split('/') : ['', node.repository?.name ?? ''];
+      out.push({
+        url: node.url,
+        title: node.title ?? '',
+        author: node.author?.login ?? 'unknown',
+        repoOwner: owner,
+        repoName: name,
+        number: node.number,
+        body: clampPrBody(node.body),
+        updatedAt: node.updatedAt,
+      });
+    }
+    return out;
+  }
+
   return {
     async searchReviewRequestedPrs(): Promise<DiscoveredPr[]> {
       // user-review-requested (raw search qualifier — gh has no flag for it) matches
       // only PRs where the user is EXPLICITLY requested; --review-requested would
       // also match requests aimed at teams the user belongs to.
-      const { stdout } = await exec(ghBinary, [
-        'search',
-        'prs',
-        'user-review-requested:@me',
-        '--state=open',
-        '--limit',
-        '100',
-        '--json',
-        'url,title,author,repository,number,body,updatedAt',
+      return searchPrs('user-review-requested:@me', 100);
+    },
+
+    async searchUnansweredTeamRequests(team: string): Promise<DiscoveredPr[]> {
+      const [org, slug] = team.split('/');
+      const [prs, { stdout: members }] = await Promise.all([
+        searchPrs(`team-review-requested:${team}`, 50),
+        exec(ghBinary, ['api', `orgs/${org}/teams/${slug}/members?per_page=100`, '--paginate', '--jq', '.[].login']),
       ]);
-      const nodes = JSON.parse(stdout) as GhSearchPrNode[];
-      const out: DiscoveredPr[] = [];
-      for (const node of nodes) {
-        if (!node.url || !node.number) continue;
-        const nameWithOwner = node.repository?.nameWithOwner ?? '';
-        const [owner, name] = nameWithOwner.includes('/') ? nameWithOwner.split('/') : ['', node.repository?.name ?? ''];
-        out.push({
-          url: node.url,
-          title: node.title ?? '',
-          author: node.author?.login ?? 'unknown',
-          repoOwner: owner,
-          repoName: name,
-          number: node.number,
-          body: clampPrBody(node.body),
-          updatedAt: node.updatedAt,
-        });
-      }
-      return out;
+      const teamLogins = new Set(members.split('\n').map((l) => l.trim().toLowerCase()).filter(Boolean));
+      // ponytail: one `gh pr view` per team-requested PR per poll; fold into one GraphQL query if the list grows large.
+      const engaged = await Promise.all(
+        prs.map(async (pr) => {
+          // One unreadable PR must not sink the pass; showing it beats silently pruning it.
+          const stdout = await exec(ghBinary, ['pr', 'view', pr.url, '--json', 'reviews,comments']).then((r) => r.stdout, () => '{}');
+          const { reviews = [], comments = [] } = JSON.parse(stdout) as {
+            reviews?: { author?: { login?: string } }[];
+            comments?: { author?: { login?: string } }[];
+          };
+          return [...reviews, ...comments].some((c) => {
+            const login = c.author?.login?.toLowerCase();
+            return !!login && login !== pr.author.toLowerCase() && teamLogins.has(login);
+          });
+        }),
+      );
+      return prs.filter((_, i) => !engaged[i]);
     },
 
     async fetchPrDiff(prUrl: string): Promise<string> {
