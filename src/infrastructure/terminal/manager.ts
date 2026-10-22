@@ -78,6 +78,10 @@ const NIX_DEVSHELL_VARS = [
   'DIRENV_FILE',
   'DIRENV_DIFF',
   'DIRENV_WATCHES',
+  // Workshop's own server config (set by the launchd plist) — leaked into sessions, `npm run dev` binds prod's port and DB
+  'NODE_ENV',
+  'PORT',
+  'WORKSHOP_DB_PATH',
 ] as const;
 
 /** tmux `-e VAR=` flags that clear nix devshell contamination for new sessions.
