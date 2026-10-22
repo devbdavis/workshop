@@ -21,7 +21,6 @@
     "format:check": "prettier --check \"src/**/*.{ts,tsx}\" \"tests/**/*.ts\"",
     "typecheck": "tsc --noEmit -p tsconfig.json && tsc --noEmit -p tsconfig.server.json",
     "start": "NODE_ENV=production tsx src/server/index.ts",
-    "sidecar": "cd docker/playwright && npm install --no-fund --no-audit && npx playwright install chromium && WORKSHOP_PREVIEW_URL=${WORKSHOP_PREVIEW_URL:-http://localhost:3102} node server.mjs",
     "postinstall": "node scripts/fix-node-pty-permissions.cjs"
   },
   "dependencies": {

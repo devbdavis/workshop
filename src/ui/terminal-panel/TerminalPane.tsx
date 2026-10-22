@@ -120,7 +120,7 @@ export function TerminalPane({ trackId, session, todos, onDestroy, onRename, def
               <span>&gt;_</span>
             </button>
           )}
-          <WorkspaceButtons sessionId={session.id} editorPath={editorPath}>
+          <WorkspaceButtons sessionId={session.id} editorPath={editorPath} todoId={linkedTodo?.id} pullRequests={linkedTodo?.pullRequests}>
             {!(launchApps?.resolvedTerminal && !editor.uriPrefix) && terminalPath && <InAppShellButton cwd={terminalPath} />}
           </WorkspaceButtons>
           <button

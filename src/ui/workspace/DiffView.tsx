@@ -30,7 +30,7 @@ function statusBadge(status: string): { label: string; className: string } {
 }
 
 /** Colors one diff line by its leading marker. */
-function diffLineClassName(line: string): string {
+export function diffLineClassName(line: string): string {
   if (line.startsWith('+++') || line.startsWith('---')) return 'text-gray-500';
   if (line.startsWith('@@')) return 'text-blue-400';
   if (line.startsWith('+')) return 'text-green-300 bg-green-950/30';

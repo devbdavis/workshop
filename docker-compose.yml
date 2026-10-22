@@ -12,9 +12,6 @@
 #   CLAUDE_CONFIG_DIR=/mnt/user/appdata/workshop/claude
 #   PUID=99
 #   PGID=100
-#
-# Design Mode element screenshots need a second container. Enable it with
-# COMPOSE_PROFILES=design-mode in .env; Workshop detects it automatically.
 services:
   workshop:
     build: .
@@ -23,7 +20,6 @@ services:
     restart: unless-stopped
     ports:
       - "3002:3002"
-      - "3102:3102"
     environment:
       PORT: "3002"
       NODE_ENV: production
@@ -31,8 +27,6 @@ services:
       PUID: "${PUID:-99}"
       PGID: "${PGID:-100}"
       WORKSHOP_VAULT_ROOT: /config/.workshop/vault
-      WORKSHOP_PREVIEW_PORT: "3102"
-      WORKSHOP_SCREENSHOT_URL: "${WORKSHOP_SCREENSHOT_URL:-http://playwright:3100}"
     volumes:
       # Persistent Workshop state (SQLite db, auth-token, sessions, vault, sprites)
       - workshop-state:/config
@@ -40,19 +34,6 @@ services:
       - ${CLAUDE_CONFIG_DIR:-${HOME}/.claude}:/config/.claude
       # Git repos Workshop operates on — reference them as /repos/<name> in the UI
       - ${REPOS_DIR:-./repos}:/repos
-
-  # Design Mode screenshot sidecar — optional. Enable with
-  # COMPOSE_PROFILES=design-mode in .env (see above).
-  playwright:
-    profiles: ["design-mode"]
-    build: ./docker/playwright
-    image: workshop-playwright:latest
-    container_name: workshop-playwright
-    restart: unless-stopped
-    init: true
-    shm_size: 1gb
-    environment:
-      WORKSHOP_PREVIEW_URL: http://workshop:3102
 
 volumes:
   workshop-state:
