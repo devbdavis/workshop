@@ -28,12 +28,17 @@ export function getPreviewPort(): number {
   return parseInt(process.env.WORKSHOP_PREVIEW_PORT || String(mainPort + 100), 10);
 }
 
-/** Strips Workshop's own cookies from a Cookie header before forwarding it upstream. */
-export function filterCookieHeader(cookieHeader: string): string {
+/** The origin serving this Workshop's own UI: Vite's dev port in dev, the server itself in production. */
+export function getSelfOrigin(): string {
+  return process.env.NODE_ENV === 'production' ? `http://localhost:${process.env.PORT || '3001'}` : 'http://localhost:5173';
+}
+
+/** Strips Workshop's own cookies before forwarding upstream; the token is kept only when the target is Workshop itself. */
+export function filterCookieHeader(cookieHeader: string, keepToken = false): string {
   return cookieHeader
     .split(';')
     .map((pair) => pair.trim())
-    .filter((pair) => !pair.startsWith(`${TOKEN_COOKIE}=`) && !pair.startsWith(`${TARGET_COOKIE}=`))
+    .filter((pair) => (keepToken || !pair.startsWith(`${TOKEN_COOKIE}=`)) && !pair.startsWith(`${TARGET_COOKIE}=`))
     .join('; ');
 }
 
@@ -120,7 +125,7 @@ function proxyRequest(req: IncomingMessage, res: ServerResponse, originStr: stri
   headers.host = origin.host;
   headers['accept-encoding'] = 'identity';
   if (typeof headers.cookie === 'string') {
-    const filtered = filterCookieHeader(headers.cookie);
+    const filtered = filterCookieHeader(headers.cookie, originStr === getSelfOrigin());
     if (filtered) headers.cookie = filtered;
     else delete headers.cookie;
   }
@@ -195,7 +200,7 @@ function handleUpgrade(req: IncomingMessage, socket: Duplex, head: Buffer): void
       let value = req.rawHeaders[i + 1];
       const lower = name.toLowerCase();
       if (lower === 'host') value = origin.host;
-      else if (lower === 'cookie') value = filterCookieHeader(value);
+      else if (lower === 'cookie') value = filterCookieHeader(value, targetOrigin === getSelfOrigin());
       headerLines.push(`${name}: ${value}`);
     }
     upstream.write(`${req.method} ${req.url} HTTP/1.1\r\n${headerLines.join('\r\n')}\r\n\r\n`);

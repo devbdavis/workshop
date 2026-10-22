@@ -104,7 +104,7 @@ describe('preview routes', () => {
   it('reports screenshots unavailable when no sidecar answers', async () => {
     const res = await fetch(`${base}/preview/status`);
     const body = await res.json();
-    expect(body).toEqual({ port: body.port, screenshots: false });
+    expect(body).toEqual({ port: body.port, self: body.self, screenshots: false });
   });
 
   it('404s send for an unknown session', async () => {
