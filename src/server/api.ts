@@ -72,7 +72,6 @@ import { ensureRegisteredPluginsInstalled } from '@infrastructure/plugins/ensure
 import { createGlobalRepoRepository, createSettingsRepository } from '@infrastructure/persistence/repo-repository.js';
 import { createRepoRouter, parsePrMonitorIgnoredAuthors } from './repo-routes.js';
 import { createWorkspaceRouter } from './workspace-routes.js';
-import { createPreviewRouter } from './preview-routes.js';
 import { createSessionHistoryRouter } from './session-history-routes.js';
 import { createSessionHistoryScanner } from '@infrastructure/usage/session-history.js';
 import { createDiffCommentRouter } from './diff-comment-routes.js';
@@ -95,6 +94,7 @@ import { createPrMonitorPoller } from '@application/pr-monitor/poller.js';
 import { createPrMonitorRegistrar } from '@application/pr-monitor/registrar.js';
 import { createPrMonitorRouter } from './pr-monitor-routes.js';
 import { createPrCheckLogRouter } from './pr-check-log-routes.js';
+import { createPrDiffRouter } from './pr-diff-routes.js';
 import { createPrReviewRepository } from '@infrastructure/persistence/pr-review-repository.js';
 import { createPrReviewDiscoveryPoller } from '@application/pr-review/discovery-poller.js';
 import { createStaleAgentReaper } from '@application/session-cleanup/stale-agent-reaper.js';
@@ -323,6 +323,7 @@ export function createApiRouter(deps: ApiRouterDeps = {}): Router {
   });
   router.use(prMonitorRouter);
   router.use(createPrCheckLogRouter({ monitors: prMonitors, forge: forgeAdapter }));
+  router.use(createPrDiffRouter({ todos, forge: forgeAdapter }));
 
   // Mount PR-review dashboard sub-router
   const prReviewRouter = createPrReviewRouter({
@@ -636,10 +637,6 @@ export function createApiRouter(deps: ApiRouterDeps = {}): Router {
   // Mount workspace sub-router (file browser, edits, git changes/diff for a session)
   const workspaceRouter = createWorkspaceRouter({ sessions, tracks });
   router.use(workspaceRouter);
-
-  // Mount Design Mode preview sub-router (screenshot + send picks into a session)
-  const previewRouter = createPreviewRouter({ sessions, terminal });
-  router.use(previewRouter);
 
   // Mount session-history sub-router (browse + resume any past Claude Code session on the box)
   const sessionHistoryScanner = createSessionHistoryScanner();

@@ -104,7 +104,6 @@ ENV NODE_ENV=production \
     TERM=xterm-256color
 
 EXPOSE 3002
-EXPOSE 3102
 
 ENTRYPOINT ["dumb-init", "--", "docker-entrypoint.sh"]
 CMD ["npx", "tsx", "src/server/index.ts"]

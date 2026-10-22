@@ -229,7 +229,7 @@ function LeafPane({ node, trackId, sessions, todos, onSplit, onClose, onCreateSe
                     &gt;_
                   </button>
                 )}
-                <WorkspaceButtons sessionId={session.id} editorPath={editorPath} />
+                <WorkspaceButtons sessionId={session.id} editorPath={editorPath} todoId={linkedTodo?.id} pullRequests={linkedTodo?.pullRequests} />
               </>
             );
           })()}

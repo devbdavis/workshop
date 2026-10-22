@@ -1,6 +1,7 @@
 import { useEffect, useState, type ReactNode } from 'react';
 import { WorkspaceBrowser } from './WorkspaceBrowser';
-import { DesignPreview } from './DesignPreview';
+import { PrDiffModal } from './PrDiffModal';
+import type { PullRequest } from '@foundation/types';
 
 let codeServerAvailable: Promise<boolean> | null = null;
 
@@ -47,15 +48,18 @@ interface Props {
   editorPath?: string;
   /** Extra in-Workshop buttons (e.g. the in-browser shell) shown inside the same group. */
   children?: ReactNode;
+  todoId?: string;
+  pullRequests?: PullRequest[];
 }
 
 /** Outlined group of tools that open inside Workshop, kept visually apart from local-app launchers. */
-export function WorkspaceButtons({ sessionId, editorPath, children }: Props) {
+export function WorkspaceButtons({ sessionId, editorPath, children, todoId, pullRequests }: Props) {
   const [showBrowser, setShowBrowser] = useState(false);
-  const [showPreview, setShowPreview] = useState(false);
+  const [showPrDiff, setShowPrDiff] = useState(false);
   const codeServerReady = useCodeServerAvailable();
 
-  if (!editorPath && !children) return null;
+  const hasPrs = !!todoId && !!pullRequests?.length;
+  if (!editorPath && !children && !hasPrs) return null;
 
   return (
     <>
@@ -80,20 +84,19 @@ export function WorkspaceButtons({ sessionId, editorPath, children }: Props) {
             <span>Web VS Code</span>
           </button>
         )}
-        {editorPath && (
+        {hasPrs && (
           <button
-            onClick={() => setShowPreview(true)}
+            onClick={() => setShowPrDiff(true)}
             className="flex items-center gap-0.5 text-[10px] text-gray-500 hover:text-blue-400 px-1"
-            title="Preview the dev server and pick elements to send to the agent"
+            title="View the diffs of this session's pull requests"
           >
-            <TargetIcon className="w-3.5 h-3.5" />
-            <span>Preview</span>
+            <span>PR Diff</span>
           </button>
         )}
         {children}
       </div>
       {showBrowser && <WorkspaceBrowser sessionId={sessionId} onClose={() => setShowBrowser(false)} />}
-      {showPreview && <DesignPreview sessionId={sessionId} onClose={() => setShowPreview(false)} />}
+      {showPrDiff && todoId && pullRequests && <PrDiffModal todoId={todoId} pullRequests={pullRequests} onClose={() => setShowPrDiff(false)} />}
     </>
   );
 }
@@ -111,16 +114,6 @@ function GlobeIcon({ className }: { className?: string }) {
     <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
       <circle cx="12" cy="12" r="10" />
       <path d="M2 12h20M12 2a15 15 0 0 1 0 20M12 2a15 15 0 0 0 0 20" />
-    </svg>
-  );
-}
-
-function TargetIcon({ className }: { className?: string }) {
-  return (
-    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <circle cx="12" cy="12" r="9" />
-      <circle cx="12" cy="12" r="4" />
-      <circle cx="12" cy="12" r="0.5" fill="currentColor" />
     </svg>
   );
 }

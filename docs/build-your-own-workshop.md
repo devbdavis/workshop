@@ -62,8 +62,7 @@ Browser (React SPA)
   ├─ REST /api/*  ─────────────┐
   ├─ WS /ws/events (event bus) │
   ├─ WS /ws/tracks/:t/sessions/:s/terminal ──► node-pty ──► tmux attach -t workshop-<id>
-  ├─ /code/* (code-server proxy, optional)
-  └─ :PORT+100 preview proxy (optional, separate origin)
+  └─ /code/* (code-server proxy, optional)
                                ▼
                     Express server (one process)
    ├─ TerminalManager (ONE instance shared by REST + WS)
@@ -105,7 +104,7 @@ Browser (React SPA)
 | Mode | Ports |
 |---|---|
 | Dev | API on 3001, Vite on 5173. Vite proxies `/api`, `/ws`, and `/code` (WebSocket, `changeOrigin:false`) to 3001. |
-| Prod | API on 3002 (`scripts/workshop.sh`, Docker). Preview proxy on `PORT+100` (3102). |
+| Prod | API on 3002 (`scripts/workshop.sh`, Docker). |
 
 Dev and prod can run side by side with separate DBs.
 
@@ -119,8 +118,7 @@ Dev and prod can run side by side with separate DBs.
 7. Mount the `/api` router.
 8. In prod, serve static `dist/client` with an SPA fallback.
 9. Create the HTTP server, attach the WebSocket upgrade router, and listen on `0.0.0.0`.
-10. Start the preview proxy.
-11. On SIGTERM, stop pollers and close the DB.
+10. On SIGTERM, stop pollers and close the DB.
 
 `createApiRouter` also runs these at startup:
 - Seeding is idempotent: default prompt templates, auto-install agents, and bundled schedules (imported disabled).
@@ -420,7 +418,7 @@ Restore re-creates tmux and resumes. Purge destroys everything. Anything deleted
   - activity dot and double-click rename
   - PR/issue links
   - Open in editor (§6.11) and Open in terminal
-  - workspace buttons: Files, Code, Preview
+  - workspace buttons: Files, Code
   - delete (soft)
 
 #### 6.2.7 Sessions tab and office strip
@@ -727,7 +725,7 @@ The client side is `ui/notifications/SessionAlerts.tsx`.
 | Repositories | — |
 | Issue Tracking | tracker linear/jira/github/none, org, Linear API key (write-only; GET returns only `linearApiKeyConfigured`), GitHub default repo and labels |
 
-### 6.11 Editors, code-server, preview / Design Mode
+### 6.11 Editors, code-server
 
 - **Open in editor:**
   - The app detects the platform (darwin/linux/wsl), editors (`cursor`, `code`), and terminals (iTerm, Konsole, gnome-terminal, `wt.exe`).
@@ -739,18 +737,6 @@ The client side is `ui/notifications/SessionAlerts.tsx`.
   - **First-run settings:** `editor.editContext:false` fixes dropped keystrokes.
   - **Proxy:** at `/code/` behind Workshop auth; WebSocket upgrades are raw-piped.
   - **Opening it:** the UI opens `/code/?folder=` or `?workspace=<.code-workspace>`. Open the tab synchronously, before any fetch, so popup blockers don't stop it.
-- **Preview proxy and Design Mode** (optional):
-  - **Why a separate server:** it's a second HTTP server on `PORT+100`, so the dev server under preview gets its own origin and absolute paths and HMR keep working.
-  - **Start URL:** `/__workshop/start?target=<url>&path=` sets a target cookie and redirects.
-  - **Proxying:**
-    - forwards everything to the target with `accept-encoding: identity`
-    - strips Workshop's cookies before forwarding
-    - removes `X-Frame-Options` and CSP from responses
-    - injects `<script src="/__workshop/picker.js">` into HTML
-    - raw-pipes WebSocket upgrades
-  - **Picker:** active only inside an iframe, toggled by `postMessage`. It highlights elements on hover and builds a unique selector. Each pick posts the selector, URL, outerHTML, parent HTML, text, about 23 computed styles, and the element's box.
-  - **Screenshots:** an optional Playwright sidecar at `WORKSHOP_SCREENSHOT_URL`.
-  - **Send:** "Send to session" writes `design-picks/<iso>.md` and pastes its path into the session with `sendInput`.
 
 ### 6.12 Auth and profiles
 
@@ -826,8 +812,6 @@ Workshop also touches `~/.claude/{agents,skills,plugins,settings.json,projects}`
 | `WORKSHOP_API_URL` | used by MCP and hooks. **Always set it explicitly**; the code defaults disagree (3001 vs 3002). |
 | `WORKSHOP_AUTH_TOKEN` | override the token file |
 | `WORKSHOP_VAULT_ROOT` | vault location |
-| `WORKSHOP_PREVIEW_PORT` | preview proxy port |
-| `WORKSHOP_SCREENSHOT_URL` | Playwright sidecar for Design Mode |
 | `WORKSHOP_CODE_SERVER_BIN`, `WORKSHOP_CODE_SERVER_PORT` | code-server |
 | `TEA_CONFIG` | Gitea CLI config path |
 | `WORKSHOP_SESSION_ID` | set on hook commands |
@@ -854,7 +838,7 @@ Workshop also touches `~/.claude/{agents,skills,plugins,settings.json,projects}`
   - packages: git, tmux, curl, jq, sqlite3, ripgrep, direnv, gosu, dumb-init
   - CLIs: `gh`, `tea`, code-server, Nix (Determinate installer, `--init none`), and the `@anthropic-ai/claude-code` npm package
 - **Env:** `HOME=/config`, so all state lands on one volume. Also `DISABLE_AUTOUPDATER=1`.
-- **Ports:** exposes 3002 and 3102.
+- **Ports:** exposes 3002.
 - **Entrypoint:**
   1. Start nix-daemon.
   2. Run `git config --system safe.directory '*'`.
@@ -863,7 +847,6 @@ Workshop also touches `~/.claude/{agents,skills,plugins,settings.json,projects}`
   5. `exec gosu`.
 - **Compose:**
   - volumes: `workshop-state:/config`, `~/.claude:/config/.claude`, `./repos:/repos`
-  - an optional Playwright service under profile `design-mode`
 - **Arch:** build on the same architecture you run on, because of the native modules.
 
 ## 11. Gotchas (keep all of these)
@@ -916,7 +899,7 @@ Each phase should end with typecheck, tests, and a demo.
     - ticket import, issue creation
     - diff comments, workspace browser
     - session history, command palette
-    - backup, office strip, code-server, Design Mode, Docker
+    - backup, office strip, code-server, Docker
 
 ## 13. Out of scope (don't copy these)
 
