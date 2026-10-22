@@ -126,6 +126,8 @@ export function isSessionExited(session: Session, preCapture?: string[]): boolea
   const lines = preCapture ?? capturePaneLines(session.tmuxSession, 5);
   if (lines.length === 0) return false;
   const lastLine = lines[lines.length - 1]?.trim() || '';
+  // The prompt line still echoing the launcher means it's running (a --print run paints nothing until done).
+  if (lastLine.endsWith('launch.sh')) return false;
   // Bare shell prompts: zsh (➜/%), bash ($)
   return /^[$%]$/.test(lastLine) || /^➜\s/.test(lastLine);
 }
