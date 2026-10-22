@@ -19,6 +19,7 @@ import { SessionAlertsProvider } from './notifications/SessionAlerts';
 import { SessionHistoryPage } from './session-history/SessionHistoryPage';
 import { TopNav } from './TopNav';
 import { CommandPalette } from './command-palette/CommandPalette';
+import { PermissionPrompt } from './permissions/PermissionPrompt';
 
 /** Gates the app behind profile selection (identity, not security). */
 function ProfileGate({ children }: { children: ReactNode }) {
@@ -49,6 +50,7 @@ export function App() {
             <div className="h-screen flex flex-col bg-gray-950 text-gray-100">
               <TopNav />
               <CommandPalette />
+              <PermissionPrompt />
               <div className="flex-1 min-h-0 overflow-y-auto">
                 <Routes>
                   <Route path="/" element={<Dashboard />} />

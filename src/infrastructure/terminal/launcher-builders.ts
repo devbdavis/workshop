@@ -11,6 +11,12 @@ const __dirname = path.dirname(__filename);
 /** Workshop API URL for hook callbacks — derived from PORT so it matches the server's own binding */
 const WORKSHOP_API_URL = process.env.WORKSHOP_API_URL || `http://localhost:${process.env.PORT || '3001'}`;
 
+/** `<node> <permission-hook.mjs> <mode>`; node path and script path are stable across sessions. */
+function permissionHookCommand(mode: string): string {
+  const script = path.join(path.resolve(__dirname, '../../../scripts'), 'permission-hook.mjs');
+  return `${JSON.stringify(process.execPath)} ${JSON.stringify(script)} ${mode}`;
+}
+
 /**
  * Write a Claude Code settings file with hooks.
  *
@@ -84,6 +90,20 @@ export function writeHookSettings(
     hooks.PreToolUse = [activityHook('needs-input', 'AskUserQuestion')];
     hooks.PostToolUse = [activityHook('working', 'AskUserQuestion')];
   }
+
+  // Permission hooks (all sessions, including --print): Workshop gets a say only after
+  // auto mode declines (PermissionDenied) or when a stored allow rule/grant exists (PreToolUse).
+  const permissionHook = (mode: string, timeout: number) => ({
+    hooks: [
+      {
+        type: 'command',
+        command: `WORKSHOP_API_URL=${WORKSHOP_API_URL} WORKSHOP_SESSION_ID=${sessionId} ${permissionHookCommand(mode)}`,
+        timeout,
+      },
+    ],
+  });
+  hooks.PermissionDenied = [permissionHook('claude-denied', 600)];
+  hooks.PreToolUse = [...(hooks.PreToolUse ?? []), permissionHook('claude-pretool', 5)];
 
   // --- SubagentStop: workflow progress tracking ---
 
@@ -280,6 +300,7 @@ export function buildClaudeLauncher(
 /** Build launcher script lines for a Gemini CLI session */
 export function buildGeminiLauncher(
   lines: string[],
+  sessionId: string,
   sessionDir: string,
   _cwd: string,
   options?: CreateSessionOptions,
@@ -298,6 +319,18 @@ export function buildGeminiLauncher(
     writeFileSync(promptMsgFile, options.initialPrompt, 'utf-8');
   }
 
+  // BeforeTool hook: applies stored Workshop allow rules (Gemini has no "would block" event).
+  const settingsFile = path.join(sessionDir, 'gemini-settings.json');
+  const hookSettings = {
+    hooks: {
+      BeforeTool: [
+        { matcher: '.*', hooks: [{ type: 'command', command: permissionHookCommand('gemini-before-tool'), timeout: 5000 }] },
+      ],
+    },
+  };
+  writeFileSync(settingsFile, JSON.stringify(hookSettings, null, 2), 'utf-8');
+  lines.push(`export GEMINI_CLI_SYSTEM_SETTINGS_PATH=${JSON.stringify(settingsFile)}`);
+  lines.push(`export WORKSHOP_API_URL=${WORKSHOP_API_URL} WORKSHOP_SESSION_ID=${sessionId}`);
   lines.push(`exec ${geminiArgs.join(' ')}`);
 }
 
@@ -381,16 +414,21 @@ export function buildCursorLauncher(
  */
 export function codexActivityHookArgs(): string[] {
   const script = path.join(path.resolve(__dirname, '../../../scripts'), 'session-activity-hook.sh');
+  const toml = (cmd: string) => JSON.stringify(cmd).replace(/'/g, "'\\''");
   const events: [string, string][] = [
     ['UserPromptSubmit', 'working'],
     ['Stop', 'idle'],
     ['Interrupt', 'idle'],
     ['PermissionRequest', 'needs-input'],
   ];
-  return events.flatMap(([event, status]) => [
-    '-c',
-    `'hooks.${event}=[{hooks=[{type="command",command=${JSON.stringify(`${script} ${status}`).replace(/'/g, "'\\''")}}]}]'`,
-  ]);
+  return events.flatMap(([event, status]) => {
+    const hooks = [`{type="command",command=${toml(`${script} ${status}`)}}`];
+    // Codex: also ask Workshop to decide on approval prompts (held up to 600s).
+    if (event === 'PermissionRequest') {
+      hooks.push(`{type="command",command=${toml(permissionHookCommand('codex-request'))},timeout=600}`);
+    }
+    return ['-c', `'hooks.${event}=[{hooks=[${hooks.join(',')}]}]'`];
+  });
 }
 
 export function buildCodexLauncher(

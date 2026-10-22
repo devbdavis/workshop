@@ -670,7 +670,7 @@ export function createTerminalManager(
     if (provider === 'codex') {
       buildCodexLauncher(launcherLines, session.id, sessionDir, cwd, effectiveOptions);
     } else if (provider === 'gemini') {
-      buildGeminiLauncher(launcherLines, sessionDir, cwd, effectiveOptions);
+      buildGeminiLauncher(launcherLines, session.id, sessionDir, cwd, effectiveOptions);
     } else if (provider === 'cursor') {
       buildCursorLauncher(launcherLines, sessionDir, cwd, effectiveOptions);
     } else if (provider === 'claude') {

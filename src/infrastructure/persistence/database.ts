@@ -961,6 +961,53 @@ function runMigrations(db: Database.Database): void {
     // Table already exists — safe to ignore
   }
 
+  // Migration: permission approvals — requests surfaced from CLI hooks, and the
+  // "always" rules users create from them.
+  try {
+    db.exec(`
+      CREATE TABLE permission_requests (
+        id TEXT PRIMARY KEY,
+        session_id TEXT NOT NULL,
+        track_id TEXT,
+        task_name TEXT NOT NULL,
+        harness TEXT NOT NULL,
+        tool_name TEXT NOT NULL,
+        normalized_tool TEXT NOT NULL,
+        summary TEXT NOT NULL,
+        tool_input TEXT NOT NULL,
+        reason TEXT,
+        suggested_pattern TEXT,
+        status TEXT NOT NULL,
+        rule_id TEXT,
+        created_at TEXT NOT NULL,
+        decided_at TEXT
+      );
+    `);
+    db.exec(`CREATE INDEX idx_permission_requests_status ON permission_requests(status);`);
+    db.exec(`CREATE INDEX idx_permission_requests_tool ON permission_requests(normalized_tool, created_at);`);
+  } catch {
+    // Table already exists — safe to ignore
+  }
+
+  try {
+    db.exec(`
+      CREATE TABLE permission_rules (
+        id TEXT PRIMARY KEY,
+        tool_name TEXT NOT NULL,
+        pattern TEXT,
+        decision TEXT NOT NULL,
+        source_request_id TEXT,
+        created_at TEXT NOT NULL
+      );
+    `);
+  } catch {
+    // Table already exists — safe to ignore
+  }
+
+  // In-memory waiters don't survive a restart, so any still-pending request is dead.
+  db.prepare(`UPDATE permission_requests SET status = 'expired', decided_at = ? WHERE status = 'pending'`)
+    .run(new Date().toISOString());
+
   // Seed default repo_root setting
   db.exec(`INSERT OR IGNORE INTO settings (key, value) VALUES ('repo_root', '/repos');`);
 

@@ -50,6 +50,9 @@ import { createPlaybookRepository } from '@infrastructure/persistence/workflow-p
 import { createAgentRoleRepository } from '@infrastructure/persistence/workflow-agent-role-repository.js';
 import { createExecutionHookRouter } from './execution-hook-routes.js';
 import { createActivityHookRouter } from './activity-hook-routes.js';
+import { createPermissionRouter } from './permission-routes.js';
+import { createPermissionRepository } from '@infrastructure/persistence/permission-repository.js';
+import { createPermissionService } from '@application/permissions/permission-service.js';
 import { recoverStuckIssues } from '@application/workflow/startup-recovery.js';
 import { broadcast } from './events.js';
 import { createDiscussionTeamRepository } from '@infrastructure/persistence/discussion-team-repository.js';
@@ -514,6 +517,26 @@ export function createApiRouter(deps: ApiRouterDeps = {}): Router {
   });
   router.use(executionHookRouter);
   router.use(createActivityHookRouter({ terminal }));
+
+  const permissionRepo = createPermissionRepository();
+  router.use(
+    createPermissionRouter({
+      repo: permissionRepo,
+      service: createPermissionService({
+        repo: permissionRepo,
+        broadcast,
+        resolveTask: (sessionId) => {
+          const session = sessions.findById(sessionId);
+          const track = session ? tracks.findById(session.trackId) : null;
+          const todo = todos.findBySession(sessionId);
+          return {
+            trackId: session?.trackId ?? null,
+            taskName: todo?.title ?? session?.name ?? track?.name ?? sessionId,
+          };
+        },
+      }),
+    }),
+  );
 
   // Dark Factory usage-pacing poller — resumes paused autonomous epics once the
   // usage window drains back under threshold. (Proactive pause happens at dispatch.)
