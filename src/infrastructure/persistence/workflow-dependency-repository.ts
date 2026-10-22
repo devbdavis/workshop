@@ -1,13 +1,13 @@
 import { v4 as uuid } from 'uuid';
 import { getDatabase } from './database.js';
-import type { TicketDependency, WorkflowTicketId } from '@foundation/types';
-import type { TicketDependencyRepository } from '@domain/workflow/ticket-repository.js';
+import type { IssueDependency, WorkflowIssueId } from '@foundation/types';
+import type { IssueDependencyRepository } from '@domain/workflow/issue-repository.js';
 
-export function createTicketDependencyRepository(): TicketDependencyRepository {
+export function createIssueDependencyRepository(): IssueDependencyRepository {
   const db = getDatabase();
 
   // Prepare statements once
-  const findByTicketStmt = db.prepare('SELECT * FROM ticket_dependencies WHERE ticket_id = ? ORDER BY created_at ASC');
+  const findByIssueStmt = db.prepare('SELECT * FROM ticket_dependencies WHERE ticket_id = ? ORDER BY created_at ASC');
   const findDependentsStmt = db.prepare('SELECT * FROM ticket_dependencies WHERE depends_on_id = ? ORDER BY created_at ASC');
   const findUnresolvedStmt = db.prepare('SELECT * FROM ticket_dependencies WHERE ticket_id = ? AND resolved_at IS NULL ORDER BY created_at ASC');
   const insertStmt = db.prepare('INSERT INTO ticket_dependencies (id, ticket_id, depends_on_id, created_at) VALUES (?, ?, ?, ?)');
@@ -15,36 +15,36 @@ export function createTicketDependencyRepository(): TicketDependencyRepository {
   const deleteStmt = db.prepare('DELETE FROM ticket_dependencies WHERE ticket_id = ? AND depends_on_id = ?');
 
   return {
-    findByTicket(ticketId: WorkflowTicketId): TicketDependency[] {
-      const rows = findByTicketStmt.all(ticketId) as DepRow[];
+    findByIssue(issueId: WorkflowIssueId): IssueDependency[] {
+      const rows = findByIssueStmt.all(issueId) as DepRow[];
       return rows.map(rowToDep);
     },
 
-    findDependents(dependsOnId: WorkflowTicketId): TicketDependency[] {
+    findDependents(dependsOnId: WorkflowIssueId): IssueDependency[] {
       const rows = findDependentsStmt.all(dependsOnId) as DepRow[];
       return rows.map(rowToDep);
     },
 
-    findUnresolved(ticketId: WorkflowTicketId): TicketDependency[] {
-      const rows = findUnresolvedStmt.all(ticketId) as DepRow[];
+    findUnresolved(issueId: WorkflowIssueId): IssueDependency[] {
+      const rows = findUnresolvedStmt.all(issueId) as DepRow[];
       return rows.map(rowToDep);
     },
 
-    create(ticketId: WorkflowTicketId, dependsOnId: WorkflowTicketId): TicketDependency {
+    create(issueId: WorkflowIssueId, dependsOnId: WorkflowIssueId): IssueDependency {
       const id = uuid();
       const now = new Date().toISOString();
-      insertStmt.run(id, ticketId, dependsOnId, now);
-      return { id, ticketId, dependsOnId, createdAt: now };
+      insertStmt.run(id, issueId, dependsOnId, now);
+      return { id, issueId, dependsOnId, createdAt: now };
     },
 
-    resolve(ticketId: WorkflowTicketId, dependsOnId: WorkflowTicketId): boolean {
+    resolve(issueId: WorkflowIssueId, dependsOnId: WorkflowIssueId): boolean {
       const now = new Date().toISOString();
-      const result = resolveStmt.run(now, ticketId, dependsOnId);
+      const result = resolveStmt.run(now, issueId, dependsOnId);
       return result.changes > 0;
     },
 
-    delete(ticketId: WorkflowTicketId, dependsOnId: WorkflowTicketId): boolean {
-      const result = deleteStmt.run(ticketId, dependsOnId);
+    delete(issueId: WorkflowIssueId, dependsOnId: WorkflowIssueId): boolean {
+      const result = deleteStmt.run(issueId, dependsOnId);
       return result.changes > 0;
     },
   };
@@ -60,11 +60,11 @@ interface DepRow {
   resolved_at: string | null;
 }
 
-function rowToDep(row: DepRow): TicketDependency {
+function rowToDep(row: DepRow): IssueDependency {
   return {
     id: row.id,
-    ticketId: row.ticket_id as WorkflowTicketId,
-    dependsOnId: row.depends_on_id as WorkflowTicketId,
+    issueId: row.ticket_id as WorkflowIssueId,
+    dependsOnId: row.depends_on_id as WorkflowIssueId,
     createdAt: row.created_at,
     resolvedAt: row.resolved_at || undefined,
   };

@@ -2,7 +2,7 @@
 name: workflow-select
 description: "Select or design a workflow playbook for a new epic. Tagged: workshop."
 user-invocable: true
-argument-hint: "<epic-ticket-id>"
+argument-hint: "<epic-issue-id>"
 ---
 
 # Playbook Selection Skill
@@ -88,7 +88,7 @@ For trivial work (single-file fix, doc update): create a 2-3 state workflow (rea
 
 ### Companion Task Playbook
 
-Every epic playbook with a splitting/execution phase needs a companion task playbook with ticket_type: 'task'.
+Every epic playbook with a splitting/execution phase needs a companion task playbook with issueType: 'task'.
 
 **IMPORTANT**: Task playbooks MUST include a `blocked` state (semanticRole: `waiting`) with an `all-deps-resolved` trigger. The engine creates tasks with dependencies in `blocked` state. Without this state in the playbook, dependency resolution cannot transition the task and it stays blocked forever.
 
@@ -108,7 +108,7 @@ Also include a `cancelled` terminal state reachable from `blocked`, `ready`, and
   "id": "feature-epic-v1",
   "name": "Standard Feature Epic",
   "description": "Multi-stage feature workflow with planning and review gates",
-  "ticketType": "epic",
+  "issueType": "epic",
   "stageDefinitions": [
     {
       "state": "triaging",
@@ -204,7 +204,7 @@ Also include a `cancelled` terminal state reachable from `blocked`, `ready`, and
   "id": "feature-task-v1",
   "name": "Standard Feature Task",
   "description": "Task workflow for feature implementation",
-  "ticketType": "task",
+  "issueType": "task",
   "stageDefinitions": [
     {
       "state": "blocked",
@@ -315,7 +315,7 @@ Use these heuristics and past findings to inform your design decisions.
 
 ### Step 2: Analyze the Epic
 
-Read the epic ticket to understand:
+Read the epic issue to understand:
 - What type of work is it? (feature, bugfix, refactor, docs, infra)
 - What is the complexity? (trivial, simple, moderate, complex)
 - Does it require human review gates?
@@ -326,7 +326,7 @@ Read the epic ticket to understand:
 ### Step 3: Search Existing Playbooks
 
 ```
-workshop_list_playbooks({ ticketType: "epic" })
+workshop_list_playbooks({ issueType: "epic" })
 ```
 
 Look for playbooks with matching:
@@ -357,7 +357,7 @@ Fix any validation errors before proposing.
 
 ```
 workshop_propose_playbook({
-  epicId: "<ticket-id>",
+  epicId: "<issue-id>",
   epicPlaybook: { ... },
   taskPlaybook: { ... },
   agentRoles: [ ... ],
@@ -365,4 +365,4 @@ workshop_propose_playbook({
 })
 ```
 
-The proposal is stored on the ticket for human review. A human must call `workshop_approve_playbook_assignment` to finalize.
+The proposal is stored on the issue for human review. A human must call `workshop_approve_playbook_assignment` to finalize.

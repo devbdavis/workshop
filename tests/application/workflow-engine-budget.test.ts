@@ -8,13 +8,13 @@ const testDbPath = path.join(os.tmpdir(), `workshop-test-wf-budget-${randomUUID(
 process.env.WORKSHOP_DB_PATH = testDbPath;
 
 import {
-  createWorkflowTicketRepository,
+  createWorkflowIssueRepository,
   createWorkflowTransitionRepository,
 } from '@infrastructure/persistence/workflow-repository';
-import { createTicketDependencyRepository } from '@infrastructure/persistence/workflow-dependency-repository';
+import { createIssueDependencyRepository } from '@infrastructure/persistence/workflow-dependency-repository';
 import { createWorkflowEngine } from '@application/workflow/engine';
 import { resetDatabase } from '@infrastructure/persistence/database';
-import type { WorkflowTicket } from '@foundation/types';
+import type { WorkflowIssue } from '@foundation/types';
 import type { TopologyLoader } from '@application/workflow/topology-loader';
 import type { StageDefinition } from '@domain/workflow/types';
 
@@ -44,13 +44,13 @@ const STAGES: StageDefinition[] = [
 
 function createMockTopologyLoader(): TopologyLoader {
   return {
-    loadForTicket(_ticket: WorkflowTicket): StageDefinition[] {
+    loadForIssue(_issue: WorkflowIssue): StageDefinition[] {
       return STAGES;
     },
     loadByPlaybookRowId(_rowId: string): StageDefinition[] {
       return STAGES;
     },
-    loadPlaybookForTicket(_ticket: WorkflowTicket) {
+    loadPlaybookForIssue(_issue: WorkflowIssue) {
       return null;
     },
     clearCache(): void {},
@@ -58,11 +58,11 @@ function createMockTopologyLoader(): TopologyLoader {
 }
 
 describe('WorkflowEngine — Dark Factory budget', () => {
-  const tickets = createWorkflowTicketRepository();
+  const issues = createWorkflowIssueRepository();
   const transitions = createWorkflowTransitionRepository();
-  const dependencies = createTicketDependencyRepository();
+  const dependencies = createIssueDependencyRepository();
   const topologyLoader = createMockTopologyLoader();
-  const engine = createWorkflowEngine({ tickets, transitions, dependencies, topologyLoader });
+  const engine = createWorkflowEngine({ issues, transitions, dependencies, topologyLoader });
 
   afterAll(() => {
     resetDatabase();
@@ -71,7 +71,7 @@ describe('WorkflowEngine — Dark Factory budget', () => {
 
   it('escalates to the nearest human gate and sets needsHuman when maxSteps is exceeded', () => {
     let epic = engine.createEpic({ title: 'Dark budget epic', description: 'x' });
-    epic = tickets.update(epic.id, {
+    epic = issues.update(epic.id, {
       stateData: { ...(epic.stateData || {}), autonomous: true, autonomousBudget: { maxSteps: 3, maxWallClockMs: 1_000_000 } },
     })!;
 
@@ -86,7 +86,7 @@ describe('WorkflowEngine — Dark Factory budget', () => {
 
   it('sets needsHuman even when the budget is exhausted on a step that already targets the gate', () => {
     let epic = engine.createEpic({ title: 'Dark budget edge', description: 'x' });
-    epic = tickets.update(epic.id, {
+    epic = issues.update(epic.id, {
       stateData: { ...(epic.stateData || {}), autonomous: true, autonomousBudget: { maxSteps: 2, maxWallClockMs: 1_000_000 } },
     })!;
 

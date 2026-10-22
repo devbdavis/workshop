@@ -6,9 +6,9 @@
  *    AgentRoleRow + StageDefinition + PromptOverrides with merge priority:
  *      stage.promptOverride > playbook.promptOverrides[agentRoleId] > agentRole.promptBlock.preamble
  * 2. Legacy fallback: composeWorkflowPrompt() uses switch-based role matching
- *    for tickets without playbooks.
+ *    for issues without playbooks.
  */
-import type { WorkflowTicket } from '@foundation/types';
+import type { WorkflowIssue } from '@foundation/types';
 import type { AgentRoleRow } from '@domain/workflow/agent-role-repository.js';
 import type { StageDefinition, PromptOverrides } from '@domain/workflow/types.js';
 
@@ -152,11 +152,11 @@ function formatStateData(stateData: Record<string, unknown>): string {
  * Assembles prompts from structured building blocks with merge priority:
  *   stage.promptOverride > playbook.promptOverrides[agentRoleId] > agentRole.promptBlock.preamble
  *
- * This is the preferred path for tickets with workflow playbooks and agent roles.
+ * This is the preferred path for issues with workflow playbooks and agent roles.
  */
 export function composeDataDrivenPrompt(
   agentRole: AgentRoleRow | null,
-  ticket: WorkflowTicket,
+  issue: WorkflowIssue,
   stage: StageDefinition,
   playbookOverrides?: PromptOverrides,
   context?: PromptContext,
@@ -179,12 +179,12 @@ export function composeDataDrivenPrompt(
     parts.push(stage.promptOverride);
   }
 
-  // 4. Ticket context (title, description)
-  parts.push(`## Ticket: ${ticket.title}\n\n${ticket.description}`);
+  // 4. Issue context (title, description)
+  parts.push(`## Issue: ${issue.title}\n\n${issue.description}`);
 
   // 5. State data context (plan drafts, findings, answers, etc.)
-  if (ticket.stateData && Object.keys(ticket.stateData).length > 0) {
-    const stateDataContent = formatStateData(ticket.stateData as Record<string, unknown>);
+  if (issue.stateData && Object.keys(issue.stateData).length > 0) {
+    const stateDataContent = formatStateData(issue.stateData as Record<string, unknown>);
     if (stateDataContent) {
       parts.push(stateDataContent);
     }
@@ -209,25 +209,25 @@ export function composeDataDrivenPrompt(
 }
 
 // ---------------------------------------------------------------------------
-// Legacy fallback — used for tickets without workflow playbooks
+// Legacy fallback — used for issues without workflow playbooks
 // ---------------------------------------------------------------------------
 
 // AgentRole is now a string (dynamic)
 type AgentRole = string;
 
 /**
- * Build a system prompt tailored to the given agent role and ticket context.
- * Legacy fallback for tickets without workflow playbooks.
+ * Build a system prompt tailored to the given agent role and issue context.
+ * Legacy fallback for issues without workflow playbooks.
  */
 export function composeWorkflowPrompt(
   role: AgentRole,
-  ticket: WorkflowTicket,
+  issue: WorkflowIssue,
   context?: PromptContext,
 ): string {
   const parts: string[] = [];
 
   // Add the role-specific prompt
-  parts.push(buildRolePrompt(role, ticket, context));
+  parts.push(buildRolePrompt(role, issue, context));
 
   // Append track context when available
   if (context?.trackContext) {
@@ -239,54 +239,54 @@ export function composeWorkflowPrompt(
 
 function buildRolePrompt(
   role: AgentRole,
-  ticket: WorkflowTicket,
+  issue: WorkflowIssue,
   context?: PromptContext,
 ): string {
   switch (role) {
     case 'workflow-designer':
-      return buildWorkflowDesignerPrompt(ticket);
+      return buildWorkflowDesignerPrompt(issue);
     case 'triage':
-      return buildTriagePrompt(ticket);
+      return buildTriagePrompt(issue);
     case 'planner':
-      return buildPlannerPrompt(ticket, context);
+      return buildPlannerPrompt(issue, context);
     case 'plan-critic':
-      return buildPlanCriticPrompt(ticket, context);
+      return buildPlanCriticPrompt(issue, context);
     case 'splitter':
-      return buildSplitterPrompt(ticket, context);
+      return buildSplitterPrompt(issue, context);
     case 'implementer':
-      return buildImplementerPrompt(ticket);
+      return buildImplementerPrompt(issue);
     case 'code-reviewer':
-      return buildCodeReviewerPrompt(ticket);
+      return buildCodeReviewerPrompt(issue);
     case 'integration-reviewer':
-      return buildIntegrationReviewerPrompt(ticket, context);
+      return buildIntegrationReviewerPrompt(issue, context);
     case 'fixer':
-      return buildFixerPrompt(ticket, context);
+      return buildFixerPrompt(issue, context);
     default:
-      return `You are working on ticket: ${ticket.title}\n\n${ticket.description}`;
+      return `You are working on issue: ${issue.title}\n\n${issue.description}`;
   }
 }
 
-function buildWorkflowDesignerPrompt(ticket: WorkflowTicket): string {
+function buildWorkflowDesignerPrompt(issue: WorkflowIssue): string {
   return [
     'You are a workflow designer. Your job is to analyze this epic and design an appropriate',
     'workflow playbook that will govern how it moves through the system.',
     '',
-    `## Epic: ${ticket.title}`,
+    `## Epic: ${issue.title}`,
     '',
-    ticket.description,
+    issue.description,
     '',
     '## Your Task',
     '',
     '1. **Analyze** the epic to understand the type of work (feature, bugfix, refactor, docs, infra),',
     '   its complexity, and what agent roles are needed.',
     '',
-    '2. **Search existing playbooks** via `workshop_list_playbooks({ ticketType: "epic" })`',
+    '2. **Search existing playbooks** via `workshop_list_playbooks({ issueType: "epic" })`',
     '   and agent roles via `workshop_list_agent_roles()`. Reuse what exists.',
     '',
     '3. **Design or select** a workflow playbook:',
     '   - If an existing playbook is a good fit, use it directly.',
     '   - If not, design a new one following the schema below.',
-    '   - Also design a companion task playbook (ticketType: "task") if the epic involves',
+    '   - Also design a companion task playbook (issueType: "task") if the epic involves',
     '     splitting work into subtasks.',
     '',
     '4. **Create agent role definitions** for any roles referenced in your playbook that',
@@ -304,7 +304,7 @@ function buildWorkflowDesignerPrompt(ticket: WorkflowTicket): string {
     '',
     '## Playbook Schema',
     '',
-    'Epic playbook fields: id, name, description, ticketType ("epic"), stageDefinitions[], tags[], matchCriteria',
+    'Epic playbook fields: id, name, description, issueType ("epic"), stageDefinitions[], tags[], matchCriteria',
     '',
     '### Stage Definition',
     '```json',
@@ -342,24 +342,24 @@ function buildWorkflowDesignerPrompt(ticket: WorkflowTicket): string {
     '',
     '## Important',
     '',
-    '- Do NOT transition the ticket yourself. Only call workshop_propose_playbook.',
+    '- Do NOT transition the issue yourself. Only call workshop_propose_playbook.',
     '- The human will approve or reject your proposal.',
     '- Design the workflow to match the actual complexity of the work — don\'t over-engineer',
     '  a simple task with 10 stages, and don\'t under-engineer a complex project with 2.',
   ].join('\n');
 }
 
-function buildTriagePrompt(ticket: WorkflowTicket): string {
+function buildTriagePrompt(issue: WorkflowIssue): string {
   const lines = [
-    'You are a ticket triage specialist.',
-    'Review this ticket and either declare it well-specced or ask clarifying questions.',
+    'You are an issue triage specialist.',
+    'Review this issue and either declare it well-specced or ask clarifying questions.',
     '',
-    `Ticket: ${ticket.title}`,
-    ticket.description,
+    `Issue: ${issue.title}`,
+    issue.description,
   ];
 
   // Include previous Q&A if the human already answered questions
-  const sd = ticket.stateData as Record<string, unknown> | undefined;
+  const sd = issue.stateData as Record<string, unknown> | undefined;
   const answers = sd?.answers as Array<{ text: string; answer: string }> | undefined;
   if (answers && answers.length > 0) {
     lines.push('', '## Previous Questions & Human Answers', '');
@@ -377,10 +377,10 @@ function buildTriagePrompt(ticket: WorkflowTicket): string {
       'The refined spec should be a standalone document that supersedes the original description.',
       '',
       'When the spec is complete:',
-      '1. First, update the ticket description to reflect the refined reality:',
-      `   workshop_update_ticket("${ticket.id}", { description: "updated description..." })`,
+      '1. First, update the issue description to reflect the refined reality:',
+      `   workshop_update_issue("${issue.id}", { description: "updated description..." })`,
       '2. Then transition to "specced" and pass the refined spec as structured data:',
-      `   workshop_transition_ticket("${ticket.id}", "specced", "summary", {`,
+      `   workshop_transition_issue("${issue.id}", "specced", "summary", {`,
       '     refinedSpec: "Your full refined spec here..."',
       '   })',
       '',
@@ -392,13 +392,13 @@ function buildTriagePrompt(ticket: WorkflowTicket): string {
       'If the spec is complete and no questions are needed:',
       '1. Write a refined spec summarizing the requirements clearly',
       '2. Transition to "specced" and pass the refined spec:',
-      `   workshop_transition_ticket("${ticket.id}", "specced", "summary", {`,
+      `   workshop_transition_issue("${issue.id}", "specced", "summary", {`,
       '     refinedSpec: "Your full refined spec here..."',
       '   })',
       '',
       'If you have questions, transition to "needs-input" and pass the questions',
       'as structured data so they appear in the UI:',
-      `  workshop_transition_ticket("${ticket.id}", "needs-input", comment, {`,
+      `  workshop_transition_issue("${issue.id}", "needs-input", comment, {`,
       '    pendingQuestions: [{ text: "Your question here?" }, ...]',
       '  })',
     );
@@ -407,13 +407,13 @@ function buildTriagePrompt(ticket: WorkflowTicket): string {
   return lines.join('\n');
 }
 
-function buildPlannerPrompt(ticket: WorkflowTicket, context?: PromptContext): string {
+function buildPlannerPrompt(issue: WorkflowIssue, context?: PromptContext): string {
   const isRevision = !!(context?.findings?.length || context?.planDraft);
 
   const lines = [
     'You are a technical architect creating an implementation plan.',
     '',
-    `## Spec\n\n${ticket.description}`,
+    `## Spec\n\n${issue.description}`,
   ];
 
   // Human Q&A answers from triage — these are authoritative and override the original spec
@@ -490,7 +490,7 @@ function buildPlannerPrompt(ticket: WorkflowTicket, context?: PromptContext): st
   return lines.join('\n');
 }
 
-function buildPlanCriticPrompt(ticket: WorkflowTicket, context?: PromptContext): string {
+function buildPlanCriticPrompt(issue: WorkflowIssue, context?: PromptContext): string {
   const lines = [
     'You are an adversarial reviewer of technical plans.',
     'Find holes, missing edge cases, security issues, scalability concerns.',
@@ -502,7 +502,7 @@ function buildPlanCriticPrompt(ticket: WorkflowTicket, context?: PromptContext):
   return lines.join('\n');
 }
 
-function buildSplitterPrompt(ticket: WorkflowTicket, context?: PromptContext): string {
+function buildSplitterPrompt(issue: WorkflowIssue, context?: PromptContext): string {
   const lines = [
     'You are a project planner splitting a technical plan into implementation tasks.',
   ];
@@ -516,35 +516,35 @@ function buildSplitterPrompt(ticket: WorkflowTicket, context?: PromptContext): s
   return lines.join('\n');
 }
 
-function buildImplementerPrompt(ticket: WorkflowTicket): string {
+function buildImplementerPrompt(issue: WorkflowIssue): string {
   return [
     'You are implementing a specific task.',
     '',
-    `Task: ${ticket.title}`,
-    ticket.description,
+    `Task: ${issue.title}`,
+    issue.description,
     '',
     'Write the code, tests, and documentation needed.',
   ].join('\n');
 }
 
-function buildCodeReviewerPrompt(ticket: WorkflowTicket): string {
+function buildCodeReviewerPrompt(issue: WorkflowIssue): string {
   return [
     'You are a code reviewer using the fkh-review methodology.',
     'Review the implementation for code quality, test coverage, security, and architecture.',
     '',
-    `Task: ${ticket.title}`,
-    ticket.description,
+    `Task: ${issue.title}`,
+    issue.description,
   ].join('\n');
 }
 
 function buildIntegrationReviewerPrompt(
-  ticket: WorkflowTicket,
+  issue: WorkflowIssue,
   context?: PromptContext,
 ): string {
   const lines = [
     'You are reviewing the full implementation against the original spec and plan.',
     '',
-    `Spec: ${ticket.description}`,
+    `Spec: ${issue.description}`,
   ];
   if (context?.planDraft) {
     lines.push('', formatPlanContent(context.planDraft, 'Plan'));
@@ -553,13 +553,13 @@ function buildIntegrationReviewerPrompt(
   return lines.join('\n');
 }
 
-function buildFixerPrompt(ticket: WorkflowTicket, context?: PromptContext): string {
+function buildFixerPrompt(issue: WorkflowIssue, context?: PromptContext): string {
   const lines = [
     'You are fixing issues found during integration review.',
     '',
-    `## Ticket: ${ticket.title}`,
+    `## Issue: ${issue.title}`,
     '',
-    ticket.description,
+    issue.description,
   ];
   if (context?.planDraft) {
     lines.push('', formatPlanContent(context.planDraft, 'Implementation Plan'));

@@ -1,5 +1,5 @@
 /**
- * Minimal GitHub Issues client for the ticket-import feature.
+ * Minimal GitHub Issues client for the issue-import feature.
  *
  * Uses the already-authenticated `gh` CLI (no API key setting) — same
  * exec/injection pattern as gh-adapter.ts and gh-review-adapter.ts.

@@ -150,7 +150,7 @@ describe('Linear client', () => {
   });
 
   it('getIssueByIdentifier returns null for malformed identifiers without making a request', async () => {
-    const result = await getIssueByIdentifier('key', 'not a ticket');
+    const result = await getIssueByIdentifier('key', 'not an issue');
     expect(result).toBeNull();
     expect(fetchSpy).not.toHaveBeenCalled();
   });

@@ -8,7 +8,7 @@
 import type { Track, TrackId, SessionId, SessionProvider } from '@foundation/types';
 import type { TrackRepository } from '@domain/track/repository';
 import type { SessionRepository } from '@domain/session/repository';
-import type { TicketRepository } from '@domain/ticket/repository';
+import type { IssueRepository } from '@domain/issue/repository';
 import type { PromptTemplateRepository } from '@domain/prompt-template/repository';
 import type { TerminalManager } from '@domain/terminal/manager.js';
 import { mkdirSync } from 'fs';
@@ -29,7 +29,7 @@ const DEFAULT_POLL_INTERVAL_MS = 30_000;
 export interface MatrixRouterDeps {
   tracks: TrackRepository;
   sessions: SessionRepository;
-  tickets: TicketRepository;
+  issues: IssueRepository;
   promptTemplates: PromptTemplateRepository;
   terminal: TerminalManager;
   vaultReader: VaultReader;
@@ -84,7 +84,7 @@ export function createMatrixRouter(deps: MatrixRouterDeps): MatrixRouter {
       const template = deps.promptTemplates.findById(track.defaultPromptTemplateId);
       if (template) {
         templateHasRepos = template.content.includes('{{track.repos}}');
-        track.tickets = deps.tickets.findByTrack(track.id);
+        track.issues = deps.issues.findByTrack(track.id);
         const interpolated = interpolateTemplate(template.content, { track });
         parts.push(interpolated);
       }

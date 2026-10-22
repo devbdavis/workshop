@@ -46,12 +46,12 @@ export function TopNav() {
 
   const loadCount = useCallback(async () => {
     try {
-      const wfRes = await fetch('/api/workflow/tickets');
+      const wfRes = await fetch('/api/workflow/issues');
       if (wfRes.ok) {
-        const tickets = await wfRes.json();
+        const issues = await wfRes.json();
         // Dynamic: use template-enriched stateData, fallback to legacy state names
         const legacyHumanStates = new Set(['spec-review', 'plan-review', 'final-review', 'needs-input', 'code-review']);
-        const count = tickets.filter((t: { state: string; stateData?: Record<string, unknown> }) => {
+        const count = issues.filter((t: { state: string; stateData?: Record<string, unknown> }) => {
           if (t.stateData?.currentStateHumanGate === true) return true;
           return legacyHumanStates.has(t.state);
         }).length;

@@ -1,10 +1,10 @@
 /**
- * Workflow proposal routes — propose and approve workflow assignments for tickets.
+ * Workflow proposal routes — propose and approve workflow assignments for issues.
  */
 import { Router } from 'express';
 import { z } from 'zod';
-import type { WorkflowTicketId, WorkflowState } from '@foundation/types.js';
-import type { WorkflowTicketRepository } from '@domain/workflow/ticket-repository.js';
+import type { WorkflowIssueId, WorkflowState } from '@foundation/types.js';
+import type { WorkflowIssueRepository } from '@domain/workflow/issue-repository.js';
 import type { PlaybookRepository } from '@domain/workflow/playbook-repository.js';
 import type { AgentRoleRepository } from '@domain/workflow/agent-role-repository.js';
 import type { TopologyLoader } from '@application/workflow/topology-loader.js';
@@ -19,7 +19,7 @@ const PlaybookPayloadSchema = z.object({
   id: z.string().min(1).max(128),
   name: z.string().min(1).max(128),
   description: z.string().max(2000),
-  ticketType: z.enum(['epic', 'task']),
+  issueType: z.enum(['epic', 'task']),
   stageDefinitions: StageDefinitionsSchema,
   tags: z.array(z.string().max(64)).max(20).optional(),
   matchCriteria: z
@@ -35,7 +35,7 @@ const PlaybookPayloadSchema = z.object({
 
 export interface WorkflowProposalRouterDeps {
   engine: WorkflowEngine;
-  tickets: WorkflowTicketRepository;
+  issues: WorkflowIssueRepository;
   playbooks: PlaybookRepository;
   agentRoles: AgentRoleRepository;
   topologyLoader: TopologyLoader;
@@ -45,15 +45,15 @@ export interface WorkflowProposalRouterDeps {
 
 export function createWorkflowProposalRouter(deps: WorkflowProposalRouterDeps): Router {
   const router = Router();
-  const { engine, tickets, playbooks, agentRoles, topologyLoader, dispatcher } = deps;
+  const { engine, issues, playbooks, agentRoles, topologyLoader, dispatcher } = deps;
 
-  router.post('/workflow/tickets/:id/propose-workflow', (req, res) => {
-    const ticketId = req.params.id as WorkflowTicketId;
+  router.post('/workflow/issues/:id/propose-workflow', (req, res) => {
+    const issueId = req.params.id as WorkflowIssueId;
     const { epicTemplate: epicPlaybook, taskTemplate: taskPlaybook, agentRoles: proposedRoles, rationale } = req.body;
 
-    const ticket = tickets.findById(ticketId);
-    if (!ticket) return res.status(404).json({ error: 'Ticket not found' });
-    if (ticket.type !== 'epic') {
+    const issue = issues.findById(issueId);
+    if (!issue) return res.status(404).json({ error: 'Issue not found' });
+    if (issue.type !== 'epic') {
       return res.status(400).json({ error: 'Workflow proposals can only be made for epics' });
     }
     if (!epicPlaybook) return res.status(400).json({ error: 'epicTemplate is required' });
@@ -133,7 +133,7 @@ export function createWorkflowProposalRouter(deps: WorkflowProposalRouterDeps): 
     }
 
     // Store proposal in stateData
-    const existingStateData = (ticket.stateData || {}) as Record<string, unknown>;
+    const existingStateData = (issue.stateData || {}) as Record<string, unknown>;
     const workflowProposal = {
       epicTemplate: epicParseResult.data,
       taskTemplate: validatedTaskPlaybook,
@@ -142,7 +142,7 @@ export function createWorkflowProposalRouter(deps: WorkflowProposalRouterDeps): 
       proposedAt: new Date().toISOString(),
     };
 
-    const updated = tickets.update(ticketId, {
+    const updated = issues.update(issueId, {
       stateData: { ...existingStateData, workflowProposal },
     });
 
@@ -151,20 +151,20 @@ export function createWorkflowProposalRouter(deps: WorkflowProposalRouterDeps): 
       return;
     }
 
-    broadcast('workflow:updated', ticketId);
+    broadcast('workflow:updated', issueId);
     res.json({
       message: 'Workflow proposal stored. Awaiting human approval.',
-      ticketId,
+      issueId,
       proposal: workflowProposal,
     });
   });
 
-  router.post('/workflow/tickets/:id/approve-workflow', async (req, res) => {
-    const ticketId = req.params.id as WorkflowTicketId;
-    const ticket = tickets.findById(ticketId);
-    if (!ticket) return res.status(404).json({ error: 'Ticket not found' });
+  router.post('/workflow/issues/:id/approve-workflow', async (req, res) => {
+    const issueId = req.params.id as WorkflowIssueId;
+    const issue = issues.findById(issueId);
+    if (!issue) return res.status(404).json({ error: 'Issue not found' });
 
-    const stateData = (ticket.stateData || {}) as Record<string, unknown>;
+    const stateData = (issue.stateData || {}) as Record<string, unknown>;
     const proposal = stateData.workflowProposal as {
       epicTemplate: z.infer<typeof PlaybookPayloadSchema>;
       taskTemplate?: z.infer<typeof PlaybookPayloadSchema>;
@@ -174,7 +174,7 @@ export function createWorkflowProposalRouter(deps: WorkflowProposalRouterDeps): 
     } | undefined;
 
     if (!proposal) {
-      return res.status(400).json({ error: 'No pending workflow proposal found on this ticket' });
+      return res.status(400).json({ error: 'No pending workflow proposal found on this issue' });
     }
 
     try {
@@ -204,7 +204,7 @@ export function createWorkflowProposalRouter(deps: WorkflowProposalRouterDeps): 
           version: 1,
           name: proposal.epicTemplate.name,
           description: proposal.epicTemplate.description,
-          ticketType: proposal.epicTemplate.ticketType,
+          issueType: proposal.epicTemplate.issueType,
           stageDefinitions: proposal.epicTemplate.stageDefinitions,
           promptOverrides: proposal.epicTemplate.promptOverrides,
           tags: proposal.epicTemplate.tags,
@@ -225,7 +225,7 @@ export function createWorkflowProposalRouter(deps: WorkflowProposalRouterDeps): 
             version: 1,
             name: proposal.taskTemplate.name,
             description: proposal.taskTemplate.description,
-            ticketType: proposal.taskTemplate.ticketType,
+            issueType: proposal.taskTemplate.issueType,
             stageDefinitions: proposal.taskTemplate.stageDefinitions,
             promptOverrides: proposal.taskTemplate.promptOverrides,
             tags: proposal.taskTemplate.tags,
@@ -237,17 +237,17 @@ export function createWorkflowProposalRouter(deps: WorkflowProposalRouterDeps): 
         }
       }
 
-      // Bind the playbook to the ticket
+      // Bind the playbook to the issue
       const updatedStateData = { ...stateData };
       delete updatedStateData.workflowProposal;
 
-      const updated = tickets.update(ticketId, {
+      const updated = issues.update(issueId, {
         playbookRowId: epicPlaybook.rowId,
         stateData: updatedStateData,
       });
 
       if (!updated) {
-        res.status(500).json({ error: 'Failed to bind playbook to ticket' });
+        res.status(500).json({ error: 'Failed to bind playbook to issue' });
         return;
       }
 
@@ -265,8 +265,8 @@ export function createWorkflowProposalRouter(deps: WorkflowProposalRouterDeps): 
       ) ?? stages[0];
       const entryState = entryStage?.state as string | undefined;
 
-      if (entryState && ticket.state !== entryState) {
-        tickets.update(ticketId, {
+      if (entryState && issue.state !== entryState) {
+        issues.update(issueId, {
           state: entryState as WorkflowState,
           stateChangedAt: new Date().toISOString(),
         });
@@ -275,16 +275,16 @@ export function createWorkflowProposalRouter(deps: WorkflowProposalRouterDeps): 
       // Dispatch agents for the entry state
       if (dispatcher) {
         try {
-          await dispatcher.dispatchForCurrentState(ticketId);
+          await dispatcher.dispatchForCurrentState(issueId);
         } catch (dispatchErr) {
           console.error('Failed to dispatch agents after workflow approval:', dispatchErr);
         }
       }
 
-      broadcast('workflow:updated', ticketId);
+      broadcast('workflow:updated', issueId);
       res.json({
         message: 'Workflow approved and applied',
-        ticketId,
+        issueId,
         epicPlaybookRowId: epicPlaybook.rowId,
         taskPlaybookRowId: taskPlaybookRow?.rowId ?? null,
         entryState,

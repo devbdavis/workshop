@@ -30,8 +30,8 @@ export interface CreateSessionOptions {
   initialPrompt?: string;
   /** Display name for the session (shown in the terminal pane header). */
   name?: string;
-  /** Workflow ticket ID — if set, adds SubagentStop + SessionEnd hooks for execution tracking */
-  executionTicketId?: string;
+  /** Workflow issue ID — if set, adds SubagentStop + SessionEnd hooks for execution tracking */
+  executionIssueId?: string;
   /** Tool patterns to pre-approve (passed as --allowedTools to claude CLI). */
   allowedTools?: string[];
   /** Claude session ID to resume (passed as --resume to claude CLI). */

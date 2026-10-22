@@ -44,7 +44,7 @@ function LinearIcon({ className }: { className?: string }) {
 }
 
 /**
- * Renders GitHub PR and/or Linear ticket icon buttons for a session pane header.
+ * Renders GitHub PR and/or Linear issue icon buttons for a session pane header.
  * Both are inserted to the left of the Cursor button.
  */
 export function SessionLinkButtons({ pullRequests, issueKey, issueBaseUrl }: Props) {

@@ -1,13 +1,13 @@
 /**
  * Dark Factory "shift report" — a compact summary produced when an autonomous
- * ticket comes to rest (waiting for merge, escalated, or done). The human's
+ * issue comes to rest (waiting for merge, escalated, or done). The human's
  * interface to a lights-out run is this report, not the session transcripts.
  *
  * Reads only data already recorded: the transition audit log, the SubagentStop
  * progress feed (stateData.agentProgress), and PR links.
  */
-import type { WorkflowTicket } from '@foundation/types.js';
-import type { WorkflowTransitionRepository } from '@domain/workflow/ticket-repository.js';
+import type { WorkflowIssue } from '@foundation/types.js';
+import type { WorkflowTransitionRepository } from '@domain/workflow/issue-repository.js';
 import type { TopologyLoader } from './topology-loader.js';
 import { isTerminal } from '@domain/workflow/types.js';
 
@@ -31,36 +31,36 @@ interface AgentProgressEntry {
 
 const PR_URL_RE = /https?:\/\/\S+?\/(?:pull|pulls|merge_requests)\/\d+/g;
 
-function detectReason(ticket: WorkflowTicket, deps: ShiftReportDeps): ShiftReport['reason'] {
-  const sd = (ticket.stateData || {}) as Record<string, unknown>;
+function detectReason(issue: WorkflowIssue, deps: ShiftReportDeps): ShiftReport['reason'] {
+  const sd = (issue.stateData || {}) as Record<string, unknown>;
   if (sd.needsHuman === true) return 'escalated';
   try {
-    const stages = deps.topologyLoader.loadForTicket(ticket);
-    if (isTerminal(stages, ticket.state)) return 'done';
+    const stages = deps.topologyLoader.loadForIssue(issue);
+    if (isTerminal(stages, issue.state)) return 'done';
   } catch {
-    if (['done', 'merged', 'cancelled'].includes(ticket.state)) return 'done';
+    if (['done', 'merged', 'cancelled'].includes(issue.state)) return 'done';
   }
   return 'awaiting-merge';
 }
 
-function findPrLinks(ticket: WorkflowTicket): string[] {
-  const haystack = JSON.stringify(ticket.stateData ?? {}) + '\n' + (ticket.description ?? '');
+function findPrLinks(issue: WorkflowIssue): string[] {
+  const haystack = JSON.stringify(issue.stateData ?? {}) + '\n' + (issue.description ?? '');
   const found = haystack.match(PR_URL_RE) ?? [];
   return Array.from(new Set(found));
 }
 
 export function generateShiftReport(
-  ticket: WorkflowTicket,
+  issue: WorkflowIssue,
   deps: ShiftReportDeps,
   generatedAt: string = new Date().toISOString(),
 ): ShiftReport {
-  const sd = (ticket.stateData || {}) as Record<string, unknown>;
-  const reason = detectReason(ticket, deps);
+  const sd = (issue.stateData || {}) as Record<string, unknown>;
+  const reason = detectReason(issue, deps);
   const stepsUsed = typeof sd.stepCount === 'number' ? sd.stepCount : 0;
 
   const progress = Array.isArray(sd.agentProgress) ? (sd.agentProgress as AgentProgressEntry[]) : [];
-  const history = deps.transitions.findByTicket(ticket.id, 100);
-  const prLinks = findPrLinks(ticket);
+  const history = deps.transitions.findByIssue(issue.id, 100);
+  const prLinks = findPrLinks(issue);
 
   const testTransition = [...history]
     .reverse()
@@ -76,7 +76,7 @@ export function generateShiftReport(
         ? '✅ Done'
         : '✅ Ready for your review — draft PR open, waiting to merge';
   lines.push(`## ${headline}`, '');
-  lines.push(`**${ticket.title}** · ${stepsUsed} step${stepsUsed === 1 ? '' : 's'} used`, '');
+  lines.push(`**${issue.title}** · ${stepsUsed} step${stepsUsed === 1 ? '' : 's'} used`, '');
 
   // What happened
   lines.push('### What happened', '');
@@ -117,7 +117,7 @@ export function generateShiftReport(
     const last = history[0];
     lines.push('### Needs your attention', '');
     lines.push(
-      `- The run stopped early and is waiting for you at \`${ticket.state}\`.` +
+      `- The run stopped early and is waiting for you at \`${issue.state}\`.` +
         (last?.comment ? ` Reason: ${last.comment}` : ''),
     );
     lines.push('');

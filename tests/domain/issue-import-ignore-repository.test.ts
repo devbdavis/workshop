@@ -7,11 +7,11 @@ import os from 'os';
 const testDbPath = path.join(os.tmpdir(), `workshop-test-ignore-${randomUUID()}.db`);
 process.env.WORKSHOP_DB_PATH = testDbPath;
 
-import { createTicketImportIgnoreRepository } from '@infrastructure/persistence/ticket-import-ignore-repository';
+import { createIssueImportIgnoreRepository } from '@infrastructure/persistence/issue-import-ignore-repository';
 import { resetDatabase } from '@infrastructure/persistence/database';
 
-describe('TicketImportIgnoreRepository', () => {
-  const repo = createTicketImportIgnoreRepository();
+describe('IssueImportIgnoreRepository', () => {
+  const repo = createIssueImportIgnoreRepository();
 
   afterAll(() => {
     resetDatabase();

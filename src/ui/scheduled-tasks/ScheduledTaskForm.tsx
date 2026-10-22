@@ -230,7 +230,7 @@ export function ScheduledTaskForm({ task, tracks, agents, onSave, onClose, onSav
                 value={generateDesc}
                 onChange={(e) => setGenerateDesc(e.target.value)}
                 onKeyDown={(e) => { if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) void handleGenerate(); }}
-                placeholder="e.g. A daily report of pending action items from yesterday. Use Glean to search my Slack history and check for any open Linear tickets."
+                placeholder="e.g. A daily report of pending action items from yesterday. Use Glean to search my Slack history and check for any open Linear issues."
                 className="w-full px-3 py-2 bg-gray-900 border border-gray-700 rounded text-sm text-gray-100 placeholder-gray-500 focus:outline-none focus:border-blue-500 resize-y"
                 rows={3}
               />

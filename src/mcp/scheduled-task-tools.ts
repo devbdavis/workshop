@@ -144,7 +144,7 @@ export function registerScheduledTaskTools(
 
   server.tool(
     'workshop_list_automation_rules',
-    'List automation rules for a track (schedule, git-change, ticket-status-change triggers)',
+    'List automation rules for a track (schedule, git-change, issue-status-change triggers)',
     {
       trackId: z.string().describe('The track ID'),
     },

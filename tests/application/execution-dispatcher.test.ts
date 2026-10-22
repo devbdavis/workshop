@@ -8,15 +8,15 @@ const testDbPath = path.join(os.tmpdir(), `workshop-test-exec-dispatch-${randomU
 process.env.WORKSHOP_DB_PATH = testDbPath;
 
 import {
-  createWorkflowTicketRepository,
+  createWorkflowIssueRepository,
   createWorkflowTransitionRepository,
 } from '@infrastructure/persistence/workflow-repository';
-import { createTicketDependencyRepository } from '@infrastructure/persistence/workflow-dependency-repository';
+import { createIssueDependencyRepository } from '@infrastructure/persistence/workflow-dependency-repository';
 import { createTrackRepository } from '@infrastructure/persistence/track-repository';
 import { createWorkflowEngine } from '@application/workflow/engine';
 import { createExecutionDispatcher } from '@application/workflow/execution-dispatcher';
 import { resetDatabase } from '@infrastructure/persistence/database';
-import type { WorkflowTicket, SessionId, TrackId, Session } from '@foundation/types';
+import type { WorkflowIssue, SessionId, TrackId, Session } from '@foundation/types';
 import type { TerminalManager } from '@infrastructure/terminal/manager';
 import type { TrackRepository } from '@domain/track/repository';
 import type { TopologyLoader } from '@application/workflow/topology-loader';
@@ -116,14 +116,14 @@ const TASK_STAGES: StageDefinition[] = [
 
 function createMockTopologyLoader(): TopologyLoader {
   return {
-    loadForTicket(ticket: WorkflowTicket): StageDefinition[] {
-      if (ticket.type === 'epic') return EPIC_STAGES;
+    loadForIssue(issue: WorkflowIssue): StageDefinition[] {
+      if (issue.type === 'epic') return EPIC_STAGES;
       return TASK_STAGES;
     },
     loadByTemplateRowId(_rowId: string): StageDefinition[] {
       return EPIC_STAGES; // default to epic for template loads
     },
-    loadTemplateForTicket(_ticket: WorkflowTicket) {
+    loadTemplateForIssue(_issue: WorkflowIssue) {
       return null;
     },
     clearCache() {},
@@ -182,11 +182,11 @@ function createMockTracks(): TrackRepository {
 
 describe('ExecutionDispatcher', () => {
   const trackRepo = createTrackRepository();
-  const tickets = createWorkflowTicketRepository();
+  const issues = createWorkflowIssueRepository();
   const transitions = createWorkflowTransitionRepository();
-  const dependencies = createTicketDependencyRepository();
+  const dependencies = createIssueDependencyRepository();
   const topologyLoader = createMockTopologyLoader();
-  const engine = createWorkflowEngine({ tickets, transitions, dependencies, topologyLoader });
+  const engine = createWorkflowEngine({ issues, transitions, dependencies, topologyLoader });
 
   // Create a real track so FK constraints pass
   let testTrackId: TrackId;
@@ -198,7 +198,7 @@ describe('ExecutionDispatcher', () => {
     if (fs.existsSync(testDbPath)) fs.unlinkSync(testDbPath);
   });
 
-  function createEpicAtPlanReview(): WorkflowTicket {
+  function createEpicAtPlanReview(): WorkflowIssue {
     const epic = engine.createEpic({
       title: 'Test Execution',
       description: 'Test spec',
@@ -209,15 +209,15 @@ describe('ExecutionDispatcher', () => {
     engine.approve(epic.id); // spec-review -> planning
     engine.transition(epic.id, 'plan-critique', { type: 'agent' });
     engine.transition(epic.id, 'plan-review', { type: 'agent' });
-    return tickets.findById(epic.id)!;
+    return issues.findById(epic.id)!;
   }
 
   describe('approveWithExecution', () => {
-    it('should approve and dispatch execution, binding session to ticket', async () => {
+    it('should approve and dispatch execution, binding session to issue', async () => {
       const mockTerminal = createMockTerminal();
       const dispatcher = createExecutionDispatcher({
         engine,
-        tickets,
+        issues,
         tracks: createMockTracks(),
         terminal: mockTerminal,
         topologyLoader,
@@ -239,7 +239,7 @@ describe('ExecutionDispatcher', () => {
 
       const dispatcher = createExecutionDispatcher({
         engine,
-        tickets,
+        issues,
         tracks: createMockTracks(),
         terminal: mockTerminal,
         topologyLoader,
@@ -254,7 +254,7 @@ describe('ExecutionDispatcher', () => {
     it('should pass through non-execution approvals unchanged', async () => {
       const dispatcher = createExecutionDispatcher({
         engine,
-        tickets,
+        issues,
         tracks: createMockTracks(),
         terminal: createMockTerminal(),
         topologyLoader,
@@ -274,7 +274,7 @@ describe('ExecutionDispatcher', () => {
 
       const dispatcher = createExecutionDispatcher({
         engine,
-        tickets,
+        issues,
         tracks: mockTracks,
         terminal: createMockTerminal(),
         topologyLoader,
@@ -289,10 +289,10 @@ describe('ExecutionDispatcher', () => {
   });
 
   describe('dispatch', () => {
-    it('should throw if ticket is not in executing state', async () => {
+    it('should throw if issue is not in executing state', async () => {
       const dispatcher = createExecutionDispatcher({
         engine,
-        tickets,
+        issues,
         tracks: createMockTracks(),
         terminal: createMockTerminal(),
         topologyLoader,

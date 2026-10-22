@@ -2,7 +2,7 @@
   "id": "new-web-app",
   "name": "New Web App",
   "description": "Dark Factory playbook for scaffolding a brand-new web application from scratch: triage the intake, plan the architecture, build it, and gate only on the final merge review.",
-  "ticketType": "epic",
+  "issueType": "epic",
   "matchCriteria": {
     "keywords": ["web", "app", "webapp", "frontend", "website", "new project", "scaffold", "greenfield"],
     "complexity": "moderate",

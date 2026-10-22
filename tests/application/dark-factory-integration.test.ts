@@ -2,10 +2,10 @@ import { describe, it, expect } from 'vitest';
 import { listTemplates, ensurePlaybookForTemplate } from '../../src/application/workflow/template-loader.js';
 import { generateShiftReport } from '../../src/application/workflow/shift-report.js';
 import type { PlaybookRepository, PlaybookRow } from '../../src/domain/workflow/playbook-repository.js';
-import type { WorkflowTransitionRepository } from '../../src/domain/workflow/ticket-repository.js';
+import type { WorkflowTransitionRepository } from '../../src/domain/workflow/issue-repository.js';
 import type { TopologyLoader } from '../../src/application/workflow/topology-loader.js';
 import type { StageDefinition } from '../../src/domain/workflow/types.js';
-import type { WorkflowTicket, WorkflowTransition } from '../../src/foundation/types.js';
+import type { WorkflowIssue, WorkflowTransition } from '../../src/foundation/types.js';
 
 const PROJECT_ROOT = process.cwd();
 
@@ -58,19 +58,19 @@ describe('shift-report', () => {
   };
   const stages = [gateStage, terminalStage];
 
-  const topologyLoader = { loadForTicket: () => stages } as unknown as TopologyLoader;
+  const topologyLoader = { loadForIssue: () => stages } as unknown as TopologyLoader;
   const transitions = {
-    findByTicket: (): WorkflowTransition[] => [
-      { id: 't1', ticketId: 'k1', fromState: 'execute', toState: 'integration-review', actor: { type: 'agent' }, comment: 'tests passing, 42 green', createdAt: '2026-07-30T00:00:00Z' } as WorkflowTransition,
+    findByIssue: (): WorkflowTransition[] => [
+      { id: 't1', issueId: 'k1', fromState: 'execute', toState: 'integration-review', actor: { type: 'agent' }, comment: 'tests passing, 42 green', createdAt: '2026-07-30T00:00:00Z' } as WorkflowTransition,
     ],
   } as unknown as WorkflowTransitionRepository;
 
-  function ticket(state: string, sd: Record<string, unknown>): WorkflowTicket {
-    return { id: 'k1', type: 'epic', title: 'Reading list', description: 'see https://github.com/x/y/pull/3', state, stateData: sd, provider: 'claude', priority: 'medium', sortOrder: 0, stateChangedAt: '', createdAt: '', updatedAt: '' } as WorkflowTicket;
+  function issue(state: string, sd: Record<string, unknown>): WorkflowIssue {
+    return { id: 'k1', type: 'epic', title: 'Reading list', description: 'see https://github.com/x/y/pull/3', state, stateData: sd, provider: 'claude', priority: 'medium', sortOrder: 0, stateChangedAt: '', createdAt: '', updatedAt: '' } as WorkflowIssue;
   }
 
   it('reports awaiting-merge at the final gate', () => {
-    const r = generateShiftReport(ticket('final-review', { stepCount: 5 }), { transitions, topologyLoader }, 'now');
+    const r = generateShiftReport(issue('final-review', { stepCount: 5 }), { transitions, topologyLoader }, 'now');
     expect(r.reason).toBe('awaiting-merge');
     expect(r.stepsUsed).toBe(5);
     expect(r.markdown).toContain('pull/3');
@@ -78,13 +78,13 @@ describe('shift-report', () => {
   });
 
   it('reports escalated when needsHuman is set', () => {
-    const r = generateShiftReport(ticket('final-review', { needsHuman: true }), { transitions, topologyLoader }, 'now');
+    const r = generateShiftReport(issue('final-review', { needsHuman: true }), { transitions, topologyLoader }, 'now');
     expect(r.reason).toBe('escalated');
     expect(r.markdown).toContain('Needs your attention');
   });
 
   it('reports done at a terminal state', () => {
-    const r = generateShiftReport(ticket('done', {}), { transitions, topologyLoader }, 'now');
+    const r = generateShiftReport(issue('done', {}), { transitions, topologyLoader }, 'now');
     expect(r.reason).toBe('done');
   });
 });

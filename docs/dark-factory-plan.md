@@ -14,11 +14,11 @@ A "Dark Factory" (lights-out manufacturing) is a production line that runs unatt
 
 **The key finding: we have already built the dark factory. We just haven't turned the lights off.**
 
-Workshop's WorkflowTicket engine is a data-driven finite-state machine where each stage carries a `humanGate: boolean` flag. It already has a circuit breaker, auto-transitions, worktree isolation, and a `dangerouslySkipPermissions` switch. "Dark Factory" is **not a new mode** — it's a *playbook variant with gates auto-approved, plus a couple of templates*. Your instinct ("beef up the workflow thing with `new web app` / `new mobile app` templates") is the correct architecture, not a shortcut around it.
+Workshop's WorkflowIssue engine is a data-driven finite-state machine where each stage carries a `humanGate: boolean` flag. It already has a circuit breaker, auto-transitions, worktree isolation, and a `dangerouslySkipPermissions` switch. "Dark Factory" is **not a new mode** — it's a *playbook variant with gates auto-approved, plus a couple of templates*. Your instinct ("beef up the workflow thing with `new web app` / `new mobile app` templates") is the correct architecture, not a shortcut around it.
 
 What's actually missing is small and honest:
-1. Let the dispatcher **auto-advance through `humanGate` stages** for a flagged ticket (except merge — never merge).
-2. **Wire `dangerouslySkipPermissions`** into workflow-ticket agent sessions (parity — todo dispatch and scheduled tasks already do this).
+1. Let the dispatcher **auto-advance through `humanGate` stages** for a flagged issue (except merge — never merge).
+2. **Wire `dangerouslySkipPermissions`** into workflow-issue agent sessions (parity — todo dispatch and scheduled tasks already do this).
 3. **2–3 stored playbook templates** with pre-filled prompts and a demanding intake questionnaire.
 4. **A "shift report"** so you come back to a tidy desk instead of a pile of transcripts.
 
@@ -48,7 +48,7 @@ There is **no** global "autonomy level" setting today. That's a feature, not a g
 
 ### Option A — Templated autonomous playbooks *(recommended)*
 
-Dark Factory = **stored playbook templates** + a **per-ticket `autonomous` flag** the dispatcher honors by auto-approving `humanGate` stages (merge exempt).
+Dark Factory = **stored playbook templates** + a **per-issue `autonomous` flag** the dispatcher honors by auto-approving `humanGate` stages (merge exempt).
 
 - Templates (`new-web-app`, `new-mobile-app`, `feature-on-existing-repo`) are stored playbooks that **seed** the normal `workflow-select` proposal. The human still approves the playbook assignment once, up front — **that approval is the "go" button.** After that, the line runs dark to a draft PR.
 - Flag **off** (default) = today's workflow, byte-for-byte unchanged.
@@ -79,7 +79,7 @@ Ranked after fable's review. The bias is a lean system: two great things beat ei
 ### Keep (build in v1)
 1. **Tests-green as the completion gate.** In an unattended loop, a green test/lint run is the only "done" that means anything. The orchestrator refuses to advance on red. This is the automated quality gate that makes the factory *dark* rather than merely *unsupervised*.
 2. **Reversibility-based hard blocks.** A short, static denylist that **no flag can override** (see Safety). Small and load-bearing.
-3. **Budget / step caps.** Wall-clock + iteration cap per ticket. The circuit breaker catches *loops*; the cap catches *drift* — an agent making steady, plausible, wrong progress for six hours. One number, escalate on breach.
+3. **Budget / step caps.** Wall-clock + iteration cap per issue. The circuit breaker catches *loops*; the cap catches *drift* — an agent making steady, plausible, wrong progress for six hours. One number, escalate on breach.
 4. **The shift report** (see below). The interface to a lights-out line is the morning report, not the floor.
 
 ### Defer (good idea, wrong week)
@@ -119,15 +119,15 @@ Notice what is **not** in the stack: the agent's opinion of its own trustworthin
 
 ---
 
-## Coexistence: one flag, on the ticket
+## Coexistence: one flag, on the issue
 
-**A per-ticket `autonomous: boolean`**, set at dispatch, defaulting from the template. It tells `dispatch-coordinator.ts` to treat `humanGate: true` stages as auto-approved — **except the merge gate, which ignores the flag.**
+**A per-issue `autonomous: boolean`**, set at dispatch, defaulting from the template. It tells `dispatch-coordinator.ts` to treat `humanGate: true` stages as auto-approved — **except the merge gate, which ignores the flag.**
 
 - Off (default) → today's behavior, unchanged. The current workflow is preserved by doing literally nothing to it.
 - On → the line runs dark; the circuit breaker escalates to the nearest human gate exactly as it does now.
 
-Why ticket-level and not:
-- **Track-level dial** — policy layered on mechanism. Ship the ticket flag; if you find yourself setting it identically on every ticket in a track, *then* promote it to a track default. YAGNI until observed.
+Why issue-level and not:
+- **Track-level dial** — policy layered on mechanism. Ship the issue flag; if you find yourself setting it identically on every issue in a track, *then* promote it to a track default. YAGNI until observed.
 - **Hand-editing `humanGate` per dispatch** — too fiddly; you shouldn't tune a stage graph to say "just go."
 
 ---
@@ -147,7 +147,7 @@ So the template's real job is **interrogation, not scaffolding**:
 
 ## The shift report (the piece the research missed)
 
-Real lights-out factories are heavily instrumented; the human's interface is the morning report, not the floor. When an autonomous ticket finishes **or** escalates, produce one compact artifact:
+Real lights-out factories are heavily instrumented; the human's interface is the morning report, not the floor. When an autonomous issue finishes **or** escalates, produce one compact artifact:
 
 - what was built, key decisions made
 - test results, cost / iterations consumed
@@ -161,7 +161,7 @@ Two reuse notes: **escalations land in the existing review queue** (no new inbox
 
 ## Suggested phasing
 
-- **v1 (the whole feature):** ticket `autonomous` flag honored by the dispatcher (merge exempt) · skip-permissions parity for workflow agents · hard reversibility denylist · tests-green completion gate · budget/iteration cap · 2 templates with demanding intake · shift report.
+- **v1 (the whole feature):** issue `autonomous` flag honored by the dispatcher (merge exempt) · skip-permissions parity for workflow agents · hard reversibility denylist · tests-green completion gate · budget/iteration cap · 2 templates with demanding intake · shift report.
 - **v1.5:** pre-flight check at dispatch · a third template if a real second use case appears.
 - **Later, only if observed need:** confidence-based routing · rewind tooling · track-level autonomy default.
 
@@ -175,7 +175,7 @@ The design principle for the UX mirrors the one for the code: **not a new place 
 
 1. **Kanban** (`/kanban`) for quick one-offs: open a todo, **Dispatch to Agent** (`DispatchDropdown` — pick provider, optionally toggle *"Dangerous mode (skip permissions)"*), watch the pulsing "Agent" badge. Or **Workflow** (`/workflow`) for anything real.
 2. **Create an epic** (`CreateEpicModal`: *Standard* or *From Plan*). An agent proposes a playbook; you land on `EpicDetail` and click **Approve & Start** (`WorkflowAssignmentPanel`).
-3. **Babysit the pipeline.** The epic walks its stages, stopping at each `humanGate`. The **bell badge** in `TopNav` counts tickets waiting on you; the **Notifications** page (`/notifications`) lists them. You open each one, read the `HumanGatePanel` summary, and click **Approve / Reject** — at spec-review, plan-review, decomposition-review, code-review, integration-review, final-review. That's potentially six stops per epic.
+3. **Babysit the pipeline.** The epic walks its stages, stopping at each `humanGate`. The **bell badge** in `TopNav` counts issues waiting on you; the **Notifications** page (`/notifications`) lists them. You open each one, read the `HumanGatePanel` summary, and click **Approve / Reject** — at spec-review, plan-review, decomposition-review, code-review, integration-review, final-review. That's potentially six stops per epic.
 4. **Merge.** Final gate approved → draft PR. You merge on GitHub. `submit-for-review` and `/done` keep the PR draft and the todo out of `done` until you say so.
 
 Every stop is a context-switch back to you. That's the feature today — and the thing you want an alternative to.
@@ -197,7 +197,7 @@ Open `EpicDetail` and watch, or close the tab and do something else. The differe
 - New surface (optional, high-charm): a **Factory Floor** view that reuses the existing `TrackOfficeStrip` "office desk" characters — one illustrated worker per active autonomous session across all runs, working / idle / dying at a glance. Fits the calm-command-center spirit; it's the "watch the line run" screen.
 
 **Step 3 — If it gets stuck (the only mid-run interruption).**
-Budget exhausted or circuit breaker tripped → the ticket escalates to its nearest human gate, *exactly* the state today's gates use. It reappears in the **bell badge** and the **Notifications** inbox with a reason ("Dark Factory: budget exhausted at code-review"). You handle it like any gate today — Approve / Reject / answer questions — and it either resumes dark or you take the wheel. No new inbox, no new mechanic; escalation simply *revives* the normal human-in-the-loop flow for that one ticket.
+Budget exhausted or circuit breaker tripped → the issue escalates to its nearest human gate, *exactly* the state today's gates use. It reappears in the **bell badge** and the **Notifications** inbox with a reason ("Dark Factory: budget exhausted at code-review"). You handle it like any gate today — Approve / Reject / answer questions — and it either resumes dark or you take the wheel. No new inbox, no new mechanic; escalation simply *revives* the normal human-in-the-loop flow for that one issue.
 
 **Step 4 — Come back to a tidy desk.**
 Terminal state = **draft PR open, tests green, waiting.** `EpicDetail` shows a new **Shift Report** card: what was built, key decisions, the test run result, steps/time consumed, and anything flagged for your eyes. You read the report, glance at the draft PR, and merge — or reject and send it back. **Merge is the one gate that never auto-passes**, in this lane or the kanban lane. If you kicked off three runs before dinner, you come back to three draft PRs and three readable reports in Notifications, not three terminals to reconstruct.
@@ -231,20 +231,20 @@ This is the detail behind Option A. It leans entirely on machinery that already 
 ### The single best property: no SQL migration
 
 Everything new rides on JSON that is **already persisted**:
-- The autonomy flag + budget live in `WorkflowTicket.stateData` (a free-form bag the engine already reads/merges — see `engine.ts:180,238`).
+- The autonomy flag + budget live in `WorkflowIssue.stateData` (a free-form bag the engine already reads/merges — see `engine.ts:180,238`).
 - The "this gate may be auto-approved" marker is one optional field on `StageDefinitionSchema`, and stage definitions are stored *inside* the playbook's JSON payload in `workflow_templates` — not as columns.
 
-So the entire feature is: a Zod field, a coordinator loop, two one-line dispatch tweaks, an engine budget check, and template data. Flag absent (every existing ticket) → every new branch is a no-op → today's behavior byte-for-byte.
+So the entire feature is: a Zod field, a coordinator loop, two one-line dispatch tweaks, an engine budget check, and template data. Flag absent (every existing issue) → every new branch is a no-op → today's behavior byte-for-byte.
 
 ### Change map
 
 | # | Change | File | Shape |
 |---|---|---|---|
-| 1 | `autonomous` + `autonomousBudget` read helper | `dispatch-coordinator.ts` | resolve from ticket, else parent epic |
+| 1 | `autonomous` + `autonomousBudget` read helper | `dispatch-coordinator.ts` | resolve from issue, else parent epic |
 | 2 | Auto-advance human gates (merge exempt) | `dispatch-coordinator.ts` | new `autoAdvanceGates()` after each transition |
 | 3 | `autoApprovable?: boolean` on stages + hard merge guard | `domain/workflow/schemas.ts`, coordinator | data marker + code belt-and-suspenders |
-| 4 | Pass `dangerouslySkipPermissions` for autonomous tickets | `agent-dispatcher.ts:337`, `execution-dispatcher.ts:133` | one option on the existing `createSession` calls |
-| 5 | Whole-ticket budget cap → escalate | `engine.ts` (beside circuit breaker, `:182`) | reuse `findNearestHumanGate()` |
+| 4 | Pass `dangerouslySkipPermissions` for autonomous issues | `agent-dispatcher.ts:337`, `execution-dispatcher.ts:133` | one option on the existing `createSession` calls |
+| 5 | Whole-issue budget cap → escalate | `engine.ts` (beside circuit breaker, `:182`) | reuse `findNearestHumanGate()` |
 | 6 | Tests-green completion gate | template prompt (+ optional `verify` stage) | topology/prompt, not engine |
 | 7 | Shift report | `engine.ts` `onTerminalState` hook (already wired) + escalation path | read existing audit + `agentProgress` |
 | 8 | Templates | `templates/playbooks/*.json` (installed like `templates/agents`) | stored playbook + intake questions |
@@ -254,16 +254,16 @@ So the entire feature is: a Zod field, a coordinator loop, two one-line dispatch
 The whole "just go" behavior is one loop in the coordinator — the funnel every caller already passes through (`dispatch-coordinator.ts`). Today `transitionWithDispatch`/`approveWithDispatch`/`reject` end by calling `dispatchIfNeeded(updated)`. Add one step after it:
 
 ```
-autoAdvanceGates(ticket):
-  guard: ticket (or its parent epic) has stateData.autonomous === true
+autoAdvanceGates(issue):
+  guard: issue (or its parent epic) has stateData.autonomous === true
   loop (depth-capped, e.g. 8):
     stage = current stage
     stop unless stage.humanGate
     stop if NOT canAutoApprove(stage)        // merge stays sacred — see #3
     stop unless stage has a 'human-approve' transition
-    updated = engine.approve(ticket.id, 'Dark Factory: auto-approved')
+    updated = engine.approve(issue.id, 'Dark Factory: auto-approved')
     await dispatchIfNeeded(updated)           // spawns the next agent/execution
-    ticket = re-read
+    issue = re-read
 ```
 
 `engine.approve()` already exists (`engine.ts:324`), already validates the gate, and already runs auto-transitions internally. We're just calling it on the machine's behalf instead of waiting for a human MCP call. The circuit breaker (`engine.ts:186`) is untouched and still fires — in autonomous mode an escalation *revives* the gates (the loop stops advancing because the escalated state is where the agent got stuck), which is exactly the failure posture we want.
@@ -287,19 +287,19 @@ Belt-and-suspenders in code so a careless template can't ever automate merge: al
 Both dispatchers build a `createSession(trackId, { … })` options object — `agent-dispatcher.ts:337` and `execution-dispatcher.ts:133`. `CreateSessionOptions` already carries `dangerouslySkipPermissions` (`domain/terminal/manager.ts:48`); scheduled tasks and todo dispatch already set it. Add:
 
 ```
-dangerouslySkipPermissions: isAutonomous(ticket),
+dangerouslySkipPermissions: isAutonomous(issue),
 ```
 
-resolving `isAutonomous` the same way `resolveTrackIdFromParent` already climbs to the parent epic (`agent-dispatcher.ts:107`). Non-autonomous tickets keep interactive permission handling exactly as now.
+resolving `isAutonomous` the same way `resolveTrackIdFromParent` already climbs to the parent epic (`agent-dispatcher.ts:107`). Non-autonomous issues keep interactive permission handling exactly as now.
 
-### 5. Whole-ticket budget cap
+### 5. Whole-issue budget cap
 
 The circuit breaker catches *loops* (3 iterations at one state); it does **not** catch *drift* — an agent making steady, plausible, wrong progress across many states for hours. Add a second check right beside it in `applyTransition` (`engine.ts:182`):
 
 ```
 if autonomous and (totalTransitions >= budget.maxSteps
                    or now - createdAt >= budget.maxWallClock):
-    toState = findNearestHumanGate(stages, ticket.state)   // reuse existing escalation
+    toState = findNearestHumanGate(stages, issue.state)   // reuse existing escalation
     comment = 'Dark Factory: budget exhausted, escalating'
 ```
 
@@ -313,12 +313,12 @@ Two levels, ship the cheap one first:
 
 ### 7. The shift report
 
-`engine.ts` already accepts an `onTerminalState(ticket)` hook (`:98,264`) that fires when a ticket reaches a no-outgoing-transitions state. Wire a reporter there, plus one call on the circuit-breaker/budget escalation path. It needs no new data collection — it reads what's already recorded:
+`engine.ts` already accepts an `onTerminalState(issue)` hook (`:98,264`) that fires when an issue reaches a no-outgoing-transitions state. Wire a reporter there, plus one call on the circuit-breaker/budget escalation path. It needs no new data collection — it reads what's already recorded:
 - the `workflow_transitions` audit table (every state change, actor, comment),
 - `stateData.agentProgress` (already populated by the `SubagentStop` progress hook, `execution-dispatcher.ts:148`),
 - linked PRs.
 
-Output: one compact artifact (what was built, decisions, test result, steps/cost consumed, why it stopped: done vs escalated) → written to the vault and the ticket description. Escalations land in the **existing** review queue — no new inbox.
+Output: one compact artifact (what was built, decisions, test result, steps/cost consumed, why it stopped: done vs escalated) → written to the vault and the issue description. Escalations land in the **existing** review queue — no new inbox.
 
 ### 8. Templates
 
@@ -330,7 +330,7 @@ Start with two: `new-web-app` and `feature-on-existing-repo` (likely your most c
 
 ### What this deliberately does NOT touch
 
-The lightweight Todo/Kanban path, `submit-for-review` (always draft PR), and `/done` (manual-only) are all unchanged. Dark Factory lives entirely in the WorkflowTicket lane; the merge gate remains human in both lanes.
+The lightweight Todo/Kanban path, `submit-for-review` (always draft PR), and `/done` (manual-only) are all unchanged. Dark Factory lives entirely in the WorkflowIssue lane; the merge gate remains human in both lanes.
 
 ### Rough effort
 
@@ -340,8 +340,8 @@ Changes 1–5 are the core and are small and localized (one Zod field, one coord
 
 ## Open decisions for you
 
-1. **Option A confirmed?** (Ticket-flag + templates, vs. anything heavier.)
+1. **Option A confirmed?** (Issue-flag + templates, vs. anything heavier.)
 2. **Which two templates first?** `new-web-app` + `new-mobile-app`, or swap one for `feature-on-existing-repo` (probably your most common real case)?
 3. **Budget cap unit** — wall-clock, iteration count, or both? Default value?
 4. **Merge stays sacred** — confirm you want *no* auto-merge escape hatch, ever (recommended).
-5. **Shift report destination** — vault note, the todo/ticket description, a dashboard card, or all three?
+5. **Shift report destination** — vault note, the todo/issue description, a dashboard card, or all three?

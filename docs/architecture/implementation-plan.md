@@ -27,13 +27,13 @@
 
 - Local-first, zero-config, single-file database
 - Perfect for single-user desktop application
-- Stores: tracks, ticket links, summaries, automation rules, session metadata
+- Stores: tracks, issue links, summaries, automation rules, session metadata
 - File-based backups trivially
 
 ### Real-time Communication: WebSocket (ws)
 
 - Terminal I/O streaming (xterm.js ↔ tmux via node-pty)
-- Live status updates (git state changes, ticket sync results)
+- Live status updates (git state changes, issue sync results)
 - Session lifecycle events (created, attached, detached, killed)
 
 ### Process Management
@@ -69,7 +69,7 @@ Set up the development environment and build pipeline.
 Build the core domain types and persistence layer. No UI yet — validate with tests.
 
 **1a. Foundation types** (`src/foundation/`)
-- Track ID, Session ID, Ticket ID — branded string types
+- Track ID, Session ID, Issue ID — branded string types
 - Common result/error types
 - Configuration schema (validated with zod)
 - Event types (domain events for the automation engine)
@@ -77,7 +77,7 @@ Build the core domain types and persistence layer. No UI yet — validate with t
 **1b. Domain entities** (`src/domain/`)
 - `track/` — ProjectTrack entity (name, description, status, repo associations, filesystem paths)
 - `session/` — TerminalSession entity (track ID, tmux session name, Claude resume ID, system prompt, state)
-- `ticket/` — ExternalTicket entity (source system, external ID, relationship annotation, cached snapshot)
+- `issue/` — ExternalIssue entity (source system, external ID, relationship annotation, cached snapshot)
 - `summary/` — ProjectSummary entity (track ID, content, version, timestamp)
 - `automation/` — AutomationRule entity (track ID, trigger type, action type, config, enabled flag)
 
@@ -139,7 +139,7 @@ Get a working UI with dashboard and terminal embedding. Keep it functional, not 
 - API routes:
   - `GET /api/tracks` — list all tracks
   - `POST /api/tracks` — create track
-  - `GET /api/tracks/:id` — get track with sessions, tickets, summary
+  - `GET /api/tracks/:id` — get track with sessions, issues, summary
   - `PUT /api/tracks/:id` — update track
   - `DELETE /api/tracks/:id` — archive track
   - `POST /api/tracks/:id/sessions` — create terminal session
@@ -153,7 +153,7 @@ Get a working UI with dashboard and terminal embedding. Keep it functional, not 
 
 **3c. Track view** (`src/ui/track-view/`)
 - Summary panel (read-only display of current summary, last-updated time)
-- Context panel (repos with branch/dirty state, linked tickets, filesystem paths)
+- Context panel (repos with branch/dirty state, linked issues, filesystem paths)
 - Terminal area with resizable panels (xterm.js instances)
 - Toolbar: new session, kill session, refresh summary
 
@@ -184,33 +184,33 @@ Get a working UI with dashboard and terminal embedding. Keep it functional, not 
 
 ---
 
-### Phase 5: External Ticket Integration (Jira/Linear via MCP)
+### Phase 5: External Issue Integration (Jira/Linear via MCP)
 
 **5a. MCP adapter layer** (`src/infrastructure/mcp/`)
 - Registry that maps available MCP servers to their capabilities
 - Generic MCP client wrapper that handles connection and error recovery
-- Atlassian adapter: search tickets, get ticket details, map to domain types
+- Atlassian adapter: search issues, get issue details, map to domain types
 - Linear adapter: same interface, different source
 
-**5b. Ticket linking** (`src/application/ticket-sync/`)
-- Search for tickets from within a track (calls MCP, returns results)
-- Link a ticket to a track (creates ExternalTicket record with relationship annotation)
-- Unlink a ticket
-- Periodic sync: refresh cached ticket status from MCP source
+**5b. Issue linking** (`src/application/issue-sync/`)
+- Search for issues from within a track (calls MCP, returns results)
+- Link an issue to a track (creates ExternalIssue record with relationship annotation)
+- Unlink an issue
+- Periodic sync: refresh cached issue status from MCP source
 
-**5c. UI for ticket management**
+**5c. UI for issue management**
 - Search panel in track view (search box → MCP results → link button)
-- Linked tickets displayed in context panel with status badges
+- Linked issues displayed in context panel with status badges
 - Relationship annotation dropdown (primary, related, blocked-by)
 
-**Verification:** Search for a real Jira ticket from the UI, link it to a track, see its status displayed. Change the ticket status in Jira, trigger sync, see it update.
+**Verification:** Search for a real Jira issue from the UI, link it to a track, see its status displayed. Change the issue status in Jira, trigger sync, see it update.
 
 ---
 
 ### Phase 6: AI-Maintained Summaries
 
 **6a. Summary generation service** (`src/application/summary-generation/`)
-- Given a track, gather context: repo states, linked ticket statuses, recent session activity
+- Given a track, gather context: repo states, linked issue statuses, recent session activity
 - Compose a prompt and send to Claude (via Claude Code headless or API)
 - Store the result as a new summary version
 - Expose a "regenerate" action
@@ -220,7 +220,7 @@ Get a working UI with dashboard and terminal embedding. Keep it functional, not 
 - "Refresh" button triggers regeneration
 - Summary history accessible (version list, click to view previous)
 
-**Verification:** Create a track with repos and tickets, trigger summary generation, see a meaningful summary appear in the panel.
+**Verification:** Create a track with repos and issues, trigger summary generation, see a meaningful summary appear in the panel.
 
 ---
 
@@ -228,8 +228,8 @@ Get a working UI with dashboard and terminal embedding. Keep it functional, not 
 
 **7a. Automation rule engine** (`src/application/automation-engine/`)
 - Rule storage: trigger type + action type + config, stored in DB per track
-- Supported triggers: `schedule` (cron), `git-change`, `ticket-status-change`, `session-end`, `manual`
-- Supported actions: `regenerate-summary`, `run-agent-prompt`, `sync-tickets`
+- Supported triggers: `schedule` (cron), `git-change`, `issue-status-change`, `session-end`, `manual`
+- Supported actions: `regenerate-summary`, `run-agent-prompt`, `sync-issues`
 - Cron scheduler for time-based triggers (node-cron)
 - Event listener for domain events (git change detected, session ended, etc.)
 
@@ -248,7 +248,7 @@ Get a working UI with dashboard and terminal embedding. Keep it functional, not 
 **8a. Prompt template system**
 - Track-level default system prompt
 - Per-session override capability
-- Variable interpolation: `{{track.name}}`, `{{track.repos[0].path}}`, `{{track.tickets}}`, etc.
+- Variable interpolation: `{{track.name}}`, `{{track.repos[0].path}}`, `{{track.issues}}`, etc.
 - Template library stored in DB with names and descriptions
 
 **8b. Prompt UI**
@@ -263,21 +263,21 @@ Get a working UI with dashboard and terminal embedding. Keep it functional, not 
 ### Phase 9: Polish and Stretch Goals
 
 **9a. Dashboard improvements**
-- Global search across tracks and tickets
+- Global search across tracks and issues
 - Archive/unarchive tracks
 - Keyboard shortcuts for navigation
 
 **9b. Cross-track visualization** (stretch)
-- Shared ticket indicators
+- Shared issue indicators
 - Shared repo indicators
 
 **9c. Voice integration** (stretch)
 - Spawn Claude Code with `/voice` flag in a dedicated session type
 - Audio passthrough via browser microphone API
 
-**9d. Ticket editing via MCP** (stretch)
+**9d. Issue editing via MCP** (stretch)
 - Write-back to Jira/Linear (add comments, change status)
-- Agent-initiated ticket updates during conversations
+- Agent-initiated issue updates during conversations
 
 ---
 
@@ -299,7 +299,7 @@ Phase 3 (Web UI) ◄───┘
   ├──────────┬──────────┐
   ▼          ▼          ▼
 Phase 5    Phase 6    Phase 8
-(Tickets)  (Summary)  (Prompts)
+(Issues)  (Summary)  (Prompts)
   │          │
   └────┬─────┘
        ▼
@@ -311,7 +311,7 @@ Phase 5    Phase 6    Phase 8
 
 Phases 2 and 4 can be worked in parallel after Phase 1.
 Phases 5, 6, and 8 can be worked in parallel after Phase 3.
-Phase 7 depends on 5 and 6 (automation triggers from ticket sync and summary generation).
+Phase 7 depends on 5 and 6 (automation triggers from issue sync and summary generation).
 
 ---
 

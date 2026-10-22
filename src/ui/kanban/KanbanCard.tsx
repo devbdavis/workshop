@@ -76,7 +76,7 @@ export function KanbanCard({ todo, trackName, onClick }: Props) {
             title={
               isGithubIssueKey(todo.issueKey)
                 ? `Linked to GitHub issue ${todo.issueKey}`
-                : `Linked to Linear ticket ${todo.issueKey}`
+                : `Linked to Linear issue ${todo.issueKey}`
             }
           >
             {isGithubIssueKey(todo.issueKey) ? (

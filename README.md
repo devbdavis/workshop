@@ -20,7 +20,7 @@ New here? The [Setup Guide](docs/setup-guide.md) gets all the external pieces wi
 
 A local-first project command center for managing parallel work tracks with AI-assisted terminal sessions.
 
-Workshop lets you organize development work into **tracks** — each with linked repos, terminal sessions, AI-generated summaries, and a workflow ticket pipeline. It provides a web UI for managing everything from a single dashboard, and an MCP server so Claude Code can interact with your tracks programmatically.
+Workshop lets you organize development work into **tracks** — each with linked repos, terminal sessions, AI-generated summaries, and a workflow issue pipeline. It provides a web UI for managing everything from a single dashboard, and an MCP server so Claude Code can interact with your tracks programmatically.
 
 ## Prerequisites
 
@@ -237,12 +237,12 @@ After symlinking, Claude Code will automatically discover and use these skills w
 ## Key Concepts
 
 ### Tracks
-A track represents a parallel work stream — a project, feature, or investigation. Each track has linked repos, terminal sessions, context, summaries, and workflow tickets.
+A track represents a parallel work stream — a project, feature, or investigation. Each track has linked repos, terminal sessions, context, summaries, and workflow issues.
 
 ### Sessions
 Terminal sessions are tmux-backed, with optional Claude Code or Codex CLI integration. Sessions survive server restarts. The system auto-composes a context-rich system prompt for each new AI session from the track's context, vault memory, and latest summary.
 
-### Workflow Tickets
+### Workflow Issues
 A full lifecycle pipeline for work items: idea -> triage -> spec review -> planning -> critique -> plan review -> task splitting -> parallel implementation -> code review -> integration review -> final review -> merge. Includes human review gates and inter-task dependency tracking.
 
 ### Vault Memory

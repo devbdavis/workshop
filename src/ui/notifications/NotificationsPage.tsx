@@ -1,6 +1,6 @@
 import { useEffect, useState, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import type { WorkflowTicket } from '@foundation/types';
+import type { WorkflowIssue } from '@foundation/types';
 import { useSessionAlerts, type SessionAlert } from './SessionAlerts';
 
 const LEGACY_HUMAN_GATE_STATES = new Set([
@@ -8,11 +8,11 @@ const LEGACY_HUMAN_GATE_STATES = new Set([
   'code-review', 'decomposition-review', 'integration-review',
 ]);
 
-/** Check if a ticket needs human action (template-aware + legacy fallback) */
-function isHumanGate(ticket: WorkflowTicket): boolean {
-  const sd = ticket.stateData as Record<string, unknown> | undefined;
+/** Check if an issue needs human action (template-aware + legacy fallback) */
+function isHumanGate(issue: WorkflowIssue): boolean {
+  const sd = issue.stateData as Record<string, unknown> | undefined;
   if (sd?.currentStateHumanGate === true) return true;
-  return LEGACY_HUMAN_GATE_STATES.has(ticket.state);
+  return LEGACY_HUMAN_GATE_STATES.has(issue.state);
 }
 
 const GATE_LABELS: Record<string, { label: string; description: string; action: string }> = {
@@ -28,15 +28,15 @@ const GATE_LABELS: Record<string, { label: string; description: string; action: 
 export function NotificationsPage() {
   const navigate = useNavigate();
   const { unread, open, clearAll } = useSessionAlerts();
-  const [workflowItems, setWorkflowItems] = useState<WorkflowTicket[]>([]);
+  const [workflowItems, setWorkflowItems] = useState<WorkflowIssue[]>([]);
   const [loading, setLoading] = useState(true);
 
   const loadPending = useCallback(async () => {
     try {
-      const wfRes = await fetch('/api/workflow/tickets');
+      const wfRes = await fetch('/api/workflow/issues');
       if (wfRes.ok) {
-        const tickets: WorkflowTicket[] = await wfRes.json();
-        setWorkflowItems(tickets.filter(isHumanGate));
+        const issues: WorkflowIssue[] = await wfRes.json();
+        setWorkflowItems(issues.filter(isHumanGate));
       }
     } catch (err) {
       console.error('Failed to load pending items:', err);
@@ -93,26 +93,26 @@ export function NotificationsPage() {
                 <span className="text-xs text-gray-500">{workflowItems.length} item{workflowItems.length !== 1 ? 's' : ''}</span>
               </div>
               <div className="divide-y divide-gray-800/50">
-                {workflowItems.map((ticket) => {
-                  const gate = GATE_LABELS[ticket.state] || { label: ticket.state, description: '', action: 'View' };
+                {workflowItems.map((issue) => {
+                  const gate = GATE_LABELS[issue.state] || { label: issue.state, description: '', action: 'View' };
                   return (
-                    <div key={ticket.id} className="px-4 py-3 flex items-center gap-3">
+                    <div key={issue.id} className="px-4 py-3 flex items-center gap-3">
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2 mb-0.5">
                           <span className={`text-[10px] px-1.5 py-0.5 rounded font-medium ${
-                            ticket.state === 'needs-input'
+                            issue.state === 'needs-input'
                               ? 'bg-blue-900/50 text-blue-300'
                               : 'bg-amber-900/50 text-amber-300'
                           }`}>
                             {gate.label}
                           </span>
-                          <span className="text-[10px] text-gray-500 uppercase">{ticket.type}</span>
+                          <span className="text-[10px] text-gray-500 uppercase">{issue.type}</span>
                         </div>
-                        <p className="text-sm text-gray-200 truncate">{ticket.title}</p>
+                        <p className="text-sm text-gray-200 truncate">{issue.title}</p>
                         <p className="text-xs text-gray-500 mt-0.5">{gate.description}</p>
                       </div>
                       <button
-                        onClick={() => navigate(`/workflow/${ticket.id}`)}
+                        onClick={() => navigate(`/workflow/${issue.id}`)}
                         className="shrink-0 px-3 py-1.5 text-xs bg-amber-700 hover:bg-amber-600 text-white rounded transition-colors"
                       >
                         {gate.action}
@@ -186,7 +186,7 @@ function EmptyState() {
         <path strokeLinecap="round" strokeLinejoin="round" d="M14.857 17.082a23.848 23.848 0 005.454-1.31A8.967 8.967 0 0118 9.75v-.7V9A6 6 0 006 9v.75a8.967 8.967 0 01-2.312 6.022c1.733.64 3.56 1.085 5.455 1.31m5.714 0a24.255 24.255 0 01-5.714 0m5.714 0a3 3 0 11-5.714 0" />
       </svg>
       <p className="text-sm">No pending approvals</p>
-      <p className="text-xs text-gray-600 mt-1">Workflow tickets requiring your review will appear here.</p>
+      <p className="text-xs text-gray-600 mt-1">Workflow issues requiring your review will appear here.</p>
     </div>
   );
 }

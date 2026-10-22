@@ -9,9 +9,9 @@ import { writeFileSync, mkdirSync } from 'fs';
 import path from 'path';
 import os from 'os';
 import { Router } from 'express';
-import type { SessionId, WorkflowTicketId, ExecutionData } from '@foundation/types';
+import type { SessionId, WorkflowIssueId, ExecutionData } from '@foundation/types';
 import type { SessionRepository } from '@domain/session/repository.js';
-import type { WorkflowTicketRepository } from '@domain/workflow/ticket-repository.js';
+import type { WorkflowIssueRepository } from '@domain/workflow/issue-repository.js';
 import type { WorkflowEngine } from '@application/workflow/engine.js';
 import type { TerminalManager } from '@infrastructure/terminal/manager.js';
 import type { ScheduledTaskRunRepository } from '@domain/scheduled-task/repository.js';
@@ -21,7 +21,7 @@ import { broadcast } from './events.js';
 
 export interface ExecutionHookRouterDeps {
   engine: WorkflowEngine;
-  tickets: WorkflowTicketRepository;
+  issues: WorkflowIssueRepository;
   terminal: TerminalManager;
   sessions: SessionRepository;
   taskRuns: ScheduledTaskRunRepository;
@@ -56,7 +56,7 @@ function captureOutputToFile(sessionId: string, tmuxSession: string, maxLines = 
 
 export function createExecutionHookRouter(deps: ExecutionHookRouterDeps): Router {
   const router = Router();
-  const { engine, tickets, terminal, sessions, taskRuns, usageTracker } = deps;
+  const { engine, issues, terminal, sessions, taskRuns, usageTracker } = deps;
 
   /**
    * StopFailure hook (matcher: rate_limit) — Dark Factory usage pacing backstop.
@@ -66,11 +66,11 @@ export function createExecutionHookRouter(deps: ExecutionHookRouterDeps): Router
    */
   router.post('/hooks/stop-failure', (req, res) => {
     try {
-      const ticketId = req.headers['x-workshop-ticket'] as string | undefined;
-      if (!ticketId) { res.json({}); return; }
+      const issueId = req.headers['x-workshop-issue'] as string | undefined;
+      if (!issueId) { res.json({}); return; }
 
-      const ticket = tickets.findById(ticketId as WorkflowTicketId);
-      if (!ticket || !isAutonomous(ticket, tickets)) { res.json({}); return; }
+      const issue = issues.findById(issueId as WorkflowIssueId);
+      if (!issue || !isAutonomous(issue, issues)) { res.json({}); return; }
 
       const error = req.body?.error;
       if (error && error !== 'rate_limit') { res.json({}); return; }
@@ -90,12 +90,12 @@ export function createExecutionHookRouter(deps: ExecutionHookRouterDeps): Router
 
       // 1h floor; the poller gates the real resume on the trailing window draining below threshold.
       const pausedUntil = new Date(Date.now() + 60 * 60 * 1000).toISOString();
-      const sd = (ticket.stateData || {}) as Record<string, unknown>;
-      tickets.update(ticket.id, {
+      const sd = (issue.stateData || {}) as Record<string, unknown>;
+      issues.update(issue.id, {
         stateData: { ...sd, paused: true, pausedUntil, pausedReason: banner || 'Claude usage limit reached' },
       });
-      broadcast('workflow:updated', ticket.id);
-      console.warn(`[dark-factory] Ticket ${ticket.id} hit the usage wall — paused, will resume after reset.`);
+      broadcast('workflow:updated', issue.id);
+      console.warn(`[dark-factory] Issue ${issue.id} hit the usage wall — paused, will resume after reset.`);
       res.json({});
     } catch (err) {
       console.error('Stop-failure hook error:', err);
@@ -137,20 +137,20 @@ export function createExecutionHookRouter(deps: ExecutionHookRouterDeps): Router
 
   /**
    * SubagentStop hook — Claude Code sends this when a Task-spawned sub-agent completes.
-   * Updates the ticket's stateData.agentProgress to track pipeline progress.
+   * Updates the issue's stateData.agentProgress to track pipeline progress.
    */
   router.post('/hooks/agent-progress', (req, res) => {
     try {
-      const ticketId = req.headers['x-workshop-ticket'] as string | undefined;
+      const issueId = req.headers['x-workshop-issue'] as string | undefined;
       const sessionId = req.headers['x-workshop-session'] as string | undefined;
 
-      if (!ticketId || !sessionId) {
+      if (!issueId || !sessionId) {
         res.json({});
         return;
       }
 
-      const ticket = tickets.findById(ticketId as WorkflowTicketId);
-      if (!ticket || ticket.state !== 'executing') {
+      const issue = issues.findById(issueId as WorkflowIssueId);
+      if (!issue || issue.state !== 'executing') {
         res.json({});
         return;
       }
@@ -158,7 +158,7 @@ export function createExecutionHookRouter(deps: ExecutionHookRouterDeps): Router
       const { subagent_type, subagent_result } = req.body;
       const agentRole = subagent_type || 'unknown';
 
-      const existingData = (ticket.stateData || {}) as ExecutionData & Record<string, unknown>;
+      const existingData = (issue.stateData || {}) as ExecutionData & Record<string, unknown>;
       const agentProgress = [...(existingData.agentProgress || [])];
 
       agentProgress.push({
@@ -170,11 +170,11 @@ export function createExecutionHookRouter(deps: ExecutionHookRouterDeps): Router
           : undefined,
       });
 
-      tickets.update(ticket.id, {
+      issues.update(issue.id, {
         stateData: { ...existingData, agentProgress },
       });
 
-      broadcast('workflow:progress', ticket.id);
+      broadcast('workflow:progress', issue.id);
       res.json({});
     } catch (err) {
       console.error('Agent progress hook error:', err);
@@ -201,24 +201,24 @@ export function createExecutionHookRouter(deps: ExecutionHookRouterDeps): Router
 
       console.log(`Session ${sessionId} ended — cleaning up`);
 
-      // 1. Workflow safety net: check if this session was bound to a ticket
-      const boundTicket = tickets.findByExecutionSessionId(sessionId);
-      if (boundTicket && boundTicket.state === 'executing') {
+      // 1. Workflow safety net: check if this session was bound to an issue
+      const boundIssue = issues.findByExecutionSessionId(sessionId);
+      if (boundIssue && boundIssue.state === 'executing') {
         console.warn(
           `Execution session ${sessionId} ended without reporting results. ` +
-          `Marking ticket ${boundTicket.id} as execution-failed.`,
+          `Marking issue ${boundIssue.id} as execution-failed.`,
         );
         try {
           engine.transition(
-            boundTicket.id,
+            boundIssue.id,
             'execution-failed',
             { type: 'system', reason: 'Session ended without completion report' },
             'Execution session terminated before reporting results. ' +
             'The agent may have crashed or timed out.',
           );
-          broadcast('workflow:transitioned', boundTicket.id);
+          broadcast('workflow:transitioned', boundIssue.id);
         } catch (transitionErr) {
-          console.error('Failed to transition ticket on session end:', transitionErr);
+          console.error('Failed to transition issue on session end:', transitionErr);
         }
       }
 

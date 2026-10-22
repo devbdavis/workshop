@@ -7,14 +7,14 @@ export function registerPlaybookTools(
 ): void {
   server.tool(
     'workshop_list_playbooks',
-    'List all latest workflow playbooks. Filter by ticket_type (epic/task) or tags.',
+    'List all latest workflow playbooks. Filter by issueType (epic/task) or tags.',
     {
-      ticketType: z.enum(['epic', 'task']).optional().describe('Filter by ticket type'),
+      issueType: z.enum(['epic', 'task']).optional().describe('Filter by issue type'),
       tags: z.array(z.string()).optional().describe('Filter by tags (all must match)'),
     },
-    async ({ ticketType, tags }) => {
+    async ({ issueType, tags }) => {
       const params = new URLSearchParams();
-      if (ticketType) params.set('ticketType', ticketType);
+      if (issueType) params.set('issueType', issueType);
       if (tags && tags.length > 0) params.set('tags', tags.join(','));
       const qs = params.toString();
       const path = `/workflow/playbooks${qs ? `?${qs}` : ''}`;
@@ -65,7 +65,7 @@ export function registerPlaybookTools(
     'workshop_propose_playbook',
     'Propose a workflow playbook for an epic. Stores the proposal for human approval.',
     {
-      epicId: z.string().describe('The epic ticket ID to propose a workflow for'),
+      epicId: z.string().describe('The epic issue ID to propose a workflow for'),
       epicTemplate: z.record(z.unknown()).describe('The workflow playbook for the epic'),
       taskTemplate: z
         .record(z.unknown())
@@ -85,7 +85,7 @@ export function registerPlaybookTools(
       if (taskTemplate) body.taskTemplate = taskTemplate;
       if (agentRoles) body.agentRoles = agentRoles;
 
-      const result = await api(`/workflow/tickets/${epicId}/propose-workflow`, {
+      const result = await api(`/workflow/issues/${epicId}/propose-workflow`, {
         method: 'POST',
         body: JSON.stringify(body),
       });
@@ -95,12 +95,12 @@ export function registerPlaybookTools(
 
   server.tool(
     'workshop_approve_playbook_assignment',
-    'Approve a pending workflow proposal for an epic. Creates the playbook(s) and binds to the ticket.',
+    'Approve a pending workflow proposal for an epic. Creates the playbook(s) and binds to the issue.',
     {
-      epicId: z.string().describe('The epic ticket ID with a pending workflow proposal'),
+      epicId: z.string().describe('The epic issue ID with a pending workflow proposal'),
     },
     async ({ epicId }) => {
-      const result = await api(`/workflow/tickets/${epicId}/approve-workflow`, {
+      const result = await api(`/workflow/issues/${epicId}/approve-workflow`, {
         method: 'POST',
         body: JSON.stringify({}),
       });

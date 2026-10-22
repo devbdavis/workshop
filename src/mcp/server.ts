@@ -88,7 +88,7 @@ server.tool(
 
 server.tool(
   'workshop_get_track',
-  'Get detailed info about a specific track (repos, paths, tickets)',
+  'Get detailed info about a specific track (repos, paths, issues)',
   { trackId: z.string().describe('The track ID') },
   async ({ trackId }) => {
     const track = await api(`/tracks/${trackId}`);

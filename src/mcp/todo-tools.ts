@@ -77,19 +77,19 @@ export function registerTodoTools(server: McpServer, api: (path: string, options
   );
 
   server.tool(
-    'workshop_report_ticket',
-    'Report a Linear ticket or GitHub issue created from a todo back to Workshop, so the ticket modal can display it and the ticket links to the todo. Call this once, after the ticket has been filed.',
+    'workshop_report_issue',
+    'Report a Linear or GitHub issue created from a todo back to Workshop, so the issue modal can display it and the issue links to the todo. Call this once, after the issue has been filed.',
     {
-      todoId: z.string().describe('The Workshop todo id the ticket was created from (given in the task prompt)'),
+      todoId: z.string().describe('The Workshop todo id the issue was created from (given in the task prompt)'),
       issueKey: z
         .string()
-        .describe('The created ticket key: Linear "ASY-1402" or GitHub "owner/repo#123"'),
-      url: z.string().describe('The full URL of the created ticket'),
-      title: z.string().describe('The ticket title'),
-      body: z.string().describe('The full ticket description/body in Markdown'),
+        .describe('The created issue key: Linear "ASY-1402" or GitHub "owner/repo#123"'),
+      url: z.string().describe('The full URL of the created issue'),
+      title: z.string().describe('The issue title'),
+      body: z.string().describe('The full issue description/body in Markdown'),
     },
     async (args) => {
-      const result = await api('/todos/report-ticket', { method: 'POST', body: JSON.stringify(args) });
+      const result = await api('/todos/report-issue', { method: 'POST', body: JSON.stringify(args) });
       return { content: [{ type: 'text' as const, text: JSON.stringify(result, null, 2) }] };
     },
   );

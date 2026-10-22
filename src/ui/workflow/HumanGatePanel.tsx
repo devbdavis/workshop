@@ -1,11 +1,11 @@
 import { useState } from 'react';
-import type { WorkflowTicket, WorkflowTransition } from '@foundation/types.js';
+import type { WorkflowIssue, WorkflowTransition } from '@foundation/types.js';
 
-// Legacy human gate states (for backward compatibility with tickets without templates)
+// Legacy human gate states (for backward compatibility with issues without templates)
 type LegacyHumanGateState = 'spec-review' | 'plan-review' | 'final-review';
 
 interface Props {
-  ticket: WorkflowTicket;
+  issue: WorkflowIssue;
   transitions?: WorkflowTransition[];
   onApprove: (comment?: string) => void;
   onReject: (comment?: string) => void;
@@ -93,18 +93,18 @@ function isLegacyHumanGate(state: string): state is LegacyHumanGateState {
   return state === 'spec-review' || state === 'plan-review' || state === 'final-review';
 }
 
-/** Check if a ticket is at a human gate (dynamic template or legacy fallback) */
-function isAtHumanGate(ticket: WorkflowTicket): boolean {
-  const sd = ticket.stateData as Record<string, unknown> | undefined;
+/** Check if an issue is at a human gate (dynamic template or legacy fallback) */
+function isAtHumanGate(issue: WorkflowIssue): boolean {
+  const sd = issue.stateData as Record<string, unknown> | undefined;
   // Dynamic workflow check via stateData
   if (sd?.currentStateHumanGate === true) return true;
   // Legacy fallback
-  return isLegacyHumanGate(ticket.state);
+  return isLegacyHumanGate(issue.state);
 }
 
 /** Get gate message for current state */
-function getGateMessage(ticket: WorkflowTicket): { heading: string; description: string } {
-  const sd = ticket.stateData as Record<string, unknown> | undefined;
+function getGateMessage(issue: WorkflowIssue): { heading: string; description: string } {
+  const sd = issue.stateData as Record<string, unknown> | undefined;
 
   // Check for custom message from dynamic workflow
   if (sd?.humanGatePrompt && typeof sd.humanGatePrompt === 'string') {
@@ -112,22 +112,22 @@ function getGateMessage(ticket: WorkflowTicket): { heading: string; description:
   }
 
   // Legacy message lookup
-  if (isLegacyHumanGate(ticket.state)) {
-    return LEGACY_GATE_MESSAGES[ticket.state];
+  if (isLegacyHumanGate(issue.state)) {
+    return LEGACY_GATE_MESSAGES[issue.state];
   }
 
   // Dynamic state fallback
-  return getDefaultGateMessage(ticket.state);
+  return getDefaultGateMessage(issue.state);
 }
 
-export function HumanGatePanel({ ticket, transitions, onApprove, onReject }: Props) {
+export function HumanGatePanel({ issue, transitions, onApprove, onReject }: Props) {
   const [comment, setComment] = useState('');
   const [submitting, setSubmitting] = useState(false);
 
-  if (!isAtHumanGate(ticket)) return null;
+  if (!isAtHumanGate(issue)) return null;
 
-  const gate = getGateMessage(ticket);
-  const { prLinks, summaryComment } = findReviewContext(transitions ?? [], ticket.state);
+  const gate = getGateMessage(issue);
+  const { prLinks, summaryComment } = findReviewContext(transitions ?? [], issue.state);
 
   async function handleApprove() {
     setSubmitting(true);

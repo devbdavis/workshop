@@ -194,7 +194,7 @@ export function NewSessionModal({ track, todos, defaultProvider, onClose, onCrea
               </div>
             ) : (
               <p className="text-xs text-gray-600 italic border border-gray-800 rounded-lg px-3 py-2">
-                No open tasks on this track. Describe the work below, or import a ticket.
+                No open tasks on this track. Describe the work below, or import an issue.
               </p>
             )}
           </div>

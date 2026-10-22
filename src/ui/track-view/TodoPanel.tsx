@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import type { Todo, TodoPriority, TodoStatus, Session, Agent, Track } from '@foundation/types';
 import { TerminalModal } from './TerminalModal';
 import { TodoDetailModal } from '../kanban/TodoDetailModal';
-import { LinearTicketModal } from '../kanban/LinearTicketModal';
+import { LinearIssueModal } from '../kanban/LinearIssueModal';
 import { ImportFromLinearModal } from '../kanban/ImportFromLinearModal';
 import { DispatchDropdown, type DispatchOptions } from './DispatchDropdown';
 
@@ -44,7 +44,7 @@ export function TodoPanel({ track, todos, sessions, onUpdate }: Props) {
   const [agents, setAgents] = useState<Agent[]>([]);
   const [dispatchingTodoId, setDispatchingTodoId] = useState<string | null>(null);
   const [editingTodo, setEditingTodo] = useState<Todo | null>(null);
-  const [linearTicketTodoId, setLinearTicketTodoId] = useState<string | null>(null);
+  const [linearIssueTodoId, setLinearIssueTodoId] = useState<string | null>(null);
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
   const activeTodos = todos.filter((t) => t.status !== 'done');
 
@@ -258,11 +258,11 @@ export function TodoPanel({ track, todos, sessions, onUpdate }: Props) {
           setEditingTodo(null);
         }}
         onDispatch={dispatchTodoFromModal}
-        onTicketCreationStarted={setLinearTicketTodoId}
+        onIssueCreationStarted={setLinearIssueTodoId}
       />
 
-      {linearTicketTodoId && (
-        <LinearTicketModal todoId={linearTicketTodoId} onClose={() => setLinearTicketTodoId(null)} />
+      {linearIssueTodoId && (
+        <LinearIssueModal todoId={linearIssueTodoId} onClose={() => setLinearIssueTodoId(null)} />
       )}
     </div>
   );

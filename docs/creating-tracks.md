@@ -1,6 +1,6 @@
 # Creating and Using Tracks
 
-A track is your unit of parallel work — a project, a feature, an investigation, a spike. Each track bundles together everything an AI agent (or you) needs to make progress: linked repos, context, terminal sessions, summaries, todos, and workflow tickets.
+A track is your unit of parallel work — a project, a feature, an investigation, a spike. Each track bundles together everything an AI agent (or you) needs to make progress: linked repos, context, terminal sessions, summaries, todos, and workflow issues.
 
 ## Creating a Track
 
@@ -153,7 +153,7 @@ When a todo is refined enough, you can dispatch it to a background agent:
 
 This is how you run parallel work — dispatch multiple todos to background agents while you focus on something else.
 
-## Workflow Tickets
+## Workflow Issues
 
 For larger work items, the workflow system provides a full lifecycle pipeline with human review gates.
 
@@ -175,7 +175,7 @@ In the **Workflow** page, click **New Epic**. Give it a title and description. T
 
 ### Human gates
 
-When a ticket reaches a human gate (`spec-review`, `plan-review`, `final-review`), it pauses. You review the agent's output and either:
+When an issue reaches a human gate (`spec-review`, `plan-review`, `final-review`), it pauses. You review the agent's output and either:
 - **Approve** — advances to the next stage
 - **Reject** (with feedback) — sends it back for another iteration
 
@@ -207,7 +207,7 @@ This gives agents long-term memory without you having to repeat yourself.
 ## Tips
 
 - **Context is king.** Spend time on your track context. A well-written context paragraph saves more tokens than any prompt engineering trick.
-- **Start small.** Create a track, set context, create one session. Get comfortable before using workflow tickets and background agents.
+- **Start small.** Create a track, set context, create one session. Get comfortable before using workflow issues and background agents.
 - **Use vault memory for things that matter across sessions.** Architectural decisions, gotchas you've discovered, things that burned you once.
 - **Preview your prompts.** Use `workshop_get_composed_prompt` before creating sessions to make sure agents are getting the right context.
 - **Dispatch liberally.** Background agents with permission hooks are safe. Let them work while you review.

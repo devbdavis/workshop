@@ -2,19 +2,19 @@
  * Topology loader — loads workflow stage definitions from playbooks
  * and provides caching to avoid repeated JSON parsing + Zod validation.
  */
-import type { WorkflowTicket } from '@foundation/types.js';
+import type { WorkflowIssue } from '@foundation/types.js';
 import type { StageDefinition } from '@domain/workflow/types.js';
 import type { PlaybookRow, PlaybookRepository } from '@domain/workflow/playbook-repository.js';
 
 export interface TopologyLoader {
-  /** Load stage definitions for a ticket (requires playbookRowId) */
-  loadForTicket(ticket: WorkflowTicket): StageDefinition[];
+  /** Load stage definitions for an issue (requires playbookRowId) */
+  loadForIssue(issue: WorkflowIssue): StageDefinition[];
 
   /** Load stage definitions by playbook row_id */
   loadByPlaybookRowId(rowId: string): StageDefinition[];
 
-  /** Load the full playbook row for a ticket (null if no playbook bound) */
-  loadPlaybookForTicket(ticket: WorkflowTicket): PlaybookRow | null;
+  /** Load the full playbook row for an issue (null if no playbook bound) */
+  loadPlaybookForIssue(issue: WorkflowIssue): PlaybookRow | null;
 
   /** Clear the cache (useful for testing or playbook updates) */
   clearCache(): void;
@@ -50,23 +50,23 @@ export function createTopologyLoader(deps: {
   }
 
   return {
-    loadForTicket(ticket: WorkflowTicket): StageDefinition[] {
-      if (!ticket.playbookRowId) {
+    loadForIssue(issue: WorkflowIssue): StageDefinition[] {
+      if (!issue.playbookRowId) {
         throw new Error(
-          `Ticket ${ticket.id} has no workflow playbook assigned. ` +
+          `Issue ${issue.id} has no workflow playbook assigned. ` +
           `Cannot load topology without a playbook binding.`
         );
       }
-      return loadAndCache(ticket.playbookRowId);
+      return loadAndCache(issue.playbookRowId);
     },
 
     loadByPlaybookRowId(rowId: string): StageDefinition[] {
       return loadAndCache(rowId);
     },
 
-    loadPlaybookForTicket(ticket: WorkflowTicket): PlaybookRow | null {
-      if (!ticket.playbookRowId) return null;
-      return playbooks.findByRowId(ticket.playbookRowId);
+    loadPlaybookForIssue(issue: WorkflowIssue): PlaybookRow | null {
+      if (!issue.playbookRowId) return null;
+      return playbooks.findByRowId(issue.playbookRowId);
     },
 
     clearCache(): void {

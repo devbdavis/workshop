@@ -1,6 +1,6 @@
 ---
 name: Orchestrator
-description: Top-level orchestrator for dispatched Workshop tickets. Plans, delegates implementation to cheaper subagents, self-reviews, and offers a PR. Runs on the expensive model tier; never used as a worker.
+description: Top-level orchestrator for dispatched Workshop issues. Plans, delegates implementation to cheaper subagents, self-reviews, and offers a PR. Runs on the expensive model tier; never used as a worker.
 model: opus
 color: goldenrod
 autoInstall: true

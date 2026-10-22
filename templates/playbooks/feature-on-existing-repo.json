@@ -2,7 +2,7 @@
   "id": "feature-on-existing-repo",
   "name": "Feature on Existing Repo",
   "description": "Dark Factory playbook for adding a feature to an existing codebase: triage against current conventions, plan the change, implement it, and gate only on the final merge review.",
-  "ticketType": "epic",
+  "issueType": "epic",
   "matchCriteria": {
     "keywords": ["feature", "add", "existing", "existing repo", "existing codebase", "extend", "enhancement"],
     "complexity": "moderate",

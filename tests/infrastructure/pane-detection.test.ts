@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { isSessionIdle, isSessionNeedsInput } from '@infrastructure/terminal/pane-detection';
+import { isSessionExited, isSessionIdle, isSessionNeedsInput } from '@infrastructure/terminal/pane-detection';
 import type { Session } from '@foundation/types';
 
 /** Minimal session stub — only tmuxSession matters when preCapture is provided */
@@ -185,5 +185,18 @@ describe('isSessionNeedsInput (preCapture)', () => {
 
   it('returns false for empty capture', () => {
     expect(isSessionNeedsInput(session, [])).toBe(false);
+  });
+});
+
+describe('isSessionExited (preCapture)', () => {
+  const session = makeSession();
+
+  it('treats a bare zsh prompt as exited', () => {
+    expect(isSessionExited(session, ['done', '➜  ~'])).toBe(true);
+  });
+
+  it('does not treat the prompt line echoing a running launcher as exited', () => {
+    // --print runs paint nothing, so the launch line stays last until Claude exits.
+    expect(isSessionExited(session, ['➜  ~ /Users/me/.workshop/sessions/abc/launch.sh'])).toBe(false);
   });
 });

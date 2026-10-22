@@ -1,7 +1,7 @@
 import { v4 as uuid } from 'uuid';
 import { getDatabase } from './database.js';
-import type { TicketImportIgnoreRepository } from '@domain/ticket-import/repository';
-import type { TicketImportIgnore, TicketImportIgnoreId, TicketSource } from '@foundation/types';
+import type { IssueImportIgnoreRepository } from '@domain/issue-import/repository';
+import type { IssueImportIgnore, IssueImportIgnoreId, IssueSource } from '@foundation/types';
 
 interface IgnoreRow {
   id: string;
@@ -12,10 +12,10 @@ interface IgnoreRow {
   created_at: string;
 }
 
-function rowToIgnore(row: IgnoreRow): TicketImportIgnore {
+function rowToIgnore(row: IgnoreRow): IssueImportIgnore {
   return {
-    id: row.id as TicketImportIgnoreId,
-    source: row.source as TicketSource,
+    id: row.id as IssueImportIgnoreId,
+    source: row.source as IssueSource,
     externalId: row.external_id,
     cachedTitle: row.cached_title || undefined,
     cachedUrl: row.cached_url || undefined,
@@ -23,7 +23,7 @@ function rowToIgnore(row: IgnoreRow): TicketImportIgnore {
   };
 }
 
-export function createTicketImportIgnoreRepository(): TicketImportIgnoreRepository {
+export function createIssueImportIgnoreRepository(): IssueImportIgnoreRepository {
   const db = getDatabase();
 
   const findBySourceStmt = db.prepare(
@@ -46,19 +46,19 @@ export function createTicketImportIgnoreRepository(): TicketImportIgnoreReposito
   );
 
   return {
-    findBySource(source: TicketSource): TicketImportIgnore[] {
+    findBySource(source: IssueSource): IssueImportIgnore[] {
       const rows = findBySourceStmt.all(source) as IgnoreRow[];
       return rows.map(rowToIgnore);
     },
 
-    findOne(source: TicketSource, externalId: string): TicketImportIgnore | null {
+    findOne(source: IssueSource, externalId: string): IssueImportIgnore | null {
       const row = findOneStmt.get(source, externalId) as IgnoreRow | undefined;
       return row ? rowToIgnore(row) : null;
     },
 
-    add(data): TicketImportIgnore {
+    add(data): IssueImportIgnore {
       const existing = findOneStmt.get(data.source, data.externalId) as IgnoreRow | undefined;
-      const id = (existing?.id ?? uuid()) as TicketImportIgnoreId;
+      const id = (existing?.id ?? uuid()) as IssueImportIgnoreId;
       const createdAt = existing?.created_at ?? new Date().toISOString();
       upsertStmt.run(
         id,
@@ -78,7 +78,7 @@ export function createTicketImportIgnoreRepository(): TicketImportIgnoreReposito
       };
     },
 
-    remove(source: TicketSource, externalId: string): boolean {
+    remove(source: IssueSource, externalId: string): boolean {
       const result = deleteStmt.run(source, externalId);
       return result.changes > 0;
     },

@@ -1,24 +1,24 @@
 import { describe, it, expect } from 'vitest';
 import { createUsagePacingPoller } from '../../src/application/usage/usage-pacing-poller.js';
-import type { WorkflowTicket } from '../../src/foundation/types.js';
-import type { WorkflowTicketRepository } from '../../src/domain/workflow/ticket-repository.js';
+import type { WorkflowIssue } from '../../src/foundation/types.js';
+import type { WorkflowIssueRepository } from '../../src/domain/workflow/issue-repository.js';
 import type { UsageTracker } from '../../src/infrastructure/usage/usage-tracker.js';
 import type { DispatchCoordinator } from '../../src/application/workflow/dispatch-coordinator.js';
 
-function epic(id: string, sd: Record<string, unknown>): WorkflowTicket {
-  return { id, type: 'epic', title: id, description: '', state: 'execute', stateData: sd, provider: 'claude', priority: 'medium', sortOrder: 0, stateChangedAt: '', createdAt: '', updatedAt: '' } as WorkflowTicket;
+function epic(id: string, sd: Record<string, unknown>): WorkflowIssue {
+  return { id, type: 'epic', title: id, description: '', state: 'execute', stateData: sd, provider: 'claude', priority: 'medium', sortOrder: 0, stateChangedAt: '', createdAt: '', updatedAt: '' } as WorkflowIssue;
 }
 
-function harness(epics: WorkflowTicket[], over: boolean, nowMs: number) {
+function harness(epics: WorkflowIssue[], over: boolean, nowMs: number) {
   const dispatched: string[] = [];
   const updated: Array<{ id: string; sd: Record<string, unknown> }> = [];
-  const tickets = {
+  const issues = {
     findAll: () => epics,
     update: (id: string, data: { stateData?: Record<string, unknown> }) => { updated.push({ id, sd: data.stateData ?? {} }); return epics.find((e) => e.id === id) ?? null; },
-  } as unknown as WorkflowTicketRepository;
+  } as unknown as WorkflowIssueRepository;
   const usageTracker = { isOverThreshold: () => over } as unknown as UsageTracker;
   const dispatcher = { dispatchForCurrentState: async (id: string) => { dispatched.push(id); } } as unknown as DispatchCoordinator;
-  const poller = createUsagePacingPoller({ tickets, usageTracker, dispatcher, now: () => nowMs });
+  const poller = createUsagePacingPoller({ issues, usageTracker, dispatcher, now: () => nowMs });
   return { poller, dispatched, updated };
 }
 

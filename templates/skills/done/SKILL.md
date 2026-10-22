@@ -63,11 +63,11 @@ Two or three lines is plenty:
 **You**:
 
 1. `pwd` → `/Users/brendan.davis/.workshop/sessions/5fff963d-.../workspace/workshop` → session ID `5fff963d-...`
-2. `workshop_list_todos status=review` → find the todo whose `sessionId` matches `5fff963d-...` → todo `49601a56-...`, title "Ticket Management", one linked PR (`github.com/.../pull/78`).
+2. `workshop_list_todos status=review` → find the todo whose `sessionId` matches `5fff963d-...` → todo `49601a56-...`, title "Issue Management", one linked PR (`github.com/.../pull/78`).
 3. `gh pr view https://github.com/.../pull/78 --json state,mergedAt` → `{ "state": "MERGED", "mergedAt": "2026-04-18T18:42:00Z" }`.
 4. `workshop_update_todo todoId=49601a56-... status=done` → returns the updated todo; server soft-deletes session `5fff963d-...`.
 5. Report:
-   > Todo **Ticket Management** (`49601a56-...`) closed.
+   > Todo **Issue Management** (`49601a56-...`) closed.
    > PR #78 merged 2026-04-18 18:42 UTC.
    > Session `5fff963d-...` moved to recycle bin.
 

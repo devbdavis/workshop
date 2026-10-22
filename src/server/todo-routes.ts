@@ -4,7 +4,7 @@ import { resolveSessionProvider } from '@foundation/types.js';
 import type { TodoRepository } from '@domain/todo/repository';
 import type { TrackRepository } from '@domain/track/repository';
 import type { SessionRepository } from '@domain/session/repository';
-import type { TicketRepository } from '@domain/ticket/repository';
+import type { IssueRepository } from '@domain/issue/repository';
 import type { PromptTemplateRepository } from '@domain/prompt-template/repository';
 import type { AgentRepository } from '@domain/agent/repository';
 import type { SettingsRepository } from '@domain/repo/repository';
@@ -16,11 +16,11 @@ import { interpolateTemplate } from '@application/track-management/prompt-interp
 import { composeVaultContext } from '@application/vault/compose-vault-context.js';
 import { broadcast } from './events.js';
 
-/** Settings key caching the dedicated system track that hosts ticket-drafting sessions. */
-const LINEAR_TICKET_TRACK_SETTING = 'linear_ticket_track_id';
+/** Settings key caching the dedicated system track that hosts issue-drafting sessions. */
+const LINEAR_ISSUE_TRACK_SETTING = 'linear_ticket_track_id';
 
-/** Result of a "create ticket" agent run, surfaced to the modal. */
-interface TicketJob {
+/** Result of a "create issue" agent run, surfaced to the modal. */
+interface IssueJob {
   status: 'pending' | 'done';
   issueKey?: string;
   url?: string;
@@ -36,7 +36,7 @@ export interface TodoRouterDeps {
   todos: TodoRepository;
   tracks: TrackRepository;
   sessions: SessionRepository;
-  tickets: TicketRepository;
+  issues: IssueRepository;
   promptTemplates: PromptTemplateRepository;
   agents: AgentRepository;
   settings: SettingsRepository;
@@ -65,7 +65,7 @@ export function createTodoRouter(deps: TodoRouterDeps): Router {
     todos,
     tracks,
     sessions,
-    tickets,
+    issues,
     promptTemplates,
     agents,
     settings,
@@ -76,21 +76,21 @@ export function createTodoRouter(deps: TodoRouterDeps): Router {
     prMonitorRegistrar,
   } = deps;
 
-  // Ephemeral results of "create ticket" runs, keyed by todoId. In-memory
+  // Ephemeral results of "create issue" runs, keyed by todoId. In-memory
   // on purpose — a transient aid for the modal, fine to lose on server restart.
-  const ticketJobs = new Map<string, TicketJob>();
+  const issueJobs = new Map<string, IssueJob>();
 
-  /** The dedicated system track that hosts ticket-drafting sessions (lazily created, id cached in settings). */
-  function ensureTicketTrack(): TrackId {
-    const cached = settings.get(LINEAR_TICKET_TRACK_SETTING);
+  /** The dedicated system track that hosts issue-drafting sessions (lazily created, id cached in settings). */
+  function ensureIssueTrack(): TrackId {
+    const cached = settings.get(LINEAR_ISSUE_TRACK_SETTING);
     if (cached && tracks.findById(cached as TrackId)) return cached as TrackId;
     const track = tracks.create({
-      name: 'Linear Tickets',
-      description: 'Background sessions that draft and file Linear tickets from todos.',
+      name: 'Issues',
+      description: 'Background sessions that draft and file Linear or GitHub issues from todos.',
       label: 'system',
       status: 'active',
     });
-    settings.set(LINEAR_TICKET_TRACK_SETTING, track.id);
+    settings.set(LINEAR_ISSUE_TRACK_SETTING, track.id);
     return track.id;
   }
 
@@ -185,7 +185,7 @@ export function createTodoRouter(deps: TodoRouterDeps): Router {
 
     // Clear session/agent assignment when moving to 'done' from any active state.
     // Moving to 'review' or back to 'backlog'/'ready' preserves the link so the
-    // session header keeps showing PR/ticket icons while the session is still alive.
+    // session header keeps showing PR/issue icons while the session is still alive.
     const isMovingToDone = status === 'done' && existing.status !== 'done';
     const resolvedSessionId = isMovingToDone ? null : sessionId;
     const resolvedAgentId: null | undefined = isMovingToDone ? null : undefined;
@@ -323,16 +323,16 @@ export function createTodoRouter(deps: TodoRouterDeps): Router {
           templateHasRepos = template.content.includes('{{track.repos');
           templateHasTask = template.content.includes('{{todo.title}}');
           templateHasBackgroundInstructions = template.content.includes('{{todo.id}}');
-          track.tickets = tickets.findByTrack(todo.trackId);
-          // Merge the todo's ticket key into the track ticket list so it's
-          // available via {{track.tickets}} in template interpolation.
+          track.issues = issues.findByTrack(todo.trackId);
+          // Merge the todo's issue key into the track issue list so it's
+          // available via {{track.issues}} in template interpolation.
           if (todo.issueKey) {
-            const alreadyPresent = track.tickets.some((t) => t.externalId === todo.issueKey);
+            const alreadyPresent = track.issues.some((t) => t.externalId === todo.issueKey);
             if (!alreadyPresent) {
-              track.tickets = [
-                ...track.tickets,
+              track.issues = [
+                ...track.issues,
                 {
-                  id: `todo-ticket-${todo.id}` as import('@foundation/types').TicketId,
+                  id: `todo-issue-${todo.id}` as import('@foundation/types').IssueId,
                   trackId: todo.trackId,
                   source: 'linear' as const,
                   externalId: todo.issueKey,
@@ -412,9 +412,9 @@ export function createTodoRouter(deps: TodoRouterDeps): Router {
     }
   });
 
-  // --- Create a Linear ticket or GitHub issue from a todo (one-shot background agent) ---
+  // --- Create a Linear or GitHub issue from a todo (one-shot background agent) ---
 
-  router.post('/todos/:todoId/create-ticket', async (req, res) => {
+  router.post('/todos/:todoId/create-issue', async (req, res) => {
     try {
       const todo = todos.findById(req.params.todoId as TodoId);
       if (!todo) {
@@ -450,23 +450,23 @@ export function createTodoRouter(deps: TodoRouterDeps): Router {
         (settings.get('dispatch_model') ?? 'opus').trim() || undefined;
 
       // Canonical (non-worktree) repo clones from the todo's track, so the agent
-      // can deep-dive into the code while drafting the ticket. Read-only by intent.
+      // can deep-dive into the code while drafting the issue. Read-only by intent.
       const repoPaths = (tracks.findById(todo.trackId)?.repos ?? []).map((r) => r.path);
 
       const fileSteps = github
         ? [
-            `2. Write the body to a temp file, then create the issue with the gh CLI: \`gh issue create --repo ${repo}${labels.map((l) => ` --label "${l}"`).join('')} --title <title> --body-file <file>\`.`,
-            `3. After the issue is filed, call the workshop_report_ticket MCP tool with todoId "${todo.id}", issueKey "${repo}#<number>", the issue url, the title, and the full body. This links the issue to the todo and lets Workshop show it.`,
+            `2. Write the body to a temp file, then create the issue with the gh CLI: \`gh issue create --repo ${repo} --assignee @me${labels.map((l) => ` --label "${l}"`).join('')} --title <title> --body-file <file>\`.`,
+            `3. After the issue is filed, call the workshop_report_issue MCP tool with todoId "${todo.id}", issueKey "${repo}#<number>", the issue url, the title, and the full body. This links the issue to the todo and lets Workshop show it.`,
           ]
         : [
-            '2. Use the /linear skill to create the ticket for team ASY with that content.',
-            `3. After the ticket is filed, call the workshop_report_ticket MCP tool with todoId "${todo.id}", the resulting issueKey (e.g. "ASY-1234"), the ticket url, the title, and the full body. This links the ticket to the todo and lets Workshop show it.`,
+            '2. Use the /linear skill to create the issue for team ASY with that content.',
+            `3. After the issue is filed, call the workshop_report_issue MCP tool with todoId "${todo.id}", the resulting issueKey (e.g. "ASY-1234"), the issue url, the title, and the full body. This links the issue to the todo and lets Workshop show it.`,
           ];
 
       const prompt = [
         github
           ? `Turn this Workshop todo into a GitHub issue in ${repo}.`
-          : 'Turn this Workshop todo into a Linear ticket.',
+          : 'Turn this Workshop todo into a Linear issue.',
         '',
         `Todo title: ${todo.title}`,
         '',
@@ -475,21 +475,21 @@ export function createTodoRouter(deps: TodoRouterDeps): Router {
         '',
         ...(repoPaths.length > 0
           ? [
-              'Relevant repositories (read-only — investigate code here as needed to write an accurate ticket, but do NOT modify anything):',
+              'Relevant repositories (read-only — investigate code here as needed to write an accurate issue, but do NOT modify anything):',
               ...repoPaths.map((p) => `- ${p}`),
               '',
             ]
           : []),
         'Do the following:',
-        '1. Expand the todo into a well-structured ticket body — a brief Description, concrete Implementation Details, and Acceptance Criteria — inferred from the todo above. This is not a full implementation plan; stay within the scope the todo implies and do not invent extra work.',
+        '1. Expand the todo into a well-structured issue body — a brief Description, concrete Implementation Details, and Acceptance Criteria — inferred from the todo above. This is not a full implementation plan; stay within the scope the todo implies and do not invent extra work.',
         ...fileSteps,
       ].join('\n');
 
       // One-shot background session on a dedicated system track: no todoId → runs
       // with --print and auto-exits (mirrors the PR-review analyze dispatch).
       // Claude-only because /linear is a Claude skill. Does NOT change the todo's status.
-      const trackId = ensureTicketTrack();
-      ticketJobs.set(todo.id, { status: 'pending' });
+      const trackId = ensureIssueTrack();
+      issueJobs.set(todo.id, { status: 'pending' });
       const session = await terminal.createSession(trackId, {
         background: true,
         initialPrompt: prompt,
@@ -505,20 +505,20 @@ export function createTodoRouter(deps: TodoRouterDeps): Router {
       broadcast('session:created', trackId, { sessionId: session.id });
       res.status(201).json({ session });
     } catch (err) {
-      console.error('Failed to create ticket from todo:', err);
-      res.status(500).json({ error: 'Failed to dispatch ticket session' });
+      console.error('Failed to create issue from todo:', err);
+      res.status(500).json({ error: 'Failed to dispatch issue session' });
     }
   });
 
-  // --- Poll the result of a "create ticket" run (drives the modal) ---
+  // --- Poll the result of a "create issue" run (drives the modal) ---
 
-  router.get('/todos/:todoId/ticket-status', (req, res) => {
-    res.json(ticketJobs.get(req.params.todoId) ?? { status: 'pending' });
+  router.get('/todos/:todoId/issue-status', (req, res) => {
+    res.json(issueJobs.get(req.params.todoId) ?? { status: 'pending' });
   });
 
-  // --- Ticket result arrives here (via the workshop_report_ticket MCP tool) ---
+  // --- Issue result arrives here (via the workshop_report_issue MCP tool) ---
 
-  router.post('/todos/report-ticket', (req, res) => {
+  router.post('/todos/report-issue', (req, res) => {
     const { todoId, issueKey, url, title, body } = (req.body ?? {}) as Record<string, unknown>;
     if (typeof todoId !== 'string') {
       res.status(400).json({ error: 'todoId is required' });
@@ -530,14 +530,14 @@ export function createTodoRouter(deps: TodoRouterDeps): Router {
       return;
     }
     const key = typeof issueKey === 'string' && issueKey.trim() ? issueKey.trim() : undefined;
-    ticketJobs.set(todoId, {
+    issueJobs.set(todoId, {
       status: 'done',
       issueKey: key,
       url: typeof url === 'string' ? url : undefined,
       title: typeof title === 'string' ? title : undefined,
       body: typeof body === 'string' ? body : undefined,
     });
-    // Link the ticket to the todo so it shows in the Issue field.
+    // Link the issue to the todo so it shows in the Issue field.
     if (key) {
       todos.update(todo.id, { issueKey: key });
       broadcast('todo:updated', todo.trackId);

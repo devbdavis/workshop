@@ -1,6 +1,6 @@
 # Spec-to-PR Workflow
 
-A structured workflow for taking a raw idea or Linear ticket through spec, review, execution, and a draft PR — without committing spec artifacts to the target repo.
+A structured workflow for taking a raw idea or Linear issue through spec, review, execution, and a draft PR — without committing spec artifacts to the target repo.
 
 ---
 
@@ -86,7 +86,7 @@ Unresolved questions requiring human input.
 Specific, testable conditions that define "done".
 
 ## References
-Links to Linear tickets, prior decisions, related specs.
+Links to Linear issues, prior decisions, related specs.
 ```
 
 ---
@@ -96,7 +96,7 @@ Links to Linear tickets, prior decisions, related specs.
 ### `spec-to-pr-triage`
 **Runs at**: `triaging`
 
-1. Read the epic description (idea / Linear ticket text)
+1. Read the epic description (idea / Linear issue text)
 2. Read `~/.workshop/specs/<repo>/constitution.md` if it exists
 3. Read `decisions.md` and `learnings.md` from the track vault
 4. Identify: missing context, ambiguous scope, conflicts with existing decisions

@@ -62,7 +62,7 @@ export function CommandPalette() {
       getJson<PaletteData['tracks'][number]>('/api/tracks'),
       getJson<PaletteData['sessions'][number]>('/api/sessions'),
       getJson<PaletteData['todos'][number]>('/api/todos'),
-      getJson<PaletteData['epics'][number]>('/api/workflow/tickets?type=epic'),
+      getJson<PaletteData['epics'][number]>('/api/workflow/issues?type=epic'),
       getJson<PaletteData['reviews'][number]>('/api/pr-reviews'),
     ]).then(([tracks, sessions, todos, epics, reviews]) => {
       setData({ tracks, sessions, todos, epics, reviews });

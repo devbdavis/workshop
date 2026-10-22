@@ -1,16 +1,16 @@
 import { useEffect, useState, useCallback, useRef } from 'react';
 import { useParams, useSearchParams, Link } from 'react-router-dom';
-import type { Track, Session, SessionId, ExternalTicket, Todo, DefaultAiCli, PrMonitor, TodoId } from '@foundation/types';
+import type { Track, Session, SessionId, ExternalIssue, Todo, DefaultAiCli, PrMonitor, TodoId } from '@foundation/types';
 import { issueBaseUrlFor } from '@foundation/issue-tracker.js';
 import type { DispatchOptions } from './DispatchDropdown';
 import { ContextPanel } from './ContextPanel';
-import { TicketPanel } from './TicketPanel';
+import { IssuePanel } from './IssuePanel';
 import { TodoPanel } from './TodoPanel';
 import { TrackConfig } from './TrackConfig';
 import { SessionPanel } from './SessionPanel';
 import { NewSessionModal, type NewSessionOptions } from './NewSessionModal';
 import { TodoDetailModal } from '../kanban/TodoDetailModal';
-import { LinearTicketModal } from '../kanban/LinearTicketModal';
+import { LinearIssueModal } from '../kanban/LinearIssueModal';
 import { TerminalArea } from '../terminal-panel/TerminalArea';
 import { useIsMobile } from '../use-is-mobile';
 
@@ -19,7 +19,7 @@ export function TrackView() {
   const [searchParams, setSearchParams] = useSearchParams();
   const [track, setTrack] = useState<Track | null>(null);
   const [sessions, setSessions] = useState<Session[]>([]);
-  const [tickets, setTickets] = useState<ExternalTicket[]>([]);
+  const [issues, setIssues] = useState<ExternalIssue[]>([]);
   const [todos, setTodos] = useState<Todo[]>([]);
   const [prMonitors, setPrMonitors] = useState<PrMonitor[]>([]);
   const [deletedSessions, setDeletedSessions] = useState<Session[]>([]);
@@ -27,7 +27,7 @@ export function TrackView() {
   const [loading, setLoading] = useState(true);
   const [sidebarTab, setSidebarTab] = useState<'session' | 'todos' | 'config'>('session');
   const [selectedTodo, setSelectedTodo] = useState<Todo | null>(null);
-  const [linearTicketTodoId, setLinearTicketTodoId] = useState<string | null>(null);
+  const [linearIssueTodoId, setLinearIssueTodoId] = useState<string | null>(null);
   const [editingName, setEditingName] = useState(false);
   const [nameValue, setNameValue] = useState('');
   const [pendingSelectSessionId, setPendingSelectSessionId] = useState<SessionId | null>(null);
@@ -49,10 +49,10 @@ export function TrackView() {
   const loadTrack = useCallback(async () => {
     if (!trackId) return;
     try {
-      const [trackRes, sessionsRes, ticketsRes, todosRes, deletedRes, prMonitorsRes] = await Promise.all([
+      const [trackRes, sessionsRes, issuesRes, todosRes, deletedRes, prMonitorsRes] = await Promise.all([
         fetch(`/api/tracks/${trackId}`),
         fetch(`/api/tracks/${trackId}/sessions`),
-        fetch(`/api/tracks/${trackId}/tickets`),
+        fetch(`/api/tracks/${trackId}/issues`),
         fetch(`/api/tracks/${trackId}/todos`),
         fetch(`/api/tracks/${trackId}/sessions/deleted`),
         fetch(`/api/tracks/${trackId}/pr-monitors`),
@@ -62,7 +62,7 @@ export function TrackView() {
         const loadedSessions: Session[] = await sessionsRes.json();
         setSessions(loadedSessions);
       }
-      if (ticketsRes.ok) setTickets(await ticketsRes.json());
+      if (issuesRes.ok) setIssues(await issuesRes.json());
       if (todosRes.ok) setTodos(await todosRes.json());
       if (deletedRes.ok) setDeletedSessions(await deletedRes.json());
       if (prMonitorsRes.ok) setPrMonitors(await prMonitorsRes.json());
@@ -405,7 +405,7 @@ export function TrackView() {
             <TodoPanel track={track} todos={todos} sessions={sessions} onUpdate={loadTrack} />
           ) : (
             <>
-              <TicketPanel trackId={track.id} tickets={tickets} onUpdate={loadTrack} />
+              <IssuePanel trackId={track.id} issues={issues} onUpdate={loadTrack} />
               <ContextPanel track={track} onUpdate={loadTrack} />
               <TrackConfig track={track} onUpdate={loadTrack} />
             </>
@@ -453,12 +453,12 @@ export function TrackView() {
           onSave={handleSaveTodo}
           onDelete={handleDeleteTodo}
           onDispatch={handleDispatchTodo}
-          onTicketCreationStarted={setLinearTicketTodoId}
+          onIssueCreationStarted={setLinearIssueTodoId}
         />
       )}
 
-      {linearTicketTodoId && (
-        <LinearTicketModal todoId={linearTicketTodoId} onClose={() => setLinearTicketTodoId(null)} />
+      {linearIssueTodoId && (
+        <LinearIssueModal todoId={linearIssueTodoId} onClose={() => setLinearIssueTodoId(null)} />
       )}
     </div>
   );

@@ -13,7 +13,7 @@ import type {
 import type { ScheduledTaskRepository, ScheduledTaskRunRepository } from '@domain/scheduled-task/repository';
 import type { TrackRepository } from '@domain/track/repository';
 import type { SessionRepository } from '@domain/session/repository';
-import type { TicketRepository } from '@domain/ticket/repository';
+import type { IssueRepository } from '@domain/issue/repository';
 import type { PromptTemplateRepository } from '@domain/prompt-template/repository';
 import type { AgentRepository } from '@domain/agent/repository';
 import type { AgentScanner as FilesystemAgentScanner } from '@domain/agent/scanner.js';
@@ -25,7 +25,7 @@ export interface TaskSchedulerDeps {
   runs: ScheduledTaskRunRepository;
   tracks: TrackRepository;
   sessions: SessionRepository;
-  tickets: TicketRepository;
+  issues: IssueRepository;
   promptTemplates: PromptTemplateRepository;
   agents: AgentRepository;
   filesystemScanner: FilesystemAgentScanner;
@@ -163,7 +163,7 @@ export function createTaskScheduler(deps: TaskSchedulerDeps): TaskScheduler {
           const template = deps.promptTemplates.findById(track.defaultPromptTemplateId);
           if (template) {
             templateHasRepos = template.content.includes('{{track.repos}}');
-            track.tickets = deps.tickets.findByTrack(task.trackId);
+            track.issues = deps.issues.findByTrack(task.trackId);
             const interpolated = interpolateTemplate(template.content, { track });
             parts.push(interpolated);
           }

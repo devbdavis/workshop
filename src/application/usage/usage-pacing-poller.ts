@@ -6,17 +6,17 @@
  * floor has elapsed and (b) the trailing usage window has drained back under the
  * threshold. Follows the codebase's plain setInterval poller idiom.
  */
-import type { WorkflowTicket } from '@foundation/types.js';
-import type { WorkflowTicketRepository } from '@domain/workflow/ticket-repository.js';
+import type { WorkflowIssue } from '@foundation/types.js';
+import type { WorkflowIssueRepository } from '@domain/workflow/issue-repository.js';
 import type { UsageTracker } from '@infrastructure/usage/usage-tracker.js';
 import type { DispatchCoordinator } from '../workflow/dispatch-coordinator.js';
 
 export interface UsagePacingPollerDeps {
-  tickets: WorkflowTicketRepository;
+  issues: WorkflowIssueRepository;
   usageTracker: UsageTracker;
   dispatcher: DispatchCoordinator;
   /** Called after an epic is resumed (used to broadcast a UI refresh). */
-  onResumed?: (ticketId: string) => void;
+  onResumed?: (issueId: string) => void;
   intervalMs?: number;
   threshold?: number;
   now?: () => number;
@@ -30,16 +30,16 @@ export interface UsagePacingPoller {
 }
 
 export function createUsagePacingPoller(deps: UsagePacingPollerDeps): UsagePacingPoller {
-  const { tickets, usageTracker, dispatcher, onResumed } = deps;
+  const { issues, usageTracker, dispatcher, onResumed } = deps;
   const intervalMs = deps.intervalMs ?? 3 * 60 * 1000;
   const threshold = deps.threshold ?? 0.75;
   const now = deps.now ?? (() => Date.now());
   let timer: ReturnType<typeof setInterval> | null = null;
 
   async function tick(): Promise<void> {
-    let epics: WorkflowTicket[];
+    let epics: WorkflowIssue[];
     try {
-      epics = tickets.findAll({ type: 'epic' });
+      epics = issues.findAll({ type: 'epic' });
     } catch {
       return;
     }
@@ -52,7 +52,7 @@ export function createUsagePacingPoller(deps: UsagePacingPollerDeps): UsagePacin
       if (usageTracker.isOverThreshold(threshold)) continue; // window hasn't drained yet
 
       try {
-        tickets.update(epic.id, { stateData: { ...sd, paused: false, pausedUntil: undefined } });
+        issues.update(epic.id, { stateData: { ...sd, paused: false, pausedUntil: undefined } });
         onResumed?.(epic.id);
         await dispatcher.dispatchForCurrentState(epic.id);
       } catch (err) {

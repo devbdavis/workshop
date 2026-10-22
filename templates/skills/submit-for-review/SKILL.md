@@ -20,7 +20,7 @@ Run steps 1–2 in parallel, then proceed sequentially.
 
 ### 2. Check task tracking
 
-- If Workshop MCP tools are available (`workshop_list_todos`, `workshop_list_workflow_tickets`), query for in-progress todos or tickets that match the work being completed
+- If Workshop MCP tools are available (`workshop_list_todos`, `workshop_list_workflow_issues`), query for in-progress todos or issues that match the work being completed
 - Note any items to move to a ready-for-review state after the PR is created
 
 ### 3. Stage and commit (if there are uncommitted changes)
@@ -99,7 +99,7 @@ After the PR URL is confirmed:
 - If Workshop MCP tools are available:
   - Move any matching in-progress todos to a **ready-for-review** state via `workshop_update_todo` — never mark them `done`. Marking a todo done closes out the session, and the work isn't done until review passes. Record the PR URL in the todo's **resolution** field so the link is preserved.
   - **Also pass `pullRequests: [{ url, title }]`** on the same `workshop_update_todo` call. Workshop's server automatically registers the PR with its background monitor as soon as that field is set — there is no separate call to make. The monitor polls the forge (GitHub via your `gh` CLI auth; Gitea/Forgejo via your `tea` login) every couple of minutes, surfaces failing CI checks and unresolved review comments in the Session view, and offers one-click sub-agent dispatch for "fix the build" or "address comment N". Skipping this means the user loses the post-submit feedback loop.
-  - If working within a workflow ticket, transition it to `integration-review` via `workshop_transition_ticket` and include the PR URL in the transition data
+  - If working within a workflow issue, transition it to `integration-review` via `workshop_transition_issue` and include the PR URL in the transition data
 - If no Workshop tools are available, skip this step silently
 
 ### 7. Report back
@@ -117,7 +117,7 @@ Output a brief summary:
 - **PR descriptions are current-state only** — no history, no iteration log, no "what changed since last review". Git already records that.
 - **Rewrite, never append, when updating a PR body**
 - **Default to zero code comments.** Most diffs need none; the reasoning belongs in the PR description, which is where reviewers actually read it. Write a comment only when it is the sole mechanism for a required effect (`# noqa`, a docstring, a build tag), or when correctness depends on something invisible from the file — e.g. a value that must stay in sync with one defined elsewhere. Never explain *why* the code is written the way it is. Never restate what well-named code already shows. If a comment seems necessary to make code understandable, rewrite the code instead. One line where one is genuinely warranted; never a paragraph.
-- **Never mark a todo or ticket as `done`** — "done" closes out the session, and review hasn't happened yet. Move items to a ready-for-review state instead.
+- **Never mark a todo or issue as `done`** — "done" closes out the session, and review hasn't happened yet. Move items to a ready-for-review state instead.
 - **Never update an item's description** — any new information (such as the PR URL) goes in the **resolution** field, not the description.
 - Never push to `main`, `master`, or `develop` directly
 - Never use `git add -A` or `git add .` — stage files explicitly

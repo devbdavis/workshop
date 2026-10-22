@@ -2,7 +2,7 @@
 name: workshop-executor
 description: "Execute an approved implementation plan from Workshop's workflow system. Delegates to team agents (coder, qa, reviewer) and reports results back via Workshop MCP tools. Tagged: workshop."
 user-invocable: true
-argument-hint: "<workflow-ticket-id>"
+argument-hint: "<workflow-issue-id>"
 ---
 
 # Role: Execution Orchestrator
@@ -98,7 +98,7 @@ After the reviewer approves:
 After the PR is created, report back to Workshop:
 
 ```
-workshop_transition_ticket("<TICKET_ID>", "integration-review", {
+workshop_transition_issue("<ISSUE_ID>", "integration-review", {
   "comment": "Execution complete",
   "data": {
     "pr_urls": ["<pr-url>"],
@@ -114,7 +114,7 @@ workshop_transition_ticket("<TICKET_ID>", "integration-review", {
 If you cannot complete the work at any step:
 
 ```
-workshop_transition_ticket("<TICKET_ID>", "execution-failed", {
+workshop_transition_issue("<ISSUE_ID>", "execution-failed", {
   "comment": "Execution failed at step N",
   "data": {
     "reason": "<what went wrong>",
