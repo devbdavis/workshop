@@ -27,6 +27,8 @@ const PR_REVIEW_AGENT_ID = 'global:pr-review' as AgentId;
 const TRACK_SETTING_KEY = 'pr_review_track_id';
 const PROVIDER_SETTING_KEY = 'pr_review_provider';
 const MODEL_SETTING_KEY = 'pr_review_model';
+/** GitHub `org/team` (e.g. grafana/syseng) — also read by the forge adapter in api.ts. */
+const TEAM_SETTING_KEY = 'pr_review_team';
 /** Event channel — the dashboard filters on event type, not trackId. */
 const EVENT_TRACK = 'pr-reviews';
 
@@ -160,17 +162,24 @@ export function createPrReviewRouter(deps: PrReviewRouterDeps): Router {
     res.json({ added });
   });
 
+  const readSettings = () => ({
+    provider: settings.get(PROVIDER_SETTING_KEY) ?? '',
+    model: settings.get(MODEL_SETTING_KEY) ?? '',
+    team: settings.get(TEAM_SETTING_KEY) ?? '',
+  });
+
   // Which CLI/model runs review analysis sessions. Empty provider = follow the
   // workshop-wide default AI CLI; model applies to claude sessions (--model).
   router.get('/settings/pr-review', (_req, res) => {
-    res.json({
-      provider: settings.get(PROVIDER_SETTING_KEY) ?? '',
-      model: settings.get(MODEL_SETTING_KEY) ?? '',
-    });
+    res.json(readSettings());
   });
 
   router.put('/settings/pr-review', (req, res) => {
-    const { provider, model } = (req.body ?? {}) as { provider?: unknown; model?: unknown };
+    const { provider, model, team } = (req.body ?? {}) as { provider?: unknown; model?: unknown; team?: unknown };
+    if (team !== undefined && (typeof team !== 'string' || !/^([\w.-]+\/[\w.-]+)?$/.test(team.trim()))) {
+      res.status(400).json({ error: 'team must be empty or org/team-slug (e.g. grafana/syseng)' });
+      return;
+    }
     if (provider !== undefined) {
       if (provider !== '' && !isSessionProvider(provider)) {
         res.status(400).json({ error: 'provider must be empty (use default) or one of: claude, codex, gemini, cursor' });
@@ -185,10 +194,8 @@ export function createPrReviewRouter(deps: PrReviewRouterDeps): Router {
       }
       settings.set(MODEL_SETTING_KEY, model.trim());
     }
-    res.json({
-      provider: settings.get(PROVIDER_SETTING_KEY) ?? '',
-      model: settings.get(MODEL_SETTING_KEY) ?? '',
-    });
+    if (typeof team === 'string') settings.set(TEAM_SETTING_KEY, team.trim());
+    res.json(readSettings());
   });
 
   // Manual add by URL. Fetches metadata via gh so the sidebar entry is useful.

@@ -34,6 +34,7 @@ export interface PrReviewPatch {
   draftSummary?: string;
   suggestedVerdict?: PrReviewVerdict;
   submittedAt?: string;
+  discoveredVia?: PrReviewDiscoveredVia;
 }
 
 /** One structured finding as reported by the pr-review agent. */

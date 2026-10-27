@@ -73,7 +73,7 @@ function rowToReview(row: PrReviewRow): PrReview {
     prBody: row.pr_body ?? undefined,
     headSha: row.head_sha ?? undefined,
     state: VALID_STATES.has(row.state as PrReviewState) ? (row.state as PrReviewState) : 'incoming',
-    discoveredVia: (row.discovered_via === 'manual' ? 'manual' : 'poll') as PrReviewDiscoveredVia,
+    discoveredVia: (row.discovered_via === 'manual' || row.discovered_via === 'team' ? row.discovered_via : 'poll') as PrReviewDiscoveredVia,
     sessionId: (row.session_id ?? undefined) as SessionId | undefined,
     draftSummary: row.draft_summary ?? undefined,
     suggestedVerdict: VALID_VERDICTS.has(row.suggested_verdict as PrReviewVerdict)
@@ -185,6 +185,7 @@ export function createPrReviewRepository(): PrReviewRepository {
         ['draftSummary', 'draft_summary'],
         ['suggestedVerdict', 'suggested_verdict'],
         ['submittedAt', 'submitted_at'],
+        ['discoveredVia', 'discovered_via'],
       ];
       for (const [key, column] of columns) {
         if (patch[key] !== undefined) {
