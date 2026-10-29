@@ -418,6 +418,7 @@ export function createPrReviewRouter(deps: PrReviewRouterDeps): Router {
       res.status(404).json({ error: 'Finding not found' });
       return;
     }
+    broadcast('pr-review:updated', EVENT_TRACK, { reviewId: updated.reviewId });
     res.json(updated);
   });
 

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import Markdown from 'react-markdown';
 import type { PrReview, PrReviewFinding, PrReviewVerdict } from '@foundation/types';
 import { FindingCard } from './FindingCard';
@@ -44,32 +44,47 @@ export function PrReviewDetail({ reviewId, refreshKey, onChanged, team }: Props)
   const [showDescription, setShowDescription] = useState(false);
   const [pending, setPending] = useState<{ message: string; confirmLabel: string; danger?: boolean; run: () => void } | null>(null);
 
+  // Responses can land out of order (the detail GET makes a slow gh call for analyzed
+  // PRs), so only the latest request may write state.
+  const loadSeq = useRef(0);
+  // The server draft the editors were last seeded from: reseed only when it changes
+  // (first load, new analysis, submit), never over the user's edits on an unrelated refresh.
+  const seeded = useRef<{ summary?: string; verdict?: PrReviewVerdict } | null>(null);
+
   const load = useCallback(async () => {
+    const seq = ++loadSeq.current;
     try {
       const res = await fetch(`/api/pr-reviews/${reviewId}`);
-      if (!res.ok) return;
+      if (!res.ok || seq !== loadSeq.current) return;
       const data = (await res.json()) as ReviewWithFindings;
+      if (seq !== loadSeq.current) return;
       setReview(data);
-      // Seed editors from the agent draft, but never clobber in-flight typing on
-      // a background refresh — only when switching PRs or when still empty.
-      setSummary((prev) => (prev.length === 0 || data.state === 'submitted' ? (data.draftSummary ?? '') : prev));
-      setVerdict((prev) => data.suggestedVerdict ?? prev);
+      if (seeded.current?.summary !== data.draftSummary) setSummary(data.draftSummary ?? '');
+      if (seeded.current?.verdict !== data.suggestedVerdict) setVerdict(data.suggestedVerdict ?? 'comment');
+      seeded.current = { summary: data.draftSummary, verdict: data.suggestedVerdict };
     } catch {
       /* keep last state */
     }
   }, [reviewId]);
 
   useEffect(() => {
-    setReview(null);
-    setSummary('');
-    setVerdict('comment');
-    setError(null);
-    void load();
-  }, [reviewId]); // eslint-disable-line react-hooks/exhaustive-deps
-
-  useEffect(() => {
     void load();
   }, [refreshKey, load]);
+
+  async function saveSummary(): Promise<void> {
+    if (summary === (seeded.current?.summary ?? '')) return;
+    try {
+      const res = await fetch(`/api/pr-reviews/${reviewId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ draftSummary: summary }),
+      });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      seeded.current = { ...seeded.current, summary };
+    } catch (err) {
+      setError(`Review comment not saved: ${err instanceof Error ? err.message : 'request failed'}`);
+    }
+  }
 
   async function call(label: string, path: string, init: RequestInit): Promise<boolean> {
     setBusy(label);
@@ -278,6 +293,7 @@ export function PrReviewDetail({ reviewId, refreshKey, onChanged, team }: Props)
           <textarea
             value={summary}
             onChange={(e) => setSummary(e.target.value)}
+            onBlur={() => void saveSummary()}
             rows={6}
             placeholder="Overall review comment — the agent drafts one; edit freely. Kept findings are posted as inline comments alongside it."
             className="w-full px-3 py-2 text-xs bg-gray-900 border border-gray-800 rounded text-gray-200 placeholder-gray-600 focus:outline-none focus:border-gray-600 resize-y"

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import type { PrReview, PrReviewState } from '@foundation/types';
 import { RefreshButton } from '../shared/RefreshButton';
@@ -70,10 +70,14 @@ export function PrReviewsPage() {
       .catch(() => {});
   }, []);
 
+  const loadSeq = useRef(0);
   const load = useCallback(async () => {
+    const seq = ++loadSeq.current;
     try {
       const res = await fetch('/api/pr-reviews');
-      if (res.ok) setReviews((await res.json()) as PrReviewListItem[]);
+      if (!res.ok) return;
+      const rows = (await res.json()) as PrReviewListItem[];
+      if (seq === loadSeq.current) setReviews(rows);
     } catch {
       /* server unreachable — keep last state */
     }
@@ -95,18 +99,35 @@ export function PrReviewsPage() {
   // Live updates: discovery poller, agent reports, and submits all broadcast
   // pr-review:updated; session:deleted covers the stale-agent reaper retiring an
   // analysis session out from under an open detail view.
+  // Reconnects so a server restart or dropped socket doesn't silently freeze the page;
+  // each (re)connect refetches to cover events missed while disconnected.
   useEffect(() => {
-    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-    const ws = new WebSocket(`${protocol}//${window.location.host}/ws/events`);
-    ws.onmessage = (evt) => {
-      try {
-        const event = JSON.parse(evt.data);
-        if (event.type === 'pr-review:updated' || event.type === 'session:deleted') setRefreshKey((k) => k + 1);
-      } catch {
-        /* ignore malformed events */
-      }
+    let cancelled = false;
+    let ws: WebSocket | undefined;
+    let timer: ReturnType<typeof setTimeout>;
+    function connect() {
+      if (cancelled) return;
+      const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+      ws = new WebSocket(`${protocol}//${window.location.host}/ws/events`);
+      ws.onopen = () => setRefreshKey((k) => k + 1);
+      ws.onmessage = (evt) => {
+        try {
+          const event = JSON.parse(evt.data);
+          if (event.type === 'pr-review:updated' || event.type === 'session:deleted') setRefreshKey((k) => k + 1);
+        } catch {
+          /* ignore malformed events */
+        }
+      };
+      ws.onclose = () => {
+        if (!cancelled) timer = setTimeout(connect, 2_000);
+      };
+    }
+    connect();
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+      ws?.close();
     };
-    return () => ws.close();
   }, []);
 
   async function addPr() {
@@ -199,7 +220,7 @@ export function PrReviewsPage() {
 
       <main className="flex-1 min-w-0 overflow-y-auto">
         {selected ? (
-          <PrReviewDetail reviewId={selected.id} refreshKey={refreshKey} onChanged={() => setRefreshKey((k) => k + 1)} team={team} />
+          <PrReviewDetail key={selected.id} reviewId={selected.id} refreshKey={refreshKey} onChanged={() => setRefreshKey((k) => k + 1)} team={team} />
         ) : (
           <div className="h-full flex items-center justify-center text-sm text-gray-600">
             Select a PR to review — or add one by URL.
