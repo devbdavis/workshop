@@ -1,4 +1,6 @@
 import { Router } from 'express';
+import fs from 'fs';
+import path from 'path';
 import type {
   AgentId,
   PrReviewFindingId,
@@ -62,6 +64,17 @@ export interface PrReviewRouterDeps {
       },
     ) => Promise<{ id: SessionId; trackId: TrackId; tmuxSession: string; state: string }>;
   };
+}
+
+/** The pr-review skill body, inlined so the dashboard review works whether or not the skill is installed. */
+function readReviewSkill(projectRoot: string): string {
+  try {
+    const raw = fs.readFileSync(path.join(projectRoot, 'templates', 'skills', 'pr-review', 'SKILL.md'), 'utf-8');
+    return `\n\n## Skill: pr-review\n\n${raw.replace(/^---\r?\n[\s\S]*?\r?\n---\r?\n/, '').trim()}`;
+  } catch (err) {
+    console.warn('[pr-review] pr-review skill template unreadable; dispatching with the agent prompt only:', err);
+    return '';
+  }
 }
 
 /** Raw finding as reported by the agent via the MCP tool. */
@@ -278,7 +291,7 @@ export function createPrReviewRouter(deps: PrReviewRouterDeps): Router {
           : null;
 
       const session = await terminal.createSession(trackId, {
-        systemPrompt: `## Agent: ${agent.name}\n\n${agent.systemPrompt}`,
+        systemPrompt: `## Agent: ${agent.name}\n\n${agent.systemPrompt}${readReviewSkill(projectRoot)}`,
         provider,
         model,
         background: true,
@@ -288,7 +301,7 @@ export function createPrReviewRouter(deps: PrReviewRouterDeps): Router {
         // its prompt once the report lands.
         interactive: true,
         initialPrompt: [
-          `Review the pull request at ${review.prUrl}.`,
+          `Mode: dashboard. Review the pull request at ${review.prUrl}.`,
           ...(dedupSection ? [dedupSection] : []),
           `When done, report your structured findings, draft summary, and suggested verdict via the workshop_report_pr_review MCP tool (prUrl: ${review.prUrl}). Do not post anything to the forge.`,
         ].join('\n\n'),
