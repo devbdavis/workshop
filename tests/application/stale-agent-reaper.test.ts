@@ -39,7 +39,7 @@ function harness(sessions: Session[]) {
 }
 
 describe('createStaleAgentReaper', () => {
-  it('terminates sessions idle beyond 48h in both disposable tracks', async () => {
+  it('terminates sessions older than 48h in both disposable tracks', async () => {
     const { reaper, destroyed } = harness([
       session('old-review', 'pr-track', 49),
       session('old-linear', 'linear-track', 100),
@@ -57,10 +57,10 @@ describe('createStaleAgentReaper', () => {
     expect(destroyed).toEqual([]);
   });
 
-  it('spares a session whose row was touched recently', async () => {
+  it('reaps an old session even when a restart resumed it recently', async () => {
     const stale = session('resumed', 'pr-track', 200);
     const { reaper, destroyed } = harness([{ ...stale, updatedAt: new Date().toISOString() }]);
-    expect(await reaper.reapNow()).toBe(0);
-    expect(destroyed).toEqual([]);
+    expect(await reaper.reapNow()).toBe(1);
+    expect(destroyed).toEqual(['resumed']);
   });
 });

@@ -283,7 +283,7 @@ export function createApiRouter(deps: ApiRouterDeps = {}): Router {
   process.on('SIGINT', () => prReviewDiscovery.stop());
   process.on('SIGTERM', () => prReviewDiscovery.stop());
 
-  // Terminate PR-review / Linear-issue agent sessions older than 48h — those
+  // Terminate PR-review / Linear-issue agent sessions created over 48h ago — those
   // system tracks otherwise accumulate parked one-shot agents forever.
   const staleAgentReaper = createStaleAgentReaper({
     sessions,
