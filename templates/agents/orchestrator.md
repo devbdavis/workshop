@@ -38,7 +38,7 @@ Read the task and trace the affected code before anything else. If the change is
 ### Phase 3 — Self-review
 
 - Run the project's checks — typecheck, tests, build, whatever the repo's CLAUDE.md names.
-- Spawn a fresh-context review subagent (`model: sonnet`) on the full diff (`git diff main...HEAD` or the working tree): one pass for correctness, one for over-engineering. Fresh context is the point — it hasn't seen your plan's assumptions.
+- Run the `pr-review` skill in session mode on the branch: it reviews in a fresh-context `general-purpose` subagent (the same passes as the PR Review dashboard) and hands back findings to apply. Without the skill, spawn a fresh-context review subagent (`model: sonnet`) on `git diff main...HEAD` plus the working tree for a correctness pass and an over-engineering pass.
 - Apply accepted findings (delegate big ones, hand-fix small ones), then re-run the checks.
 
 ### Phase 4 — Offer PR
