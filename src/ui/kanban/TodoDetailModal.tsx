@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import type { Todo, TodoStatus, TodoPriority, Track, Agent, PullRequest } from '@foundation/types';
 import { DispatchDropdown, type DispatchOptions } from '../track-view/DispatchDropdown';
+import { issueBaseUrlFor, issueHref } from '@foundation/issue-tracker.js';
 
 interface Props {
   todo: Todo | null;
@@ -43,6 +44,7 @@ export function TodoDetailModal({ todo, tracks, onClose, onSave, onDelete, onDis
   const [issueError, setIssueError] = useState<string | null>(null);
   const [tracker, setTracker] = useState<{
     tracker?: string;
+    orgName?: string;
     githubRepo?: string;
     githubLabels?: string;
   } | null>(null);
@@ -97,6 +99,7 @@ export function TodoDetailModal({ todo, tracks, onClose, onSave, onDelete, onDis
   const canDispatch = status === 'ready' || status === 'backlog';
   // Unset means Linear (server default); Jira has no create flow; hidden until settings load.
   const trackerKind = tracker && (tracker.tracker ?? 'linear');
+  const issueUrl = issueHref(issueBaseUrlFor(trackerKind || undefined, tracker?.orgName), issueKey || undefined);
   const trackerName = trackerKind === 'github' ? 'GitHub' : trackerKind === 'linear' ? 'Linear' : undefined;
 
   function handleSave() {
@@ -225,7 +228,19 @@ export function TodoDetailModal({ todo, tracks, onClose, onSave, onDelete, onDis
           </div>
 
           <div>
-            <label className="text-xs text-gray-400 block mb-1">Issue</label>
+            <div className="flex items-center justify-between mb-1">
+              <label className="text-xs text-gray-400">Issue</label>
+              {issueUrl && (
+                <a
+                  href={issueUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-xs text-blue-400 hover:underline"
+                >
+                  Open {issueKey} ↗
+                </a>
+              )}
+            </div>
             <input
               value={issueKey}
               onChange={(e) => {
