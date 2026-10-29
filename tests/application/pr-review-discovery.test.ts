@@ -183,7 +183,7 @@ describe('PR review discovery poller', () => {
     expect(reviews.findById(submittedReview.id)?.state).toBe('needs_rereview');
   });
 
-  it('skips the head check for reviews submitted long ago', async () => {
+  it('deletes tracked rows once the PR is merged or closed, regardless of age', async () => {
     const reviews = createPrReviewRepository();
     const old = reviews.upsertIncoming({
       prUrl: 'https://github.com/acme/widgets/pull/3',
@@ -193,19 +193,68 @@ describe('PR review discovery poller', () => {
       discoveredVia: 'poll',
     });
     reviews.update(old.id, { state: 'submitted', headSha: 'abc', submittedAt: '2020-01-01T00:00:00.000Z' });
-    const fetchPrSnapshot = vi.fn(async () => ({ headRefOid: 'def' }));
+    const broadcast = vi.fn();
     const poller = createPrReviewDiscoveryPoller({
       reviews,
-      forge: { discoverReviewRequests: async () => ({ prs: [], hosts: ['github.com'] }), fetchPrSnapshot },
+      forge: {
+        discoverReviewRequests: async () => ({ prs: [], hosts: ['github.com'] }),
+        fetchPrSnapshot: async () => ({ headRefOid: 'abc', finished: true }),
+      },
+      broadcast,
+    });
+
+    await poller.pollNow();
+    expect(reviews.findById(old.id)).toBeNull();
+    expect(broadcast).toHaveBeenCalledWith('pr-review:updated', 'pr-reviews', { added: 0, pruned: 1, rereview: 0 });
+  });
+
+  it('flips a submitted review to needs_rereview when the author re-requests it', async () => {
+    const reviews = createPrReviewRepository();
+    const row = reviews.upsertIncoming({
+      prUrl: discovered(4).url,
+      repoOwner: 'acme',
+      repoName: 'widgets',
+      prNumber: 4,
+      discoveredVia: 'poll',
+    });
+    reviews.update(row.id, { state: 'submitted', headSha: 'abc', submittedAt: new Date(Date.now() - 60 * 60_000).toISOString() });
+    const poller = createPrReviewDiscoveryPoller({
+      reviews,
+      forge: {
+        discoverReviewRequests: async () => ({ prs: [discovered(4)], hosts: ['github.com'] }),
+        fetchPrSnapshot: async () => ({ headRefOid: 'abc' }),
+      },
       broadcast: vi.fn(),
     });
 
     await poller.pollNow();
-    expect(fetchPrSnapshot).not.toHaveBeenCalled();
-    expect(reviews.findById(old.id)?.state).toBe('submitted');
+    expect(reviews.findById(row.id)?.state).toBe('needs_rereview');
   });
 
-  it('leaves a submitted review alone when the head SHA is unchanged, and never head-checks other states', async () => {
+  it('ignores a request still listed right after submitting (search lag)', async () => {
+    const reviews = createPrReviewRepository();
+    const row = reviews.upsertIncoming({
+      prUrl: discovered(5).url,
+      repoOwner: 'acme',
+      repoName: 'widgets',
+      prNumber: 5,
+      discoveredVia: 'poll',
+    });
+    reviews.update(row.id, { state: 'submitted', headSha: 'abc', submittedAt: new Date().toISOString() });
+    const poller = createPrReviewDiscoveryPoller({
+      reviews,
+      forge: {
+        discoverReviewRequests: async () => ({ prs: [discovered(5)], hosts: ['github.com'] }),
+        fetchPrSnapshot: async () => ({ headRefOid: 'abc' }),
+      },
+      broadcast: vi.fn(),
+    });
+
+    await poller.pollNow();
+    expect(reviews.findById(row.id)?.state).toBe('submitted');
+  });
+
+  it('leaves a submitted review alone when the head SHA is unchanged, and only head-checks submitted rows', async () => {
     const reviews = createPrReviewRepository();
     const submittedReview = reviews.upsertIncoming({
       prUrl: 'https://github.com/acme/widgets/pull/1',
@@ -232,8 +281,7 @@ describe('PR review discovery poller', () => {
 
     await poller.pollNow();
     expect(reviews.findById(submittedReview.id)?.state).toBe('submitted');
-    expect(fetchPrSnapshot).toHaveBeenCalledTimes(1);
-    expect(fetchPrSnapshot).toHaveBeenCalledWith(submittedReview.prUrl);
+    expect(reviews.findById(readyReview.id)?.state).toBe('ready');
   });
 
   it('registers team requests as team rows, keeps them through a failed team pass, and prunes once a teammate engages', async () => {
