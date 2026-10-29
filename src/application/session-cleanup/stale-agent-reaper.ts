@@ -42,10 +42,8 @@ export function createStaleAgentReaper(deps: StaleAgentReaperDeps): StaleAgentRe
       // findByTrack skips the recycle bin — soft-deleted rows are already owned
       // by the terminal manager's 7-day purge.
       for (const session of deps.sessions.findByTrack(trackId as TrackId)) {
-        // updatedAt, not the manager's in-memory lastActivityAt: that map is
-        // stamped on the first pane observation after every restart, which would
-        // reset the clock on any long-parked session each time Workshop restarts.
-        if (new Date(session.updatedAt).getTime() > cutoff) continue;
+        // createdAt: suspend/resume on every restart bumps updatedAt, which would keep parked sessions alive forever.
+        if (new Date(session.createdAt).getTime() > cutoff) continue;
         try {
           // Soft-delete, like every other retire path: tmux dies and the session
           // leaves the active list, but the scrollback stays readable in the

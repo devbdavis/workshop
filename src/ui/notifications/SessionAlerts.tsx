@@ -27,7 +27,16 @@ export function useSessionAlerts(): SessionAlertsContextValue {
   return ctx;
 }
 
-function alertUrl(alert: SessionAlert): string {
+// PR review analysis sessions belong on the PR Reviews page, not the Sessions tab.
+async function alertUrl(alert: SessionAlert): Promise<string> {
+  try {
+    const res = await fetch('/api/pr-reviews');
+    const reviews: { id: string; sessionId?: string }[] = res.ok ? await res.json() : [];
+    const review = reviews.find((r) => r.sessionId === alert.sessionId);
+    if (review) return `/pr-reviews?review=${review.id}`;
+  } catch {
+    // fall through to the session link
+  }
   return `/sessions?session=${alert.sessionId}`;
 }
 
@@ -48,7 +57,7 @@ export function SessionAlertsProvider({ children }: { children: ReactNode }) {
   const open = useCallback((alert: SessionAlert) => {
     setUnread((prev) => prev.filter((a) => a.sessionId !== alert.sessionId));
     setChips((prev) => prev.filter((a) => a.id !== alert.id));
-    navigate(alertUrl(alert));
+    void alertUrl(alert).then((url) => navigate(url));
   }, [navigate]);
 
   const dismissChip = useCallback((id: string) => {

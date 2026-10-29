@@ -5,8 +5,10 @@ import type { ReviewRequestDiscovery } from '@infrastructure/forge/forge-adapter
 const EVENT_TRACK = 'pr-reviews';
 
 const DEFAULT_INTERVAL_MS = 5 * 60_000;
-/** How far back a submitted review stays eligible for the "author pushed" head check. */
-const RECHECK_WINDOW_MS = 14 * 24 * 60 * 60_000;
+/** Search can lag a submit, so a request still listed this soon after is the old one, not a re-request. */
+const REREQUEST_GRACE_MS = 10 * 60_000;
+/** Rows the user has acted on: checked each pass for merge/close and fresh pushes. */
+const TRACKED_STATES = new Set(['ready', 'submitted', 'needs_rereview', 'dismissed']);
 
 function hostOf(url: string): string {
   try {
@@ -20,7 +22,7 @@ export interface PrReviewDiscoveryPollerDeps {
   reviews: PrReviewRepository;
   forge: {
     discoverReviewRequests(): Promise<ReviewRequestDiscovery>;
-    fetchPrSnapshot(prUrl: string): Promise<{ headRefOid?: string }>;
+    fetchPrSnapshot(prUrl: string): Promise<{ headRefOid?: string; finished?: boolean }>;
   };
   broadcast: (type: 'pr-review:updated', trackId: string, payload?: Record<string, unknown>) => void;
   intervalMs?: number;
@@ -47,10 +49,20 @@ export function createPrReviewDiscoveryPoller(deps: PrReviewDiscoveryPollerDeps)
       // Direct requests first so a PR asked of both you and your team registers as yours.
       const discovered = [...direct, ...(teamPrs ?? [])];
       let added = 0;
+      let rereview = 0;
       for (const [i, pr] of discovered.entries()) {
         const existing = reviews.findByUrl(pr.url);
         // Asked of you directly now — it's no longer just a team request.
         if (existing?.discoveredVia === 'team' && i < direct.length) reviews.update(existing.id, { discoveredVia: 'poll' });
+        // Submitting clears your request, so seeing it again means the author re-requested.
+        if (
+          existing?.state === 'submitted' &&
+          i < direct.length &&
+          Date.now() - Date.parse(existing.submittedAt ?? existing.updatedAt) > REREQUEST_GRACE_MS
+        ) {
+          reviews.update(existing.id, { state: 'needs_rereview' });
+          rereview++;
+        }
         if (existing) continue;
         reviews.upsertIncoming({
           prUrl: pr.url,
@@ -86,26 +98,30 @@ export function createPrReviewDiscoveryPoller(deps: PrReviewDiscoveryPollerDeps)
         pruned++;
       }
 
-      // A submitted review goes stale the moment the author pushes, so flip those rows
-      // back onto the active list. Only recently submitted ones are checked: a PR reviewed
-      // weeks ago is almost certainly merged or abandoned, and each check is a forge round-trip.
-      const cutoff = Date.now() - RECHECK_WINDOW_MS;
-      const flips = await Promise.all(
+      // Merged/closed PRs leave the dashboard; a submitted review goes stale the moment
+      // the author pushes, so flip those rows back onto the active list.
+      // ponytail: one forge call per tracked row per pass; merged rows delete themselves, so the set stays open PRs only.
+      const outcomes = await Promise.all(
         rows
-          .filter((row) => row.state === 'submitted' && row.headSha && Date.parse(row.submittedAt ?? row.updatedAt) >= cutoff)
-          .map(async (row): Promise<boolean> => {
+          .filter((row) => TRACKED_STATES.has(row.state))
+          .map(async (row): Promise<'pruned' | 'rereview' | null> => {
             try {
-              const { headRefOid } = await forge.fetchPrSnapshot(row.prUrl);
-              if (!headRefOid || headRefOid === row.headSha) return false;
+              const { headRefOid, finished } = await forge.fetchPrSnapshot(row.prUrl);
+              if (finished) {
+                reviews.delete(row.id);
+                return 'pruned';
+              }
+              if (row.state !== 'submitted' || !row.headSha || !headRefOid || headRefOid === row.headSha) return null;
               reviews.update(row.id, { state: 'needs_rereview' });
-              return true;
+              return 'rereview';
             } catch (err) {
               console.warn('[pr-review] Head check failed for', row.prUrl, err instanceof Error ? err.message : err);
-              return false;
+              return null;
             }
           }),
       );
-      const rereview = flips.filter(Boolean).length;
+      pruned += outcomes.filter((o) => o === 'pruned').length;
+      rereview += outcomes.filter((o) => o === 'rereview').length;
 
       if (added > 0 || pruned > 0 || rereview > 0) {
         broadcast('pr-review:updated', EVENT_TRACK, { added, pruned, rereview });
