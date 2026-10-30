@@ -20,9 +20,10 @@ export function issueBaseUrlFor(tracker: string | undefined, orgName: string | u
 
 /** Full link to an issue, or undefined when we lack a base or key. */
 export function issueHref(base: string | undefined, key: string | undefined): string | undefined {
-  if (!base || !key) return undefined;
-  // GitHub keys ("owner/repo#123") expand to a repo-scoped issue path.
-  return base + (key.includes('#') ? key.replace('#', '/issues/') : key);
+  if (!key) return undefined;
+  // GitHub keys ("owner/repo#123") are self-locating, so they link even when another tracker is configured.
+  if (isGithubIssueKey(key)) return `https://github.com/${key.replace('#', '/issues/')}`;
+  return base ? base + key : undefined;
 }
 
 /** True when an issueKey belongs to GitHub (only GitHub keys carry a "#"). */
