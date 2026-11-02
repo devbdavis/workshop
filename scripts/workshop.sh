@@ -252,7 +252,7 @@ install_launchd() {
     <key>EnvironmentVariables</key>
     <dict>
         <key>PATH</key>
-        <string>${node_dir}:/usr/local/bin:/opt/homebrew/bin:/usr/bin:/bin</string>
+        <string>${node_dir}:${HOME}/.local/bin:/usr/local/bin:/opt/homebrew/bin:/usr/bin:/bin</string>
         <key>NODE_ENV</key>
         <string>production</string>
         <key>WORKSHOP_DB_PATH</key>

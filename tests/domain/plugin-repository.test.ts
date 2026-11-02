@@ -30,6 +30,12 @@ describe('Plugin Repository', () => {
     expect(ponytail!.enabled).toBe(true);
   });
 
+  it('seeds egm by default', () => {
+    const egm = repo.findByName('egm@egm');
+    expect(egm?.marketplaceRepo).toBe('google/elephant-goldfish-model');
+    expect(egm?.enabled).toBe(true);
+  });
+
   it('creates and finds a plugin', () => {
     const plugin = repo.create({
       marketplaceRepo: 'acme/tools',
