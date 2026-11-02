@@ -1014,16 +1014,18 @@ function runMigrations(db: Database.Database): void {
   // Seed default prompt templates if the table is empty
   seedDefaultTemplates(db);
 
-  // Seed default plugins (ponytail) if not present
+  // Seed default plugins (ponytail, egm) if not present
   seedDefaultPlugins(db);
 }
 
 function seedDefaultPlugins(db: Database.Database): void {
   const now = new Date().toISOString();
-  db.prepare(
+  const insert = db.prepare(
     `INSERT OR IGNORE INTO plugins (id, marketplace_repo, plugin_name, description, enabled, created_at, updated_at)
-     VALUES (?, 'DietrichGebert/ponytail', 'ponytail@ponytail', 'Lazy senior dev discipline — YAGNI ladder + /ponytail-review over-engineering review', 1, ?, ?)`,
-  ).run(uuid(), now, now);
+     VALUES (?, ?, ?, ?, 1, ?, ?)`,
+  );
+  insert.run(uuid(), 'DietrichGebert/ponytail', 'ponytail@ponytail', 'Lazy senior dev discipline — YAGNI ladder + /ponytail-review over-engineering review', now, now);
+  insert.run(uuid(), 'google/elephant-goldfish-model', 'egm@egm', 'Draft specs, review designs, and check implementation drift', now, now);
 }
 
 function seedDefaultTemplates(db: Database.Database): void {
