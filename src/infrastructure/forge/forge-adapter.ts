@@ -12,6 +12,8 @@ export interface ReviewRequestDiscovery {
   hosts: string[];
   /** Team-requested PRs no teammate has engaged with yet; undefined when the team search failed. */
   teamPrs?: DiscoveredPr[];
+  /** Direct-request URLs a teammate has already reviewed or commented on; undefined when that check failed. */
+  teamEngaged?: Set<string>;
 }
 
 /** A forge we can inspect one PR at a time (GitHub or Gitea). */
@@ -84,12 +86,19 @@ export function createForgeAdapter(opts: CreateForgeAdapterOptions = {}): ForgeA
 
       const team = opts.getReviewTeam?.();
       let teamPrs: DiscoveredPr[] | undefined = [];
+      let teamEngaged: Set<string> | undefined = new Set();
       if (team) {
         try {
           teamPrs = await github.searchUnansweredTeamRequests(team);
         } catch (err) {
           teamPrs = undefined;
           console.warn('[forge] GitHub team review discovery failed:', err instanceof Error ? err.message : err);
+        }
+        try {
+          teamEngaged = await github.findTeamEngagedPrs(team, prs);
+        } catch (err) {
+          teamEngaged = undefined;
+          console.warn('[forge] GitHub teammate engagement check failed:', err instanceof Error ? err.message : err);
         }
       }
 
@@ -103,7 +112,7 @@ export function createForgeAdapter(opts: CreateForgeAdapterOptions = {}): ForgeA
         }
       }
 
-      return { prs, hosts, teamPrs };
+      return { prs, hosts, teamPrs, teamEngaged };
     },
   };
 }

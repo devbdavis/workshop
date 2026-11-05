@@ -235,6 +235,7 @@ describe('ForgeAdapter', () => {
     submitPrReview: vi.fn(async () => {}),
     searchReviewRequestedPrs: vi.fn(async () => []),
     searchUnansweredTeamRequests: vi.fn(async () => []),
+    findTeamEngagedPrs: vi.fn(async () => new Set<string>()),
     fetchCheckLog: vi.fn(async () => 'gh-log'),
   };
   const stubGitea = {

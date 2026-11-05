@@ -62,7 +62,8 @@ describe('GhReviewAdapter', () => {
       exec: async (_binary, args) => {
         calls.push(args);
         if (args[0] === 'search') return { stdout: JSON.stringify([pr(1, 'bob'), pr(2, 'dave'), pr(3, 'dave')]), stderr: '' };
-        if (args[0] === 'api') return { stdout: 'bob\ncarol\n', stderr: '' };
+        if (args[1] === 'user') return { stdout: 'me\n', stderr: '' };
+        if (args[0] === 'api') return { stdout: 'bob\ncarol\nme\n', stderr: '' };
         return { stdout: JSON.stringify(activity[args[2]]), stderr: '' };
       },
     });
@@ -70,7 +71,41 @@ describe('GhReviewAdapter', () => {
     const prs = await adapter.searchUnansweredTeamRequests('acme/syseng');
     expect(prs.map((p) => p.number)).toEqual([1, 3]);
     expect(calls.find((a) => a[0] === 'search')).toContain('team-review-requested:acme/syseng');
-    expect(calls.find((a) => a[0] === 'api')?.[1]).toBe('orgs/acme/teams/syseng/members?per_page=100');
+    expect(calls.find((a) => a[0] === 'api' && a[1] !== 'user')?.[1]).toBe('orgs/acme/teams/syseng/members?per_page=100');
+  });
+
+  it('caches the team roster and skips re-reading PRs whose updatedAt has not moved', async () => {
+    const pr = (n: number, updatedAt: string) => ({
+      url: `https://github.com/acme/widgets/pull/${n}`,
+      title: '',
+      author: 'dave',
+      repoOwner: 'acme',
+      repoName: 'widgets',
+      number: n,
+      updatedAt,
+    });
+    const activity: Record<string, object> = {
+      // Your own comment doesn't count as a teammate engaging.
+      'https://github.com/acme/widgets/pull/1': { reviews: [], comments: [{ author: { login: 'me' } }] },
+      'https://github.com/acme/widgets/pull/2': { reviews: [{ author: { login: 'carol' } }], comments: [] },
+    };
+    const calls: string[][] = [];
+    const adapter = createGhReviewAdapter({
+      exec: async (_binary, args) => {
+        calls.push(args);
+        if (args[1] === 'user') return { stdout: 'me\n', stderr: '' };
+        if (args[0] === 'api') return { stdout: 'carol\nme\n', stderr: '' };
+        return { stdout: JSON.stringify(activity[args[2]]), stderr: '' };
+      },
+    });
+
+    expect([...(await adapter.findTeamEngagedPrs('acme/syseng', [pr(1, 't0'), pr(2, 't0')]))]).toEqual([pr(2, 't0').url]);
+    await adapter.findTeamEngagedPrs('acme/syseng', [pr(1, 't0'), pr(2, 't0')]);
+    await adapter.findTeamEngagedPrs('acme/syseng', [pr(1, 't1'), pr(2, 't0')]);
+    const count = (pred: (a: string[]) => boolean) => calls.filter(pred).length;
+    expect(count((a) => a[0] === 'api')).toBe(2); // roster + self, once each
+    expect(count((a) => a[0] === 'pr' && a[2] === pr(1, '').url)).toBe(2); // re-read only after it changed
+    expect(count((a) => a[0] === 'pr' && a[2] === pr(2, '').url)).toBe(1);
   });
 
   it('submits a review with the GitHub API payload shape on stdin', async () => {

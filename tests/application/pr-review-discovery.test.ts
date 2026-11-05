@@ -314,4 +314,28 @@ describe('PR review discovery poller', () => {
     await poller.pollNow();
     expect(via()).toEqual({ 1: 'poll', 3: 'poll' });
   });
+
+  it('skips direct requests a teammate already engaged, survives a failed check, prunes once one engages', async () => {
+    const reviews = createPrReviewRepository();
+    const passes: { prs: DiscoveredPr[]; teamEngaged?: Set<string> }[] = [
+      { prs: [discovered(1), discovered(2)], teamEngaged: new Set([discovered(2).url]) }, // teammate already on #2
+      { prs: [discovered(1)], teamEngaged: undefined }, // engagement check failed
+      { prs: [discovered(1)], teamEngaged: new Set([discovered(1).url]) }, // teammate commented on #1
+    ];
+    const poller = createPrReviewDiscoveryPoller({
+      reviews,
+      forge: {
+        discoverReviewRequests: async () => ({ ...passes.shift()!, hosts: ['github.com'] }),
+        fetchPrSnapshot: async () => ({}),
+      },
+      broadcast: vi.fn(),
+    });
+
+    expect(await poller.pollNow()).toBe(1);
+    expect(reviews.findAll().map((r) => r.prNumber)).toEqual([1]);
+    await poller.pollNow();
+    expect(reviews.findAll().map((r) => r.prNumber)).toEqual([1]);
+    await poller.pollNow();
+    expect(reviews.findAll()).toEqual([]);
+  });
 });

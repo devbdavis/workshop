@@ -46,6 +46,8 @@ export interface GhReviewAdapter {
   searchReviewRequestedPrs(): Promise<DiscoveredPr[]>;
   /** Open PRs requesting `org/team` that no team member (other than the author) has reviewed or commented on. */
   searchUnansweredTeamRequests(team: string): Promise<DiscoveredPr[]>;
+  /** URLs of `prs` a member of `org/team` (other than you or the author) has reviewed or commented on. */
+  findTeamEngagedPrs(team: string, prs: DiscoveredPr[]): Promise<Set<string>>;
   /** Raw unified diff of the PR (`gh pr diff`). */
   fetchPrDiff(prUrl: string): Promise<string>;
   /** Posts ONE review (body + verdict + inline comments) via the forge's reviews API. */
@@ -55,6 +57,8 @@ export interface GhReviewAdapter {
 }
 
 export const CHECK_LOG_TAIL_LINES = 200;
+
+const TEAM_TTL_MS = 7 * 24 * 60 * 60_000;
 
 /** `--log-failed` prefixes every line with `job\tstep\ttimestamp `; keep only the text. */
 export function tailFailedLog(raw: string, lines = CHECK_LOG_TAIL_LINES): string {
@@ -242,6 +246,59 @@ export function createGhReviewAdapter(opts: CreateGhReviewAdapterOptions = {}): 
     return out;
   }
 
+  let selfLogin: Promise<string> | undefined;
+  const teamCache = new Map<string, { at: number; logins: Promise<Set<string>> }>();
+  /** `team url` → engagement as of the PR's `updatedAt`; any new review or comment bumps that stamp. */
+  // ponytail: never evicted; one entry per PR seen this process, trim if that ever matters.
+  const engagementCache = new Map<string, { updatedAt?: string; engaged: boolean }>();
+
+  // Rosters change about monthly, so a weekly refetch keeps the per-poll cost at zero.
+  function teamLogins(team: string): Promise<Set<string>> {
+    const hit = teamCache.get(team);
+    if (hit && Date.now() - hit.at < TEAM_TTL_MS) return hit.logins;
+    const [org, slug] = team.split('/');
+    const logins = exec(ghBinary, ['api', `orgs/${org}/teams/${slug}/members?per_page=100`, '--paginate', '--jq', '.[].login']).then(
+      ({ stdout }) => new Set(stdout.split('\n').map((l) => l.trim().toLowerCase()).filter(Boolean)),
+    );
+    teamCache.set(team, { at: Date.now(), logins });
+    logins.catch(() => teamCache.delete(team));
+    return logins;
+  }
+
+  async function findTeamEngagedPrs(team: string, prs: DiscoveredPr[]): Promise<Set<string>> {
+    selfLogin ??= exec(ghBinary, ['api', 'user', '--jq', '.login']).then(({ stdout }) => stdout.trim().toLowerCase());
+    selfLogin.catch(() => (selfLogin = undefined));
+    const [members, me] = await Promise.all([teamLogins(team), selfLogin]);
+    const engaged = new Set<string>();
+    await Promise.all(
+      prs.map(async (pr) => {
+        const key = `${team} ${pr.url}`;
+        let hit = engagementCache.get(key);
+        if (!hit || !pr.updatedAt || hit.updatedAt !== pr.updatedAt) {
+          let stdout: string;
+          try {
+            ({ stdout } = await exec(ghBinary, ['pr', 'view', pr.url, '--json', 'reviews,comments']));
+          } catch {
+            // One unreadable PR must not sink the pass; showing it beats silently hiding it.
+            return;
+          }
+          const { reviews = [], comments = [] } = JSON.parse(stdout) as {
+            reviews?: { author?: { login?: string } }[];
+            comments?: { author?: { login?: string } }[];
+          };
+          const byTeammate = [...reviews, ...comments].some((c) => {
+            const login = c.author?.login?.toLowerCase();
+            return !!login && login !== me && login !== pr.author.toLowerCase() && members.has(login);
+          });
+          hit = { updatedAt: pr.updatedAt, engaged: byTeammate };
+          engagementCache.set(key, hit);
+        }
+        if (hit.engaged) engaged.add(pr.url);
+      }),
+    );
+    return engaged;
+  }
+
   return {
     async searchReviewRequestedPrs(): Promise<DiscoveredPr[]> {
       // user-review-requested (raw search qualifier — gh has no flag for it) matches
@@ -251,29 +308,12 @@ export function createGhReviewAdapter(opts: CreateGhReviewAdapterOptions = {}): 
     },
 
     async searchUnansweredTeamRequests(team: string): Promise<DiscoveredPr[]> {
-      const [org, slug] = team.split('/');
-      const [prs, { stdout: members }] = await Promise.all([
-        searchPrs(`team-review-requested:${team}`, 50),
-        exec(ghBinary, ['api', `orgs/${org}/teams/${slug}/members?per_page=100`, '--paginate', '--jq', '.[].login']),
-      ]);
-      const teamLogins = new Set(members.split('\n').map((l) => l.trim().toLowerCase()).filter(Boolean));
-      // ponytail: one `gh pr view` per team-requested PR per poll; fold into one GraphQL query if the list grows large.
-      const engaged = await Promise.all(
-        prs.map(async (pr) => {
-          // One unreadable PR must not sink the pass; showing it beats silently pruning it.
-          const stdout = await exec(ghBinary, ['pr', 'view', pr.url, '--json', 'reviews,comments']).then((r) => r.stdout, () => '{}');
-          const { reviews = [], comments = [] } = JSON.parse(stdout) as {
-            reviews?: { author?: { login?: string } }[];
-            comments?: { author?: { login?: string } }[];
-          };
-          return [...reviews, ...comments].some((c) => {
-            const login = c.author?.login?.toLowerCase();
-            return !!login && login !== pr.author.toLowerCase() && teamLogins.has(login);
-          });
-        }),
-      );
-      return prs.filter((_, i) => !engaged[i]);
+      const prs = await searchPrs(`team-review-requested:${team}`, 50);
+      const engaged = await findTeamEngagedPrs(team, prs);
+      return prs.filter((pr) => !engaged.has(pr.url));
     },
+
+    findTeamEngagedPrs,
 
     async fetchPrDiff(prUrl: string): Promise<string> {
       const { stdout } = await exec(ghBinary, ['pr', 'diff', prUrl]);
