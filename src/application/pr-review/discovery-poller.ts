@@ -45,7 +45,7 @@ export function createPrReviewDiscoveryPoller(deps: PrReviewDiscoveryPollerDeps)
     if (polling) return 0;
     polling = true;
     try {
-      const { prs: direct, hosts, teamPrs } = await forge.discoverReviewRequests();
+      const { prs: direct, hosts, teamPrs, teamEngaged } = await forge.discoverReviewRequests();
       // Direct requests first so a PR asked of both you and your team registers as yours.
       const discovered = [...direct, ...(teamPrs ?? [])];
       let added = 0;
@@ -63,7 +63,7 @@ export function createPrReviewDiscoveryPoller(deps: PrReviewDiscoveryPollerDeps)
           reviews.update(existing.id, { state: 'needs_rereview' });
           rereview++;
         }
-        if (existing) continue;
+        if (existing || teamEngaged?.has(pr.url)) continue;
         reviews.upsertIncoming({
           prUrl: pr.url,
           repoOwner: pr.repoOwner,
@@ -93,7 +93,8 @@ export function createPrReviewDiscoveryPoller(deps: PrReviewDiscoveryPollerDeps)
         if (!searched.has(hostOf(row.prUrl))) continue;
         // A failed team search must not prune team rows; a teammate engaging (or the request going away) does.
         if (row.discoveredVia === 'team' && !teamPrs) continue;
-        if (liveUrls.has(row.prUrl)) continue;
+        // A teammate already reviewing a PR asked of you both takes it off your plate.
+        if (liveUrls.has(row.prUrl) && !teamEngaged?.has(row.prUrl)) continue;
         reviews.delete(row.id);
         pruned++;
       }
