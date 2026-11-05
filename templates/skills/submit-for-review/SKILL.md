@@ -1,11 +1,10 @@
 ---
 name: submit-for-review
-description: "Completes a unit of work: updates task tracking, commits staged changes to a branch, and opens a draft PR. Use at the end of a task when work is ready for review. Tagged: workshop."
-templateName: submit-for-review
+description: "The required way to open a pull request. Commits the work, pushes the branch, opens the PR, links it to the Workshop todo, registers it with the PR monitor, and moves the todo to review. Use this whenever you are about to open, create, raise, or submit a PR or merge request, run `gh pr create` or `tea pulls create`, push a branch for review, or wrap up a finished task, even if the user only says \"ship it\", \"open a PR\", or \"I'm done\". Do not run `gh pr create` directly. Tagged: workshop."
 ---
 
-Wraps up a finished unit of work — task tracking, git, and a draft PR in one shot.
-Always produces a **draft** PR. Never opens a non-draft PR under any circumstances.
+Wraps up a finished unit of work — task tracking, git, and a PR in one shot.
+PRs are **draft** by default. Open a non-draft PR only when the repo's CLAUDE.md or the session instructions explicitly say to.
 
 ## Steps
 
@@ -27,7 +26,7 @@ Run steps 1–2 in parallel, then proceed sequentially.
 
 - Stage relevant files **explicitly by name** — never use `git add -A` or `git add .`
 - Write a concise commit message following the repo's existing style (from step 1 log)
-- Append `Co-Authored-By: Claude Sonnet 4.6 <noreply@anthropic.com>` to the commit
+- Append the commit attribution lines from the session context, if any
 
 If everything is already committed, skip to step 4.
 
@@ -37,7 +36,7 @@ If everything is already committed, skip to step 4.
 - Otherwise create a branch with a short kebab-case name that describes the work (e.g. `feat/add-kanban-sort`)
 - Push with `-u` to set the upstream: `git push -u origin <branch>`
 
-### 5. Open a draft PR
+### 5. Open the PR
 
 Construct the PR body:
 
@@ -82,13 +81,13 @@ Create the PR against whichever forge the `origin` remote points at:
   ```
   gh pr create --draft --title "<title>" --body "<body>"
   ```
-  **`--draft` is mandatory. Never omit it.**
+  Omit `--draft` only when the repo or session instructions require non-draft PRs.
 
 - **Gitea / Forgejo** (any host in `~/.config/tea/config.yml`):
   ```
   tea pulls create --title "WIP: <title>" --description "<body>"
   ```
-  `tea` has no `--draft` flag — Gitea derives draft status from a `WIP:` title prefix. **The prefix is mandatory.** Print the PR URL from the command output.
+  `tea` has no `--draft` flag — Gitea derives draft status from a `WIP:` title prefix, so drop the prefix only when non-draft is required. Print the PR URL from the command output.
 
 If the user supplied a PR title as an argument, use it. Otherwise derive a short title (≤ 70 chars) from the commit message or branch name.
 
@@ -113,7 +112,7 @@ Output a brief summary:
 
 ## Rules
 
-- **Always `--draft`** — no exceptions
+- **Draft by default** — non-draft only when the repo or session instructions say so
 - **PR descriptions are current-state only** — no history, no iteration log, no "what changed since last review". Git already records that.
 - **Rewrite, never append, when updating a PR body**
 - **Default to zero code comments.** Most diffs need none; the reasoning belongs in the PR description, which is where reviewers actually read it. Write a comment only when it is the sole mechanism for a required effect (`# noqa`, a docstring, a build tag), or when correctness depends on something invisible from the file — e.g. a value that must stay in sync with one defined elsewhere. Never explain *why* the code is written the way it is. Never restate what well-named code already shows. If a comment seems necessary to make code understandable, rewrite the code instead. One line where one is genuinely warranted; never a paragraph.
