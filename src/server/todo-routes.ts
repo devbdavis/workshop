@@ -85,7 +85,7 @@ export function createTodoRouter(deps: TodoRouterDeps): Router {
     const cached = settings.get(LINEAR_ISSUE_TRACK_SETTING);
     if (cached && tracks.findById(cached as TrackId)) return cached as TrackId;
     const track = tracks.create({
-      name: 'Issues',
+      name: '_Issue Tracking',
       description: 'Background sessions that draft and file Linear or GitHub issues from todos.',
       label: 'system',
       status: 'active',

@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import type { ExternalIssue, IssueSource, IssueRelationship } from '@foundation/types';
+import { useIssueTracker } from '../hooks/useIssueTracker';
 
 interface Props {
   trackId: string;
@@ -9,6 +10,7 @@ interface Props {
 
 export function IssuePanel({ trackId, issues, onUpdate }: Props) {
   const [showAdd, setShowAdd] = useState(false);
+  const tracker = useIssueTracker();
 
   async function removeIssue(issueId: string) {
     await fetch(`/api/tracks/${trackId}/issues/${issueId}`, { method: 'DELETE' });
@@ -41,7 +43,13 @@ export function IssuePanel({ trackId, issues, onUpdate }: Props) {
         </button>
       </div>
 
-      {showAdd && <AddIssueForm onAdd={addIssue} onCancel={() => setShowAdd(false)} />}
+      {showAdd && (
+        <AddIssueForm
+          defaultSource={tracker === 'linear' || tracker === 'github' ? tracker : 'jira'}
+          onAdd={addIssue}
+          onCancel={() => setShowAdd(false)}
+        />
+      )}
 
       {issues.length > 0 ? (
         <ul className="space-y-2">
@@ -82,13 +90,15 @@ export function IssuePanel({ trackId, issues, onUpdate }: Props) {
 }
 
 function AddIssueForm({
+  defaultSource,
   onAdd,
   onCancel,
 }: {
+  defaultSource: IssueSource;
   onAdd: (source: IssueSource, externalId: string, relationship: IssueRelationship) => void;
   onCancel: () => void;
 }) {
-  const [source, setSource] = useState<IssueSource>('jira');
+  const [source, setSource] = useState<IssueSource>(defaultSource);
   const [externalId, setExternalId] = useState('');
   const [relationship, setRelationship] = useState<IssueRelationship>('related');
 

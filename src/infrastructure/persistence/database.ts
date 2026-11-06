@@ -1008,6 +1008,10 @@ function runMigrations(db: Database.Database): void {
   db.prepare(`UPDATE permission_requests SET status = 'expired', decided_at = ? WHERE status = 'pending'`)
     .run(new Date().toISOString());
 
+  // Rename the issue-drafting system track (formerly "Linear Tickets" / "Issues").
+  db.exec(`UPDATE tracks SET name = '_Issue Tracking'
+    WHERE id = (SELECT value FROM settings WHERE key = 'linear_ticket_track_id') AND name IN ('Linear Tickets', 'Issues');`);
+
   // Seed default repo_root setting
   db.exec(`INSERT OR IGNORE INTO settings (key, value) VALUES ('repo_root', '/repos');`);
 

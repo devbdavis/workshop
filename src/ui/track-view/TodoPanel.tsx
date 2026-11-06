@@ -4,6 +4,7 @@ import { TerminalModal } from './TerminalModal';
 import { TodoDetailModal } from '../kanban/TodoDetailModal';
 import { LinearIssueModal } from '../kanban/LinearIssueModal';
 import { ImportFromLinearModal } from '../kanban/ImportFromLinearModal';
+import { importLabel, useIssueTracker } from '../hooks/useIssueTracker';
 import { DispatchDropdown, type DispatchOptions } from './DispatchDropdown';
 
 interface Props {
@@ -39,6 +40,7 @@ export function TodoPanel({ track, todos, sessions, onUpdate }: Props) {
   const trackId = track.id;
   const [showAdd, setShowAdd] = useState(false);
   const [showImport, setShowImport] = useState(false);
+  const issueTracker = useIssueTracker();
   const [terminalSessionId, setTerminalSessionId] = useState<string | null>(null);
   const [terminalTodoTitle, setTerminalTodoTitle] = useState('');
   const [agents, setAgents] = useState<Agent[]>([]);
@@ -126,7 +128,7 @@ export function TodoPanel({ track, todos, sessions, onUpdate }: Props) {
         </h3>
         <div className="flex items-center gap-2">
           <button onClick={() => setShowImport(true)} className="text-xs text-blue-400 hover:text-blue-300">
-            Import from Linear
+            {importLabel(issueTracker)}
           </button>
           <button onClick={() => setShowAdd(!showAdd)} className="text-xs text-blue-400 hover:text-blue-300">
             + Add
