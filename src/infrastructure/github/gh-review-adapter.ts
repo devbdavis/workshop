@@ -220,12 +220,15 @@ export function createGhReviewAdapter(opts: CreateGhReviewAdapterOptions = {}): 
     const { stdout } = await exec(ghBinary, [
       'search',
       'prs',
-      query,
       '--state=open',
       '--limit',
       String(limit),
       '--json',
       'url,title,author,repository,number,body,updatedAt',
+      // Team requests include PRs you opened yourself. `--` keeps the negation from parsing as a flag.
+      '--',
+      query,
+      '-author:@me',
     ]);
     const out: DiscoveredPr[] = [];
     for (const node of JSON.parse(stdout) as GhSearchPrNode[]) {
