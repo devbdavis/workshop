@@ -103,7 +103,18 @@ export function writeHookSettings(
     ],
   });
   hooks.PermissionDenied = [permissionHook('claude-denied', 600)];
-  hooks.PreToolUse = [...(hooks.PreToolUse ?? []), permissionHook('claude-pretool', 5)];
+  // PR gate: `gh pr create` is denied until the session has invoked the submit-for-review skill
+  const prGate = {
+    matcher: 'Bash',
+    hooks: [
+      {
+        type: 'command',
+        command: `${JSON.stringify(process.execPath)} ${JSON.stringify(path.join(scriptsDir, 'pr-create-hook.mjs'))}`,
+        timeout: 5,
+      },
+    ],
+  };
+  hooks.PreToolUse = [...(hooks.PreToolUse ?? []), prGate, permissionHook('claude-pretool', 5)];
 
   // --- SubagentStop: workflow progress tracking ---
 
