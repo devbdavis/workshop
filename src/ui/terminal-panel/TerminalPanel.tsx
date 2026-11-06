@@ -183,7 +183,6 @@ interface Props {
 
 interface ScrollbackState {
   term: Terminal;
-  fitAddon: FitAddon;
   overlay: HTMLDivElement;
   autoExitEnabled: boolean;
   autoExitTimer: ReturnType<typeof setTimeout>;
@@ -413,7 +412,10 @@ export function TerminalPanel({ trackId = '', sessionId = '', wsPath, autoFocus,
 
       const scrollTerm = new Terminal({
         cursorBlink: false,
-        fontSize: 13,
+        // Mirror the live grid: capture-pane lines are pane-width, so any col mismatch rewraps them.
+        cols: term.cols,
+        rows: term.rows,
+        fontSize: term.options.fontSize,
         fontFamily: 'Menlo, Monaco, "Courier New", monospace',
         scrollback: 50000,
         theme: THEME,
@@ -425,12 +427,10 @@ export function TerminalPanel({ trackId = '', sessionId = '', wsPath, autoFocus,
         // ends up reporting zero matches even on text the user can see.
         allowProposedApi: true,
       });
-      const scrollFit = new FitAddon();
-      scrollTerm.loadAddon(scrollFit);
       const search = createSearchSession(scrollTerm);
       const unsubscribeSearch = search.onResultChange((info) => setSearchResult(info));
       scrollTerm.open(overlay);
-      scrollFit.fit();
+      if (!isMobile) loadWebglRenderer(scrollTerm);
 
       // Enable auto-exit-on-scroll-to-bottom after a short delay so the
       // initial programmatic scroll-up doesn't immediately trigger exit.
@@ -440,7 +440,6 @@ export function TerminalPanel({ trackId = '', sessionId = '', wsPath, autoFocus,
 
       scrollbackRef.current = {
         term: scrollTerm,
-        fitAddon: scrollFit,
         overlay,
         autoExitEnabled: false,
         autoExitTimer: timer,
@@ -530,7 +529,7 @@ export function TerminalPanel({ trackId = '', sessionId = '', wsPath, autoFocus,
     const resizeObserver = new ResizeObserver(() => {
       if (disposed) return;
       applyFit();
-      scrollbackRef.current?.fitAddon.fit();
+      scrollbackRef.current?.term.resize(term.cols, term.rows);
     });
     resizeObserver.observe(container);
 
