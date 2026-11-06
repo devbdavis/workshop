@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import type { Agent, DefaultAiCli, SessionProvider, Todo, Track } from '@foundation/types';
 import { useAvailableClis } from '../hooks/useAvailableClis';
 import { ImportFromLinearModal } from '../kanban/ImportFromLinearModal';
+import { importLabel, useIssueTracker } from '../hooks/useIssueTracker';
 
 export interface NewSessionOptions {
   provider: SessionProvider;
@@ -33,13 +34,14 @@ interface Props {
   defaultProvider: DefaultAiCli;
   onClose: () => void;
   onCreate: (opts: NewSessionOptions) => Promise<unknown>;
-  /** Refresh the parent's todo list (after a Linear/Jira import). */
+  /** Refresh the parent's todo list (after an issue import). */
   onTodosChanged: () => void;
 }
 
 export function NewSessionModal({ track, todos, defaultProvider, onClose, onCreate, onTodosChanged }: Props) {
   const [provider, setProvider] = useState<ProviderChoice>(defaultProvider);
   const [worktree, setWorktree] = useState(true);
+  const issueTracker = useIssueTracker();
   const [agentId, setAgentId] = useState<string>(track.defaultAgentId ?? '');
   const [selectedTodoId, setSelectedTodoId] = useState<string | null>(null);
   const [prompt, setPrompt] = useState('');
@@ -166,7 +168,7 @@ export function NewSessionModal({ track, todos, defaultProvider, onClose, onCrea
                 onClick={() => setShowImport(true)}
                 className="text-[11px] text-blue-400 hover:text-blue-300"
               >
-                Import from Linear/Jira…
+                {importLabel(issueTracker)}…
               </button>
             </div>
             {openTodos.length > 0 ? (

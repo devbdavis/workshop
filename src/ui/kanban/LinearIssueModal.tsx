@@ -86,7 +86,7 @@ export function LinearIssueModal({ todoId, onClose }: { todoId: string; onClose:
           {!done && timedOut && (
             <p className="text-sm text-gray-400 py-6">
               This is taking longer than expected. The agent may still be working — check the{' '}
-              <span className="text-gray-300">Linear Issues</span> track for the session, or close this and
+              <span className="text-gray-300">_Issue Tracking</span> track for the session, or close this and
               refresh the todo later.
             </p>
           )}

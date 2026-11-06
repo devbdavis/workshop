@@ -22,6 +22,7 @@ import { TodoDetailModal } from './TodoDetailModal';
 import { LinearIssueModal } from './LinearIssueModal';
 import { CreateTodoModal } from './CreateTodoModal';
 import { ImportFromLinearModal } from './ImportFromLinearModal';
+import { importLabel, useIssueTracker } from '../hooks/useIssueTracker';
 
 const COLUMNS: { status: TodoStatus; label: string; color: string }[] = [
   { status: 'backlog', label: 'Backlog', color: 'bg-gray-500' },
@@ -46,6 +47,7 @@ function fuzzyMatch(query: string, text: string): boolean {
 export function KanbanBoard() {
   const [todos, setTodos] = useState<Todo[]>([]);
   const [tracks, setTracks] = useState<Track[]>([]);
+  const issueTracker = useIssueTracker();
   const [filterTrackId, setFilterTrackId] = useState<string>('');
   const [searchQuery, setSearchQuery] = useState('');
   const [activeDrag, setActiveDrag] = useState<Todo | null>(null);
@@ -285,7 +287,7 @@ export function KanbanBoard() {
             onClick={() => setShowImportModal(true)}
             className="px-3 py-1.5 text-xs bg-gray-800 hover:bg-gray-700 text-gray-200 border border-gray-700 rounded-lg transition-colors"
           >
-            Import from Linear
+            {importLabel(issueTracker)}
           </button>
           <button
             onClick={() => setShowCreateModal(true)}
@@ -357,7 +359,7 @@ export function KanbanBoard() {
 
       {showImportModal && (
         <ImportFromLinearModal
-          tracks={tracks}
+          tracks={tracks.filter((t) => t.label !== 'system' && !t.hidden)}
           onClose={() => setShowImportModal(false)}
           onImported={loadData}
         />

@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import type { ImportableIssue, Track } from '@foundation/types';
+import { useIssueTracker } from '../hooks/useIssueTracker';
 
 interface Props {
   tracks: Track[];
@@ -58,19 +59,12 @@ export function ImportFromLinearModal({ tracks, onClose, onImported }: Props) {
   const [error, setError] = useState<string | null>(null);
   const [issues, setIssues] = useState<IssueListResponse>({ available: [], imported: [], ignored: [] });
   const [rowStates, setRowStates] = useState<Record<string, RowState>>({});
+  const tracker = useIssueTracker();
   // undefined = still checking settings; null = current tracker has no import support (jira/none).
-  const [source, setSource] = useState<ImportSource | null | undefined>(undefined);
+  const source: ImportSource | null | undefined =
+    tracker === undefined ? undefined : tracker === 'linear' || tracker === 'github' ? tracker : null;
 
   const defaultTrackId = tracks[0]?.id ?? '';
-
-  useEffect(() => {
-    fetch('/api/settings/issue-tracker')
-      .then((r) => r.json())
-      .then((data: { tracker: string }) => {
-        setSource(data.tracker === 'linear' || data.tracker === 'github' ? data.tracker : null);
-      })
-      .catch(() => setSource(null));
-  }, []);
 
   const loadIssues = useCallback(async () => {
     if (!source) return;
