@@ -8,6 +8,7 @@ import { useEditorLaunch } from '@ui/hooks/useEditorLaunch';
 import { WorkspaceButtons } from '@ui/workspace/WorkspaceButtons';
 import { InAppShellButton } from './InAppShellButton';
 import { TranscriptView } from '@ui/session-history/TranscriptView';
+import { TranscriptComposer } from './TranscriptComposer';
 import { useIsMobile } from '../use-is-mobile';
 
 interface PaneProps {
@@ -29,7 +30,8 @@ export function TerminalPane({ trackId, session, todos, onDestroy, onRename, def
   const launchApps = useLaunchApps();
   const editor = useEditorLaunch();
   const isMobile = useIsMobile();
-  const [showTranscript, setShowTranscript] = useState(false);
+  const [showTranscript, setShowTranscript] = useState(true);
+  const [transcriptRefresh, setTranscriptRefresh] = useState(0);
   // Mobile-only: the terminal is pinned to 120 cols (shared tmux window), so a reflowing transcript reads far better on a phone.
   const transcriptId = isMobile ? session.claudeResumeId : undefined;
   const transcriptOpen = showTranscript && !!transcriptId;
@@ -135,11 +137,12 @@ export function TerminalPane({ trackId, session, todos, onDestroy, onRename, def
       <div className="flex-1 min-h-0">
         {/* Unmount (not hide) xterm so a hidden phone client never sends resizes to the shared tmux window. */}
         {transcriptOpen && transcriptId ? (
-          <TranscriptView sessionId={transcriptId} live />
+          <TranscriptView sessionId={transcriptId} live refreshKey={transcriptRefresh} />
         ) : (
           <TerminalPanel trackId={trackId} sessionId={session.id} autoFocus={autoFocus} focusTrigger={focusTrigger} />
         )}
       </div>
+      {transcriptOpen && <TranscriptComposer sessionId={session.id} onSent={() => setTranscriptRefresh((n) => n + 1)} />}
     </div>
   );
 }

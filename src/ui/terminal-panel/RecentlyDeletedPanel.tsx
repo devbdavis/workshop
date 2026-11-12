@@ -23,7 +23,7 @@ export function RecentlyDeletedPanel({ sessions, onRestore, onPurge, onClose }: 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60" onClick={onClose}>
       <div
-        className="bg-gray-900 border border-gray-700 rounded-xl shadow-2xl w-[480px] max-h-[600px] flex flex-col"
+        className="bg-gray-900 border border-gray-700 rounded-xl shadow-2xl w-[480px] max-w-[calc(100vw-2rem)] max-h-[min(600px,calc(var(--app-h,100dvh)-2rem))] flex flex-col"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}

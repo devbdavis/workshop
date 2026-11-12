@@ -27,7 +27,7 @@ export function AuthGate({ children }: AuthGateProps) {
 
   if (state === 'loading') {
     return (
-      <div className="h-screen flex items-center justify-center bg-gray-950">
+      <div className="h-app flex items-center justify-center bg-gray-950">
         <p className="text-gray-500 text-sm">Connecting...</p>
       </div>
     );

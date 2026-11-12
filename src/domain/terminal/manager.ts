@@ -86,6 +86,8 @@ export interface TerminalManager {
   /** Inject text into a live session's tmux pane and submit it (Enter).
    *  Resolves false if the session is unknown or not running. */
   sendInput(sessionId: SessionId, text: string): Promise<boolean>;
+  /** Send a single whitelisted key (Escape interrupts Claude). Resolves false if unknown or not running. */
+  sendKey(sessionId: SessionId, key: 'Escape'): Promise<boolean>;
   syncSessionStates(): SyncResult;
   /** Resume all sessions marked 'suspended' that have a Claude resume ID. */
   resumeSuspendedSessions(): Promise<Session[]>;

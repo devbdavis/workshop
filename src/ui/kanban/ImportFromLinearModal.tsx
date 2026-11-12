@@ -198,7 +198,7 @@ export function ImportFromLinearModal({ tracks, onClose, onImported }: Props) {
     return (
       <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50" onClick={onClose}>
         <div
-          className="bg-gray-900 border border-gray-700 rounded-xl w-[420px] mx-4 overflow-hidden flex flex-col"
+          className="bg-gray-900 border border-gray-700 rounded-xl w-[420px] max-w-[calc(100vw-2rem)] mx-4 overflow-hidden flex flex-col"
           onClick={(e) => e.stopPropagation()}
         >
           <div className="flex items-center justify-between px-5 py-3 border-b border-gray-800 shrink-0">
@@ -216,7 +216,7 @@ export function ImportFromLinearModal({ tracks, onClose, onImported }: Props) {
   return (
     <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50" onClick={onClose}>
       <div
-        className="bg-gray-900 border border-gray-700 rounded-xl w-[80vw] h-[80vh] mx-4 overflow-hidden flex flex-col"
+        className="bg-gray-900 border border-gray-700 rounded-xl w-[calc(100vw-1rem)] h-[calc(var(--app-h,100dvh)-1rem)] md:w-[80vw] md:h-[80vh] overflow-hidden flex flex-col"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-center justify-between px-5 py-3 border-b border-gray-800 shrink-0">

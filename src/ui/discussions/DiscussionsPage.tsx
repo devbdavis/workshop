@@ -210,7 +210,7 @@ export function DiscussionsPage() {
       {/* Main content: sidebar + thread */}
       <div className="flex-1 flex min-h-0">
         {/* Sidebar */}
-        <div className="w-80 shrink-0 border-r border-gray-800">
+        <div className={`${selectedId ? 'hidden md:block' : ''} w-full md:w-80 md:shrink-0 border-r border-gray-800`}>
           <DiscussionList
             discussions={filtered}
             teams={teams}
@@ -222,7 +222,8 @@ export function DiscussionsPage() {
         </div>
 
         {/* Thread panel */}
-        <div className="flex-1 min-w-0 flex flex-col">
+        <div className={`${selectedId ? 'flex' : 'hidden md:flex'} flex-1 min-w-0 flex-col`}>
+          <button onClick={() => setSelectedId(null)} className="md:hidden px-3 py-2 text-left text-xs text-gray-400 hover:text-gray-200">‹ Back</button>
           {state ? (
             <DiscussionThread
               state={state}

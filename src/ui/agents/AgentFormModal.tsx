@@ -95,7 +95,7 @@ export function AgentFormModal({ initial, onSave, onClose, onSaveAsTemplate }: P
       className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4"
       onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
     >
-      <div className="bg-gray-900 border border-gray-700 rounded-lg w-[85vw] h-[88vh] flex flex-col">
+      <div className="bg-gray-900 border border-gray-700 rounded-lg w-[calc(100vw-1rem)] h-[calc(var(--app-h,100dvh)-1rem)] md:w-[85vw] md:h-[88vh] flex flex-col">
         {/* Header */}
         <div className="flex items-center justify-between px-5 py-4 border-b border-gray-800 shrink-0">
           <h2 className="text-lg font-semibold">{initial ? 'Edit Agent' : 'New Agent'}</h2>

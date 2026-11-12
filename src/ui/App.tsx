@@ -26,7 +26,7 @@ function ProfileGate({ children }: { children: ReactNode }) {
   const { user, loading } = useProfile();
   if (loading) {
     return (
-      <div className="h-screen flex items-center justify-center bg-gray-950">
+      <div className="h-app flex items-center justify-center bg-gray-950">
         <p className="text-gray-500 text-sm">Loading profile…</p>
       </div>
     );
@@ -42,12 +42,34 @@ export function App() {
     if (stored) applyTheme(stored);
   }, []);
 
+  // iOS ignores interactive-widget, so track the visual viewport to shrink the shell with the keyboard
+  useEffect(() => {
+    const vv = window.visualViewport;
+    if (!vv) return;
+    // Ignore pinch-zoom: a zoomed visual viewport is smaller but the layout must not shrink or snap back
+    const zoomed = (): boolean => vv.scale > 1.01;
+    const onResize = (): void => {
+      if (!zoomed()) document.documentElement.style.setProperty('--app-h', `${vv.height}px`);
+    };
+    // iOS scrolls the layout viewport when an input focuses; the shell never scrolls, so undo it
+    const onScroll = (): void => {
+      if (!zoomed()) window.scrollTo(0, 0);
+    };
+    onResize();
+    vv.addEventListener("resize", onResize);
+    vv.addEventListener("scroll", onScroll);
+    return () => {
+      vv.removeEventListener("resize", onResize);
+      vv.removeEventListener("scroll", onScroll);
+    };
+  }, []);
+
   return (
     <AuthGate>
       <ProfileProvider>
         <ProfileGate>
           <SessionAlertsProvider>
-            <div className="h-screen flex flex-col bg-gray-950 text-gray-100">
+            <div className="h-app flex flex-col bg-gray-950 text-gray-100 pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)] pl-[env(safe-area-inset-left)] pr-[env(safe-area-inset-right)]">
               <TopNav />
               <CommandPalette />
               <PermissionPrompt />

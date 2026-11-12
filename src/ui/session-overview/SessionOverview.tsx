@@ -252,8 +252,8 @@ export function SessionOverview() {
   }
 
   return (
-    <div className="h-full flex">
-      <aside className="w-80 border-r border-gray-800 overflow-y-auto shrink-0">
+    <div className="h-full flex flex-col md:flex-row">
+      <aside className="w-full max-h-[40%] border-b md:w-80 md:max-h-none md:border-b-0 md:border-r border-gray-800 overflow-y-auto shrink-0">
         <div className="flex items-center justify-between px-3 pt-3">
           <span className="text-xs font-semibold text-gray-300">Sessions</span>
           <NewSessionPicker tracks={sortTracks(tracks.filter(isVisibleTrack))} onPick={openNewSession} />

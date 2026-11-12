@@ -164,7 +164,7 @@ export function PlaybookLibrary() {
       ) : (
         <div className="flex gap-6">
           {/* Playbook grid */}
-          <div className={`grid gap-4 ${selected ? 'md:grid-cols-1 w-72 shrink-0' : 'md:grid-cols-2 lg:grid-cols-3 flex-1'}`}>
+          <div className={`gap-4 ${selected ? 'hidden md:grid md:grid-cols-1 w-72 shrink-0' : 'grid md:grid-cols-2 lg:grid-cols-3 flex-1'}`}>
             {filteredPlaybooks.map((playbook) => (
               <PlaybookCard
                 key={playbook.rowId}

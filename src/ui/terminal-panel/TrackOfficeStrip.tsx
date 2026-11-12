@@ -3,6 +3,7 @@ import type { Session, SessionId } from '@foundation/types';
 import { CharacterSvg } from '@ui/office/CharacterSvg';
 import { getActivityState, providerColor } from '@ui/office/activity';
 import { ActivityDot } from '@ui/shared/ActivityDot';
+import { useIsMobile } from '@ui/use-is-mobile';
 
 const COLLAPSED_KEY = 'workshop:sessions-strip-collapsed';
 
@@ -22,8 +23,13 @@ interface Props {
  * Collapse button in the header reclaims vertical space when not needed.
  */
 export function TrackOfficeStrip({ sessions, selectedIds, onSelect, deletedCount, onShowRecentlyDeleted, startingSessions }: Props) {
+  const isMobile = useIsMobile();
   const [collapsed, setCollapsed] = useState(() => {
-    try { return localStorage.getItem(COLLAPSED_KEY) === 'true'; } catch { return false; }
+    try {
+      const saved = localStorage.getItem(COLLAPSED_KEY);
+      if (saved !== null) return saved === 'true';
+    } catch { /* ignore */ }
+    return isMobile;
   });
 
   const toggle = () => {
@@ -54,7 +60,7 @@ export function TrackOfficeStrip({ sessions, selectedIds, onSelect, deletedCount
         </button>
         <SessionStatusBadges sessions={sessions} />
         {!collapsed && (
-          <span className="text-[10px] text-gray-700">· click to focus · ⌘-click for split</span>
+          <span className="hidden md:inline text-[10px] text-gray-700">· click to focus · ⌘-click for split</span>
         )}
         <button
           onClick={onShowRecentlyDeleted}

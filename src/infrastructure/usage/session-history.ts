@@ -20,6 +20,8 @@ export interface SessionHistoryEntry {
 export interface SessionHistoryScanner {
   list(): Promise<SessionHistoryEntry[]>;
   readTranscript(sessionId: string): Promise<TranscriptMessage[] | null>;
+  /** Cheap change token (from the list cache) so callers can 304 before parsing. */
+  stat(sessionId: string): Promise<{ mtimeMs: number; size: number } | null>;
 }
 
 interface CacheEntry {
@@ -175,9 +177,25 @@ export function createSessionHistoryScanner(deps: { projectsDir?: string } = {})
     } catch {
       return null;
     }
-    // ponytail: full re-read + re-parse per call (the mobile live view polls every 4s); seek-from-end if huge sessions get slow.
+    // ponytail: full re-read + re-parse per call (the mobile live view polls ~1.5s; 304s skip it when unchanged); seek-from-end if huge sessions get slow.
     return toTranscript(parseJsonlLines(content));
   }
 
-  return { list, readTranscript };
+  async function stat(sessionId: string): Promise<{ mtimeMs: number; size: number } | null> {
+    // Fast path: stat just the known file, so a polling client doesn't walk every project dir per tick.
+    for (const [file, c] of cache) {
+      if (c.entry?.sessionId !== sessionId) continue;
+      try {
+        const s = await fs.promises.stat(file);
+        return { mtimeMs: s.mtimeMs, size: s.size };
+      } catch {
+        break;
+      }
+    }
+    await list();
+    const cached = [...cache.values()].find((c) => c.entry?.sessionId === sessionId);
+    return cached ? { mtimeMs: cached.mtimeMs, size: cached.size } : null;
+  }
+
+  return { list, readTranscript, stat };
 }

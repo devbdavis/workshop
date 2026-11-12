@@ -98,7 +98,7 @@ export function PermissionPrompt() {
       <button
         type="button"
         onClick={() => setMinimised(false)}
-        className="fixed bottom-4 left-4 z-50 px-3 py-2 text-sm bg-amber-900/70 border border-amber-700 text-amber-100 rounded-lg shadow-lg hover:bg-amber-900"
+        className="fixed bottom-[calc(1rem+env(safe-area-inset-bottom))] left-4 z-50 px-3 py-2 text-sm bg-amber-900/70 border border-amber-700 text-amber-100 rounded-lg shadow-lg hover:bg-amber-900"
       >
         {pending.length} permission request{pending.length === 1 ? '' : 's'}
       </button>

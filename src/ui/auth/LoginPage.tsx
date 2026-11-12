@@ -34,7 +34,7 @@ export function LoginPage({ onLogin }: LoginPageProps) {
   }
 
   return (
-    <div className="h-screen flex items-center justify-center bg-gray-950">
+    <div className="h-app overflow-y-auto flex items-center-safe justify-center-safe bg-gray-950">
       <div className="w-full max-w-sm mx-auto">
         <div className="bg-gray-900 border border-gray-800 rounded-lg p-8">
           <h1 className="text-xl font-semibold text-gray-100 mb-1">Workshop</h1>

@@ -978,6 +978,17 @@ export function createTerminalManager(
       }
     },
 
+    async sendKey(sessionId: SessionId, key: 'Escape'): Promise<boolean> {
+      const session = sessionRepo.findById(sessionId);
+      if (!session || !this.isSessionAlive(session)) return false;
+      try {
+        execFileSync('tmux', ['send-keys', '-t', session.tmuxSession, key], { stdio: 'pipe' });
+        return true;
+      } catch {
+        return false;
+      }
+    },
+
     getLastActivityAt(sessionId: SessionId): string | undefined {
       return lastActivityAt.get(sessionId);
     },

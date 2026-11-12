@@ -25,7 +25,7 @@ export function MobileKeyBar({ onSend }: Props) {
         <button
           key={label}
           type="button"
-          className="min-h-9 shrink-0 rounded bg-gray-800 px-3 text-sm text-gray-200 active:bg-gray-700"
+          className="min-h-11 shrink-0 rounded bg-gray-800 px-3 text-sm text-gray-200 active:bg-gray-700"
           onClick={() => onSend(seq)}
         >
           {label}

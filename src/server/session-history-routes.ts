@@ -1,6 +1,6 @@
 import { existsSync } from 'fs';
 import { Router } from 'express';
-import type { TrackId } from '@foundation/types';
+import type { SessionId, TrackId } from '@foundation/types';
 import type { SessionRepository } from '@domain/session/repository';
 import type { TrackRepository } from '@domain/track/repository';
 import type { TerminalManager } from '@infrastructure/terminal/manager.js';
@@ -8,6 +8,8 @@ import type { SessionHistoryEntry, SessionHistoryScanner } from '@infrastructure
 import { broadcast } from './events.js';
 
 const SESSION_ID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+const MAX_INPUT_CHARS = 20000;
 
 export interface SessionHistoryRouterDeps {
   scanner: SessionHistoryScanner;
@@ -82,17 +84,57 @@ export function createSessionHistoryRouter(deps: SessionHistoryRouterDeps): Rout
       return;
     }
     try {
+      const limit = Number(req.query.limit);
+      const stat = await deps.scanner.stat(req.params.sessionId);
+      if (!stat) {
+        res.status(404).json({ error: 'Session not found' });
+        return;
+      }
+      const etag = `"${stat.mtimeMs}-${stat.size}-${Number.isInteger(limit) ? limit : 0}"`;
+      res.setHeader('ETag', etag);
+      res.setHeader('Cache-Control', 'no-cache');
+      if (req.headers['if-none-match'] === etag) {
+        res.status(304).end();
+        return;
+      }
       const messages = await deps.scanner.readTranscript(req.params.sessionId);
       if (!messages) {
         res.status(404).json({ error: 'Session not found' });
         return;
       }
       // Optional tail so a phone polling a long session only pulls the recent end.
-      const limit = Number(req.query.limit);
       res.json({ messages: Number.isInteger(limit) && limit > 0 ? messages.slice(-limit) : messages });
     } catch (err) {
       console.error('Failed to read session transcript:', err);
       res.status(500).json({ error: 'Failed to read session transcript' });
+    }
+  });
+
+  router.post('/sessions/:id/input', async (req, res) => {
+    const { text, key } = req.body ?? {};
+    if (key !== undefined && key !== 'Escape') {
+      res.status(400).json({ error: "key must be 'Escape'" });
+      return;
+    }
+    if (key === undefined && (typeof text !== 'string' || text.trim().length === 0 || text.length > MAX_INPUT_CHARS)) {
+      res.status(400).json({ error: `text must be a non-empty string up to ${MAX_INPUT_CHARS} chars` });
+      return;
+    }
+    const sessionId = req.params.id as SessionId;
+    if (!deps.sessions.findById(sessionId)) {
+      res.status(404).json({ error: 'Session not found' });
+      return;
+    }
+    try {
+      const ok = key ? await deps.terminal.sendKey(sessionId, key) : await deps.terminal.sendInput(sessionId, text);
+      if (!ok) {
+        res.status(409).json({ error: 'Session is not running' });
+        return;
+      }
+      res.status(204).end();
+    } catch (err) {
+      console.error('Failed to send session input:', err);
+      res.status(500).json({ error: 'Failed to send input' });
     }
   });
 

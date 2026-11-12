@@ -544,3 +544,29 @@ button:focus-visible {
 .markdown-body th { font-weight: 600; }
 .markdown-body hr { margin: 1em 0; border: 0; border-top: 1px solid var(--color-gray-700); }
 .markdown-body img { max-width: 100%; }
+
+/* ─── Mobile viewport ─── */
+/* --app-h is set from visualViewport in App.tsx so the iOS keyboard shrinks the shell */
+@utility h-app {
+  height: var(--app-h, 100dvh);
+}
+
+html,
+body,
+#root {
+  overflow: hidden;
+  overscroll-behavior: none;
+}
+
+/* Unlayered, so it beats Tailwind's layered text-* utilities; 16px stops iOS focus-zoom */
+@media (pointer: coarse) and (max-width: 767px) {
+  input,
+  textarea,
+  select {
+    font-size: 16px;
+  }
+}
+
+button {
+  -webkit-tap-highlight-color: transparent;
+}

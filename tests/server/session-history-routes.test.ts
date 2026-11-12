@@ -15,6 +15,8 @@ describe('session history routes', () => {
   let base: string;
   const sessionId = randomUUID();
   let resumeCwd = '';
+  let running = true;
+  const sent: unknown[] = [];
 
   beforeAll(async () => {
     root = await mkdtemp(join(tmpdir(), 'session-history-routes-test-'));
@@ -39,10 +41,12 @@ describe('session history routes', () => {
         readTranscript: async (id: string) => (id === sessionId
           ? [{ id: 'u1', role: 'user', blocks: [{ type: 'text', text: 'hi' }], timestamp: null }, { id: 'u2', role: 'assistant', blocks: [{ type: 'text', text: 'yo' }], timestamp: null }]
           : null),
+        stat: async (id: string) => (id === sessionId ? { mtimeMs: 1, size: 2 } : null),
       },
       sessions: {
         findAll: () => [{ id: 'session-1', trackId: 'track-1', worktreeRoot: root } as never],
         findAllDeleted: () => [],
+        findById: (id: string) => (id === 'session-1' ? ({ id } as never) : null),
       },
       tracks: {
         findAll: () => [{ id: 'track-1', name: 'My Track' } as never],
@@ -50,6 +54,8 @@ describe('session history routes', () => {
         findById: (id: string) => (id === 'track-1' ? ({ id: 'track-1', name: 'My Track' } as never) : null),
       },
       terminal: {
+        sendInput: async (_id: string, text: string) => { sent.push(text); return running; },
+        sendKey: async (_id: string, key: string) => { sent.push({ key }); return running; },
         createSession: async () => {
           throw new Error('createSession should not be called when cwd is missing');
         },
@@ -102,6 +108,41 @@ describe('session history routes', () => {
     const res = await fetch(`${base}/session-history/${sessionId}/transcript?limit=1`);
     const body = (await res.json()) as { messages: unknown[] };
     expect(body.messages).toEqual([{ id: 'u2', role: 'assistant', blocks: [{ type: 'text', text: 'yo' }], timestamp: null }]);
+  });
+
+  it('304s the transcript when If-None-Match matches, without re-reading', async () => {
+    const first = await fetch(`${base}/session-history/${sessionId}/transcript?limit=5`);
+    const etag = first.headers.get('etag') ?? '';
+    expect(etag).not.toBe('');
+    const again = await fetch(`${base}/session-history/${sessionId}/transcript?limit=5`, { headers: { 'If-None-Match': etag } });
+    expect(again.status).toBe(304);
+    const otherLimit = await fetch(`${base}/session-history/${sessionId}/transcript?limit=1`, { headers: { 'If-None-Match': etag } });
+    expect(otherLimit.status).toBe(200);
+  });
+
+  describe('POST /sessions/:id/input', () => {
+    const post = (id: string, body: unknown) =>
+      fetch(`${base}/sessions/${id}/input`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+
+    it('400s on empty, oversize, or non-whitelisted input', async () => {
+      expect((await post('session-1', { text: '  ' })).status).toBe(400);
+      expect((await post('session-1', { text: 'x'.repeat(20001) })).status).toBe(400);
+      expect((await post('session-1', { key: 'Enter' })).status).toBe(400);
+    });
+
+    it('404s unknown sessions and 409s when not running', async () => {
+      expect((await post('nope', { text: 'hi' })).status).toBe(404);
+      running = false;
+      expect((await post('session-1', { text: 'hi' })).status).toBe(409);
+      running = true;
+    });
+
+    it('sends text and Escape', async () => {
+      sent.length = 0;
+      expect((await post('session-1', { text: 'hello' })).status).toBe(204);
+      expect((await post('session-1', { key: 'Escape' })).status).toBe(204);
+      expect(sent).toEqual(['hello', { key: 'Escape' }]);
+    });
   });
 
   it('404s resume for an unknown track', async () => {

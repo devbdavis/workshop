@@ -169,7 +169,7 @@ export function PrReviewsPage() {
 
   return (
     <div className="h-full flex">
-      <aside className="w-80 shrink-0 border-r border-gray-800 flex flex-col bg-gray-950">
+      <aside className={`${selected ? 'hidden md:flex' : 'flex'} w-full md:w-80 shrink-0 border-r border-gray-800 flex-col bg-gray-950`}>
         <div className="p-3 border-b border-gray-800">
           <div className="flex gap-1.5">
             <input
@@ -218,9 +218,12 @@ export function PrReviewsPage() {
         </div>
       </aside>
 
-      <main className="flex-1 min-w-0 overflow-y-auto">
+      <main className={`${selected ? '' : 'hidden md:block'} flex-1 min-w-0 overflow-y-auto`}>
         {selected ? (
-          <PrReviewDetail key={selected.id} reviewId={selected.id} refreshKey={refreshKey} onChanged={() => setRefreshKey((k) => k + 1)} team={team} />
+          <>
+            <button onClick={() => setSelectedId(null)} className="md:hidden px-3 py-2 text-xs text-gray-400 hover:text-gray-200">‹ Back</button>
+            <PrReviewDetail key={selected.id} reviewId={selected.id} refreshKey={refreshKey} onChanged={() => setRefreshKey((k) => k + 1)} team={team} />
+          </>
         ) : (
           <div className="h-full flex items-center justify-center text-sm text-gray-600">
             Select a PR to review — or add one by URL.
