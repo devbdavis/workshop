@@ -574,7 +574,8 @@ button {
 /* Phones: nothing may widen the page. Long paths/URLs/hashes break instead of pushing the layout,
    and wide tables scroll inside their own box. */
 @media (max-width: 767px) {
-  body { overflow-wrap: anywhere; }
+  /* break-word, not anywhere: anywhere shrinks flex items to one character wide (letter-per-line labels) */
+  body { overflow-wrap: break-word; }
   .markdown-body table { display: block; max-width: 100%; overflow-x: auto; }
   img, video, iframe { max-width: 100%; }
 }
