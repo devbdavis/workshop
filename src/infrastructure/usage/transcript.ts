@@ -8,6 +8,8 @@ export interface TranscriptMessage {
   role: 'user' | 'assistant';
   blocks: TranscriptBlock[];
   timestamp: string | null;
+  /** Claude Code's auto-generated summary after a context compaction, not something the user typed. */
+  compact?: true;
 }
 
 type ToolBlock = Extract<TranscriptBlock, { type: 'tool' }>;
@@ -93,6 +95,7 @@ export function toTranscript(lines: unknown[]): TranscriptMessage[] {
       role: entry.type,
       blocks,
       timestamp: typeof entry.timestamp === 'string' ? entry.timestamp : null,
+      ...(entry.isCompactSummary === true ? { compact: true as const } : {}),
     });
   }
   return messages;

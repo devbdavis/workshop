@@ -1,5 +1,6 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
-import Markdown from 'react-markdown';
+import Markdown, { type Components } from 'react-markdown';
+import { remarkBareUrls, splitUrls } from './linkify';
 
 // Mirrors src/infrastructure/usage/transcript.ts (UI can't import infrastructure).
 type TranscriptBlock =
@@ -11,6 +12,7 @@ interface TranscriptMessage {
   role: 'user' | 'assistant';
   blocks: TranscriptBlock[];
   timestamp: string | null;
+  compact?: true;
 }
 
 interface Props {
@@ -83,7 +85,9 @@ export function TranscriptView({ sessionId, live = false, refreshKey = 0 }: Prop
       {error && messages === null && <p className="text-xs text-red-400">{error}</p>}
       {!error && messages === null && <p className="text-xs text-gray-500">Loading…</p>}
       {messages?.length === 0 && <p className="text-xs text-gray-600">No messages in this transcript.</p>}
-      {messages?.map((m, idx) => (
+      {messages?.map((m, idx) => m.compact ? (
+        <CompactMarker key={m.id ?? idx} message={m} />
+      ) : (
         <div
           key={m.id ?? idx}
           className={`rounded-lg px-3 py-2 text-sm min-w-0 ${
@@ -111,10 +115,23 @@ export function TranscriptView({ sessionId, live = false, refreshKey = 0 }: Prop
   );
 }
 
+// Compaction summaries are huge and machine-written: show a divider, summary on demand.
+function CompactMarker({ message }: { message: TranscriptMessage }) {
+  const text = message.blocks.map((b) => (b.type === 'text' ? b.text : '')).join('\n\n');
+  return (
+    <details className="rounded border border-dashed border-gray-700 text-xs text-gray-400">
+      <summary className="cursor-pointer select-none px-2 py-1">
+        Conversation compacted{message.timestamp ? ` · ${new Date(message.timestamp).toLocaleString()}` : ''} — show summary
+      </summary>
+      <div className="px-2 py-1 border-t border-gray-800"><TextBlock text={text} /></div>
+    </details>
+  );
+}
+
 function TextBlock({ text }: { text: string }) {
   return (
     <div className="text-gray-200 break-words markdown-body">
-      <Markdown>{text}</Markdown>
+      <Markdown remarkPlugins={REMARK_PLUGINS} components={MD_COMPONENTS}>{text}</Markdown>
     </div>
   );
 }
@@ -128,12 +145,24 @@ function ToolBlock({ block }: { block: Extract<TranscriptBlock, { type: 'tool' }
         <span className="font-mono font-semibold text-gray-300 shrink-0">{block.name}</span>
         {block.hint && <span className="font-mono text-gray-500 truncate">{block.hint}</span>}
       </summary>
-      <pre className="px-2 py-1 border-t border-gray-800 text-gray-400 whitespace-pre-wrap break-words max-h-64 overflow-y-auto">{block.input}</pre>
+      <pre className="px-2 py-1 border-t border-gray-800 text-gray-400 whitespace-pre-wrap break-words max-h-64 overflow-y-auto"><Linkified text={block.input} /></pre>
       {block.result !== null && (
         <pre className={`px-2 py-1 border-t border-gray-800 whitespace-pre-wrap break-words max-h-64 overflow-y-auto ${block.isError ? 'text-red-300' : 'text-gray-300'}`}>
-          {block.result || '(empty result)'}
+          {block.result ? <Linkified text={block.result} /> : '(empty result)'}
         </pre>
       )}
     </details>
   );
+}
+
+// Links leave Workshop in a new tab: same-tab would replace the app (and strand a home-screen PWA).
+function ExternalLink({ href, children }: { href?: string; children?: React.ReactNode }) {
+  return <a href={href} target="_blank" rel="noopener noreferrer" className="text-blue-400 underline break-all">{children}</a>;
+}
+
+const REMARK_PLUGINS = [remarkBareUrls];
+const MD_COMPONENTS: Components = { a: ({ href, children }) => <ExternalLink href={href}>{children}</ExternalLink> };
+
+function Linkified({ text }: { text: string }) {
+  return <>{splitUrls(text).map((p, i) => (p.url ? <ExternalLink key={i} href={p.url}>{p.text}</ExternalLink> : p.text))}</>;
 }

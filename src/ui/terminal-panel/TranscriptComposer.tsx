@@ -1,5 +1,6 @@
-import { useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { COMPOSER_INPUT_ID } from './SessionPromptCard';
+import { loadDraft, saveDraft } from './composer-draft';
 
 interface Props {
   sessionId: string;
@@ -8,10 +9,22 @@ interface Props {
 }
 
 export function TranscriptComposer({ sessionId, onSent, placeholder = 'Message Claude…' }: Props) {
-  const [text, setText] = useState('');
+  const [text, setText] = useState(() => loadDraft(sessionId));
   const [sending, setSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const areaRef = useRef<HTMLTextAreaElement>(null);
+  // Persist on every edit (survives refresh); skipping unchanged text keeps "a week untouched" honest.
+  const savedRef = useRef(text);
+  useEffect(() => {
+    if (text === savedRef.current) return;
+    savedRef.current = text;
+    saveDraft(sessionId, text);
+  }, [sessionId, text]);
+  // Size the textarea to a restored multi-line draft.
+  useLayoutEffect(() => {
+    const el = areaRef.current;
+    if (el?.value) el.style.height = `${Math.min(el.scrollHeight, 120)}px`;
+  }, []);
   const coarse = window.matchMedia('(pointer: coarse)').matches;
 
   const post = async (body: { text: string } | { keys: string[] }): Promise<boolean> => {
