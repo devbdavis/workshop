@@ -32,11 +32,14 @@ export function TranscriptView({ sessionId, live = false, refreshKey = 0, src }:
   const [messages, setMessages] = useState<TranscriptMessage[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
-  const stickToBottomRef = useRef(live);
+  // Open at the newest message (chat-style); scrolling up releases it, and the jump button brings it back.
+  const stickToBottomRef = useRef(true);
+  const [atBottom, setAtBottom] = useState(true);
   const lastBodyRef = useRef<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
+    stickToBottomRef.current = true;
     let inFlight = false; // a slow response must not land after (and overwrite) a newer one
     const load = () => {
       if (document.hidden || inFlight) return;
@@ -66,6 +69,15 @@ export function TranscriptView({ sessionId, live = false, refreshKey = 0, src }:
     if (el && stickToBottomRef.current) el.scrollTop = el.scrollHeight;
   }, [messages]);
 
+  // Scrolling a display:none pane is a no-op (phone list→detail mounts it hidden), so re-pin when it gets a size — also covers the keyboard opening.
+  useEffect(() => {
+    const el = scrollRef.current;
+    if (!el) return;
+    const ro = new ResizeObserver(() => { if (stickToBottomRef.current) el.scrollTop = el.scrollHeight; });
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+
   // After a send: jump to the bottom now and keep following new output.
   useLayoutEffect(() => {
     const el = scrollRef.current;
@@ -76,7 +88,16 @@ export function TranscriptView({ sessionId, live = false, refreshKey = 0, src }:
 
   const onScroll = () => {
     const el = scrollRef.current;
-    if (live && el) stickToBottomRef.current = el.scrollHeight - el.scrollTop - el.clientHeight < 40;
+    if (!el) return;
+    stickToBottomRef.current = el.scrollHeight - el.scrollTop - el.clientHeight < 40;
+    setAtBottom(stickToBottomRef.current);
+  };
+
+  const jumpToBottom = () => {
+    const el = scrollRef.current;
+    if (!el) return;
+    stickToBottomRef.current = true;
+    el.scrollTo({ top: el.scrollHeight, behavior: 'smooth' });
   };
 
   const lastBlock = messages?.at(-1)?.blocks.at(-1);
@@ -107,6 +128,18 @@ export function TranscriptView({ sessionId, live = false, refreshKey = 0, src }:
           </div>
         </div>
       ))}
+      {!atBottom && messages?.length ? (
+        <div className={`sticky ${running ? 'bottom-9' : 'bottom-1'} flex justify-end pointer-events-none`}>
+          <button
+            onClick={jumpToBottom}
+            aria-label="Jump to latest"
+            title="Jump to latest"
+            className="pointer-events-auto size-11 md:size-8 rounded-full bg-gray-800/90 border border-gray-600 text-gray-200 shadow-lg flex items-center justify-center hover:bg-gray-700"
+          >
+            <span aria-hidden="true">↓</span>
+          </button>
+        </div>
+      ) : null}
       {running && (
         <div className="sticky bottom-0 -mx-3 -mb-3 px-3 py-1.5 bg-gray-900/95 border-t border-gray-800 text-xs text-gray-300 flex items-center gap-1.5 min-w-0">
           <span className="text-green-400 animate-pulse shrink-0" aria-hidden="true">●</span>
