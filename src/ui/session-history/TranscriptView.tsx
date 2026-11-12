@@ -75,6 +75,9 @@ export function TranscriptView({ sessionId, live = false, refreshKey = 0 }: Prop
     if (live && el) stickToBottomRef.current = el.scrollHeight - el.scrollTop - el.clientHeight < 40;
   };
 
+  const lastBlock = messages?.at(-1)?.blocks.at(-1);
+  const running = live && lastBlock?.type === 'tool' && lastBlock.result === null ? lastBlock : null;
+
   return (
     <div ref={scrollRef} onScroll={onScroll} className="h-full overflow-y-auto px-3 py-3 space-y-3">
       {error && messages === null && <p className="text-xs text-red-400">{error}</p>}
@@ -98,6 +101,12 @@ export function TranscriptView({ sessionId, live = false, refreshKey = 0 }: Prop
           </div>
         </div>
       ))}
+      {running && (
+        <div className="sticky bottom-0 -mx-3 -mb-3 px-3 py-1.5 bg-gray-900/95 border-t border-gray-800 text-xs text-gray-300 flex items-center gap-1.5 min-w-0">
+          <span className="text-green-400 animate-pulse shrink-0" aria-hidden="true">●</span>
+          <span className="truncate">Running {running.name}{running.hint ? ` — ${running.hint}` : ''}</span>
+        </div>
+      )}
     </div>
   );
 }

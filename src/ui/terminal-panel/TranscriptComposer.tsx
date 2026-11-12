@@ -1,18 +1,20 @@
 import { useRef, useState } from 'react';
+import { COMPOSER_INPUT_ID } from './SessionPromptCard';
 
 interface Props {
   sessionId: string;
   onSent: () => void;
+  placeholder?: string;
 }
 
-export function TranscriptComposer({ sessionId, onSent }: Props) {
+export function TranscriptComposer({ sessionId, onSent, placeholder = 'Message Claude…' }: Props) {
   const [text, setText] = useState('');
   const [sending, setSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const areaRef = useRef<HTMLTextAreaElement>(null);
   const coarse = window.matchMedia('(pointer: coarse)').matches;
 
-  const post = async (body: { text: string } | { key: 'Escape' }): Promise<boolean> => {
+  const post = async (body: { text: string } | { keys: string[] }): Promise<boolean> => {
     setSending(true);
     setError(null);
     try {
@@ -49,7 +51,7 @@ export function TranscriptComposer({ sessionId, onSent }: Props) {
       {error && <p className="text-xs text-red-400 mb-1">{error}</p>}
       <div className="flex items-end gap-2">
         <button
-          onClick={() => void post({ key: 'Escape' })}
+          onClick={() => void post({ keys: ['Escape'] })}
           disabled={sending}
           title="Interrupt"
           className="min-h-11 min-w-11 px-2 text-xs rounded border border-gray-700 text-gray-300 disabled:opacity-50"
@@ -57,6 +59,7 @@ export function TranscriptComposer({ sessionId, onSent }: Props) {
           Esc
         </button>
         <textarea
+          id={COMPOSER_INPUT_ID}
           ref={areaRef}
           value={text}
           rows={1}
@@ -73,7 +76,7 @@ export function TranscriptComposer({ sessionId, onSent }: Props) {
               void send();
             }
           }}
-          placeholder="Message Claude…"
+          placeholder={placeholder}
           className="flex-1 min-h-11 resize-none rounded bg-gray-800 border border-gray-700 px-2 py-2 text-base leading-6 text-gray-100 outline-none focus:border-blue-500"
         />
         <button

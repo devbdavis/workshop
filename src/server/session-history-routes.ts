@@ -10,6 +10,9 @@ import { broadcast } from './events.js';
 const SESSION_ID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 const MAX_INPUT_CHARS = 20000;
+const MAX_KEYS = 10;
+// Trust boundary: only these tmux key names may reach send-keys.
+const KEY_RE = /^(?:[1-9]|Escape|Enter|Up|Down|Left|Right)$/;
 
 export interface SessionHistoryRouterDeps {
   scanner: SessionHistoryScanner;
@@ -111,12 +114,13 @@ export function createSessionHistoryRouter(deps: SessionHistoryRouterDeps): Rout
   });
 
   router.post('/sessions/:id/input', async (req, res) => {
-    const { text, key } = req.body ?? {};
-    if (key !== undefined && key !== 'Escape') {
-      res.status(400).json({ error: "key must be 'Escape'" });
-      return;
-    }
-    if (key === undefined && (typeof text !== 'string' || text.trim().length === 0 || text.length > MAX_INPUT_CHARS)) {
+    const { text, keys } = req.body ?? {};
+    if (keys !== undefined) {
+      if (!Array.isArray(keys) || keys.length < 1 || keys.length > MAX_KEYS || !keys.every((k) => typeof k === 'string' && KEY_RE.test(k))) {
+        res.status(400).json({ error: `keys must be 1-${MAX_KEYS} of: 1-9, Escape, Enter, Up, Down, Left, Right` });
+        return;
+      }
+    } else if (typeof text !== 'string' || text.trim().length === 0 || text.length > MAX_INPUT_CHARS) {
       res.status(400).json({ error: `text must be a non-empty string up to ${MAX_INPUT_CHARS} chars` });
       return;
     }
@@ -126,7 +130,7 @@ export function createSessionHistoryRouter(deps: SessionHistoryRouterDeps): Rout
       return;
     }
     try {
-      const ok = key ? await deps.terminal.sendKey(sessionId, key) : await deps.terminal.sendInput(sessionId, text);
+      const ok = keys ? await deps.terminal.sendKeys(sessionId, keys) : await deps.terminal.sendInput(sessionId, text);
       if (!ok) {
         res.status(409).json({ error: 'Session is not running' });
         return;
@@ -136,6 +140,20 @@ export function createSessionHistoryRouter(deps: SessionHistoryRouterDeps): Rout
       console.error('Failed to send session input:', err);
       res.status(500).json({ error: 'Failed to send input' });
     }
+  });
+
+  router.get('/sessions/:id/prompt', (req, res) => {
+    const sessionId = req.params.id as SessionId;
+    if (!deps.sessions.findById(sessionId)) {
+      res.status(404).json({ error: 'Session not found' });
+      return;
+    }
+    const prompt = deps.terminal.capturePrompt(sessionId);
+    if (prompt === undefined) {
+      res.status(409).json({ error: 'Session is not running' });
+      return;
+    }
+    res.json({ prompt });
   });
 
   router.post('/session-history/:sessionId/resume', async (req, res) => {

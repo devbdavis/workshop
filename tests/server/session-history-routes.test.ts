@@ -55,7 +55,8 @@ describe('session history routes', () => {
       },
       terminal: {
         sendInput: async (_id: string, text: string) => { sent.push(text); return running; },
-        sendKey: async (_id: string, key: string) => { sent.push({ key }); return running; },
+        sendKeys: async (_id: string, keys: string[]) => { sent.push({ keys }); return running; },
+        capturePrompt: (id: string) => (running ? (id === 'session-1' ? { question: 'Q', options: [], hasSubmitTab: false, screen: [] } : null) : undefined),
         createSession: async () => {
           throw new Error('createSession should not be called when cwd is missing');
         },
@@ -127,7 +128,10 @@ describe('session history routes', () => {
     it('400s on empty, oversize, or non-whitelisted input', async () => {
       expect((await post('session-1', { text: '  ' })).status).toBe(400);
       expect((await post('session-1', { text: 'x'.repeat(20001) })).status).toBe(400);
-      expect((await post('session-1', { key: 'Enter' })).status).toBe(400);
+      expect((await post('session-1', { key: 'Escape' })).status).toBe(400);
+      for (const keys of [[], ['a'], ['0'], ['10'], ['C-c'], ['Enter; ls'], 'Enter', [1], Array(11).fill('1')]) {
+        expect((await post('session-1', { keys })).status).toBe(400);
+      }
     });
 
     it('404s unknown sessions and 409s when not running', async () => {
@@ -137,11 +141,24 @@ describe('session history routes', () => {
       running = true;
     });
 
-    it('sends text and Escape', async () => {
+    it('sends text and whitelisted keys', async () => {
       sent.length = 0;
       expect((await post('session-1', { text: 'hello' })).status).toBe(204);
-      expect((await post('session-1', { key: 'Escape' })).status).toBe(204);
-      expect(sent).toEqual(['hello', { key: 'Escape' }]);
+      expect((await post('session-1', { keys: ['Escape'] })).status).toBe(204);
+      expect((await post('session-1', { keys: ['2', 'Right', 'Enter'] })).status).toBe(204);
+      expect(sent).toEqual(['hello', { keys: ['Escape'] }, { keys: ['2', 'Right', 'Enter'] }]);
+    });
+  });
+
+  describe('GET /sessions/:id/prompt', () => {
+    it('404s unknown, 409s when not running, else returns the prompt', async () => {
+      expect((await fetch(`${base}/sessions/nope/prompt`)).status).toBe(404);
+      running = false;
+      expect((await fetch(`${base}/sessions/session-1/prompt`)).status).toBe(409);
+      running = true;
+      const res = await fetch(`${base}/sessions/session-1/prompt`);
+      expect(res.status).toBe(200);
+      expect(((await res.json()) as { prompt: { question: string } }).prompt.question).toBe('Q');
     });
   });
 
