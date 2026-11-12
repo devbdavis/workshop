@@ -12,6 +12,7 @@ interface TranscriptMessage {
   role: 'user' | 'assistant';
   blocks: TranscriptBlock[];
   timestamp: string | null;
+  compact?: true;
 }
 
 interface Props {
@@ -84,7 +85,9 @@ export function TranscriptView({ sessionId, live = false, refreshKey = 0 }: Prop
       {error && messages === null && <p className="text-xs text-red-400">{error}</p>}
       {!error && messages === null && <p className="text-xs text-gray-500">Loading…</p>}
       {messages?.length === 0 && <p className="text-xs text-gray-600">No messages in this transcript.</p>}
-      {messages?.map((m, idx) => (
+      {messages?.map((m, idx) => m.compact ? (
+        <CompactMarker key={m.id ?? idx} message={m} />
+      ) : (
         <div
           key={m.id ?? idx}
           className={`rounded-lg px-3 py-2 text-sm min-w-0 ${
@@ -109,6 +112,19 @@ export function TranscriptView({ sessionId, live = false, refreshKey = 0 }: Prop
         </div>
       )}
     </div>
+  );
+}
+
+// Compaction summaries are huge and machine-written: show a divider, summary on demand.
+function CompactMarker({ message }: { message: TranscriptMessage }) {
+  const text = message.blocks.map((b) => (b.type === 'text' ? b.text : '')).join('\n\n');
+  return (
+    <details className="rounded border border-dashed border-gray-700 text-xs text-gray-400">
+      <summary className="cursor-pointer select-none px-2 py-1">
+        Conversation compacted{message.timestamp ? ` · ${new Date(message.timestamp).toLocaleString()}` : ''} — show summary
+      </summary>
+      <div className="px-2 py-1 border-t border-gray-800"><TextBlock text={text} /></div>
+    </details>
   );
 }
 
