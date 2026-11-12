@@ -117,7 +117,7 @@ export function AgentFormModal({ initial, onSave, onClose, onSaveAsTemplate }: P
                 rows={4}
                 className="w-full px-3 py-2 bg-gray-900 border border-gray-700 rounded text-sm text-gray-100 placeholder-gray-500 focus:outline-none focus:border-blue-500 resize-y"
               />
-              <div className="flex items-center justify-between">
+              <div className="flex flex-wrap items-center gap-2 justify-between">
                 <span className="text-[10px] text-gray-500">⌘↵ to generate</span>
                 <button
                   type="button"
@@ -132,7 +132,7 @@ export function AgentFormModal({ initial, onSave, onClose, onSaveAsTemplate }: P
             </div>
           )}
 
-          <div className="grid grid-cols-2 gap-3 shrink-0">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3 shrink-0">
             <div>
               <label className="block text-xs text-gray-400 mb-1">Name *</label>
               <input value={name} onChange={(e) => setName(e.target.value)} className={inputCls} required />
@@ -148,7 +148,7 @@ export function AgentFormModal({ initial, onSave, onClose, onSaveAsTemplate }: P
             <input value={description} onChange={(e) => setDescription(e.target.value)} className={inputCls} required />
           </div>
 
-          <div className="grid grid-cols-2 gap-3 shrink-0">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3 shrink-0">
             <div>
               <label className="block text-xs text-gray-400 mb-1">Color</label>
               <input value={color} onChange={(e) => setColor(e.target.value)} className={inputCls} placeholder="e.g. blue, #3b82f6" />
@@ -177,7 +177,7 @@ export function AgentFormModal({ initial, onSave, onClose, onSaveAsTemplate }: P
         </form>
 
         {/* Footer */}
-        <div className="flex items-center gap-2 px-5 py-3 border-t border-gray-800 shrink-0">
+        <div className="flex flex-wrap items-center gap-2 px-5 py-3 border-t border-gray-800 shrink-0">
           {initial && onSaveAsTemplate && (
             <button
               type="button"

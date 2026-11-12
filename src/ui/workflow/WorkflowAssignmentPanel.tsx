@@ -177,7 +177,7 @@ export function WorkflowAssignmentPanel({ issue, onApprove, onSelectManually }: 
       )}
 
       {/* Actions */}
-      <div className="flex items-center gap-3">
+      <div className="flex flex-wrap items-center gap-3">
         <button
           onClick={handleApprove}
           disabled={submitting}

@@ -210,7 +210,7 @@ export function ScheduledTaskForm({ task, tracks, agents, onSave, onClose, onSav
 
   return (
     <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4">
-      <div className="bg-gray-900 border border-gray-700 rounded-lg w-[80vw] h-[85vh] resize overflow-hidden flex flex-col">
+      <div className="bg-gray-900 border border-gray-700 rounded-lg w-full md:w-[80vw] h-[85vh] resize overflow-hidden flex flex-col">
         <div className="flex items-center justify-between px-5 py-3 border-b border-gray-800 shrink-0">
           <h2 className="text-sm font-semibold">
             {task ? 'Edit Scheduled Task' : 'New Scheduled Task'}
@@ -234,7 +234,7 @@ export function ScheduledTaskForm({ task, tracks, agents, onSave, onClose, onSav
                 className="w-full px-3 py-2 bg-gray-900 border border-gray-700 rounded text-sm text-gray-100 placeholder-gray-500 focus:outline-none focus:border-blue-500 resize-y"
                 rows={3}
               />
-              <div className="flex items-center gap-3">
+              <div className="flex flex-wrap items-center gap-3">
                 <button
                   onClick={() => void handleGenerate()}
                   disabled={isGenerating || !generateDesc.trim()}
@@ -278,7 +278,7 @@ export function ScheduledTaskForm({ task, tracks, agents, onSave, onClose, onSav
           <Field label="Schedule">
             <div className="space-y-3">
               {/* Preset tabs */}
-              <div className="flex gap-1">
+              <div className="flex flex-wrap gap-1">
                 {PRESETS.map((p) => (
                   <button
                     key={p.value}
@@ -321,7 +321,7 @@ export function ScheduledTaskForm({ task, tracks, agents, onSave, onClose, onSav
                       className="px-2 py-1 bg-gray-800 border border-gray-700 rounded text-sm"
                     />
                   </div>
-                  <div className="flex items-center gap-1">
+                  <div className="flex flex-wrap items-center gap-1">
                     {DAY_LABELS.map((label, i) => (
                       <button
                         key={i}
@@ -352,7 +352,7 @@ export function ScheduledTaskForm({ task, tracks, agents, onSave, onClose, onSav
               )}
 
               {preset === 'weekly' && (
-                <div className="flex items-center gap-2">
+                <div className="flex flex-wrap items-center gap-2">
                   <span className="text-xs text-gray-400">Every</span>
                   <select
                     value={dayOfWeek}
@@ -375,7 +375,7 @@ export function ScheduledTaskForm({ task, tracks, agents, onSave, onClose, onSav
 
               {preset === 'monthly' && (
                 <div className="space-y-2">
-                  <div className="flex gap-2">
+                  <div className="flex flex-wrap gap-2">
                     <button
                       onClick={() => setMonthRule('day-of-month')}
                       className={`text-xs px-2 py-1 rounded ${
@@ -399,7 +399,7 @@ export function ScheduledTaskForm({ task, tracks, agents, onSave, onClose, onSav
                   </div>
 
                   {monthRule === 'day-of-month' ? (
-                    <div className="flex items-center gap-2">
+                    <div className="flex flex-wrap items-center gap-2">
                       <span className="text-xs text-gray-400">On day</span>
                       <select
                         value={dayOfMonth}
@@ -527,7 +527,7 @@ export function ScheduledTaskForm({ task, tracks, agents, onSave, onClose, onSav
           </Field>
 
           {/* Agent */}
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <Field label="Agent" optional>
               <select
                 value={agentId}
@@ -578,7 +578,7 @@ export function ScheduledTaskForm({ task, tracks, agents, onSave, onClose, onSav
         </div>
 
         {/* Footer */}
-        <div className="flex items-center gap-2 px-5 py-3 border-t border-gray-800 shrink-0">
+        <div className="flex flex-wrap items-center gap-2 px-5 py-3 border-t border-gray-800 shrink-0">
           {task && onSaveAsTemplate && (
             <button
               onClick={!!task.templateName && !task.isOutOfSync ? undefined : onSaveAsTemplate}
@@ -622,7 +622,7 @@ function Field({
   children: React.ReactNode;
 }) {
   return (
-    <div>
+    <div className="min-w-0">
       <label className="block text-xs text-gray-400 mb-1">
         {label}
         {optional && <span className="text-gray-600 ml-1">(optional)</span>}

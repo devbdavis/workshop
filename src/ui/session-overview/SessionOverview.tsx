@@ -35,6 +35,9 @@ export function SessionOverview() {
   const [selectedRepoPath, setSelectedRepoPath] = useState<string | undefined>(undefined);
   const [issueBaseUrl, setIssueBaseUrl] = useState<string | undefined>(undefined);
   const [selectedId, setSelectedId] = useState<SessionId | null>(loadSelected);
+  // Phones show the list OR the session full-screen (desktop always shows both).
+  const [showList, setShowList] = useState(true);
+  const openSession = (id: SessionId) => { setSelectedId(id); setShowList(false); };
   // Full track (repos populated) for the New Session modal — fetched on "+" click.
   const [modalTrack, setModalTrack] = useState<Track | null>(null);
   const [defaultAiCli, setDefaultAiCli] = useState<DefaultAiCli>('claude');
@@ -121,7 +124,7 @@ export function SessionOverview() {
   const sessionParam = searchParams.get('session');
   useEffect(() => {
     if (!sessionParam) return;
-    setSelectedId(sessionParam as SessionId);
+    openSession(sessionParam as SessionId);
     setSearchParams({}, { replace: true });
   }, [sessionParam, setSearchParams]);
 
@@ -170,6 +173,7 @@ export function SessionOverview() {
     try {
       await fetch(`/api/tracks/${session.trackId}/sessions/${session.id}`, { method: 'DELETE' });
       setSelectedId((prev) => (prev === session.id ? null : prev));
+      setShowList(true);
       loadSessions();
     } catch (err) {
       console.error('Failed to delete session:', err);
@@ -208,7 +212,7 @@ export function SessionOverview() {
       });
       if (res.ok) {
         const session: Session = await res.json();
-        setSelectedId(session.id);
+        openSession(session.id);
         loadSessions();
         return session;
       }
@@ -252,15 +256,15 @@ export function SessionOverview() {
   }
 
   return (
-    <div className="h-full flex flex-col md:flex-row">
-      <aside className="w-full max-h-[40%] border-b md:w-80 md:max-h-none md:border-b-0 md:border-r border-gray-800 overflow-y-auto shrink-0">
+    <div className="h-full flex">
+      <aside className={`${showList ? 'flex-1' : 'hidden'} md:block md:flex-none w-full md:w-80 md:border-r border-gray-800 overflow-y-auto shrink-0`}>
         <div className="flex items-center justify-between px-3 pt-3">
           <span className="text-xs font-semibold text-gray-300">Sessions</span>
           <NewSessionPicker tracks={sortTracks(tracks.filter(isVisibleTrack))} onPick={openNewSession} />
         </div>
         {/* Navigator first — fixed position so click targets don't shift when the
             variable-height session panel below changes with each selection. */}
-        <TrackNavigator groups={groups} selectedId={selectedId} onSelect={setSelectedId} />
+        <TrackNavigator groups={groups} selectedId={selectedId} onSelect={openSession} />
 
         {selectedSession && (
           <div className="border-t border-gray-800">
@@ -276,7 +280,13 @@ export function SessionOverview() {
         )}
       </aside>
 
-      <main className="flex-1 overflow-hidden flex flex-col min-h-0">
+      <main className={`${showList ? 'hidden md:flex' : 'flex'} flex-1 min-w-0 overflow-hidden flex-col min-h-0`}>
+        <button
+          onClick={() => setShowList(true)}
+          className="md:hidden shrink-0 min-h-11 px-3 text-left text-sm text-gray-300 border-b border-gray-800 bg-gray-900"
+        >
+          ‹ Sessions
+        </button>
         {!selectedSession ? (
           <div className="flex-1 flex items-center justify-center text-gray-500">
             <p>No active sessions</p>

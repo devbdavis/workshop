@@ -142,13 +142,13 @@ export function PrReviewDetail({ reviewId, refreshKey, onChanged, team }: Props)
   }
 
   return (
-    <div className="max-w-4xl mx-auto p-5 space-y-4">
+    <div className="max-w-4xl mx-auto p-3 md:p-5 space-y-4">
       <header className="space-y-1.5">
         <div className="flex items-center gap-2">
           <h1 className="text-base font-semibold text-gray-100 truncate">{review.prTitle ?? review.prUrl}</h1>
           <span className={`shrink-0 px-1.5 py-0.5 rounded text-[10px] font-medium ${badge.className}`}>{badge.label}</span>
         </div>
-        <div className="flex items-center gap-3 text-xs text-gray-500">
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-gray-500">
           <a
             href={review.prUrl}
             target="_blank"
@@ -161,7 +161,7 @@ export function PrReviewDetail({ reviewId, refreshKey, onChanged, team }: Props)
           {review.prAuthor && <span>by {review.prAuthor}</span>}
           {review.prBranch && <span className="font-mono">{review.prBranch}</span>}
         </div>
-        <div className="flex items-center gap-2 pt-1">
+        <div className="flex flex-wrap items-center gap-2 pt-1">
           {(!submitted || prChanged) && (
             <button
               onClick={analyze}
@@ -298,7 +298,7 @@ export function PrReviewDetail({ reviewId, refreshKey, onChanged, team }: Props)
             placeholder="Overall review comment — the agent drafts one; edit freely. Kept findings are posted as inline comments alongside it."
             className="w-full px-3 py-2 text-xs bg-gray-900 border border-gray-800 rounded text-gray-200 placeholder-gray-600 focus:outline-none focus:border-gray-600 resize-y"
           />
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             <select
               value={verdict}
               onChange={(e) => setVerdict(e.target.value as PrReviewVerdict)}

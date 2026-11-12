@@ -28,7 +28,7 @@ export function RecentlyDeletedPanel({ sessions, onRestore, onPurge, onClose }: 
       >
         {/* Header */}
         <div className="flex items-center justify-between px-4 py-3 border-b border-gray-800">
-          <div>
+          <div className="min-w-0">
             <h2 className="text-sm font-semibold text-gray-200">Recently Deleted</h2>
             <p className="text-[11px] text-gray-500 mt-0.5">Sessions are permanently removed after 7 days.</p>
           </div>

@@ -57,7 +57,7 @@ export function TerminalPane({ trackId, session, todos, onDestroy, onRename, def
 
   return (
     <div className="h-full flex flex-col min-h-0">
-      <div className="flex items-center justify-between px-2 py-0.5 bg-gray-900 border-b border-gray-800 shrink-0">
+      <div className="flex max-md:flex-wrap items-center justify-between gap-x-2 px-2 py-0.5 bg-gray-900 border-b border-gray-800 shrink-0">
         {editing ? (
           <input
             ref={inputRef}
@@ -73,7 +73,7 @@ export function TerminalPane({ trackId, session, todos, onDestroy, onRename, def
           />
         ) : (
           <span
-            className="text-xs text-gray-400 font-mono truncate cursor-pointer hover:text-gray-200 flex items-center gap-1.5"
+            className="text-xs text-gray-400 font-mono min-w-0 truncate cursor-pointer hover:text-gray-200 flex items-center gap-1.5"
             onDoubleClick={startEditing}
             title="Double-click to rename"
           >
@@ -81,7 +81,7 @@ export function TerminalPane({ trackId, session, todos, onDestroy, onRename, def
             {displayName}
           </span>
         )}
-        <div className="flex items-center gap-1">
+        <div className="flex max-md:flex-wrap items-center gap-1">
           {transcriptId && (
             <button
               onClick={() => setShowTranscript((v) => !v)}

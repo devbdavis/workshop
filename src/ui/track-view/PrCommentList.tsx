@@ -28,7 +28,7 @@ export function PrCommentList({
 
   return (
     <div className="space-y-2">
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between flex-wrap gap-2">
         <div className="text-[11px] uppercase tracking-wide text-pink-300 font-semibold">Unresolved comments</div>
         <div className="flex items-center gap-1.5">
           <button
@@ -73,11 +73,11 @@ export function PrCommentList({
                 </button>
               </div>
               <div
-                className={`mt-1 text-gray-300 prose prose-invert prose-sm max-w-none prose-p:my-1 prose-pre:my-1 prose-headings:my-1 ${expanded ? '' : 'max-h-20 overflow-hidden'}`}
+                className={`mt-1 text-gray-300 prose prose-invert prose-sm max-w-none prose-p:my-1 prose-pre:my-1 prose-headings:my-1 max-md:overflow-x-auto ${expanded ? '' : 'max-h-20 overflow-hidden'}`}
               >
                 <Markdown>{stripHtmlNoise(c.body)}</Markdown>
               </div>
-              <div className="flex items-center justify-between mt-2 gap-2">
+              <div className="flex items-center justify-between flex-wrap mt-2 gap-2">
                 {c.url ? (
                   <a
                     href={c.url}

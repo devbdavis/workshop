@@ -84,9 +84,9 @@ export function EpicList({
 
   return (
     <>
-      <header className="flex items-center gap-4 px-6 py-2 border-b border-gray-800 shrink-0">
+      <header className="flex flex-wrap items-center gap-2 md:gap-4 px-3 md:px-6 py-2 border-b border-gray-800 shrink-0">
         <span className="text-xs text-gray-500">{filtered.length} epics</span>
-        <div className="ml-auto flex items-center gap-2">
+        <div className="ml-auto flex flex-wrap items-center gap-2">
           {FILTER_TABS.map(({ value, label }) => (
             <button
               key={value}
@@ -109,7 +109,7 @@ export function EpicList({
         </div>
       </header>
 
-      <div className="flex-1 overflow-y-auto p-6">
+      <div className="flex-1 overflow-y-auto p-3 md:p-6">
         {filtered.length === 0 ? (
           <div className="text-center py-20 text-gray-500">
             {epics.length === 0
@@ -162,8 +162,8 @@ function EpicCard({
     >
       <div className="flex items-start justify-between gap-3">
         <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-2 mb-1">
-            <h3 className="text-sm font-medium text-gray-200 truncate">{epic.title}</h3>
+          <div className="flex max-md:flex-wrap items-center gap-2 mb-1">
+            <h3 className="text-sm font-medium text-gray-200 min-w-0 break-words md:truncate">{epic.title}</h3>
             <WorkflowStateIndicator state={epic.state} issueType="epic" stateData={epic.stateData as Record<string, unknown> | undefined} />
             {stateData?.autonomous === true && <RunningDarkPill />}
             {stateData?.paused === true && <PausedPill until={typeof stateData?.pausedUntil === 'string' ? stateData.pausedUntil : undefined} reason={typeof stateData?.pausedReason === 'string' ? stateData.pausedReason : undefined} />}

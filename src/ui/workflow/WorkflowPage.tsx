@@ -100,7 +100,7 @@ export function WorkflowPage() {
 
   return (
     <div className="h-full flex flex-col">
-      <header className="flex items-center gap-4 px-6 py-2 border-b border-gray-800 shrink-0">
+      <header className="flex flex-wrap items-center gap-2 md:gap-4 px-3 md:px-6 py-2 border-b border-gray-800 shrink-0">
         <h1 className="text-lg font-semibold">Workflow</h1>
         <div className="flex items-center gap-1">
           <button

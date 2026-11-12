@@ -188,7 +188,7 @@ export function BackupSettings() {
             value={config.cronExpression}
             onChange={(e) => setConfig({ ...config, cronExpression: e.target.value })}
             placeholder="0 3 * * *"
-            className="bg-gray-800 border border-gray-700 rounded px-3 py-1.5 text-sm text-gray-200 focus:outline-none focus:border-blue-500 w-48 font-mono"
+            className="bg-gray-800 border border-gray-700 rounded px-3 py-1.5 text-sm text-gray-200 focus:outline-none focus:border-blue-500 w-full md:w-48 font-mono"
           />
           <p className="text-[11px] text-gray-500 mt-2">
             Default: <span className="font-mono">0 3 * * *</span> (03:00 local, daily). Sunday runs
@@ -213,7 +213,7 @@ export function BackupSettings() {
                 ? '•••••••••••••••••• (leave blank to keep existing)'
                 : 'Choose a strong passphrase'
             }
-            className="bg-gray-800 border border-gray-700 rounded px-3 py-1.5 text-sm text-gray-200 focus:outline-none focus:border-blue-500 w-96 font-mono"
+            className="bg-gray-800 border border-gray-700 rounded px-3 py-1.5 text-sm text-gray-200 focus:outline-none focus:border-blue-500 w-full md:w-96 font-mono"
           />
           <p className="text-[11px] text-gray-500 mt-2">
             Used to derive the encryption key (scrypt → AES-256-GCM). <strong className="text-amber-400">Write it

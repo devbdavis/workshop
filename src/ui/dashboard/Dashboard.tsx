@@ -124,7 +124,7 @@ export function Dashboard() {
   }, [tracks, activity, showSystem, showHidden, sort]);
 
   return (
-    <div className="max-w-6xl mx-auto px-6 py-8">
+    <div className="max-w-6xl mx-auto px-3 md:px-6 py-8">
       <header className="flex items-center justify-between mb-6 flex-wrap gap-3">
         <h1 className="text-xl font-semibold">Tracks</h1>
         <div className="flex items-center gap-3 flex-wrap">

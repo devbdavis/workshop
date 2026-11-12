@@ -42,15 +42,15 @@ export function Settings() {
   const activeTab: Tab = VALID_TABS.has(tab ?? '') ? (tab as Tab) : 'general';
 
   return (
-    <div className="max-w-4xl mx-auto px-6 py-8">
-      <header className="flex items-center gap-4 mb-6">
+    <div className="max-w-4xl mx-auto px-3 md:px-6 py-8">
+      <header className="flex flex-col md:flex-row md:items-center gap-2 md:gap-4 mb-6">
         <h1 className="text-xl font-semibold">Settings</h1>
-        <div className="flex items-center gap-0.5">
+        <div className="flex items-center gap-0.5 overflow-x-auto md:overflow-visible">
           {SETTINGS_TABS.map(({ id, label }) => (
             <button
               key={id}
               onClick={() => navigate(`/settings/${id}`)}
-              className={`px-3 py-1 text-xs font-medium rounded transition-colors ${
+              className={`shrink-0 whitespace-nowrap px-3 py-1 text-xs font-medium rounded transition-colors ${
                 activeTab === id
                   ? 'bg-gray-800 text-gray-100'
                   : 'text-gray-500 hover:text-gray-300 hover:bg-gray-900'
@@ -64,43 +64,43 @@ export function Settings() {
 
       {activeTab === 'general' && (
         <div className="space-y-6">
-          <section className="bg-gray-900 border border-gray-800 rounded-lg p-6">
+          <section className="bg-gray-900 border border-gray-800 rounded-lg p-3 md:p-6">
             <ThemeSelector />
           </section>
 
-          <section className="bg-gray-900 border border-gray-800 rounded-lg p-6">
+          <section className="bg-gray-900 border border-gray-800 rounded-lg p-3 md:p-6">
             <NotificationSettings />
           </section>
 
-          <section className="bg-gray-900 border border-gray-800 rounded-lg p-6">
+          <section className="bg-gray-900 border border-gray-800 rounded-lg p-3 md:p-6">
             <DefaultAiCliSettings />
           </section>
 
-          <section className="bg-gray-900 border border-gray-800 rounded-lg p-6">
+          <section className="bg-gray-900 border border-gray-800 rounded-lg p-3 md:p-6">
             <DispatchModelSettings />
           </section>
 
-          <section className="bg-gray-900 border border-gray-800 rounded-lg p-6">
+          <section className="bg-gray-900 border border-gray-800 rounded-lg p-3 md:p-6">
             <PrReviewSettings />
           </section>
 
-          <section className="bg-gray-900 border border-gray-800 rounded-lg p-6">
+          <section className="bg-gray-900 border border-gray-800 rounded-lg p-3 md:p-6">
             <PrMonitorFilterSettings />
           </section>
 
-          <section className="bg-gray-900 border border-gray-800 rounded-lg p-6">
+          <section className="bg-gray-900 border border-gray-800 rounded-lg p-3 md:p-6">
             <AvailableClisSettings />
           </section>
 
-          <section className="bg-gray-900 border border-gray-800 rounded-lg p-6">
+          <section className="bg-gray-900 border border-gray-800 rounded-lg p-3 md:p-6">
             <BackupSettings />
           </section>
 
-          <section className="bg-gray-900 border border-gray-800 rounded-lg p-6">
+          <section className="bg-gray-900 border border-gray-800 rounded-lg p-3 md:p-6">
             <SoulEditor />
           </section>
 
-          <section className="bg-gray-900 border border-gray-800 rounded-lg p-6">
+          <section className="bg-gray-900 border border-gray-800 rounded-lg p-3 md:p-6">
             <LaunchAppsSettings />
           </section>
         </div>
@@ -108,7 +108,7 @@ export function Settings() {
 
       {activeTab === 'profile' && (
         <div className="space-y-6">
-          <section className="bg-gray-900 border border-gray-800 rounded-lg p-6">
+          <section className="bg-gray-900 border border-gray-800 rounded-lg p-3 md:p-6">
             <ProfileSettings />
           </section>
         </div>
@@ -116,7 +116,7 @@ export function Settings() {
 
       {activeTab === 'repositories' && (
         <div className="space-y-6">
-          <section className="bg-gray-900 border border-gray-800 rounded-lg p-6">
+          <section className="bg-gray-900 border border-gray-800 rounded-lg p-3 md:p-6">
             <Repositories />
           </section>
         </div>
@@ -124,7 +124,7 @@ export function Settings() {
 
       {activeTab === 'mcp' && (
         <div className="space-y-6">
-          <section className="bg-gray-900 border border-gray-800 rounded-lg p-6">
+          <section className="bg-gray-900 border border-gray-800 rounded-lg p-3 md:p-6">
             <McpServers />
           </section>
         </div>
@@ -132,7 +132,7 @@ export function Settings() {
 
       {activeTab === 'plugins' && (
         <div className="space-y-6">
-          <section className="bg-gray-900 border border-gray-800 rounded-lg p-6">
+          <section className="bg-gray-900 border border-gray-800 rounded-lg p-3 md:p-6">
             <Plugins />
           </section>
         </div>
@@ -140,7 +140,7 @@ export function Settings() {
 
       {activeTab === 'templates' && (
         <div className="space-y-6">
-          <section className="bg-gray-900 border border-gray-800 rounded-lg p-6">
+          <section className="bg-gray-900 border border-gray-800 rounded-lg p-3 md:p-6">
             <PromptTemplates />
           </section>
         </div>
@@ -152,10 +152,10 @@ export function Settings() {
 
       {activeTab === 'issue-tracking' && (
         <div className="space-y-6">
-          <section className="bg-gray-900 border border-gray-800 rounded-lg p-6">
+          <section className="bg-gray-900 border border-gray-800 rounded-lg p-3 md:p-6">
             <IssueTracking />
           </section>
-          <section className="bg-gray-900 border border-gray-800 rounded-lg p-6">
+          <section className="bg-gray-900 border border-gray-800 rounded-lg p-3 md:p-6">
             <PermissionSettings />
           </section>
         </div>

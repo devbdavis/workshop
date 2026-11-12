@@ -68,7 +68,7 @@ export function DispatchDropdown({ agents, onSelect, onClose, popUp, defaultAgen
   const sorted = [...agents].sort((a, b) => a.name.localeCompare(b.name));
 
   return (
-    <div ref={ref} className={`absolute left-0 z-10 bg-gray-800 border border-gray-700 rounded-lg shadow-lg min-w-[220px] ${popUp ? 'bottom-full mb-1' : 'top-full mt-1'}`}>
+    <div ref={ref} className={`absolute left-0 z-10 bg-gray-800 border border-gray-700 rounded-lg shadow-lg min-w-[220px] max-w-[calc(100vw-1rem)] ${popUp ? 'bottom-full mb-1' : 'top-full mt-1'}`}>
       {/* Provider toggle */}
       <div className="flex items-center gap-1 px-3 py-2 border-b border-gray-700">
         <span className="text-[10px] text-gray-500 mr-1">Run as:</span>

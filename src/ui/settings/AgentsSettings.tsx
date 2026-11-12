@@ -155,7 +155,7 @@ export function AgentsSettings() {
 
   return (
     <>
-      <div className="flex items-center justify-between mb-6">
+      <div className="flex flex-wrap items-center justify-between gap-2 mb-6">
         <h2 className="text-lg font-semibold">Agents</h2>
         <button
           onClick={() => setCreating(true)}
@@ -167,7 +167,7 @@ export function AgentsSettings() {
 
       <div className="space-y-8">
         {myAgents.length > 0 && (
-          <section className="bg-gray-900 border border-gray-800 rounded-lg p-6">
+          <section className="bg-gray-900 border border-gray-800 rounded-lg p-3 md:p-6">
             <div className="mb-4">
               <h2 className="text-lg font-semibold">
                 My Agents
@@ -194,7 +194,7 @@ export function AgentsSettings() {
 
         {/* Templates section — always below real items */}
         {templates.length > 0 && (
-          <section className="bg-gray-900/50 border border-gray-800/50 rounded-lg p-6">
+          <section className="bg-gray-900/50 border border-gray-800/50 rounded-lg p-3 md:p-6">
             <button
               onClick={() => setShowTemplates(!showTemplates)}
               className="w-full flex items-center justify-between text-left group"
@@ -290,7 +290,7 @@ function ProjectAgentSection({ agents }: { agents: Agent[] }) {
   if (agents.length === 0) return null;
 
   return (
-    <section className="bg-gray-900 border border-gray-800 rounded-lg p-6">
+    <section className="bg-gray-900 border border-gray-800 rounded-lg p-3 md:p-6">
       <button
         onClick={() => setCollapsed(!collapsed)}
         className="w-full flex items-center justify-between text-left group"

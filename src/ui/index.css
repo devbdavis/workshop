@@ -570,3 +570,11 @@ body,
 button {
   -webkit-tap-highlight-color: transparent;
 }
+
+/* Phones: nothing may widen the page. Long paths/URLs/hashes break instead of pushing the layout,
+   and wide tables scroll inside their own box. */
+@media (max-width: 767px) {
+  body { overflow-wrap: anywhere; }
+  .markdown-body table { display: block; max-width: 100%; overflow-x: auto; }
+  img, video, iframe { max-width: 100%; }
+}

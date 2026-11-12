@@ -84,7 +84,7 @@ export function ReviewDiffView({
                 key={i}
                 className={`border rounded px-3 py-2 text-xs ${SEVERITY_STYLES[finding.severity] ?? SEVERITY_STYLES.info}`}
               >
-                <div className="flex items-center gap-2 mb-1">
+                <div className="flex flex-wrap items-center gap-2 mb-1">
                   <span className="font-medium uppercase tracking-wide text-[10px]">
                     {finding.severity}
                   </span>
@@ -116,16 +116,16 @@ export function ReviewDiffView({
               return (
                 <div key={i} className="border border-gray-800 rounded-lg overflow-hidden">
                   {/* Change header */}
-                  <div className="flex items-center gap-2 px-3 py-2 bg-gray-900/80 border-b border-gray-800">
+                  <div className="flex flex-wrap items-center gap-2 px-3 py-2 bg-gray-900/80 border-b border-gray-800">
                     <span className={`text-[10px] px-1.5 py-0.5 rounded font-medium ${typeInfo.color}`}>
                       {typeInfo.label}
                     </span>
-                    <span className="text-xs text-gray-300">{change.description}</span>
+                    <span className="min-w-0 text-xs text-gray-300">{change.description}</span>
                   </div>
 
                   {/* Before/After diff */}
                   {(change.before != null || change.after != null) && (
-                    <div className="grid grid-cols-2 divide-x divide-gray-800 text-[11px] font-mono">
+                    <div className="grid grid-cols-1 md:grid-cols-2 divide-y md:divide-y-0 md:divide-x divide-gray-800 text-[11px] font-mono">
                       <div className="p-3 bg-red-950/10">
                         <div className="text-[10px] text-red-400/70 font-sans mb-1 uppercase tracking-wide">
                           Before
@@ -160,7 +160,7 @@ export function ReviewDiffView({
       )}
 
       {/* Action buttons */}
-      <div className="flex items-center gap-3 pt-2 border-t border-gray-800">
+      <div className="flex flex-wrap items-center gap-3 pt-2 border-t border-gray-800">
         <button
           onClick={() => handleAction('accept')}
           disabled={submitting !== null}

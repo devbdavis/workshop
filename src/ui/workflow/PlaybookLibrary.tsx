@@ -123,13 +123,13 @@ export function PlaybookLibrary() {
   }
 
   return (
-    <div className="p-6 max-w-7xl">
+    <div className="p-3 md:p-6 max-w-7xl">
       {/* Header and filters */}
       <div className="flex items-center gap-4 mb-6 flex-wrap">
         <h2 className="text-lg font-semibold text-gray-200">Workflow Playbooks</h2>
         <span className="text-sm text-gray-500">{filteredPlaybooks.length} playbooks</span>
 
-        <div className="ml-auto flex items-center gap-3">
+        <div className="ml-auto flex flex-wrap items-center gap-2 md:gap-3">
           <input
             type="text"
             value={searchQuery}
@@ -164,7 +164,7 @@ export function PlaybookLibrary() {
       ) : (
         <div className="flex gap-6">
           {/* Playbook grid */}
-          <div className={`gap-4 ${selected ? 'hidden md:grid md:grid-cols-1 w-72 shrink-0' : 'grid md:grid-cols-2 lg:grid-cols-3 flex-1'}`}>
+          <div className={`gap-4 ${selected ? 'hidden md:grid md:grid-cols-1 w-72 shrink-0' : 'grid md:grid-cols-2 lg:grid-cols-3 flex-1 min-w-0'}`}>
             {filteredPlaybooks.map((playbook) => (
               <PlaybookCard
                 key={playbook.rowId}
@@ -311,7 +311,7 @@ function PlaybookDetailPanel({
     <div className="flex-1 border border-gray-800 bg-gray-900 rounded-lg overflow-hidden min-w-0">
       {/* Header */}
       <div className="flex items-center justify-between px-5 py-3 border-b border-gray-800">
-        <div className="flex items-center gap-3">
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-1 min-w-0">
           <h3 className="text-sm font-semibold text-gray-200">{playbook.name}</h3>
           <span className={`text-[10px] px-1.5 py-0.5 rounded border ${typeColor}`}>
             {playbook.issueType}
@@ -328,7 +328,7 @@ function PlaybookDetailPanel({
       </div>
 
       {/* Diagram */}
-      <div className="px-5 py-4 border-b border-gray-800 bg-gray-950/50">
+      <div className="px-5 py-4 border-b border-gray-800 bg-gray-950/50 max-md:overflow-x-auto">
         <StateDiagram stages={playbook.stageDefinitions} />
       </div>
 
@@ -345,7 +345,7 @@ function PlaybookDetailPanel({
         {/* Stage summary table */}
         <div>
           <h4 className="text-gray-400 font-medium mb-2">Stages ({playbook.stageDefinitions.length})</h4>
-          <div className="border border-gray-800 rounded overflow-hidden">
+          <div className="border border-gray-800 rounded overflow-x-auto md:overflow-hidden">
             <table className="w-full text-[11px]">
               <thead>
                 <tr className="bg-gray-800/50 text-gray-400">
@@ -501,7 +501,7 @@ function PlaybookDetailPanel({
 
         {/* Match criteria & tags */}
         {(playbook.tags?.length || playbook.matchCriteria) && (
-          <div className="flex gap-6">
+          <div className="flex flex-wrap gap-x-6 gap-y-3">
             {playbook.tags && playbook.tags.length > 0 && (
               <div>
                 <h4 className="text-gray-400 font-medium mb-1">Tags</h4>

@@ -215,7 +215,7 @@ export function DiffView({ sessionId, changes, onRefresh }: Props) {
                               aria-label="Add comment"
                               title="Add comment"
                               onClick={() => setComposingLine(number)}
-                              className="opacity-0 group-hover:opacity-100 text-gray-500 hover:text-blue-400 leading-none"
+                              className="md:opacity-0 md:group-hover:opacity-100 text-gray-500 hover:text-blue-400 leading-none"
                             >
                               +
                             </button>

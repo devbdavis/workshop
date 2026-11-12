@@ -153,7 +153,7 @@ export function AgentsPage() {
   if (loading) {
     return (
       <div className="h-full overflow-y-auto">
-        <div className="max-w-4xl mx-auto px-6 py-8">
+        <div className="max-w-4xl mx-auto px-3 md:px-6 py-8">
           <p className="text-sm text-gray-500">Loading agents...</p>
         </div>
       </div>
@@ -162,9 +162,9 @@ export function AgentsPage() {
 
   return (
     <div className="h-full overflow-y-auto">
-      <div className="max-w-4xl mx-auto px-6 py-8">
-        <header className="flex items-center justify-between mb-8">
-          <div className="flex items-center gap-4">
+      <div className="max-w-4xl mx-auto px-3 md:px-6 py-8">
+        <header className="flex flex-wrap items-center justify-between gap-2 mb-8">
+          <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
             <Link to="/" className="text-gray-400 hover:text-gray-200 text-sm">&larr; Dashboard</Link>
             <h1 className="text-2xl font-bold">Agents</h1>
           </div>
@@ -179,7 +179,7 @@ export function AgentsPage() {
         <div className="space-y-8">
           {/* My Agents — global (and legacy workshop) — editable */}
           {myAgents.length > 0 && (
-            <section className="bg-gray-900 border border-gray-800 rounded-lg p-6">
+            <section className="bg-gray-900 border border-gray-800 rounded-lg p-3 md:p-6">
               <div className="mb-4">
                 <h2 className="text-lg font-semibold">
                   My Agents
@@ -207,7 +207,7 @@ export function AgentsPage() {
 
           {/* Templates section — always below real items */}
           {templates.length > 0 && (
-            <section className="bg-gray-900/50 border border-gray-800/50 rounded-lg p-6">
+            <section className="bg-gray-900/50 border border-gray-800/50 rounded-lg p-3 md:p-6">
               <button
                 onClick={() => setShowTemplates(!showTemplates)}
                 className="w-full flex items-center justify-between text-left group"
@@ -222,7 +222,7 @@ export function AgentsPage() {
                   <p className="text-sm text-gray-500">Agent definitions you can install across machines</p>
                 </div>
                 <svg
-                  className={`w-5 h-5 text-gray-600 transition-transform ${showTemplates ? 'rotate-180' : ''}`}
+                  className={`shrink-0 w-5 h-5 text-gray-600 transition-transform ${showTemplates ? 'rotate-180' : ''}`}
                   viewBox="0 0 20 20" fill="currentColor"
                 >
                   <path fillRule="evenodd" d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" clipRule="evenodd" />
@@ -307,7 +307,7 @@ function ProjectAgentSection({ agents }: { agents: Agent[] }) {
   if (agents.length === 0) return null;
 
   return (
-    <section className="bg-gray-900 border border-gray-800 rounded-lg p-6">
+    <section className="bg-gray-900 border border-gray-800 rounded-lg p-3 md:p-6">
       <button
         onClick={() => setCollapsed(!collapsed)}
         className="w-full flex items-center justify-between text-left group"
@@ -320,7 +320,7 @@ function ProjectAgentSection({ agents }: { agents: Agent[] }) {
           <p className="text-sm text-gray-400">From .claude/agents/ — scoped to this project</p>
         </div>
         <svg
-          className={`w-5 h-5 text-gray-500 transition-transform ${collapsed ? '' : 'rotate-180'}`}
+          className={`shrink-0 w-5 h-5 text-gray-500 transition-transform ${collapsed ? '' : 'rotate-180'}`}
           viewBox="0 0 20 20" fill="currentColor"
         >
           <path fillRule="evenodd" d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" clipRule="evenodd" />

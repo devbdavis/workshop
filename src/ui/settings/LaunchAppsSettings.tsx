@@ -104,7 +104,7 @@ export function LaunchAppsSettings() {
           <select
             value={config.editor}
             onChange={(e) => saveEditor(e.target.value as EditorChoice)}
-            className="bg-gray-800 border border-gray-700 rounded px-3 py-1.5 text-sm text-gray-200 focus:outline-none focus:border-blue-500 w-72"
+            className="bg-gray-800 border border-gray-700 rounded px-3 py-1.5 text-sm text-gray-200 focus:outline-none focus:border-blue-500 w-full md:w-72"
           >
             <option value="auto">
               Auto-detect
@@ -134,7 +134,7 @@ export function LaunchAppsSettings() {
           <select
             value={config.terminal}
             onChange={(e) => saveTerminal(e.target.value as TerminalChoice)}
-            className="bg-gray-800 border border-gray-700 rounded px-3 py-1.5 text-sm text-gray-200 focus:outline-none focus:border-blue-500 w-72"
+            className="bg-gray-800 border border-gray-700 rounded px-3 py-1.5 text-sm text-gray-200 focus:outline-none focus:border-blue-500 w-full md:w-72"
           >
             <option value="auto">
               Auto-detect

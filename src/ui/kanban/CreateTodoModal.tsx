@@ -88,7 +88,7 @@ export function CreateTodoModal({ tracks, defaultTrackId, onClose, onCreate }: P
           </div>
 
           <div className="flex gap-4">
-            <div className="flex-1">
+            <div className="flex-1 min-w-0">
               <label className="text-xs text-gray-400 block mb-1">Status</label>
               <select
                 value={status}
@@ -100,7 +100,7 @@ export function CreateTodoModal({ tracks, defaultTrackId, onClose, onCreate }: P
                 ))}
               </select>
             </div>
-            <div className="flex-1">
+            <div className="flex-1 min-w-0">
               <label className="text-xs text-gray-400 block mb-1">Priority</label>
               <select
                 value={priority}

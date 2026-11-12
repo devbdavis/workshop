@@ -31,8 +31,8 @@ export function SkillCard({ skill, onEdit, onDelete, onImprove, onSyncFromTempla
   return (
     <>
     <div className="bg-gray-800 border border-gray-700 rounded-lg p-4">
-      <div className="flex items-start justify-between">
-        <div className="flex-1 min-w-0">
+      <div className="flex flex-col md:flex-row items-start justify-between">
+        <div className="flex-1 min-w-0 w-full">
           <div className="flex items-center gap-2 flex-wrap">
             <h3 className="text-sm font-semibold text-gray-200">{skill.name}</h3>
             <span className={`text-[10px] px-1.5 py-0.5 rounded ${SOURCE_STYLES[skill.source]}`}>
@@ -45,7 +45,7 @@ export function SkillCard({ skill, onEdit, onDelete, onImprove, onSyncFromTempla
             )}
           </div>
           {skill.isOutOfSync && onSyncFromTemplate && (
-            <div className="flex items-center gap-2 mt-1">
+            <div className="flex flex-wrap items-center gap-2 mt-1">
               <button
                 onClick={() => setShowDiff(true)}
                 className="text-[10px] text-amber-400 hover:text-amber-300 underline"
@@ -68,7 +68,7 @@ export function SkillCard({ skill, onEdit, onDelete, onImprove, onSyncFromTempla
             <p className="text-[10px] text-gray-500 mt-1 font-mono">{skill.filePath}</p>
           )}
         </div>
-        <div className="flex items-center gap-2 ml-3 shrink-0">
+        <div className="flex flex-wrap items-center gap-2 mt-2 md:mt-0 md:ml-3 shrink-0">
           <button
             onClick={() => setExpanded(!expanded)}
             className="text-xs text-gray-500 hover:text-gray-300"

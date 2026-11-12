@@ -160,12 +160,12 @@ export function ScheduledTasksPage() {
 
   return (
     <div className="h-full flex flex-col">
-      <header className="flex items-center gap-4 px-6 py-2 border-b border-gray-800 shrink-0">
+      <header className="flex flex-wrap items-center gap-2 md:gap-4 px-3 md:px-6 py-2 border-b border-gray-800 shrink-0">
         <h1 className="text-lg font-semibold">Schedules</h1>
         <span className="text-xs text-gray-500">
           {tasks.filter((t) => t.enabled).length} active
         </span>
-        <div className="ml-auto flex items-center gap-2">
+        <div className="ml-auto flex flex-wrap items-center gap-2">
           <FilterButton label="All" value="all" current={filter} onChange={setFilter} />
           <FilterButton label="Enabled" value="enabled" current={filter} onChange={setFilter} />
           <FilterButton label="Disabled" value="disabled" current={filter} onChange={setFilter} />
@@ -181,7 +181,7 @@ export function ScheduledTasksPage() {
         </div>
       </header>
 
-      <div className="flex-1 overflow-y-auto p-6">
+      <div className="flex-1 overflow-y-auto p-3 md:p-6">
         {filtered.length === 0 ? (
           <div className="text-center py-20 text-gray-500">
             {tasks.length === 0

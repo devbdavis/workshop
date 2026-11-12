@@ -73,7 +73,8 @@ export function App() {
               <TopNav />
               <CommandPalette />
               <PermissionPrompt />
-              <div className="flex-1 min-h-0 overflow-y-auto">
+              {/* Phones never pan sideways; wide content (tables, code, boards) scrolls inside its own box */}
+              <div className="flex-1 min-h-0 min-w-0 overflow-y-auto overflow-x-hidden md:overflow-x-auto">
                 <Routes>
                   <Route path="/" element={<Dashboard />} />
                   <Route path="/tracks/:trackId" element={<TrackView />} />

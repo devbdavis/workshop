@@ -67,7 +67,7 @@ export function TerminalSearchBar({
 
   return (
     <div
-      className="absolute top-2 right-2 z-20 flex items-center gap-1 rounded-md border border-gray-700 bg-gray-900/95 px-2 py-1 shadow-lg backdrop-blur-sm"
+      className="absolute top-2 right-2 z-20 max-w-[calc(100%-1rem)] flex items-center gap-1 rounded-md border border-gray-700 bg-gray-900/95 px-2 py-1 shadow-lg backdrop-blur-sm"
       // Stop wheel events on the bar from bubbling to the terminal's
       // wheel handler (which would scroll the scrollback view).
       onWheel={(e) => e.stopPropagation()}
@@ -85,7 +85,7 @@ export function TerminalSearchBar({
         autoComplete="off"
         onChange={(e) => onQueryChange(e.target.value)}
         onKeyDown={handleKeyDown}
-        className={`w-56 bg-transparent text-sm text-gray-100 placeholder:text-gray-500 focus:outline-none ${
+        className={`w-32 md:w-56 min-w-0 bg-transparent text-sm text-gray-100 placeholder:text-gray-500 focus:outline-none ${
           noMatches ? 'text-red-400' : ''
         }`}
       />

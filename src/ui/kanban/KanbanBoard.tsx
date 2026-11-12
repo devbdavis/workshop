@@ -262,16 +262,16 @@ export function KanbanBoard() {
 
   return (
     <div className="h-full flex flex-col">
-      <header className="flex items-center gap-4 px-6 py-2 border-b border-gray-800 shrink-0">
-        <h1 className="text-lg font-semibold">Kanban</h1>
+      <header className="flex flex-wrap items-center gap-2 md:gap-4 px-3 md:px-6 py-2 border-b border-gray-800 shrink-0">
+        <h1 className="text-lg font-semibold min-w-0 truncate">Kanban</h1>
         <span className="text-xs text-gray-500">{filteredTodos.length} todos</span>
-        <div className="ml-auto flex items-center gap-3">
+        <div className="ml-auto flex flex-wrap items-center gap-2 md:gap-3">
           <input
             type="text"
             placeholder="Search…"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            className="px-3 py-1.5 bg-gray-800 border border-gray-700 rounded-lg text-sm text-gray-300 w-44 placeholder-gray-600"
+            className="px-3 py-1.5 bg-gray-800 border border-gray-700 rounded-lg text-sm text-gray-300 w-32 md:w-44 placeholder-gray-600"
           />
           <select
             value={filterTrackId}
@@ -298,7 +298,7 @@ export function KanbanBoard() {
         </div>
       </header>
 
-      <div className="flex-1 overflow-x-auto p-4">
+      <div className="flex-1 overflow-x-auto p-4 snap-x snap-mandatory md:snap-none">
         <DndContext
           sensors={sensors}
           collisionDetection={collisionDetection}

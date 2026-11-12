@@ -73,7 +73,7 @@ export function PromptTemplates() {
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-wrap items-center justify-between gap-2">
         <div>
           <h2 className="text-lg font-semibold">Prompt Templates</h2>
           <p className="text-sm text-gray-400 mt-1">

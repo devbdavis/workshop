@@ -113,7 +113,7 @@ export function SessionLinkButtons({ pullRequests, issueKey, issueBaseUrl }: Pro
             <GitHubIcon className="w-3.5 h-3.5" />
           </button>
           {dropdownOpen && (
-            <div className="absolute right-0 top-full mt-1 bg-gray-800 border border-gray-700 rounded shadow-lg py-1 z-50 min-w-[200px]">
+            <div className="absolute right-0 top-full mt-1 bg-gray-800 border border-gray-700 rounded shadow-lg py-1 z-50 min-w-[200px] max-w-[calc(100vw-1rem)]">
               {pullRequests!.map((pr, i) => (
                 <a
                   key={i}

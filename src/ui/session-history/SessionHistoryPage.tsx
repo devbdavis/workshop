@@ -137,7 +137,7 @@ function ResumeAction({ item, tracks }: { item: SessionHistoryItem; tracks: Trac
         <select
           value={chosenTrackId}
           onChange={(e) => setChosenTrackId(e.target.value)}
-          className="px-1 py-1 text-[10px] bg-gray-900 border border-gray-700 rounded text-gray-200"
+          className="min-w-0 max-w-[40vw] px-1 py-1 text-[10px] bg-gray-900 border border-gray-700 rounded text-gray-200"
         >
           <option value="">Select track…</option>
           {tracks.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}

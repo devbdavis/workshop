@@ -121,7 +121,7 @@ export function McpServers() {
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-wrap items-center justify-between gap-2">
         <div>
           <h2 className="text-lg font-semibold">MCP Servers</h2>
           <p className="text-sm text-gray-400 mt-1">
@@ -150,7 +150,7 @@ export function McpServers() {
 
       {/* Tool availability badges */}
       {toolStatus && (
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2">
           {Object.entries(toolStatus).map(([tool, available]) => (
             <span
               key={tool}

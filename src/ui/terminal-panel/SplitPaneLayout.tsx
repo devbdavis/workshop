@@ -150,7 +150,7 @@ function LeafPane({ node, trackId, sessions, todos, onSplit, onClose, onCreateSe
   return (
     <div className="h-full w-full flex flex-col min-h-0 min-w-0">
       {/* Pane header */}
-      <div className="flex items-center justify-between px-2 py-0.5 bg-gray-900 border-b border-gray-800 shrink-0">
+      <div className="flex items-center justify-between max-md:flex-wrap px-2 py-0.5 bg-gray-900 border-b border-gray-800 shrink-0">
         {editing ? (
           <input
             ref={inputRef}
@@ -167,7 +167,7 @@ function LeafPane({ node, trackId, sessions, todos, onSplit, onClose, onCreateSe
           />
         ) : (
           <span
-            className="text-xs text-gray-400 font-mono truncate cursor-pointer hover:text-gray-200 flex items-center gap-1.5"
+            className="min-w-0 text-xs text-gray-400 font-mono truncate cursor-pointer hover:text-gray-200 flex items-center gap-1.5"
             onDoubleClick={startEditing}
             title="Double-click to rename"
           >

@@ -76,8 +76,8 @@ export function ScheduledTaskCard({
     >
       <div className="px-4 py-3">
         {/* Header row */}
-        <div className="flex items-start justify-between gap-3">
-          <div className="flex-1 min-w-0">
+        <div className="flex flex-col md:flex-row items-start justify-between gap-2 md:gap-3">
+          <div className="flex-1 min-w-0 w-full">
             <div className="flex items-center gap-2 flex-wrap">
               <button
                 onClick={onToggle}
@@ -100,7 +100,7 @@ export function ScheduledTaskCard({
               )}
             </div>
             {task.isOutOfSync && onSyncFromTemplate && (
-              <div className="flex items-center gap-2 mt-1">
+              <div className="flex flex-wrap items-center gap-2 mt-1">
                 <button
                   onClick={() => setShowDiff(true)}
                   className="text-[10px] text-amber-400 hover:text-amber-300 underline"
@@ -122,7 +122,7 @@ export function ScheduledTaskCard({
             )}
           </div>
 
-          <div className="flex items-center gap-1 shrink-0">
+          <div className="flex flex-wrap items-center gap-1 shrink-0">
             <button
               onClick={onTrigger}
               className="text-[10px] px-2 py-1 bg-blue-900/50 text-blue-300 rounded hover:bg-blue-800/50 transition-colors"

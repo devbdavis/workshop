@@ -59,7 +59,7 @@ export function PermissionSettings() {
       )}
 
       <h3 className="text-xs font-semibold text-gray-400 mb-1.5">Recent requests</h3>
-      <table className="w-full text-xs">
+      <div className="overflow-x-auto"><table className="w-full text-xs">
         <tbody>
           {requests.map((r) => (
             <tr key={r.id} className="border-t border-gray-800">
@@ -80,7 +80,7 @@ export function PermissionSettings() {
             </tr>
           ))}
         </tbody>
-      </table>
+      </table></div>
     </div>
   );
 }

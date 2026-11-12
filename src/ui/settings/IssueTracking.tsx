@@ -110,7 +110,7 @@ export function IssueTracking() {
           <select
             value={config.tracker}
             onChange={(e) => setConfig((prev) => ({ ...prev, tracker: e.target.value as IssueTracker }))}
-            className="bg-gray-800 border border-gray-700 rounded px-3 py-1.5 text-sm text-gray-200 focus:outline-none focus:border-blue-500 w-48"
+            className="bg-gray-800 border border-gray-700 rounded px-3 py-1.5 text-sm text-gray-200 focus:outline-none focus:border-blue-500 w-full md:w-48"
           >
             <option value="linear">Linear</option>
             <option value="jira">Jira</option>
@@ -140,7 +140,7 @@ export function IssueTracking() {
                   ? 'e.g. my-org'
                   : 'e.g. mycompany'
               }
-              className="bg-gray-800 border border-gray-700 rounded px-3 py-1.5 text-sm text-gray-200 focus:outline-none focus:border-blue-500 w-72"
+              className="bg-gray-800 border border-gray-700 rounded px-3 py-1.5 text-sm text-gray-200 focus:outline-none focus:border-blue-500 w-full md:w-72"
             />
             {config.tracker === 'github' && (
               <p className="text-[11px] text-gray-500 mt-2">
@@ -169,7 +169,7 @@ export function IssueTracking() {
                 value={config.githubRepo}
                 onChange={(e) => setConfig((prev) => ({ ...prev, githubRepo: e.target.value }))}
                 placeholder="e.g. owner/repo"
-                className="bg-gray-800 border border-gray-700 rounded px-3 py-1.5 text-sm text-gray-200 focus:outline-none focus:border-blue-500 w-72 font-mono"
+                className="bg-gray-800 border border-gray-700 rounded px-3 py-1.5 text-sm text-gray-200 focus:outline-none focus:border-blue-500 w-full md:w-72 font-mono"
               />
             </div>
             <div>
@@ -181,7 +181,7 @@ export function IssueTracking() {
                 value={config.githubLabels}
                 onChange={(e) => setConfig((prev) => ({ ...prev, githubLabels: e.target.value }))}
                 placeholder="e.g. enhancement, triage"
-                className="bg-gray-800 border border-gray-700 rounded px-3 py-1.5 text-sm text-gray-200 focus:outline-none focus:border-blue-500 w-72"
+                className="bg-gray-800 border border-gray-700 rounded px-3 py-1.5 text-sm text-gray-200 focus:outline-none focus:border-blue-500 w-full md:w-72"
               />
               <p className="text-[11px] text-gray-500 mt-2">
                 Prefilled when creating a GitHub issue from a todo; you confirm or change them each
@@ -209,7 +209,7 @@ export function IssueTracking() {
                   ? '•••••••••••••••••• (leave blank to keep existing)'
                   : 'lin_api_...'
               }
-              className="bg-gray-800 border border-gray-700 rounded px-3 py-1.5 text-sm text-gray-200 focus:outline-none focus:border-blue-500 w-96 font-mono"
+              className="bg-gray-800 border border-gray-700 rounded px-3 py-1.5 text-sm text-gray-200 focus:outline-none focus:border-blue-500 w-full md:w-96 font-mono"
             />
             <p className="text-[11px] text-gray-500 mt-2">
               {config.orgName.trim() ? (

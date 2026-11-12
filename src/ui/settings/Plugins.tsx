@@ -87,7 +87,7 @@ export function Plugins() {
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-wrap items-center justify-between gap-2">
         <div>
           <h2 className="text-lg font-semibold">Marketplace Plugins</h2>
           <p className="text-sm text-gray-400 mt-1">
@@ -96,7 +96,7 @@ export function Plugins() {
             Codex/Gemini artifacts at next sync.
           </p>
         </div>
-        <div className="flex gap-2 shrink-0 ml-4">
+        <div className="flex gap-2 shrink-0 md:ml-4">
           <button
             onClick={() => setShowAdd((v) => !v)}
             className="px-3 py-1.5 text-sm bg-gray-700 hover:bg-gray-600 rounded-lg transition-colors"
@@ -115,7 +115,7 @@ export function Plugins() {
 
       {showAdd && (
         <div className="bg-gray-800 border border-gray-700 rounded-lg p-3 space-y-2">
-          <div className="flex gap-2">
+          <div className="flex flex-col md:flex-row gap-2">
             <input
               value={newRepo}
               onChange={(e) => setNewRepo(e.target.value)}

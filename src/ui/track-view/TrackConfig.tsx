@@ -167,10 +167,10 @@ export function TrackConfig({ track, onUpdate }: Props) {
           <ul className="space-y-1">
             {track.repos.map((repo) => (
               <li key={repo.id} className="flex items-center justify-between text-sm group">
-                <span className="font-mono text-xs text-gray-400 truncate">{tildeify(repo.path)}</span>
+                <span className="min-w-0 font-mono text-xs text-gray-400 truncate">{tildeify(repo.path)}</span>
                 <button
                   onClick={() => removeRepo(repo.id)}
-                  className="text-xs text-gray-600 hover:text-red-400 opacity-0 group-hover:opacity-100"
+                  className="text-xs text-gray-600 hover:text-red-400 md:opacity-0 md:group-hover:opacity-100 shrink-0"
                 >
                   Remove
                 </button>
@@ -197,13 +197,13 @@ export function TrackConfig({ track, onUpdate }: Props) {
           <ul className="space-y-1">
             {track.paths.map((p) => (
               <li key={p.id} className="flex items-center justify-between text-sm group">
-                <span className="font-mono text-xs text-gray-400 truncate">
+                <span className="min-w-0 font-mono text-xs text-gray-400 truncate">
                   {p.label && <span className="text-gray-500 mr-1">{p.label}:</span>}
                   {p.path}
                 </span>
                 <button
                   onClick={() => removePath(p.id)}
-                  className="text-xs text-gray-600 hover:text-red-400 opacity-0 group-hover:opacity-100"
+                  className="text-xs text-gray-600 hover:text-red-400 md:opacity-0 md:group-hover:opacity-100 shrink-0"
                 >
                   Remove
                 </button>

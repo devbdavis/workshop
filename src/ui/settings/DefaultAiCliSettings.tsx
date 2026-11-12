@@ -62,7 +62,7 @@ export function DefaultAiCliSettings() {
       <select
         value={provider}
         onChange={(e) => handleChange(e.target.value as DefaultAiCli)}
-        className="bg-gray-800 border border-gray-700 rounded px-3 py-1.5 text-sm text-gray-200 focus:outline-none focus:border-blue-500 w-72"
+        className="bg-gray-800 border border-gray-700 rounded px-3 py-1.5 text-sm text-gray-200 focus:outline-none focus:border-blue-500 w-full md:w-72"
       >
         {options.map((o) => (
           <option key={o.value} value={o.value}>

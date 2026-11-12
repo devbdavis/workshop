@@ -150,12 +150,12 @@ export function TodoPanel({ track, todos, sessions, onUpdate }: Props) {
                     </span>
                     <button
                       onClick={() => setEditingTodo(todo)}
-                      className="text-gray-200 truncate text-left hover:text-blue-300 transition-colors"
+                      className="min-w-0 text-gray-200 truncate text-left hover:text-blue-300 transition-colors"
                     >
                       {todo.title}
                     </button>
                   </div>
-                  <div className="flex items-center gap-1.5 mt-1">
+                  <div className="flex items-center flex-wrap gap-1.5 mt-1">
                     <button
                       onClick={() => {
                         const statuses: TodoStatus[] = ['backlog', 'ready', 'in-progress', 'review', 'done'];
@@ -220,7 +220,7 @@ export function TodoPanel({ track, todos, sessions, onUpdate }: Props) {
                 ) : (
                   <button
                     onClick={() => setConfirmDeleteId(todo.id)}
-                    className="text-xs text-gray-600 hover:text-red-400 opacity-0 group-hover:opacity-100 shrink-0 ml-2"
+                    className="text-xs text-gray-600 hover:text-red-400 md:opacity-0 md:group-hover:opacity-100 shrink-0 ml-2"
                   >
                     x
                   </button>

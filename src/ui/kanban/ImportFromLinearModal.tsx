@@ -271,8 +271,8 @@ export function ImportFromLinearModal({ tracks, onClose, onImported }: Props) {
                 const state = rowStates[issue.externalId] ?? { trackId: defaultTrackId, busy: false };
                 return (
                   <li key={issue.externalId} className="p-4 hover:bg-gray-850/40">
-                    <div className="flex items-start gap-3">
-                      <div className="flex-1 min-w-0">
+                    <div className="flex flex-col md:flex-row items-start gap-3">
+                      <div className="flex-1 min-w-0 w-full">
                         <div className="flex items-center gap-2 flex-wrap mb-1">
                           <a
                             href={issue.url}
@@ -307,7 +307,7 @@ export function ImportFromLinearModal({ tracks, onClose, onImported }: Props) {
                         )}
                       </div>
 
-                      <div className="flex flex-col items-end gap-2 shrink-0 w-56">
+                      <div className="flex flex-col items-end gap-2 shrink-0 w-full md:w-56">
                         {tab === 'available' && (
                           <>
                             <select
