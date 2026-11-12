@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useRef, useState, useCallback } from 'react';
 import { NavLink, useMatch } from 'react-router-dom';
 import { useProfile } from './hooks/useProfile';
 import { useIsMobile } from './use-is-mobile';
@@ -17,6 +17,11 @@ function navLinkClass({ isActive }: { isActive: boolean }): string {
   }`;
 }
 
+function mobileLinkClass(s: { isActive: boolean }): string {
+  // `!` so these beat navLinkClass's py-1/text-xs regardless of stylesheet order
+  return `${navLinkClass(s)} py-3! text-sm!`;
+}
+
 export const navItems = [
   { to: '/kanban', label: 'Kanban', end: false },
 { to: '/scheduled-tasks', label: 'Schedules', end: false },
@@ -33,6 +38,7 @@ export function TopNav() {
   const isMobile = useIsMobile();
   const { unread } = useSessionAlerts();
   const [menuOpen, setMenuOpen] = useState(false);
+  const navRef = useRef<HTMLElement>(null);
   const [pendingCount, setPendingCount] = useState(0);
   const alertCount = pendingCount + unread.length;
   const [lastTrack, setLastTrack] = useState<LastTrack | null>(() => {
@@ -92,14 +98,31 @@ export function TopNav() {
     return () => ws.close();
   }, [loadCount]);
 
+  // Close the mobile menu on outside tap or Escape
+  useEffect(() => {
+    if (!menuOpen) return;
+    const onPointerDown = (e: PointerEvent): void => {
+      if (e.target instanceof Node && !navRef.current?.contains(e.target)) setMenuOpen(false);
+    };
+    const onKeyDown = (e: KeyboardEvent): void => {
+      if (e.key === 'Escape') setMenuOpen(false);
+    };
+    document.addEventListener("pointerdown", onPointerDown);
+    document.addEventListener("keydown", onKeyDown);
+    return () => {
+      document.removeEventListener("pointerdown", onPointerDown);
+      document.removeEventListener("keydown", onKeyDown);
+    };
+  }, [menuOpen]);
+
   return (
-    <nav className="relative flex items-center gap-1 px-4 py-1.5 bg-gray-950 border-b border-gray-800 shrink-0">
+    <nav ref={navRef} className="relative flex items-center gap-1 px-4 py-1.5 bg-gray-950 border-b border-gray-800 shrink-0">
       {/* Hamburger toggle — mobile only; desktop keeps the flat horizontal nav */}
       <button
         onClick={() => setMenuOpen((v) => !v)}
         aria-label="Toggle navigation menu"
         aria-expanded={menuOpen}
-        className="md:hidden px-2 py-1 mr-1 text-lg leading-none text-gray-400 hover:text-gray-200 rounded hover:bg-gray-900"
+        className="md:hidden min-w-11 min-h-11 px-2 py-1 mr-1 text-lg leading-none text-gray-400 hover:text-gray-200 rounded hover:bg-gray-900"
       >
         ☰
       </button>
@@ -181,21 +204,21 @@ export function TopNav() {
       {/* Mobile dropdown drawer — same links stacked vertically, closes on navigate */}
       {isMobile && menuOpen && (
         <div className="md:hidden absolute top-full left-0 right-0 z-50 flex flex-col gap-0.5 p-2 bg-gray-950 border-b border-gray-800 shadow-lg">
-          <NavLink to="/" end className={navLinkClass} onClick={() => setMenuOpen(false)}>
+          <NavLink to="/" end className={mobileLinkClass} onClick={() => setMenuOpen(false)}>
             Tracks
           </NavLink>
-          <NavLink to="/sessions" className={navLinkClass} onClick={() => setMenuOpen(false)}>
+          <NavLink to="/sessions" className={mobileLinkClass} onClick={() => setMenuOpen(false)}>
             Sessions
           </NavLink>
           {navItems.map(({ to, label, end }) => (
-            <NavLink key={to} to={to} end={end} className={navLinkClass} onClick={() => setMenuOpen(false)}>
+            <NavLink key={to} to={to} end={end} className={mobileLinkClass} onClick={() => setMenuOpen(false)}>
               {label}
             </NavLink>
           ))}
           {lastTrack && (
             <NavLink
               to={`/tracks/${lastTrack.id}`}
-              className={navLinkClass}
+              className={mobileLinkClass}
               onClick={() => setMenuOpen(false)}
             >
               {lastTrack.name}

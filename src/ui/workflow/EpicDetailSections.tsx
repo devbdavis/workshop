@@ -68,9 +68,9 @@ export function CollapsibleSection({ title, children, defaultOpen = false, badge
 
 export function DetailRow({ label, value }: { label: string; value: string }) {
   return (
-    <div className="flex justify-between">
-      <dt className="text-gray-500">{label}</dt>
-      <dd className="text-gray-300">{value}</dd>
+    <div className="flex justify-between gap-2">
+      <dt className="shrink-0 text-gray-500">{label}</dt>
+      <dd className="min-w-0 text-right text-gray-300">{value}</dd>
     </div>
   );
 }
@@ -146,7 +146,7 @@ export function NeedsInputSection({ data, answers, onChangeAnswer, onSubmit, tra
               </div>
             );
           })}
-          <div className="flex items-center gap-3 pt-1">
+          <div className="flex flex-wrap items-center gap-3 pt-1">
             <button
               onClick={onSubmit}
               disabled={answeredCount === 0}
@@ -187,7 +187,7 @@ export function NeedsInputSection({ data, answers, onChangeAnswer, onSubmit, tra
             className="w-full px-3 py-2 bg-gray-900 border border-gray-700 rounded text-sm text-gray-200 placeholder-gray-600 focus:border-blue-600 focus:outline-none"
             rows={4}
           />
-          <div className="flex items-center gap-3 pt-1">
+          <div className="flex flex-wrap items-center gap-3 pt-1">
             <button
               onClick={onSubmit}
               disabled={!hasFreeform}
@@ -226,7 +226,7 @@ export function FindingsSection({ data }: {
             }`}>
               {f.severity}
             </span>
-            <span className={`text-sm ${f.resolved ? 'text-gray-500 line-through' : 'text-gray-300'}`}>
+            <span className={`min-w-0 text-sm ${f.resolved ? 'text-gray-500 line-through' : 'text-gray-300'}`}>
               {f.text}
             </span>
           </li>
@@ -350,7 +350,7 @@ export function ProgressFeedSection({ entries }: { entries: AgentProgressEntry[]
         {sorted.map((e, idx) => (
           <li key={idx} className="flex items-start gap-2 text-xs">
             <span className="text-gray-600 shrink-0">{formatRelativeTime(e.timestamp)}</span>
-            <span className="text-gray-300">
+            <span className="text-gray-300 min-w-0">
               <span className="text-gray-500">{e.agentRole}:</span> {e.summary}
             </span>
           </li>

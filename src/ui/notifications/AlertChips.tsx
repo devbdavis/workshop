@@ -11,7 +11,7 @@ export function AlertChips({ chips, onOpen, onDismiss }: Props) {
   if (chips.length === 0) return null;
 
   return (
-    <div className="fixed bottom-4 right-4 flex flex-col gap-2 z-50 max-w-xs">
+    <div className="fixed bottom-[calc(1rem+env(safe-area-inset-bottom))] right-4 flex flex-col gap-2 z-50 max-w-xs">
       {chips.map((alert) => (
         <div
           key={alert.id}

@@ -168,7 +168,7 @@ export function TodoDetailModal({ todo, tracks, onClose, onSave, onDelete, onDis
   return (
     <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50" onClick={onClose}>
       <div
-        className="bg-gray-900 border border-gray-700 rounded-xl w-[80vw] h-[80vh] mx-4 overflow-hidden resize flex flex-col"
+        className="bg-gray-900 border border-gray-700 rounded-xl w-[calc(100vw-1rem)] h-[calc(var(--app-h,100dvh)-1rem)] md:w-[80vw] md:h-[80vh] overflow-hidden resize flex flex-col"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-center justify-between px-5 py-3 border-b border-gray-800 shrink-0">
@@ -201,7 +201,7 @@ export function TodoDetailModal({ todo, tracks, onClose, onSave, onDelete, onDis
           </div>
 
           <div className="flex gap-4">
-            <div className="flex-1">
+            <div className="flex-1 min-w-0">
               <label className="text-xs text-gray-400 block mb-1">Status</label>
               <select
                 value={status}
@@ -213,7 +213,7 @@ export function TodoDetailModal({ todo, tracks, onClose, onSave, onDelete, onDis
                 ))}
               </select>
             </div>
-            <div className="flex-1">
+            <div className="flex-1 min-w-0">
               <label className="text-xs text-gray-400 block mb-1">Priority</label>
               <select
                 value={priority}
@@ -274,7 +274,7 @@ export function TodoDetailModal({ todo, tracks, onClose, onSave, onDelete, onDis
                         href={pr.url}
                         target="_blank"
                         rel="noopener noreferrer"
-                        className="flex-1 truncate text-xs text-blue-400 hover:text-blue-300 hover:underline font-mono"
+                        className="flex-1 min-w-0 truncate text-xs text-blue-400 hover:text-blue-300 hover:underline font-mono"
                         title={pr.url}
                       >
                         {pr.title || pr.url}
@@ -284,21 +284,21 @@ export function TodoDetailModal({ todo, tracks, onClose, onSave, onDelete, onDis
                           title, description: description || undefined, status, priority,
                           pullRequests: pullRequests.length > 0 ? pullRequests : undefined,
                         })}
-                        className="opacity-0 group-hover:opacity-100 text-emerald-500 hover:text-emerald-300 text-xs px-1 transition-opacity"
+                        className="md:opacity-0 md:group-hover:opacity-100 text-emerald-500 hover:text-emerald-300 text-xs px-1 transition-opacity"
                         title="Dispatch a PR review session (pr-review agent)"
                       >
                         Review
                       </button>
                       <button
                         onClick={() => startEditPr(i)}
-                        className="opacity-0 group-hover:opacity-100 text-gray-500 hover:text-gray-300 text-xs px-1 transition-opacity"
+                        className="md:opacity-0 md:group-hover:opacity-100 text-gray-500 hover:text-gray-300 text-xs px-1 transition-opacity"
                         title="Edit"
                       >
                         ✎
                       </button>
                       <button
                         onClick={() => removePr(i)}
-                        className="opacity-0 group-hover:opacity-100 text-gray-500 hover:text-red-400 text-xs px-1 transition-opacity"
+                        className="md:opacity-0 md:group-hover:opacity-100 text-gray-500 hover:text-red-400 text-xs px-1 transition-opacity"
                         title="Remove"
                       >
                         ×
@@ -372,7 +372,7 @@ export function TodoDetailModal({ todo, tracks, onClose, onSave, onDelete, onDis
           )}
         </div>
 
-        <div className="flex items-center justify-between px-5 py-3 border-t border-gray-800 shrink-0">
+        <div className="flex flex-wrap items-center justify-between gap-2 px-5 py-3 border-t border-gray-800 shrink-0">
           {confirmDelete ? (
             <div className="flex items-center gap-2">
               <span className="text-xs text-red-400">Delete?</span>
@@ -398,7 +398,7 @@ export function TodoDetailModal({ todo, tracks, onClose, onSave, onDelete, onDis
               Delete
             </button>
           )}
-          <div className="flex gap-2">
+          <div className="flex flex-wrap gap-2">
             {canDispatch && (
               <div className="relative">
                 <button

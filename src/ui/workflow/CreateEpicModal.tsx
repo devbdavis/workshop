@@ -114,10 +114,10 @@ export function CreateEpicModal({ tracks, onSave, onClose }: Props) {
   const isFromTemplate = mode === 'from-template';
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-2 md:p-0">
       <form
         onSubmit={handleSubmit}
-        className="bg-gray-900 border border-gray-700 rounded-lg p-6 w-full max-w-lg shadow-xl max-h-[90vh] flex flex-col"
+        className="bg-gray-900 border border-gray-700 rounded-lg p-4 md:p-6 w-full max-w-lg shadow-xl max-h-[90vh] flex flex-col"
       >
         <h2 className="text-sm font-semibold text-gray-200 mb-3">New Epic</h2>
 
@@ -314,7 +314,7 @@ export function CreateEpicModal({ tracks, onSave, onClose }: Props) {
             </>
           )}
 
-          <div className="grid grid-cols-3 gap-3">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
             <div>
               <label className="block text-xs text-gray-400 mb-1">Track</label>
               <select

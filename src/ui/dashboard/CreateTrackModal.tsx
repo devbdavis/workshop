@@ -35,7 +35,7 @@ export function CreateTrackModal({ onClose, onCreated }: Props) {
     <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50">
       <form
         onSubmit={handleSubmit}
-        className="bg-gray-900 border border-gray-700 rounded-xl p-6 w-[80vw] h-[80vh] resize overflow-hidden flex flex-col"
+        className="bg-gray-900 border border-gray-700 rounded-xl p-6 w-[calc(100vw-1rem)] h-[calc(var(--app-h,100dvh)-1rem)] md:w-[80vw] md:h-[80vh] resize overflow-hidden flex flex-col"
       >
         <h2 className="text-lg font-semibold mb-4 shrink-0">New Project Track</h2>
 

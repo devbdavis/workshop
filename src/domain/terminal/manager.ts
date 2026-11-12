@@ -4,6 +4,7 @@
  * Infrastructure provides the concrete implementation (tmux + node-pty).
  */
 import type { Session, SessionId, SessionProvider, TrackId, TrackRepo } from '@foundation/types';
+import type { TuiPrompt } from '@foundation/tui-prompt-types';
 
 export interface CreateSessionOptions {
   systemPrompt?: string;
@@ -86,6 +87,10 @@ export interface TerminalManager {
   /** Inject text into a live session's tmux pane and submit it (Enter).
    *  Resolves false if the session is unknown or not running. */
   sendInput(sessionId: SessionId, text: string): Promise<boolean>;
+  /** Send tmux key names (callers must whitelist). Resolves false if unknown or not running. */
+  sendKeys(sessionId: SessionId, keys: string[]): Promise<boolean>;
+  /** The dialog currently on screen; undefined if the session is unknown or not running. */
+  capturePrompt(sessionId: SessionId): TuiPrompt | null | undefined;
   syncSessionStates(): SyncResult;
   /** Resume all sessions marked 'suspended' that have a Claude resume ID. */
   resumeSuspendedSessions(): Promise<Session[]>;

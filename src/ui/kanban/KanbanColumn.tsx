@@ -18,7 +18,7 @@ export function KanbanColumn({ status, label, color, todos, trackNames, onCardCl
   return (
     <div
       ref={setNodeRef}
-      className={`flex flex-col w-72 shrink-0 rounded-xl bg-gray-900/50 ${isOver ? 'ring-2 ring-blue-500/40' : ''}`}
+      className={`flex flex-col w-[85vw] md:w-72 snap-start shrink-0 rounded-xl bg-gray-900/50 ${isOver ? 'ring-2 ring-blue-500/40' : ''}`}
     >
       <div className="flex items-center gap-2 px-3 py-2.5 border-b border-gray-800">
         <span className={`w-2 h-2 rounded-full ${color}`} />

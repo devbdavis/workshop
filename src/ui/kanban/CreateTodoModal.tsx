@@ -44,7 +44,7 @@ export function CreateTodoModal({ tracks, defaultTrackId, onClose, onCreate }: P
   return (
     <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50" onClick={onClose}>
       <div
-        className="bg-gray-900 border border-gray-700 rounded-xl w-[520px] mx-4 overflow-hidden flex flex-col"
+        className="bg-gray-900 border border-gray-700 rounded-xl w-[520px] max-w-[calc(100vw-2rem)] mx-4 overflow-hidden flex flex-col"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-center justify-between px-5 py-3 border-b border-gray-800">
@@ -88,7 +88,7 @@ export function CreateTodoModal({ tracks, defaultTrackId, onClose, onCreate }: P
           </div>
 
           <div className="flex gap-4">
-            <div className="flex-1">
+            <div className="flex-1 min-w-0">
               <label className="text-xs text-gray-400 block mb-1">Status</label>
               <select
                 value={status}
@@ -100,7 +100,7 @@ export function CreateTodoModal({ tracks, defaultTrackId, onClose, onCreate }: P
                 ))}
               </select>
             </div>
-            <div className="flex-1">
+            <div className="flex-1 min-w-0">
               <label className="text-xs text-gray-400 block mb-1">Priority</label>
               <select
                 value={priority}

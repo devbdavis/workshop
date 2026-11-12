@@ -91,7 +91,7 @@ export function ImproveSkillModal({ skill, onApply, onClose }: Props) {
               className="w-full px-3 py-2 bg-gray-800 border border-gray-700 rounded text-sm text-gray-100 placeholder-gray-500 focus:outline-none focus:border-blue-500 resize-y"
               autoFocus
             />
-            <div className="flex items-center justify-between mt-2">
+            <div className="flex flex-wrap items-center gap-2 justify-between mt-2">
               <span className="text-[10px] text-gray-500">⌘↵ to generate</span>
               <button
                 type="button"
@@ -137,7 +137,7 @@ export function ImproveSkillModal({ skill, onApply, onClose }: Props) {
         </div>
 
         {/* Footer */}
-        <div className="flex items-center justify-end gap-2 px-5 py-3 border-t border-gray-800 shrink-0">
+        <div className="flex flex-wrap items-center justify-end gap-2 px-5 py-3 border-t border-gray-800 shrink-0">
           <button type="button" onClick={onClose} className="px-4 py-2 text-sm bg-gray-700 hover:bg-gray-600 rounded-lg transition-colors">
             Cancel
           </button>

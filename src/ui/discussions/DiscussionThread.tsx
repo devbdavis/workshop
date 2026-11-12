@@ -121,7 +121,7 @@ export function DiscussionThread({ state, onPostMessage, onCastVote, onClose, on
     <div className="flex flex-col h-full bg-gray-950">
       {/* Header */}
       <div className="shrink-0 px-4 py-3 border-b border-gray-800 bg-gray-950">
-        <div className="flex items-center gap-2 mb-2">
+        <div className="flex flex-wrap items-center gap-2 mb-2">
           <h2 className="text-sm font-semibold text-gray-100 flex-1 truncate">{discussion.title}</h2>
           <span className={`text-[10px] px-1.5 py-0.5 rounded ${TYPE_STYLES[discussion.type] ?? 'bg-gray-700 text-gray-400'}`}>
             {discussion.type}
@@ -133,7 +133,7 @@ export function DiscussionThread({ state, onPostMessage, onCastVote, onClose, on
         </div>
 
         {/* Vote tally */}
-        <div className="flex items-center gap-2 text-xs text-gray-400">
+        <div className="flex flex-wrap items-center gap-2 text-xs text-gray-400">
           <span>{satisfiedCount}/{participantCount} satisfied</span>
           <span className="text-gray-600">|</span>
           <span>{votedCount} voted</span>
@@ -174,7 +174,7 @@ export function DiscussionThread({ state, onPostMessage, onCastVote, onClose, on
             key={msg.id}
             className={`bg-gray-900/50 border-l-2 ${MSG_BORDER[msg.messageType]} rounded-r px-3 py-2`}
           >
-            <div className="flex items-center gap-2 mb-1">
+            <div className="flex flex-wrap items-center gap-2 mb-1">
               <span className="text-xs font-medium text-gray-200">
                 {msg.authorName ?? msg.authorId ?? 'Unknown'}
               </span>
@@ -199,7 +199,7 @@ export function DiscussionThread({ state, onPostMessage, onCastVote, onClose, on
       {/* Input area or status banner */}
       {isOpen ? (
         <div className="shrink-0 px-4 py-3 border-t border-gray-800 bg-gray-950 space-y-2">
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             <select
               value={msgType}
               onChange={(e) => setMsgType(e.target.value as DiscussionMessageType)}
@@ -214,7 +214,7 @@ export function DiscussionThread({ state, onPostMessage, onCastVote, onClose, on
               onChange={(e) => setContent(e.target.value)}
               placeholder="Write a message..."
               rows={2}
-              className="flex-1 px-3 py-1.5 bg-gray-800 border border-gray-700 rounded text-sm text-gray-200 placeholder-gray-600 resize-none"
+              className="flex-1 min-w-[10rem] px-3 py-1.5 bg-gray-800 border border-gray-700 rounded text-sm text-gray-200 placeholder-gray-600 resize-none"
               onKeyDown={(e) => {
                 if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) handlePost();
               }}
@@ -227,7 +227,7 @@ export function DiscussionThread({ state, onPostMessage, onCastVote, onClose, on
               Post
             </button>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             <span className="text-[10px] text-gray-500 mr-1">Vote:</span>
             <button
               onClick={() => handleVote('satisfied')}
@@ -251,7 +251,7 @@ export function DiscussionThread({ state, onPostMessage, onCastVote, onClose, on
         </div>
       ) : banner ? (
         <div className={`shrink-0 px-4 py-3 border-t ${banner.style}`}>
-          <div className="flex items-center justify-center gap-3">
+          <div className="flex flex-wrap items-center justify-center gap-3">
             <span className="text-sm font-medium">{banner.text}</span>
             {discussion.actSessionId ? (
               <span className="inline-flex items-center gap-1.5 px-3 py-1 text-xs bg-emerald-900/50 text-emerald-300 border border-emerald-800 rounded">

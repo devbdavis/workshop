@@ -117,7 +117,7 @@ export function OfficeDeskUnit({ session, activityState, trackName, spriteUrl, o
         <div
           className="absolute z-50 left-1/2 -translate-x-1/2 top-full mt-2
                      bg-gray-800 border border-gray-700 rounded-lg px-3 py-2
-                     text-[11px] text-gray-300 whitespace-nowrap shadow-lg"
+                     text-[11px] text-gray-300 whitespace-nowrap shadow-lg max-md:hidden"
         >
           <div className="font-medium text-gray-100 mb-1">{displayName}</div>
           <div>Track: {trackName}</div>

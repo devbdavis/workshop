@@ -68,7 +68,7 @@ export function NotificationsPage() {
 
   return (
     <div className="h-full flex flex-col">
-      <header className="flex items-center gap-4 px-6 py-2 border-b border-gray-800 shrink-0">
+      <header className="flex items-center gap-4 px-3 md:px-6 py-2 border-b border-gray-800 shrink-0">
         <h1 className="text-lg font-semibold">Notifications</h1>
         {workflowItems.length > 0 && (
           <span className="px-2 py-0.5 text-xs font-medium bg-amber-900/60 text-amber-300 rounded-full">
@@ -77,7 +77,7 @@ export function NotificationsPage() {
         )}
       </header>
 
-      <div className="flex-1 overflow-y-auto p-6">
+      <div className="flex-1 overflow-y-auto p-3 md:p-6">
         {workflowItems.length === 0 && unread.length === 0 ? (
           <EmptyState />
         ) : (
@@ -87,7 +87,7 @@ export function NotificationsPage() {
             {/* Workflow items needing human action */}
             {workflowItems.length > 0 && (
             <div className="border border-gray-800 rounded-lg overflow-hidden">
-              <div className="flex items-center gap-2 px-4 py-2 bg-gray-900/60 border-b border-gray-800">
+              <div className="flex flex-wrap items-center gap-2 px-4 py-2 bg-gray-900/60 border-b border-gray-800">
                 <span className="w-2 h-2 rounded-full bg-amber-400 animate-pulse" />
                 <span className="text-sm font-medium text-gray-200">Workflow — Action Required</span>
                 <span className="text-xs text-gray-500">{workflowItems.length} item{workflowItems.length !== 1 ? 's' : ''}</span>
@@ -139,7 +139,7 @@ interface SessionAlertsSectionProps {
 function SessionAlertsSection({ alerts, onOpen, onClearAll }: SessionAlertsSectionProps) {
   return (
     <div className="border border-gray-800 rounded-lg overflow-hidden">
-      <div className="flex items-center gap-2 px-4 py-2 bg-gray-900/60 border-b border-gray-800">
+      <div className="flex flex-wrap items-center gap-2 px-4 py-2 bg-gray-900/60 border-b border-gray-800">
         <span className="w-2 h-2 rounded-full bg-red-400 animate-pulse" />
         <span className="text-sm font-medium text-gray-200">Sessions — waiting on you</span>
         <span className="text-xs text-gray-500">{alerts.length} item{alerts.length !== 1 ? 's' : ''}</span>

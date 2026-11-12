@@ -313,7 +313,7 @@ export function TrackView() {
 
   return (
     <div className="h-full flex flex-col">
-      <header className="flex items-center gap-4 px-6 py-2 border-b border-gray-800 shrink-0">
+      <header className="flex items-center flex-wrap md:flex-nowrap gap-2 md:gap-4 px-3 md:px-6 py-2 border-b border-gray-800 shrink-0">
         {editingName ? (
           <input
             autoFocus
@@ -321,11 +321,11 @@ export function TrackView() {
             onChange={(e) => setNameValue(e.target.value)}
             onBlur={saveTrackName}
             onKeyDown={(e) => { if (e.key === 'Enter') saveTrackName(); if (e.key === 'Escape') setEditingName(false); }}
-            className="text-lg font-semibold bg-gray-800 border border-gray-600 rounded px-2 py-0.5 outline-none focus:border-blue-500"
+            className="min-w-0 max-w-full text-lg font-semibold bg-gray-800 border border-gray-600 rounded px-2 py-0.5 outline-none focus:border-blue-500"
           />
         ) : (
           <h1
-            className="text-lg font-semibold cursor-pointer hover:text-blue-300 transition-colors"
+            className="text-lg font-semibold truncate min-w-0 cursor-pointer hover:text-blue-300 transition-colors"
             title="Click to rename"
             onClick={() => { setNameValue(track.name); setEditingName(true); }}
           >

@@ -121,7 +121,7 @@ export function PrDiffModal({ todoId, pullRequests, onClose }: Props) {
   return (
     <div className="fixed inset-0 bg-black/70 z-50 flex items-center justify-center p-2 md:p-6" onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}>
       <div className="bg-gray-900 border border-gray-700 rounded-lg w-full h-full max-w-6xl flex flex-col overflow-hidden">
-        <div className="flex items-center justify-between px-4 py-2 border-b border-gray-800 shrink-0 gap-3">
+        <div className="flex max-md:flex-wrap items-center justify-between px-4 py-2 border-b border-gray-800 shrink-0 gap-3">
           <div className="flex items-center gap-3 min-w-0">
             <span className="text-sm text-gray-200">PR Diff</span>
             {pullRequests.length > 1 && (
@@ -137,11 +137,11 @@ export function PrDiffModal({ todoId, pullRequests, onClose }: Props) {
           : diff === null ? <p className="p-4 text-sm text-gray-500">Loading diff…</p>
           : !files.length ? <p className="p-4 text-sm text-gray-500">This pull request has no changes.</p>
           : (
-            <div className="flex flex-1 min-h-0">
-              <div className="w-72 shrink-0 overflow-y-auto border-r border-gray-800 text-xs font-mono py-1">
+            <div className="flex flex-col md:flex-row flex-1 min-h-0">
+              <div className="w-full md:w-72 shrink-0 overflow-y-auto max-h-48 md:max-h-none border-b md:border-b-0 md:border-r border-gray-800 text-xs font-mono py-1">
                 <DiffTree node={tree} prefix="" depth={0} collapsed={collapsed} onToggle={toggleDir} selected={file?.path} onSelect={setSelected} />
               </div>
-              <pre className="flex-1 overflow-auto text-xs font-mono py-2">
+              <pre className="flex-1 min-w-0 min-h-0 overflow-auto text-xs font-mono py-2">
                 {file?.lines.map((line, i) => <div key={i} className={`px-3 whitespace-pre ${diffLineClassName(line)}`}>{line || ' '}</div>)}
               </pre>
             </div>

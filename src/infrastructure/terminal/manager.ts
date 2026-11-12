@@ -23,6 +23,8 @@ import {
 
 // Re-export domain interfaces so existing consumers are not broken
 export type { TerminalManager, CreateSessionOptions, SyncResult } from '@domain/terminal/manager.js';
+import { parseTuiPrompt } from './tui-prompt.js';
+import type { TuiPrompt } from '@foundation/tui-prompt-types';
 import type { TerminalManager, CreateSessionOptions, SyncResult } from '@domain/terminal/manager.js';
 
 /** Directory for per-session data (prompt files, hook config, etc.) */
@@ -976,6 +978,23 @@ export function createTerminalManager(
       } catch {
         return false;
       }
+    },
+
+    async sendKeys(sessionId: SessionId, keys: string[]): Promise<boolean> {
+      const session = sessionRepo.findById(sessionId);
+      if (!session || !this.isSessionAlive(session)) return false;
+      try {
+        execFileSync('tmux', ['send-keys', '-t', session.tmuxSession, ...keys], { stdio: 'pipe' });
+        return true;
+      } catch {
+        return false;
+      }
+    },
+
+    capturePrompt(sessionId: SessionId): TuiPrompt | null | undefined {
+      const session = sessionRepo.findById(sessionId);
+      if (!session || !this.isSessionAlive(session)) return undefined;
+      return parseTuiPrompt(capturePaneLines(session.tmuxSession, 40));
     },
 
     getLastActivityAt(sessionId: SessionId): string | undefined {

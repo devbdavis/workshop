@@ -52,13 +52,13 @@ export function PrReviewSettings() {
       <p className="text-xs text-gray-500 mb-4">
         Which CLI and model run the analysis when you click Analyze on the PR Reviews dashboard.
       </p>
-      <div className="flex items-end gap-3">
+      <div className="flex flex-col md:flex-row md:items-end gap-3">
         <div>
           <label className="block text-xs text-gray-400 mb-1.5">CLI</label>
           <select
             value={data.provider}
             onChange={(e) => save({ provider: e.target.value })}
-            className="bg-gray-800 border border-gray-700 rounded px-3 py-1.5 text-sm text-gray-200 focus:outline-none focus:border-blue-500 w-52"
+            className="bg-gray-800 border border-gray-700 rounded px-3 py-1.5 text-sm text-gray-200 focus:outline-none focus:border-blue-500 w-full md:w-52"
           >
             <option value="">Use default CLI</option>
             {enabledAgents.map((c) => (
@@ -75,7 +75,7 @@ export function PrReviewSettings() {
             onChange={(e) => setData((d) => ({ ...d, model: e.target.value }))}
             onBlur={(e) => save({ model: e.target.value })}
             placeholder="opus"
-            className="bg-gray-800 border border-gray-700 rounded px-3 py-1.5 text-sm text-gray-200 placeholder-gray-600 focus:outline-none focus:border-blue-500 w-52"
+            className="bg-gray-800 border border-gray-700 rounded px-3 py-1.5 text-sm text-gray-200 placeholder-gray-600 focus:outline-none focus:border-blue-500 w-full md:w-52"
           />
         </div>
         {saved && <span className="text-xs text-emerald-400 pb-2">Saved</span>}
@@ -90,7 +90,7 @@ export function PrReviewSettings() {
           onChange={(e) => setData((d) => ({ ...d, team: e.target.value }))}
           onBlur={(e) => save({ team: e.target.value })}
           placeholder="grafana/syseng"
-          className="bg-gray-800 border border-gray-700 rounded px-3 py-1.5 text-sm text-gray-200 placeholder-gray-600 focus:outline-none focus:border-blue-500 w-52"
+          className="bg-gray-800 border border-gray-700 rounded px-3 py-1.5 text-sm text-gray-200 placeholder-gray-600 focus:outline-none focus:border-blue-500 w-full md:w-52"
         />
         <p className="text-[11px] text-gray-600 mt-2">
           PRs requesting this team show up on the dashboard while no teammate has reviewed or commented. Needs the

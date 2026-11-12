@@ -107,7 +107,7 @@ export function NewDiscussionModal({ teams, tracks, onSubmit, onClose }: Props) 
             {/* Type */}
             <div>
               <label className="block text-xs text-gray-400 mb-1">Type</label>
-              <div className="flex gap-1">
+              <div className="flex flex-wrap gap-1">
                 {DISCUSSION_TYPES.map((dt) => (
                   <button
                     key={dt.value}

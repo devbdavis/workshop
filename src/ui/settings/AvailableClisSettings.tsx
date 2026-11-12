@@ -89,7 +89,7 @@ export function AvailableClisSettings() {
                   onChange={(e) => toggleAgent(cli, e.target.checked)}
                   className="h-4 w-4 rounded border-gray-700 bg-gray-800"
                 />
-                <label htmlFor={`cli-${cli.id}`} className="text-xs text-gray-300 w-40">
+                <label htmlFor={`cli-${cli.id}`} className="text-xs text-gray-300 w-24 md:w-40">
                   {cli.label}
                 </label>
                 <InstalledBadge installed={cli.installed} />
@@ -117,7 +117,7 @@ export function AvailableClisSettings() {
           <ul className="space-y-2">
             {tools.map((cli) => (
               <li key={cli.id} className="flex items-center gap-3">
-                <span className="text-xs text-gray-300 w-40">{cli.label}</span>
+                <span className="text-xs text-gray-300 w-24 md:w-40">{cli.label}</span>
                 <InstalledBadge installed={cli.installed} />
                 <button
                   onClick={() => authenticate(cli)}

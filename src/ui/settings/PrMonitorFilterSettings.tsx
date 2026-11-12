@@ -53,7 +53,7 @@ export function PrMonitorFilterSettings() {
         onBlur={handleSave}
         rows={6}
         placeholder="trunk-io"
-        className="bg-gray-800 border border-gray-700 rounded px-3 py-1.5 text-sm text-gray-200 focus:outline-none focus:border-blue-500 w-72 font-mono"
+        className="bg-gray-800 border border-gray-700 rounded px-3 py-1.5 text-sm text-gray-200 focus:outline-none focus:border-blue-500 w-full md:w-72 font-mono"
       />
       {saved && <span className="ml-2 text-xs text-green-400">Saved</span>}
     </div>

@@ -617,10 +617,10 @@ export function TerminalPanel({ trackId = '', sessionId = '', wsPath, autoFocus,
     <div
       ref={containerRef}
       className={`h-full w-full relative${isMobile ? ' overflow-x-auto' : ''}`}
-      // paddingBottom reserves space for the fixed MobileKeyBar (~44px) so
+      // paddingBottom reserves space for the absolutely-positioned MobileKeyBar (44px keys + 8px padding) so
       // FitAddon measures a shorter area and the last terminal row stays
       // visible above the bar instead of hidden behind it.
-      style={isMobile ? { touchAction: 'pan-x pan-y', paddingBottom: '2.75rem' } : undefined}
+      style={isMobile ? { touchAction: 'pan-x pan-y', paddingBottom: '3.25rem' } : undefined}
       onClick={() => termRef.current?.focus()}
     >
       {searchVisible && (

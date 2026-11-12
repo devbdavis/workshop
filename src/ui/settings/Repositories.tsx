@@ -155,7 +155,7 @@ export function Repositories() {
             <input
               value={rootDraft}
               onChange={(e) => setRootDraft(e.target.value)}
-              className="flex-1 px-2 py-1 bg-gray-800 border border-gray-700 rounded text-xs font-mono"
+              className="flex-1 min-w-0 px-2 py-1 bg-gray-800 border border-gray-700 rounded text-xs font-mono"
               autoFocus
             />
             <button onClick={saveRepoRoot} className="text-xs text-blue-400 hover:text-blue-300">
@@ -270,7 +270,7 @@ export function Repositories() {
               </div>
               <button
                 onClick={() => deleteRepo(repo.id)}
-                className="text-xs text-gray-600 hover:text-red-400 opacity-0 group-hover:opacity-100 shrink-0 ml-2"
+                className="text-xs text-gray-600 hover:text-red-400 md:opacity-0 md:group-hover:opacity-100 shrink-0 ml-2"
               >
                 Remove
               </button>

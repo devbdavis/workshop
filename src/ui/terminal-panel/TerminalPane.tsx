@@ -8,6 +8,8 @@ import { useEditorLaunch } from '@ui/hooks/useEditorLaunch';
 import { WorkspaceButtons } from '@ui/workspace/WorkspaceButtons';
 import { InAppShellButton } from './InAppShellButton';
 import { TranscriptView } from '@ui/session-history/TranscriptView';
+import { TranscriptComposer } from './TranscriptComposer';
+import { SessionPromptCard } from './SessionPromptCard';
 import { useIsMobile } from '../use-is-mobile';
 
 interface PaneProps {
@@ -29,7 +31,9 @@ export function TerminalPane({ trackId, session, todos, onDestroy, onRename, def
   const launchApps = useLaunchApps();
   const editor = useEditorLaunch();
   const isMobile = useIsMobile();
-  const [showTranscript, setShowTranscript] = useState(false);
+  const [showTranscript, setShowTranscript] = useState(true);
+  const [transcriptRefresh, setTranscriptRefresh] = useState(0);
+  const [typingAnswer, setTypingAnswer] = useState(false);
   // Mobile-only: the terminal is pinned to 120 cols (shared tmux window), so a reflowing transcript reads far better on a phone.
   const transcriptId = isMobile ? session.claudeResumeId : undefined;
   const transcriptOpen = showTranscript && !!transcriptId;
@@ -53,7 +57,7 @@ export function TerminalPane({ trackId, session, todos, onDestroy, onRename, def
 
   return (
     <div className="h-full flex flex-col min-h-0">
-      <div className="flex items-center justify-between px-2 py-0.5 bg-gray-900 border-b border-gray-800 shrink-0">
+      <div className="flex max-md:flex-wrap items-center justify-between gap-x-2 px-2 py-0.5 bg-gray-900 border-b border-gray-800 shrink-0">
         {editing ? (
           <input
             ref={inputRef}
@@ -69,7 +73,7 @@ export function TerminalPane({ trackId, session, todos, onDestroy, onRename, def
           />
         ) : (
           <span
-            className="text-xs text-gray-400 font-mono truncate cursor-pointer hover:text-gray-200 flex items-center gap-1.5"
+            className="text-xs text-gray-400 font-mono min-w-0 truncate cursor-pointer hover:text-gray-200 flex items-center gap-1.5"
             onDoubleClick={startEditing}
             title="Double-click to rename"
           >
@@ -77,7 +81,7 @@ export function TerminalPane({ trackId, session, todos, onDestroy, onRename, def
             {displayName}
           </span>
         )}
-        <div className="flex items-center gap-1">
+        <div className="flex max-md:flex-wrap items-center gap-1">
           {transcriptId && (
             <button
               onClick={() => setShowTranscript((v) => !v)}
@@ -132,14 +136,35 @@ export function TerminalPane({ trackId, session, todos, onDestroy, onRename, def
           </button>
         </div>
       </div>
+      {transcriptOpen && <StatusLine status={session.activityStatus} />}
       <div className="flex-1 min-h-0">
         {/* Unmount (not hide) xterm so a hidden phone client never sends resizes to the shared tmux window. */}
         {transcriptOpen && transcriptId ? (
-          <TranscriptView sessionId={transcriptId} live />
+          <TranscriptView sessionId={transcriptId} live refreshKey={transcriptRefresh} />
         ) : (
           <TerminalPanel trackId={trackId} sessionId={session.id} autoFocus={autoFocus} focusTrigger={focusTrigger} />
         )}
       </div>
+      {transcriptOpen && <SessionPromptCard sessionId={session.id} onTypeAnswer={() => setTypingAnswer(true)} />}
+      {transcriptOpen && (
+        <TranscriptComposer
+          sessionId={session.id}
+          placeholder={typingAnswer ? 'Type your answer…' : undefined}
+          onSent={() => { setTypingAnswer(false); setTranscriptRefresh((n) => n + 1); }}
+        />
+      )}
+    </div>
+  );
+}
+
+function StatusLine({ status }: { status: Session['activityStatus'] }) {
+  if (!status) return null;
+  const [label, color] = status === 'working' ? ['Working…', 'text-green-400 animate-pulse']
+    : status === 'needs-input' ? ['Needs your input', 'text-amber-400'] : ['Idle', 'text-gray-500'];
+  return (
+    <div className={`px-2 py-0.5 text-[11px] shrink-0 bg-gray-900 border-b border-gray-800 flex items-center gap-1.5 ${color}`}>
+      <ActivityDot activityStatus={status} />
+      {label}
     </div>
   );
 }

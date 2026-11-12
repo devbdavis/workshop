@@ -198,7 +198,7 @@ export function ImportFromLinearModal({ tracks, onClose, onImported }: Props) {
     return (
       <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50" onClick={onClose}>
         <div
-          className="bg-gray-900 border border-gray-700 rounded-xl w-[420px] mx-4 overflow-hidden flex flex-col"
+          className="bg-gray-900 border border-gray-700 rounded-xl w-[420px] max-w-[calc(100vw-2rem)] mx-4 overflow-hidden flex flex-col"
           onClick={(e) => e.stopPropagation()}
         >
           <div className="flex items-center justify-between px-5 py-3 border-b border-gray-800 shrink-0">
@@ -216,7 +216,7 @@ export function ImportFromLinearModal({ tracks, onClose, onImported }: Props) {
   return (
     <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50" onClick={onClose}>
       <div
-        className="bg-gray-900 border border-gray-700 rounded-xl w-[80vw] h-[80vh] mx-4 overflow-hidden flex flex-col"
+        className="bg-gray-900 border border-gray-700 rounded-xl w-[calc(100vw-1rem)] h-[calc(var(--app-h,100dvh)-1rem)] md:w-[80vw] md:h-[80vh] overflow-hidden flex flex-col"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-center justify-between px-5 py-3 border-b border-gray-800 shrink-0">
@@ -271,8 +271,8 @@ export function ImportFromLinearModal({ tracks, onClose, onImported }: Props) {
                 const state = rowStates[issue.externalId] ?? { trackId: defaultTrackId, busy: false };
                 return (
                   <li key={issue.externalId} className="p-4 hover:bg-gray-850/40">
-                    <div className="flex items-start gap-3">
-                      <div className="flex-1 min-w-0">
+                    <div className="flex flex-col md:flex-row items-start gap-3">
+                      <div className="flex-1 min-w-0 w-full">
                         <div className="flex items-center gap-2 flex-wrap mb-1">
                           <a
                             href={issue.url}
@@ -307,7 +307,7 @@ export function ImportFromLinearModal({ tracks, onClose, onImported }: Props) {
                         )}
                       </div>
 
-                      <div className="flex flex-col items-end gap-2 shrink-0 w-56">
+                      <div className="flex flex-col items-end gap-2 shrink-0 w-full md:w-56">
                         {tab === 'available' && (
                           <>
                             <select

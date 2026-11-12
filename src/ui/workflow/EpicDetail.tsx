@@ -187,7 +187,7 @@ export function EpicDetail() {
 
   return (
     <div className="h-full overflow-y-auto">
-      <div className="max-w-6xl mx-auto px-6 py-4">
+      <div className="max-w-6xl mx-auto px-3 md:px-6 py-4">
         {/* Header */}
         <div className="mb-4">
           <button
@@ -437,7 +437,7 @@ function AgentSessionsBar({ issue, sessions, onAttach, onKill }: {
     }`}>
       {/* Status banner when agents are working */}
       {stateDesc && (
-        <div className="flex items-center gap-2 mb-2">
+        <div className="flex flex-wrap items-center gap-2 mb-2">
           {alive.length > 0 && (
             <span className="w-2 h-2 rounded-full bg-blue-400 animate-pulse shrink-0" />
           )}
@@ -462,7 +462,7 @@ function AgentSessionsBar({ issue, sessions, onAttach, onKill }: {
       )}
       <div className="space-y-1.5">
         {alive.map((s) => (
-          <div key={s.id} className="flex items-center gap-2 text-xs">
+          <div key={s.id} className="flex flex-wrap items-center gap-2 text-xs">
             <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 shrink-0" />
             <span className="text-gray-300 font-medium">
               {s.name || s.tmuxSession}

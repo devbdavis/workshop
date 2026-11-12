@@ -1,5 +1,6 @@
 import { useState, useCallback, useEffect, useRef } from 'react';
 import { TerminalPanel } from '../terminal-panel/TerminalPanel';
+import { useIsMobile } from '../use-is-mobile';
 
 interface Props {
   trackId?: string;
@@ -47,6 +48,7 @@ const CURSOR_MAP: Record<ResizeDirection, string> = {
 };
 
 export function TerminalModal({ trackId, sessionId, wsPath, title, onClose, onDock }: Props) {
+  const isMobile = useIsMobile();
   const [size, setSize] = useState<Size>(() => ({
     width: Math.round(window.innerWidth * 0.8),
     height: Math.round(window.innerHeight * 0.8),
@@ -195,8 +197,8 @@ export function TerminalModal({ trackId, sessionId, wsPath, title, onClose, onDo
 
       {/* Modal window */}
       <div
-        className="absolute bg-gray-900 border border-gray-700 rounded-lg shadow-2xl flex flex-col overflow-hidden"
-        style={{
+        className={`absolute bg-gray-900 shadow-2xl flex flex-col overflow-hidden${isMobile ? " inset-0" : " border border-gray-700 rounded-lg"}`}
+        style={isMobile ? { height: "var(--app-h,100dvh)" } : {
           left: position.x,
           top: position.y,
           width: size.width,
@@ -205,8 +207,8 @@ export function TerminalModal({ trackId, sessionId, wsPath, title, onClose, onDo
       >
         {/* Title bar */}
         <div
-          className="flex items-center justify-between px-3 py-2 bg-gray-800 border-b border-gray-700 shrink-0 cursor-move select-none"
-          onMouseDown={onDragStart}
+          className="flex items-center justify-between px-3 py-2 bg-gray-800 border-b border-gray-700 shrink-0 md:cursor-move select-none"
+          onMouseDown={isMobile ? undefined : onDragStart}
         >
           <div className="flex items-center gap-2 min-w-0">
             <TerminalIcon className="w-4 h-4 text-emerald-400 shrink-0" />
@@ -225,7 +227,7 @@ export function TerminalModal({ trackId, sessionId, wsPath, title, onClose, onDo
             <kbd className="text-xs text-gray-600 font-mono">esc</kbd>
             <button
               onClick={onClose}
-              className="text-gray-500 hover:text-gray-300 text-lg leading-none px-1"
+              className="text-gray-500 hover:text-gray-300 text-lg leading-none px-1 min-w-11 min-h-11 md:min-w-0 md:min-h-0"
             >
               &times;
             </button>
@@ -237,7 +239,8 @@ export function TerminalModal({ trackId, sessionId, wsPath, title, onClose, onDo
           <TerminalPanel trackId={trackId} sessionId={sessionId} wsPath={wsPath} autoFocus />
         </div>
 
-        {/* Resize handles */}
+        {!isMobile && (
+        <>
         {/* Edges */}
         <div
           className="absolute top-0 left-0 right-0"
@@ -280,6 +283,8 @@ export function TerminalModal({ trackId, sessionId, wsPath, title, onClose, onDo
           style={{ width: edgeSize * 2, height: edgeSize * 2, cursor: 'nesw-resize' }}
           onMouseDown={onResizeStart('se')}
         />
+        </>
+        )}
       </div>
     </div>
   );
