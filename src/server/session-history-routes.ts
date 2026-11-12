@@ -1,10 +1,11 @@
-import { existsSync } from 'fs';
+import { existsSync, statSync } from 'fs';
 import { Router } from 'express';
 import type { SessionId, TrackId } from '@foundation/types';
 import type { SessionRepository } from '@domain/session/repository';
 import type { TrackRepository } from '@domain/track/repository';
 import type { TerminalManager } from '@infrastructure/terminal/manager.js';
 import type { SessionHistoryEntry, SessionHistoryScanner } from '@infrastructure/usage/session-history.js';
+import { readAgentTranscript } from '@infrastructure/usage/agent-transcripts.js';
 import { broadcast } from './events.js';
 
 const SESSION_ID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -110,6 +111,34 @@ export function createSessionHistoryRouter(deps: SessionHistoryRouterDeps): Rout
     } catch (err) {
       console.error('Failed to read session transcript:', err);
       res.status(500).json({ error: 'Failed to read session transcript' });
+    }
+  });
+
+  // Codex/Gemini sessions, keyed by Workshop session id (Claude's go through /session-history above).
+  router.get('/sessions/:id/transcript', (req, res) => {
+    const session = deps.sessions.findById(req.params.id as SessionId);
+    const found = session?.workingDirectory
+      ? readAgentTranscript(session.provider, session.workingDirectory, Date.parse(session.createdAt))
+      : null;
+    if (!found) {
+      res.status(404).json({ error: 'No transcript yet' });
+      return;
+    }
+    try {
+      const limit = Number(req.query.limit);
+      const st = statSync(found.file);
+      const etag = `"${st.mtimeMs}-${st.size}-${Number.isInteger(limit) ? limit : 0}"`;
+      res.setHeader('ETag', etag);
+      res.setHeader('Cache-Control', 'no-cache');
+      if (req.headers['if-none-match'] === etag) {
+        res.status(304).end();
+        return;
+      }
+      const messages = found.read();
+      res.json({ messages: Number.isInteger(limit) && limit > 0 ? messages.slice(-limit) : messages });
+    } catch (err) {
+      console.error('Failed to read agent transcript:', err);
+      res.status(500).json({ error: 'Failed to read transcript' });
     }
   });
 

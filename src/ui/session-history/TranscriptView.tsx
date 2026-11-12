@@ -12,7 +12,7 @@ interface TranscriptMessage {
   role: 'user' | 'assistant';
   blocks: TranscriptBlock[];
   timestamp: string | null;
-  compact?: true;
+  note?: string;
 }
 
 interface Props {
@@ -21,25 +21,30 @@ interface Props {
   live?: boolean;
   /** Bump to reload immediately and jump to the bottom (e.g. after sending a command). */
   refreshKey?: number;
+  /** Endpoint override (Codex/Gemini sessions); defaults to the Claude session-history transcript. */
+  src?: string;
 }
 
 const POLL_MS = 1500;
 const LIVE_TAIL = 200;
 
-export function TranscriptView({ sessionId, live = false, refreshKey = 0 }: Props) {
+export function TranscriptView({ sessionId, live = false, refreshKey = 0, src }: Props) {
   const [messages, setMessages] = useState<TranscriptMessage[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
-  const stickToBottomRef = useRef(live);
+  // Open at the newest message (chat-style); scrolling up releases it, and the jump button brings it back.
+  const stickToBottomRef = useRef(true);
+  const [atBottom, setAtBottom] = useState(true);
   const lastBodyRef = useRef<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
+    stickToBottomRef.current = true;
     let inFlight = false; // a slow response must not land after (and overwrite) a newer one
     const load = () => {
       if (document.hidden || inFlight) return;
       inFlight = true;
-      fetch(`/api/session-history/${sessionId}/transcript${live ? `?limit=${LIVE_TAIL}` : ''}`)
+      fetch(`${src ?? `/api/session-history/${sessionId}/transcript`}${live ? `?limit=${LIVE_TAIL}` : ''}`)
         .then((r) => (r.ok ? r.text() : Promise.reject(new Error(r.status === 404 ? 'No transcript yet' : `HTTP ${r.status}`))))
         .then((body) => {
           if (cancelled) return;
@@ -57,12 +62,21 @@ export function TranscriptView({ sessionId, live = false, refreshKey = 0 }: Prop
     const onVisible = () => { if (!document.hidden) load(); };
     if (live) document.addEventListener('visibilitychange', onVisible);
     return () => { cancelled = true; clearInterval(timer); document.removeEventListener('visibilitychange', onVisible); };
-  }, [sessionId, live, refreshKey]);
+  }, [sessionId, live, refreshKey, src]);
 
   useLayoutEffect(() => {
     const el = scrollRef.current;
     if (el && stickToBottomRef.current) el.scrollTop = el.scrollHeight;
   }, [messages]);
+
+  // Scrolling a display:none pane is a no-op (phone list→detail mounts it hidden), so re-pin when it gets a size — also covers the keyboard opening.
+  useEffect(() => {
+    const el = scrollRef.current;
+    if (!el) return;
+    const ro = new ResizeObserver(() => { if (stickToBottomRef.current) el.scrollTop = el.scrollHeight; });
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
 
   // After a send: jump to the bottom now and keep following new output.
   useLayoutEffect(() => {
@@ -74,7 +88,16 @@ export function TranscriptView({ sessionId, live = false, refreshKey = 0 }: Prop
 
   const onScroll = () => {
     const el = scrollRef.current;
-    if (live && el) stickToBottomRef.current = el.scrollHeight - el.scrollTop - el.clientHeight < 40;
+    if (!el) return;
+    stickToBottomRef.current = el.scrollHeight - el.scrollTop - el.clientHeight < 40;
+    setAtBottom(stickToBottomRef.current);
+  };
+
+  const jumpToBottom = () => {
+    const el = scrollRef.current;
+    if (!el) return;
+    stickToBottomRef.current = true;
+    el.scrollTo({ top: el.scrollHeight, behavior: 'smooth' });
   };
 
   const lastBlock = messages?.at(-1)?.blocks.at(-1);
@@ -85,8 +108,8 @@ export function TranscriptView({ sessionId, live = false, refreshKey = 0 }: Prop
       {error && messages === null && <p className="text-xs text-red-400">{error}</p>}
       {!error && messages === null && <p className="text-xs text-gray-500">Loading…</p>}
       {messages?.length === 0 && <p className="text-xs text-gray-600">No messages in this transcript.</p>}
-      {messages?.map((m, idx) => m.compact ? (
-        <CompactMarker key={m.id ?? idx} message={m} />
+      {messages?.map((m, idx) => m.note ? (
+        <NoteMarker key={m.id ?? idx} message={m} />
       ) : (
         <div
           key={m.id ?? idx}
@@ -105,6 +128,18 @@ export function TranscriptView({ sessionId, live = false, refreshKey = 0 }: Prop
           </div>
         </div>
       ))}
+      {!atBottom && messages?.length ? (
+        <div className={`sticky ${running ? 'bottom-9' : 'bottom-1'} flex justify-end pointer-events-none`}>
+          <button
+            onClick={jumpToBottom}
+            aria-label="Jump to latest"
+            title="Jump to latest"
+            className="pointer-events-auto size-11 md:size-8 rounded-full bg-gray-800/90 border border-gray-600 text-gray-200 shadow-lg flex items-center justify-center hover:bg-gray-700"
+          >
+            <span aria-hidden="true">↓</span>
+          </button>
+        </div>
+      ) : null}
       {running && (
         <div className="sticky bottom-0 -mx-3 -mb-3 px-3 py-1.5 bg-gray-900/95 border-t border-gray-800 text-xs text-gray-300 flex items-center gap-1.5 min-w-0">
           <span className="text-green-400 animate-pulse shrink-0" aria-hidden="true">●</span>
@@ -115,14 +150,14 @@ export function TranscriptView({ sessionId, live = false, refreshKey = 0 }: Prop
   );
 }
 
-// Compaction summaries are huge and machine-written: show a divider, summary on demand.
-function CompactMarker({ message }: { message: TranscriptMessage }) {
+// Harness turns (compaction, background-task reports, interrupts) aren't the user talking: a divider, body on demand.
+function NoteMarker({ message }: { message: TranscriptMessage }) {
   const text = message.blocks.map((b) => (b.type === 'text' ? b.text : '')).join('\n\n');
+  const label = `${message.note}${message.timestamp ? ` · ${new Date(message.timestamp).toLocaleString()}` : ''}`;
+  if (!text) return <p className="text-center text-xs text-gray-500 border-y border-dashed border-gray-800 py-1">{label}</p>;
   return (
     <details className="rounded border border-dashed border-gray-700 text-xs text-gray-400">
-      <summary className="cursor-pointer select-none px-2 py-1">
-        Conversation compacted{message.timestamp ? ` · ${new Date(message.timestamp).toLocaleString()}` : ''} — show summary
-      </summary>
+      <summary className="cursor-pointer select-none px-2 py-1">{label}</summary>
       <div className="px-2 py-1 border-t border-gray-800"><TextBlock text={text} /></div>
     </details>
   );
