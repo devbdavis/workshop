@@ -23,6 +23,9 @@ const BACKGROUND_WORK_RE = new RegExp(
     // Newer Claude Code TUI task panel, e.g. "3 tasks (0 done, 2 in progress, 1 open)"
     // — a nonzero in-progress count means delegated work is still running.
     String.raw`\(\d+ done, [1-9]\d* in progress`,
+    // Agent panel row under an idle composer, e.g. "◯ general-purpose  Fresh review  5s · ↓ 38.3k tokens";
+    // the row disappears once the agent finishes.
+    String.raw`◯ \S.*·\s*↓\s*[\d.]+[km]? tokens`,
   ].join('|'),
   'i',
 );

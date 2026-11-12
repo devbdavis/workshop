@@ -17,6 +17,7 @@ interface SessionAlertsContextValue {
   unread: SessionAlert[];
   open: (alert: SessionAlert) => void;
   clearAll: () => void;
+  dismissSession: (sessionId: string) => void;
 }
 
 const SessionAlertsContext = createContext<SessionAlertsContextValue | undefined>(undefined);
@@ -25,6 +26,29 @@ export function useSessionAlerts(): SessionAlertsContextValue {
   const ctx = useContext(SessionAlertsContext);
   if (!ctx) throw new Error('useSessionAlerts must be used within SessionAlertsProvider');
   return ctx;
+}
+
+const VIEWED_CLEAR_MS = 10_000;
+
+/** Clears a session's alerts once its terminal has been open on a visible page for 10s. */
+export function useClearAlertsWhenViewed(sessionId: string): void {
+  const { unread, dismissSession } = useSessionAlerts();
+  // Keyed on the alert so one arriving while the session is already open also clears.
+  const alertId = unread.find((a) => a.sessionId === sessionId)?.id;
+  useEffect(() => {
+    if (!alertId) return;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const arm = () => {
+      clearTimeout(timer);
+      if (document.visibilityState === 'visible') timer = setTimeout(() => dismissSession(sessionId), VIEWED_CLEAR_MS);
+    };
+    arm();
+    document.addEventListener('visibilitychange', arm);
+    return () => {
+      clearTimeout(timer);
+      document.removeEventListener('visibilitychange', arm);
+    };
+  }, [alertId, sessionId, dismissSession]);
 }
 
 // PR review analysis sessions belong on the PR Reviews page, not the Sessions tab.
@@ -53,6 +77,7 @@ export function SessionAlertsProvider({ children }: { children: ReactNode }) {
   // Read inside the WS handler without retriggering the socket effect on every navigation.
   const locationRef = useRef(location);
   locationRef.current = location;
+  const systemNotes = useRef(new Map<string, Notification>());
 
   const open = useCallback((alert: SessionAlert) => {
     setUnread((prev) => prev.filter((a) => a.sessionId !== alert.sessionId));
@@ -66,6 +91,13 @@ export function SessionAlertsProvider({ children }: { children: ReactNode }) {
 
   const clearAll = useCallback(() => {
     setUnread([]);
+  }, []);
+
+  const dismissSession = useCallback((sessionId: string) => {
+    setUnread((prev) => prev.filter((a) => a.sessionId !== sessionId));
+    setChips((prev) => prev.filter((a) => a.sessionId !== sessionId));
+    systemNotes.current.get(sessionId)?.close();
+    systemNotes.current.delete(sessionId);
   }, []);
 
   // Clear unread for the track being viewed once it's actually visible/focused.
@@ -149,6 +181,7 @@ export function SessionAlertsProvider({ children }: { children: ReactNode }) {
                   body: alert.kind === 'needs-input' ? 'Waiting for your input' : 'Idle after working',
                   tag: alert.sessionId,
                 });
+                systemNotes.current.set(alert.sessionId, n);
                 n.onclick = () => {
                   window.focus();
                   open(alert);
@@ -182,7 +215,7 @@ export function SessionAlertsProvider({ children }: { children: ReactNode }) {
   }, [open, dismissChip]);
 
   return (
-    <SessionAlertsContext.Provider value={{ unread, open, clearAll }}>
+    <SessionAlertsContext.Provider value={{ unread, open, clearAll, dismissSession }}>
       {children}
       <AlertChips chips={chips} onOpen={open} onDismiss={dismissChip} />
     </SessionAlertsContext.Provider>

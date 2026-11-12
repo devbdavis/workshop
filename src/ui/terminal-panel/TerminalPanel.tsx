@@ -8,6 +8,7 @@ import { TerminalSearchBar } from './TerminalSearchBar';
 import { createSearchSession, type SearchResultInfo, type SearchSession } from './terminal-search';
 import { MobileKeyBar } from './MobileKeyBar';
 import { useIsMobile } from '../use-is-mobile';
+import { useClearAlertsWhenViewed } from '../notifications/SessionAlerts';
 
 /** Shared terminal theme — keeps live and scrollback visually identical. */
 const THEME = {
@@ -201,6 +202,7 @@ export function TerminalPanel({ trackId = '', sessionId = '', wsPath, autoFocus,
   // the terminal with the correct fontSize + cols-pinning branch — a stale
   // snapshot could drive the shared tmux window below 120 cols.
   const isMobile = useIsMobile();
+  useClearAlertsWhenViewed(sessionId);
   // Bumping this forces the setup effect to tear down and recreate the
   // WebSocket — used to recover from mobile OSes killing background-tab
   // sockets (see the visibilitychange effect below).
