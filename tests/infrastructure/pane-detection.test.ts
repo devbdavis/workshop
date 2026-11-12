@@ -75,6 +75,20 @@ describe('isSessionIdle (preCapture)', () => {
     expect(isSessionIdle(session, lines)).toBe(false);
   });
 
+  it('returns false while the agent panel lists a running background agent', () => {
+    const lines = [
+      '❯',
+      '  ⏵⏵ auto mode on (shift+tab to cycle) · ← 2 agents · ↓ to manage',
+      '  ● main',
+      '  ◯ general-purpose  Fresh review of mobile diff                    5s · ↓ 38.3k tokens',
+    ];
+    expect(isSessionIdle(session, lines)).toBe(false);
+  });
+
+  it('returns true once the agent panel row is gone', () => {
+    expect(isSessionIdle(session, ['❯', '  ⏵⏵ auto mode on (shift+tab to cycle) · /tasks to see subagents · ← 2 agents'])).toBe(true);
+  });
+
   it('returns false when the task panel shows in-progress tasks without a spinner', () => {
     expect(isSessionIdle(session, ['3 tasks (1 done, 2 in progress, 0 open)', '❯'])).toBe(false);
   });
