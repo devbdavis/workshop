@@ -12,7 +12,7 @@ interface TranscriptMessage {
   role: 'user' | 'assistant';
   blocks: TranscriptBlock[];
   timestamp: string | null;
-  compact?: true;
+  note?: string;
 }
 
 interface Props {
@@ -21,12 +21,14 @@ interface Props {
   live?: boolean;
   /** Bump to reload immediately and jump to the bottom (e.g. after sending a command). */
   refreshKey?: number;
+  /** Endpoint override (Codex/Gemini sessions); defaults to the Claude session-history transcript. */
+  src?: string;
 }
 
 const POLL_MS = 1500;
 const LIVE_TAIL = 200;
 
-export function TranscriptView({ sessionId, live = false, refreshKey = 0 }: Props) {
+export function TranscriptView({ sessionId, live = false, refreshKey = 0, src }: Props) {
   const [messages, setMessages] = useState<TranscriptMessage[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -39,7 +41,7 @@ export function TranscriptView({ sessionId, live = false, refreshKey = 0 }: Prop
     const load = () => {
       if (document.hidden || inFlight) return;
       inFlight = true;
-      fetch(`/api/session-history/${sessionId}/transcript${live ? `?limit=${LIVE_TAIL}` : ''}`)
+      fetch(`${src ?? `/api/session-history/${sessionId}/transcript`}${live ? `?limit=${LIVE_TAIL}` : ''}`)
         .then((r) => (r.ok ? r.text() : Promise.reject(new Error(r.status === 404 ? 'No transcript yet' : `HTTP ${r.status}`))))
         .then((body) => {
           if (cancelled) return;
@@ -57,7 +59,7 @@ export function TranscriptView({ sessionId, live = false, refreshKey = 0 }: Prop
     const onVisible = () => { if (!document.hidden) load(); };
     if (live) document.addEventListener('visibilitychange', onVisible);
     return () => { cancelled = true; clearInterval(timer); document.removeEventListener('visibilitychange', onVisible); };
-  }, [sessionId, live, refreshKey]);
+  }, [sessionId, live, refreshKey, src]);
 
   useLayoutEffect(() => {
     const el = scrollRef.current;
@@ -85,8 +87,8 @@ export function TranscriptView({ sessionId, live = false, refreshKey = 0 }: Prop
       {error && messages === null && <p className="text-xs text-red-400">{error}</p>}
       {!error && messages === null && <p className="text-xs text-gray-500">Loading…</p>}
       {messages?.length === 0 && <p className="text-xs text-gray-600">No messages in this transcript.</p>}
-      {messages?.map((m, idx) => m.compact ? (
-        <CompactMarker key={m.id ?? idx} message={m} />
+      {messages?.map((m, idx) => m.note ? (
+        <NoteMarker key={m.id ?? idx} message={m} />
       ) : (
         <div
           key={m.id ?? idx}
@@ -115,14 +117,14 @@ export function TranscriptView({ sessionId, live = false, refreshKey = 0 }: Prop
   );
 }
 
-// Compaction summaries are huge and machine-written: show a divider, summary on demand.
-function CompactMarker({ message }: { message: TranscriptMessage }) {
+// Harness turns (compaction, background-task reports, interrupts) aren't the user talking: a divider, body on demand.
+function NoteMarker({ message }: { message: TranscriptMessage }) {
   const text = message.blocks.map((b) => (b.type === 'text' ? b.text : '')).join('\n\n');
+  const label = `${message.note}${message.timestamp ? ` · ${new Date(message.timestamp).toLocaleString()}` : ''}`;
+  if (!text) return <p className="text-center text-xs text-gray-500 border-y border-dashed border-gray-800 py-1">{label}</p>;
   return (
     <details className="rounded border border-dashed border-gray-700 text-xs text-gray-400">
-      <summary className="cursor-pointer select-none px-2 py-1">
-        Conversation compacted{message.timestamp ? ` · ${new Date(message.timestamp).toLocaleString()}` : ''} — show summary
-      </summary>
+      <summary className="cursor-pointer select-none px-2 py-1">{label}</summary>
       <div className="px-2 py-1 border-t border-gray-800"><TextBlock text={text} /></div>
     </details>
   );
