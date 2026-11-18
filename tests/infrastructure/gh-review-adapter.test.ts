@@ -29,6 +29,7 @@ describe('GhReviewAdapter', () => {
     // Explicit-only qualifier — --review-requested would also match team requests.
     expect(capturedArgs).toContain('user-review-requested:@me');
     expect(capturedArgs).toContain('-author:@me');
+    expect(capturedArgs).toContain('draft:false');
     expect(capturedArgs).not.toContain('--review-requested=@me');
     expect(prs).toHaveLength(1);
     expect(prs[0]).toEqual({
@@ -215,6 +216,26 @@ describe('GhReviewAdapter', () => {
     const restored = JSON.parse(stdins[1]) as Record<string, unknown>;
     expect(restored.event).toBeUndefined();
     expect(restored.comments).toEqual([{ path: 'a.py', body: 'keep me', position: 16 }]);
+  });
+});
+
+describe('fetchPrDiff', () => {
+  it('falls back to the files API when the diff exceeds GitHub\'s line cap', async () => {
+    const calls: string[][] = [];
+    const adapter = createGhReviewAdapter({
+      exec: async (_binary, args) => {
+        calls.push(args);
+        if (args[0] === 'pr') throw new Error('HTTP 406: Sorry, the diff exceeded the maximum number of lines (20000)\nPullRequest.diff too_large');
+        return { stdout: 'diff --git a/x b/x\n', stderr: '' };
+      },
+    });
+    expect(await adapter.fetchPrDiff('https://github.com/acme/widgets/pull/3')).toBe('diff --git a/x b/x\n');
+    expect(calls[1].slice(0, 3)).toEqual(['api', 'repos/acme/widgets/pulls/3/files?per_page=100', '--paginate']);
+  });
+
+  it('rethrows other gh failures', async () => {
+    const adapter = createGhReviewAdapter({ exec: async () => { throw new Error('HTTP 404'); } });
+    await expect(adapter.fetchPrDiff('https://github.com/acme/widgets/pull/3')).rejects.toThrow('HTTP 404');
   });
 });
 
