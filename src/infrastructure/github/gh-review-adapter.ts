@@ -320,8 +320,24 @@ export function createGhReviewAdapter(opts: CreateGhReviewAdapterOptions = {}): 
     findTeamEngagedPrs,
 
     async fetchPrDiff(prUrl: string): Promise<string> {
-      const { stdout } = await exec(ghBinary, ['pr', 'diff', prUrl]);
-      return stdout;
+      try {
+        const { stdout } = await exec(ghBinary, ['pr', 'diff', prUrl]);
+        return stdout;
+      } catch (err) {
+        if (!/too_large|HTTP 406/.test(err instanceof Error ? err.message : String(err))) throw err;
+        const parsed = parsePrUrl(prUrl);
+        if (!parsed) throw err;
+        // Past GitHub's 20k-line cap, rebuild the diff from per-file patches (binary files have none).
+        // ponytail: the files API stops at 3000 files and truncates huge single-file patches; findings there fall back to the body.
+        const { stdout } = await exec(ghBinary, [
+          'api',
+          `repos/${parsed.owner}/${parsed.repo}/pulls/${parsed.number}/files?per_page=100`,
+          '--paginate',
+          '--jq',
+          '.[] | select(.patch) | "diff --git a/\\(.filename) b/\\(.filename)\\n--- a/\\(.previous_filename // .filename)\\n+++ b/\\(.filename)\\n\\(.patch)"',
+        ]);
+        return stdout;
+      }
     },
 
     async fetchCheckLog(prUrl: string, detailsUrl: string): Promise<string> {
