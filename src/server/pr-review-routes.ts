@@ -465,9 +465,9 @@ export function createPrReviewRouter(deps: PrReviewRouterDeps): Router {
       const fullBody = [
         body,
         ...(unanchored.length > 0
-          ? ['\n---\n', ...unanchored.map((f) => `**${f.file}${f.line ? `:${f.line}` : ''}** — ${f.suggestedComment}`)]
+          ? ['---', ...unanchored.map((f) => `**${f.file}${f.line ? `:${f.line}` : ''}** — ${f.suggestedComment}`)]
           : []),
-      ].join('\n');
+      ].join('\n\n');
 
       await ghReview.submitPrReview(review.prUrl, {
         body: fullBody,
