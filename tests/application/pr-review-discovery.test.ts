@@ -102,6 +102,25 @@ describe('PR review discovery poller', () => {
     expect(reviews.findById(manual.id)).not.toBeNull();
   });
 
+  it('drops a manually added PR once it is merged', async () => {
+    const reviews = createPrReviewRepository();
+    const manual = reviews.upsertIncoming({
+      prUrl: discovered(98).url,
+      repoOwner: 'acme',
+      repoName: 'widgets',
+      prNumber: 98,
+      discoveredVia: 'manual',
+    });
+    const poller = createPrReviewDiscoveryPoller({
+      reviews,
+      forge: { discoverReviewRequests: async () => ({ prs: [], hosts: ['github.com'] }), fetchPrSnapshot: async () => ({ finished: true }) },
+      broadcast: vi.fn(),
+    });
+
+    await poller.pollNow();
+    expect(reviews.findById(manual.id)).toBeNull();
+  });
+
   it('never re-adds or prunes a removed PR, even while it still appears in search', async () => {
     const reviews = createPrReviewRepository();
     const poller = createPrReviewDiscoveryPoller({

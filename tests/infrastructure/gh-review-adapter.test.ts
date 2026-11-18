@@ -29,6 +29,7 @@ describe('GhReviewAdapter', () => {
     // Explicit-only qualifier — --review-requested would also match team requests.
     expect(capturedArgs).toContain('user-review-requested:@me');
     expect(capturedArgs).toContain('-author:@me');
+    expect(capturedArgs).toContain('draft:false');
     expect(capturedArgs).not.toContain('--review-requested=@me');
     expect(prs).toHaveLength(1);
     expect(prs[0]).toEqual({

@@ -104,7 +104,7 @@ export function createPrReviewDiscoveryPoller(deps: PrReviewDiscoveryPollerDeps)
       // ponytail: one forge call per tracked row per pass; merged rows delete themselves, so the set stays open PRs only.
       const outcomes = await Promise.all(
         rows
-          .filter((row) => TRACKED_STATES.has(row.state))
+          .filter((row) => TRACKED_STATES.has(row.state) || (row.state === 'incoming' && row.discoveredVia === 'manual'))
           .map(async (row): Promise<'pruned' | 'rereview' | null> => {
             try {
               const { headRefOid, finished } = await forge.fetchPrSnapshot(row.prUrl);

@@ -225,10 +225,11 @@ export function createGhReviewAdapter(opts: CreateGhReviewAdapterOptions = {}): 
       String(limit),
       '--json',
       'url,title,author,repository,number,body,updatedAt',
-      // Team requests include PRs you opened yourself. `--` keeps the negation from parsing as a flag.
+      // Team requests include PRs you opened yourself; drafts aren't ready for review. `--` keeps the negation from parsing as a flag.
       '--',
       query,
       '-author:@me',
+      'draft:false',
     ]);
     const out: DiscoveredPr[] = [];
     for (const node of JSON.parse(stdout) as GhSearchPrNode[]) {

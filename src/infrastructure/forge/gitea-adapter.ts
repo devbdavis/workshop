@@ -43,6 +43,7 @@ interface GiteaSearchIssue {
   updated_at?: string;
   user?: GiteaUser;
   repository?: { owner?: string; name?: string; full_name?: string };
+  pull_request?: { draft?: boolean };
 }
 
 export type GiteaFetch = (url: string, init: { method: string; headers: Record<string, string>; body?: string; signal: AbortSignal }) => Promise<{
@@ -268,7 +269,7 @@ export function createGiteaAdapter(opts: CreateGiteaAdapterOptions = {}) {
         }
         hosts.push(login.host);
         for (const issue of issues ?? []) {
-          if (!issue.html_url || !issue.number) continue;
+          if (!issue.html_url || !issue.number || issue.pull_request?.draft) continue;
           const fullName = issue.repository?.full_name ?? '';
           const [owner, name] = fullName.includes('/')
             ? fullName.split('/')
