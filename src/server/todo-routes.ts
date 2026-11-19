@@ -267,7 +267,10 @@ export function createTodoRouter(deps: TodoRouterDeps): Router {
 
   // --- Dispatch todo to an agent session ---
 
+  const handingOff = new Set<SessionId>();
+
   router.post('/todos/:todoId/dispatch', async (req, res) => {
+    let lockId: SessionId | undefined;
     try {
       const todo = todos.findById(req.params.todoId as TodoId);
       if (!todo) {
@@ -388,6 +391,11 @@ export function createTodoRouter(deps: TodoRouterDeps): Router {
         res.status(400).json({ error: 'Todo has no previous session to hand off from' });
         return;
       }
+      if (prev && (prev.deletedAt || handingOff.has(prev.id))) {
+        res.status(409).json({ error: 'This session has already been handed off' });
+        return;
+      }
+      if (prev) handingOff.add((lockId = prev.id));
       if (prev && prevCwd) parts.push(await buildHandoff(prev, prevCwd, todo, historyScanner));
 
       const systemPrompt = parts.join('\n\n---\n\n');
@@ -430,6 +438,8 @@ export function createTodoRouter(deps: TodoRouterDeps): Router {
     } catch (err) {
       console.error('Failed to dispatch todo:', err);
       res.status(500).json({ error: 'Failed to dispatch todo to agent' });
+    } finally {
+      if (lockId) handingOff.delete(lockId);
     }
   });
 

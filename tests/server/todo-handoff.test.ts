@@ -20,7 +20,7 @@ function buildApp(todo: Record<string, unknown>) {
     },
     sessions: {
       findById: (id: string) =>
-        id === 'old' ? { id: 'old', provider: 'claude', claudeResumeId: 'c1', workingDirectory: PREV_CWD, worktreeRoot: '/nonexistent-handoff-root', createdAt: new Date().toISOString() } : null,
+        id === 'old' || id === 'gone' ? { deletedAt: id === 'gone' ? new Date().toISOString() : undefined, id: 'old', provider: 'claude', claudeResumeId: 'c1', workingDirectory: PREV_CWD, worktreeRoot: '/nonexistent-handoff-root', createdAt: new Date().toISOString() } : null,
     },
     agents: { findById: () => null },
     promptTemplates: { findById: () => null },
@@ -74,6 +74,18 @@ describe('dispatch handoff', () => {
     const res = await post(base2, { handoff: true, provider: 'codex' });
     expect(res.status).toBe(400);
     expect(withoutSession.created).toHaveLength(0);
+  });
+
+  it('409s when the previous session was already handed off', async () => {
+    const gone = buildApp({ id: 't1', trackId: 'track-1', title: 'Fix login', status: 'in-progress', sessionId: 'gone' });
+    const srv = gone.app.listen(0);
+    try {
+      const res = await post(`http://127.0.0.1:${port(srv)}`, { handoff: true, provider: 'codex' });
+      expect(res.status).toBe(409);
+      expect(gone.created).toHaveLength(0);
+    } finally {
+      srv.close();
+    }
   });
 
   it('launches in the previous cwd with the brief and no worktree', async () => {

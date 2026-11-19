@@ -804,13 +804,19 @@ export function createTerminalManager(
             const oldRoot = from.worktreeRoot;
             const worktreeRoot = path.join(SESSION_DATA_DIR, session.id, 'workspace');
             // No fallback on failure: two sessions sharing one worktree means deleting either destroys the work.
-            await adoptWorktrees(oldRoot, worktreeRoot);
-            sessionRepo.updateWorktreeRoot(from.sessionId, null);
-            sessionRepo.updateWorktreeRoot(session.id, worktreeRoot);
+            try {
+              await adoptWorktrees(oldRoot, worktreeRoot);
+            } finally {
+              // Record ownership once the rename landed, even if worktree repair then failed.
+              if (existsSync(worktreeRoot) && !existsSync(oldRoot)) {
+                sessionRepo.updateWorktreeRoot(from.sessionId, null);
+                sessionRepo.updateWorktreeRoot(session.id, worktreeRoot);
+              }
+            }
             session.worktreeRoot = worktreeRoot;
             cwd = path.join(worktreeRoot, path.relative(oldRoot, from.workingDirectory));
             const move = (s: string) => {
-              const moved = s.split(oldRoot + '/').join(worktreeRoot + '/').split(oldRoot).join(worktreeRoot);
+              const moved = s.replace(new RegExp(oldRoot.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '(?![\\w.-])', 'g'), worktreeRoot);
               return options.repos?.length ? rewritePathsForWorktree(moved, options.repos, worktreeRoot) : moved;
             };
             if (resolvedSystemPrompt) resolvedSystemPrompt = move(resolvedSystemPrompt);
@@ -820,10 +826,12 @@ export function createTerminalManager(
           }
           sessionRepo.updateWorkingDirectory(session.id, cwd);
           session.workingDirectory = cwd;
-          // Stop the old CLI so two agents never edit the same tree; its record and transcript stay.
+          // Retire the old session to the recycle bin so it is never auto-resumed into the same tree; its transcript stays.
           const prev = sessionRepo.findById(from.sessionId);
           if (prev) {
             try { execSync(`tmux kill-session -t ${JSON.stringify(prev.tmuxSession)}`, { stdio: 'pipe' }); } catch { /* already gone */ }
+            sessionRepo.softDelete(prev.id);
+            clearSessionMaps(prev.id);
           }
         } else if (options?.worktreeMode && options.repos?.length) {
           try {

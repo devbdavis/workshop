@@ -234,7 +234,7 @@ export function buildClaudeLauncher(
 
   if (options?.provider === 'local') {
     // Todo dispatch defaults to a Claude alias, which Ollama can't serve.
-    model = model && !/^(opus|sonnet|haiku|claude-)/i.test(model)
+    model = model && !/^(opus|sonnet|haiku)(\[1m\])?$|^claude-/i.test(model)
       ? model
       : process.env.WORKSHOP_LOCAL_MODEL || 'qwen3-coder:30b';
     const env: Record<string, string> = {
