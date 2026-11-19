@@ -25,6 +25,7 @@ const PROVIDER_META: Record<ProviderChoice, { label: string; color: string }> = 
   cursor: { label: 'Cursor CLI', color: 'bg-violet-400' },
   codex: { label: 'Codex', color: 'bg-emerald-400' },
   gemini: { label: 'Gemini', color: 'bg-blue-400' },
+  local: { label: 'Local (Ollama)', color: 'bg-lime-400' },
   shell: { label: 'Shell', color: 'bg-gray-400' },
 };
 

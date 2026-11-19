@@ -1,8 +1,8 @@
 import { useState } from 'react';
 import type { DiscussionTeam, ConsensusRule } from '@foundation/discussion-types';
-import type { Agent } from '@foundation/types';
+import type { Agent, SessionProvider } from '@foundation/types';
 
-type ProviderType = 'claude' | 'codex' | 'gemini' | 'cursor';
+type ProviderType = SessionProvider;
 
 function resolveAgentProvider(agent: Agent): ProviderType {
   // Check explicit provider field first
@@ -18,6 +18,7 @@ const PROVIDER_BADGES: Record<ProviderType, { bg: string; label: string }> = {
   codex: { bg: 'bg-green-900/60 text-green-300', label: 'Codex' },
   gemini: { bg: 'bg-blue-900/60 text-blue-300', label: 'Gemini' },
   cursor: { bg: 'bg-violet-900/60 text-violet-300', label: 'Cursor' },
+  local: { bg: 'bg-lime-900/60 text-lime-300', label: 'Local' },
 };
 
 interface CreateTeamData {

@@ -53,6 +53,8 @@ export interface CreateSessionOptions {
   worktreeMode?: boolean;
   /** Repos to create worktrees for. Required when worktreeMode is true. */
   repos?: TrackRepo[];
+  /** Handoff: continue in another session's directory, taking ownership of its worktrees (moved, not copied), and stop its CLI. */
+  handoffFrom?: { sessionId: SessionId; worktreeRoot?: string; workingDirectory: string };
   /** Issue key to append to the worktree branch name (e.g. "ASY-1402"). */
   issueKey?: string;
   /** Additional directories to pre-trust via --add-dir (e.g. track filesystem paths). */

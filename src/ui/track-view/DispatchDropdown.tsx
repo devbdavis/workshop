@@ -6,6 +6,8 @@ export interface DispatchOptions {
   agentId?: string;
   provider?: SessionProvider;
   dangerouslySkipPermissions?: boolean;
+  /** Continue the todo's previous session's work in a new session. */
+  handoff?: boolean;
 }
 
 const PROVIDER_COLORS: Record<string, string> = {

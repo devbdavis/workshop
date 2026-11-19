@@ -40,6 +40,7 @@ export function TodoDetailModal({ todo, tracks, onClose, onSave, onDelete, onDis
   const [priority, setPriority] = useState<TodoPriority>('medium');
   const [agents, setAgents] = useState<Agent[]>([]);
   const [showDispatch, setShowDispatch] = useState(false);
+  const [showHandoff, setShowHandoff] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [issueError, setIssueError] = useState<string | null>(null);
   const [tracker, setTracker] = useState<{
@@ -420,6 +421,28 @@ export function TodoDetailModal({ todo, tracks, onClose, onSave, onDelete, onDis
                       onDispatch(todo.id, opts, { title, description: description || undefined, status, priority });
                     }}
                     onClose={() => setShowDispatch(false)}
+                  />
+                )}
+              </div>
+            )}
+            {todo.sessionId && (status === 'in-progress' || status === 'review') && (
+              <div className="relative">
+                <button
+                  onClick={() => setShowHandoff(!showHandoff)}
+                  className="px-3 py-1.5 text-xs bg-amber-700 hover:bg-amber-600 text-white rounded-lg transition-colors"
+                  title="Continue this work in a new session, e.g. if the current CLI is down or out of usage"
+                >
+                  Hand off to…
+                </button>
+                {showHandoff && (
+                  <DispatchDropdown
+                    agents={agents}
+                    popUp
+                    onSelect={(opts) => {
+                      setShowHandoff(false);
+                      onDispatch(todo.id, { ...opts, handoff: true });
+                    }}
+                    onClose={() => setShowHandoff(false)}
                   />
                 )}
               </div>
