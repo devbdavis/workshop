@@ -45,6 +45,20 @@ describe('ensureDefaultTodoTemplate', () => {
     expect(row.content).toContain('{{todo.id}}');
   });
 
+  it('rewrites only the legacy summary-to-description line, keeping user edits', () => {
+    const db = getDatabase();
+    db.prepare(`UPDATE prompt_templates SET content = ? WHERE is_default = 1`).run(
+      'My custom note\n2. Add a brief summary of what you accomplished or why you stopped to the description\n',
+    );
+    ensureDefaultTodoTemplate();
+    const row = db
+      .prepare(`SELECT content FROM prompt_templates WHERE is_default = 1`)
+      .get() as { content: string };
+    expect(row.content).toContain('My custom note');
+    expect(row.content).toContain('resolution field, never the description');
+    expect(row.content).not.toContain('to the description');
+  });
+
   it('leaves an up-to-date default row untouched', () => {
     const db = getDatabase();
     const before = (db.prepare(`SELECT content, updated_at FROM prompt_templates WHERE is_default = 1`).get()) as { content: string; updated_at: string };
