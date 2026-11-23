@@ -12,6 +12,7 @@
 #   CLAUDE_CONFIG_DIR=/mnt/user/appdata/workshop/claude
 #   PUID=99
 #   PGID=100
+#   DEV_HOST=tower.lan   # host name/IP you browse to, used in dev-server URLs
 services:
   workshop:
     build: .
@@ -20,6 +21,8 @@ services:
     restart: unless-stopped
     ports:
       - "3002:3002"
+      # Dev servers agents start (docs/docker.md); keep in sync with WORKSHOP_DEV_PORTS
+      - "4100-4119:4100-4119"
     environment:
       PORT: "3002"
       NODE_ENV: production
@@ -30,6 +33,9 @@ services:
       # Optional: Ollama server + model for the "Local (Ollama)" provider
       WORKSHOP_LOCAL_LLM_URL: "${WORKSHOP_LOCAL_LLM_URL:-}"
       WORKSHOP_LOCAL_MODEL: "${WORKSHOP_LOCAL_MODEL:-}"
+      # Read by the dev-server skill: which ports reach the host, and the URL host to report
+      WORKSHOP_DEV_PORTS: "4100-4119"
+      WORKSHOP_DEV_HOST: "${DEV_HOST:-}"
     volumes:
       # Persistent Workshop state (SQLite db, auth-token, sessions, vault, sprites)
       - workshop-state:/config

@@ -29,7 +29,8 @@
   <Category>Productivity: Tools:</Category>
   <WebUI>http://[IP]:[PORT:3002]/</WebUI>
   <Icon>https://raw.githubusercontent.com/devbdavis/workshop/main/public/favicon.png</Icon>
-  <ExtraParams>--init</ExtraParams>
+  <!-- Dev-server port range; keep in sync with WORKSHOP_DEV_PORTS below. -->
+  <ExtraParams>--init -p 4100-4119:4100-4119</ExtraParams>
   <DonateText/>
   <DonateLink/>
 
@@ -60,4 +61,12 @@
   <Config Name="PORT" Target="PORT" Default="3002" Mode=""
           Description="Internal server port (keep in sync with the WebUI port mapping)"
           Type="Variable" Display="advanced" Required="false" Mask="false">3002</Config>
+
+  <Config Name="Dev server ports" Target="WORKSHOP_DEV_PORTS" Default="4100-4119" Mode=""
+          Description="Port range published for dev servers agents start (must match the -p range in Extra Parameters)"
+          Type="Variable" Display="advanced" Required="false" Mask="false">4100-4119</Config>
+
+  <Config Name="Dev server host" Target="WORKSHOP_DEV_HOST" Default="" Mode=""
+          Description="Host name or IP you browse to (e.g. tower.lan or the Tailscale name); used in dev-server URLs"
+          Type="Variable" Display="advanced" Required="false" Mask="false"></Config>
 </Container>

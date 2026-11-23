@@ -83,6 +83,26 @@ No `sshd`, no `docker exec`, no Docker socket mount. The "Open in Terminal" butt
 in the pane header is a *host*-side launcher (iTerm/Konsole/Windows Terminal) and
 is only useful for native, non-Docker installs.
 
+## Dev servers
+
+Agents run inside the container, so a dev server they start (`npm run dev`, etc.)
+is only reachable from your browser if it listens on a **published** port and on
+`0.0.0.0`, not `localhost`. The compose file and unraid template publish
+`4100-4119` for this (host and container ports must match) and pass it to sessions as `WORKSHOP_DEV_PORTS`.
+
+Install the **dev-server** skill (Settings → Skills) and ask an agent to "start a
+dev server". It picks a free port in the range, binds `0.0.0.0`, runs the server in
+a detached `dev-<name>` tmux session so it outlives the agent, and reports
+`http://$WORKSHOP_DEV_HOST:<port>` — set `DEV_HOST` (compose `.env`) or the
+template's **Dev server host** to the name or IP you browse to. Ask it to list or stop dev servers the same way.
+On a native (non-Docker) install the variables are unset and any local port works.
+
+**Away from home**: the dev ports are plain host ports with no Workshop auth in
+front of them. Don't port-forward them; install the Tailscale plugin on unraid and
+browse to `http://<tailscale-name>:<port>` from anywhere. Use that name as `DEV_HOST`
+so reported URLs work both on the LAN and remotely. Vite (5.4.12+) rejects unknown
+`Host` headers, so the skill passes it via `__VITE_ADDITIONAL_SERVER_ALLOWED_HOSTS`.
+
 ## Per-user editor paths
 
 "Open in Editor" hands `<uri prefix><path>` to your local editor. If you SSH into
