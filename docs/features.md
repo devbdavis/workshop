@@ -254,6 +254,7 @@ A visual representation of session activity above the terminal panel.
 
 - **Nix devshell** — `flake.nix` provides Node.js 24 and tmux; `direnv allow` activates automatically
 - **Dev + prod simultaneously** — Dev server (`:3001`/`:5173`) and prod server (`:3002`) can run at the same time against separate databases
+- **Per-session dev servers** — A track's dev command runs per session, proxied at `<track>-<sid>.<WORKSHOP_DEV_DOMAIN>` via the **Dev Server** button (see `docs/docker.md`)
 - **Hot module replacement** — Vite HMR for fast UI iteration
 - **TypeScript strict mode** — Throughout; ESM imports; no `any` drift
 - **Vitest** — Test suite for application and domain logic

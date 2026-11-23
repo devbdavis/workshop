@@ -11,10 +11,10 @@ export function createTrackRepository(): TrackRepository {
   const findByIdStmt = db.prepare('SELECT * FROM tracks WHERE id = ?');
   const findByMatrixRoomIdStmt = db.prepare('SELECT * FROM tracks WHERE matrix_room_id = ?');
   const insertStmt = db.prepare(
-    'INSERT INTO tracks (id, name, description, context, label, matrix_room_id, worktree_mode, default_agent_id, status, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+    'INSERT INTO tracks (id, name, description, context, label, matrix_room_id, worktree_mode, dev_command, default_agent_id, status, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
   );
   const updateStmt = db.prepare(
-    'UPDATE tracks SET name = ?, description = ?, context = ?, label = ?, matrix_room_id = ?, worktree_mode = ?, default_agent_id = ?, status = ?, updated_at = ? WHERE id = ?',
+    'UPDATE tracks SET name = ?, description = ?, context = ?, label = ?, matrix_room_id = ?, worktree_mode = ?, dev_command = ?, default_agent_id = ?, status = ?, updated_at = ? WHERE id = ?',
   );
   const deleteStmt = db.prepare('DELETE FROM tracks WHERE id = ?');
   const setDefaultPromptTemplateStmt = db.prepare(
@@ -70,8 +70,9 @@ export function createTrackRepository(): TrackRepository {
       const now = new Date().toISOString();
       // worktreeMode defaults to true — all new tracks use per-session git worktrees
       const worktreeMode = data.worktreeMode !== false;
-      insertStmt.run(id, data.name, data.description || null, data.context || null, data.label || null, data.matrixRoomId || null, worktreeMode ? 1 : 0, data.defaultAgentId || null, data.status || 'active', now, now);
-      return { id, name: data.name, description: data.description, context: data.context, label: data.label, matrixRoomId: data.matrixRoomId, worktreeMode, defaultAgentId: data.defaultAgentId, status: data.status || 'active', createdAt: now, updatedAt: now };
+      const devCommand = data.devCommand?.trim() || null;
+      insertStmt.run(id, data.name, data.description || null, data.context || null, data.label || null, data.matrixRoomId || null, worktreeMode ? 1 : 0, devCommand, data.defaultAgentId || null, data.status || 'active', now, now);
+      return { id, name: data.name, description: data.description, context: data.context, label: data.label, matrixRoomId: data.matrixRoomId, worktreeMode, devCommand: devCommand ?? undefined, defaultAgentId: data.defaultAgentId, status: data.status || 'active', createdAt: now, updatedAt: now };
     },
 
     update(id: TrackId, data): Track | null {
@@ -84,10 +85,11 @@ export function createTrackRepository(): TrackRepository {
       const label = data.label !== undefined ? data.label : existing.label;
       const matrixRoomId = data.matrixRoomId !== undefined ? data.matrixRoomId : existing.matrixRoomId;
       const worktreeMode = data.worktreeMode !== undefined ? data.worktreeMode : existing.worktreeMode;
+      const devCommand = (data.devCommand !== undefined ? data.devCommand : existing.devCommand)?.trim() || undefined;
       const defaultAgentId = data.defaultAgentId !== undefined ? data.defaultAgentId : existing.defaultAgentId;
       const status = data.status ?? existing.status;
-      updateStmt.run(name, description || null, context || null, label || null, matrixRoomId || null, worktreeMode ? 1 : 0, defaultAgentId || null, status, now, id);
-      return { ...existing, name, description, context, label, matrixRoomId, worktreeMode, defaultAgentId, status, updatedAt: now };
+      updateStmt.run(name, description || null, context || null, label || null, matrixRoomId || null, worktreeMode ? 1 : 0, devCommand || null, defaultAgentId || null, status, now, id);
+      return { ...existing, name, description, context, label, matrixRoomId, worktreeMode, devCommand, defaultAgentId, status, updatedAt: now };
     },
 
     delete(id: TrackId): boolean {
@@ -172,6 +174,7 @@ interface TrackRow {
   label: string | null;
   matrix_room_id: string | null;
   worktree_mode: number;
+  dev_command: string | null;
   default_agent_id: string | null;
   status: string;
   default_prompt_template_id: string | null;
@@ -215,6 +218,7 @@ function rowToTrack(row: TrackRow): Track {
     label: row.label || undefined,
     matrixRoomId: row.matrix_room_id || undefined,
     worktreeMode: row.worktree_mode === 1 ? true : undefined,
+    devCommand: row.dev_command || undefined,
     defaultAgentId: (row.default_agent_id as AgentId) || undefined,
     status: row.status as Track['status'],
     defaultPromptTemplateId: (row.default_prompt_template_id as TemplateId) || undefined,

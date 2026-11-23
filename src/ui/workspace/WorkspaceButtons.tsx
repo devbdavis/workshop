@@ -43,6 +43,28 @@ export async function openInVsCode(sessionId: string, editorPath: string): Promi
   }
 }
 
+async function fetchDevServerUrl(sessionId: string): Promise<string | null> {
+  const res = await fetch(`/api/sessions/${sessionId}/dev-server`);
+  if (!res.ok) throw new Error('Failed to get dev server url');
+  return ((await res.json()) as { url: string | null }).url;
+}
+
+/** Fetches a fresh sign-in ticket per click, so the tab is opened first to avoid popup blockers. */
+export async function openDevServer(sessionId: string): Promise<void> {
+  const tab = window.open('about:blank', '_blank');
+  try {
+    const url = await fetchDevServerUrl(sessionId);
+    if (!url) throw new Error('Dev server unavailable');
+    if (tab) {
+      // Pre-opened without noopener (needed for the handle), so cut the link before loading the untrusted app.
+      tab.opener = null;
+      tab.location.href = url;
+    }
+  } catch {
+    tab?.close();
+  }
+}
+
 interface Props {
   sessionId: string;
   editorPath?: string;
@@ -57,9 +79,18 @@ export function WorkspaceButtons({ sessionId, editorPath, children, todoId, pull
   const [showBrowser, setShowBrowser] = useState(false);
   const [showPrDiff, setShowPrDiff] = useState(false);
   const codeServerReady = useCodeServerAvailable();
+  const [hasDevServer, setHasDevServer] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    fetchDevServerUrl(sessionId)
+      .then((url) => { if (!cancelled) setHasDevServer(url !== null); })
+      .catch(() => { if (!cancelled) setHasDevServer(false); });
+    return () => { cancelled = true; };
+  }, [sessionId]);
 
   const hasPrs = !!todoId && !!pullRequests?.length;
-  if (!editorPath && !children && !hasPrs) return null;
+  if (!editorPath && !children && !hasPrs && !hasDevServer) return null;
 
   return (
     <>
@@ -82,6 +113,17 @@ export function WorkspaceButtons({ sessionId, editorPath, children, todoId, pull
           >
             <GlobeIcon className="w-3.5 h-3.5" />
             <span>Web VS Code</span>
+          </button>
+        )}
+        {hasDevServer && (
+          <button
+            onClick={() => openDevServer(sessionId)}
+            className="flex items-center gap-0.5 text-[10px] text-gray-500 hover:text-blue-400 px-1"
+            title="Open this session's dev server in a new tab"
+            aria-label="Open dev server"
+          >
+            <PlayIcon className="w-3.5 h-3.5" />
+            <span>Dev Server</span>
           </button>
         )}
         {hasPrs && (
@@ -114,6 +156,14 @@ function GlobeIcon({ className }: { className?: string }) {
     <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
       <circle cx="12" cy="12" r="10" />
       <path d="M2 12h20M12 2a15 15 0 0 1 0 20M12 2a15 15 0 0 0 0 20" />
+    </svg>
+  );
+}
+
+function PlayIcon({ className }: { className?: string }) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <polygon points="6 4 20 12 6 20 6 4" />
     </svg>
   );
 }

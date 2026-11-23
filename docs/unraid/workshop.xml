@@ -60,4 +60,8 @@
   <Config Name="PORT" Target="PORT" Default="3002" Mode=""
           Description="Internal server port (keep in sync with the WebUI port mapping)"
           Type="Variable" Display="advanced" Required="false" Mask="false">3002</Config>
+
+  <Config Name="Dev server domain" Target="WORKSHOP_DEV_DOMAIN" Default="" Mode=""
+          Description="Base domain for per-session dev servers, e.g. beta.workshop.chu.zone (needs wildcard DNS + TLS; empty disables)"
+          Type="Variable" Display="advanced" Required="false" Mask="false"></Config>
 </Container>

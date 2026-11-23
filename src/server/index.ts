@@ -6,6 +6,9 @@ import { createApiRouter } from './api.js';
 import { createAuthRoutes } from './auth-routes.js';
 import { createAuthMiddleware } from './auth-middleware.js';
 import { createCodeServerProxy } from './code-server-proxy.js';
+import { createDevServerRouter } from './dev-server-router.js';
+import { devDomain } from './dev-host.js';
+import { createTrackRepository } from '@infrastructure/persistence/track-repository.js';
 import { setupWebSocket } from './websocket.js';
 import { closeDatabase } from '@infrastructure/persistence/database.js';
 import { createAutomationRuleRepository, createAutomationRunRepository } from '@infrastructure/persistence/automation-repository.js';
@@ -29,6 +32,13 @@ registerActionHandlers(automationEngine);
 automationEngine.start();
 
 const app = express();
+
+// First, so a dev host's /api/* and everything else reaches the dev app, not Workshop.
+const domain = devDomain();
+const devServerRouter = domain
+  ? createDevServerRouter({ domain, sessions: createSessionRepository(), tracks: createTrackRepository() })
+  : undefined;
+if (devServerRouter) app.use(devServerRouter.middleware);
 
 // Mounted before express.json() so request bodies (e.g. VS Code extension
 // installs) reach code-server unconsumed.
@@ -68,7 +78,7 @@ if (isProduction) {
 const server = createServer(app);
 
 // WebSocket for terminal sessions
-setupWebSocket(server, terminal, codeServerProxy);
+setupWebSocket(server, terminal, codeServerProxy, devServerRouter);
 
 server.listen(PORT, '0.0.0.0', () => {
   console.log(`Workshop server running on http://0.0.0.0:${PORT}`);

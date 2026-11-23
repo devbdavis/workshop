@@ -3,12 +3,11 @@
  * so a full browser VS Code is reachable through Workshop's single port.
  */
 
-import http from 'http';
-import net from 'net';
 import type { Request, Response, NextFunction } from 'express';
 import type { IncomingMessage } from 'http';
 import type { Duplex } from 'stream';
 import { extractToken, validateToken } from './auth-middleware.js';
+import { proxyHttp, proxyUpgrade } from './reverse-proxy.js';
 import { ensureCodeServer, isCodeServerAvailable } from '@infrastructure/code-server/code-server.js';
 
 const PREFIX = '/code';
@@ -62,26 +61,7 @@ export function createCodeServerProxy(): CodeServerProxy {
       return;
     }
 
-    const headers: http.OutgoingHttpHeaders = {
-      ...req.headers,
-      host: `127.0.0.1:${port}`,
-      'x-forwarded-proto': req.protocol,
-      'x-forwarded-host': req.headers.host ?? '',
-    };
-
-    const upstreamReq = http.request(
-      { hostname: '127.0.0.1', port, path: stripPrefix(req.originalUrl), method: req.method, headers },
-      (upstreamRes) => {
-        res.writeHead(upstreamRes.statusCode ?? 502, upstreamRes.headers);
-        upstreamRes.pipe(res);
-      },
-    );
-    upstreamReq.on('error', (err) => {
-      console.error('[code-server-proxy] upstream request error:', err);
-      if (!res.headersSent) res.status(502).send('Bad gateway');
-    });
-    req.on('error', () => upstreamReq.destroy());
-    req.pipe(upstreamReq);
+    proxyHttp(req, res, port, stripPrefix(req.originalUrl));
   }
 
   function handleUpgrade(req: IncomingMessage, socket: Duplex, head: Buffer): boolean {
@@ -98,25 +78,7 @@ export function createCodeServerProxy(): CodeServerProxy {
         return;
       }
 
-      const upstream = net.connect(port, '127.0.0.1', () => {
-        const headerLines: string[] = [];
-        for (let i = 0; i < req.rawHeaders.length; i += 2) {
-          headerLines.push(`${req.rawHeaders[i]}: ${req.rawHeaders[i + 1]}`);
-        }
-        upstream.write(`${req.method} ${stripPrefix(url)} HTTP/1.1\r\n${headerLines.join('\r\n')}\r\n\r\n`);
-        upstream.write(head);
-        socket.pipe(upstream);
-        upstream.pipe(socket);
-      });
-
-      const cleanup = (): void => {
-        upstream.destroy();
-        socket.destroy();
-      };
-      upstream.on('error', cleanup);
-      upstream.on('close', cleanup);
-      socket.on('error', cleanup);
-      socket.on('close', cleanup);
+      proxyUpgrade(req, socket, head, port, stripPrefix(url));
     })();
 
     return true;

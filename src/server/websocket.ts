@@ -7,6 +7,7 @@ import { createSessionRepository } from '@infrastructure/persistence/session-rep
 import { getAuthTmux } from '@infrastructure/terminal/auth-terminal.js';
 import { addEventClient, broadcast } from './events.js';
 import { extractToken, validateToken } from './auth-middleware.js';
+import type { DevServerRouter } from './dev-server-router.js';
 import type { CodeServerProxy } from './code-server-proxy.js';
 import type { SessionId } from '@foundation/types';
 import type { TerminalManager } from '@infrastructure/terminal/manager.js';
@@ -32,6 +33,7 @@ export function setupWebSocket(
   server: HttpServer,
   terminal: TerminalManager,
   codeServerProxy: CodeServerProxy,
+  devServerRouter?: DevServerRouter,
 ): void {
   const wss = new WebSocketServer({ noServer: true });
   const sessions = createSessionRepository();
@@ -66,6 +68,9 @@ export function setupWebSocket(
   keepalive.unref();
 
   server.on('upgrade', (request: IncomingMessage, socket, head) => {
+    // Dev hosts authenticate with their own cookie, so they go before the Workshop token check.
+    if (devServerRouter?.handleUpgrade(request, socket, head)) return;
+
     // Authenticate before allowing any WebSocket upgrade
     const token = extractToken(request);
     if (!validateToken(token)) {
