@@ -55,7 +55,7 @@ A managed lifecycle system for taking work items from raw idea through implement
 - **Workflow builder (skill chains)** — Playbooks tab → "New workflow" builds an ordered list of steps (prompts, typically slash-skills like `/review-app`, `/egm-draft`, `/egm-review`)
   - Each step runs as its own agent session; the agent hands off to the next step and passes a summary along (`previousStep`)
   - Optionally pause for approval after any step; a final review gate always waits for you
-  - Todos can be dispatched straight into a workflow from the Dispatch ▾ menu ("Run workflow"); the todo moves to review when the workflow finishes
+  - Todos can be dispatched straight into a workflow from the Dispatch ▾ menu ("Run workflow"); the todo moves to review when the workflow finishes; tick **Autonomous** in that section to run it Dark Factory style (gates auto-pass within the default 40-step / 4h budget, escalating if stuck)
   - Run it from the playbook's detail panel ("Run"): give a title, what to work on, a track, and optionally run autonomously (skips gates that allow it)
 - **Execution callbacks** — Agents signal completion via a `SubagentStop` webhook. The engine validates the transition and advances state without polling
 - **Startup recovery** — Issues in transient states are re-dispatched on server restart, preventing stuck issues

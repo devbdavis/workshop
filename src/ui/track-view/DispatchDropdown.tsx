@@ -10,6 +10,8 @@ export interface DispatchOptions {
   handoff?: boolean;
   /** Run the todo through this epic playbook instead of a single agent session. */
   playbookRowId?: string;
+  /** Workflow only: auto-pass gates within the default budget. */
+  autonomous?: boolean;
 }
 
 export function dispatchTodoRequest(todoId: string, opts: DispatchOptions): Promise<Response> {
@@ -17,7 +19,7 @@ export function dispatchTodoRequest(todoId: string, opts: DispatchOptions): Prom
   return fetch(`/api/todos/${todoId}/${dispatchWorkflow ? 'dispatch-workflow' : 'dispatch'}`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(dispatchWorkflow ? { playbookRowId: opts.playbookRowId } : opts),
+    body: JSON.stringify(dispatchWorkflow ? { playbookRowId: opts.playbookRowId, autonomous: opts.autonomous } : opts),
   });
 }
 
@@ -49,6 +51,7 @@ export function DispatchDropdown({ agents, onSelect, onClose, popUp, defaultAgen
   const [workflows, setWorkflows] = useState<PlaybookSummary[]>([]);
   const [provider, setProvider] = useState<SessionProvider>('claude');
   const [dangerouslySkipPermissions, setDangerouslySkipPermissions] = useState(false);
+  const [autonomous, setAutonomous] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
   const { clis } = useAvailableClis();
 
@@ -159,11 +162,22 @@ export function DispatchDropdown({ agents, onSelect, onClose, popUp, defaultAgen
 
       {workflows.length > 0 && (
         <>
-          <div className="px-3 py-1 text-[10px] text-gray-500 border-t border-gray-700">Run workflow</div>
+          <div className="flex items-center justify-between px-3 py-1 text-[10px] text-gray-500 border-t border-gray-700">
+            <span>Run workflow</span>
+            <label className="flex items-center gap-1 cursor-pointer select-none">
+              <input
+                type="checkbox"
+                checked={autonomous}
+                onChange={(e) => setAutonomous(e.target.checked)}
+                className="rounded border-gray-600 bg-gray-800"
+              />
+              Autonomous
+            </label>
+          </div>
           {workflows.map((w) => (
             <button
               key={w.rowId}
-              onClick={() => onSelect({ playbookRowId: w.rowId })}
+              onClick={() => onSelect({ playbookRowId: w.rowId, autonomous })}
               className="w-full text-left px-3 py-1.5 text-xs text-gray-300 hover:bg-gray-700"
             >
               <span className="font-medium">{w.name}</span>
