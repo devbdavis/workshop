@@ -140,7 +140,7 @@ export function WorkflowPage() {
 
       {activeTab === 'playbooks' && (
         <div className="flex-1 overflow-y-auto">
-          <PlaybookLibrary />
+          <PlaybookLibrary tracks={tracks} />
         </div>
       )}
 

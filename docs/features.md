@@ -52,6 +52,10 @@ A managed lifecycle system for taking work items from raw idea through implement
 - **Dependency tracking** — Tasks can declare `blocked-by` relationships. A blocked task automatically transitions to `ready` when all its dependencies reach `done`
 - **Automatic parent advancement** — When all child tasks of an epic complete, the epic advances to the integration review phase automatically
 - **Prompt composition** — The engine assembles execution prompts from issue content, playbook instructions, track context, vault memory, and prior execution data
+- **Workflow builder (skill chains)** — Playbooks tab → "New workflow" builds an ordered list of steps (prompts, typically slash-skills like `/review-app`, `/egm-draft`, `/egm-review`)
+  - Each step runs as its own agent session; the agent hands off to the next step and passes a summary along (`previousStep`)
+  - Optionally pause for approval after any step; a final review gate always waits for you
+  - Run it from the playbook's detail panel ("Run"): give a title, what to work on, a track, and optionally run autonomously (skips gates that allow it)
 - **Execution callbacks** — Agents signal completion via a `SubagentStop` webhook. The engine validates the transition and advances state without polling
 - **Startup recovery** — Issues in transient states are re-dispatched on server restart, preventing stuck issues
 - **Audit trail** — Every state transition records actor (human, agent, system), timestamp, and comment

@@ -3,7 +3,10 @@
  * Click a playbook to see its state diagram and agent role details.
  */
 import { useEffect, useState, useMemo } from 'react';
+import type { Track } from '@foundation/types.js';
 import { StateDiagram } from './StateDiagram';
+import { WorkflowBuilder } from './WorkflowBuilder';
+import { RunWorkflowModal } from './RunWorkflowModal';
 
 // Agent role prompt block
 interface PromptBlock {
@@ -64,7 +67,10 @@ interface Playbook {
 
 type IssueTypeFilter = 'all' | 'epic' | 'task';
 
-export function PlaybookLibrary() {
+export function PlaybookLibrary({ tracks }: { tracks: Track[] }) {
+  const [showBuilder, setShowBuilder] = useState(false);
+  const [runTarget, setRunTarget] = useState<Playbook | null>(null);
+  const [reloadKey, setReloadKey] = useState(0);
   const [playbooks, setPlaybooks] = useState<Playbook[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -90,7 +96,7 @@ export function PlaybookLibrary() {
       }
     }
     load();
-  }, []);
+  }, [reloadKey]);
 
   // Filter playbooks
   const filteredPlaybooks = useMemo(() => {
@@ -128,6 +134,7 @@ export function PlaybookLibrary() {
       <div className="flex items-center gap-4 mb-6 flex-wrap">
         <h2 className="text-lg font-semibold text-gray-200">Workflow Playbooks</h2>
         <span className="text-sm text-gray-500">{filteredPlaybooks.length} playbooks</span>
+        <button onClick={() => setShowBuilder(true)} className="px-3 py-1 text-xs bg-blue-600 hover:bg-blue-500 text-white rounded">New workflow</button>
 
         <div className="ml-auto flex flex-wrap items-center gap-2 md:gap-3">
           <input
@@ -180,10 +187,18 @@ export function PlaybookLibrary() {
             <PlaybookDetailPanel
               playbook={selected}
               onClose={() => setSelectedId(null)}
+              onRun={() => setRunTarget(selected)}
             />
           )}
         </div>
       )}
+      {showBuilder && (
+        <WorkflowBuilder
+          onClose={() => setShowBuilder(false)}
+          onSaved={() => { setShowBuilder(false); setReloadKey((k) => k + 1); }}
+        />
+      )}
+      {runTarget && <RunWorkflowModal playbook={runTarget} tracks={tracks} onClose={() => setRunTarget(null)} />}
     </div>
   );
 }
@@ -258,9 +273,11 @@ const ROLE_INFO: Record<string, { label: string; color: string; description: str
 function PlaybookDetailPanel({
   playbook,
   onClose,
+  onRun,
 }: {
   playbook: Playbook;
   onClose: () => void;
+  onRun: () => void;
 }) {
   const typeColor =
     playbook.issueType === 'epic'
@@ -318,6 +335,9 @@ function PlaybookDetailPanel({
           </span>
           <span className="text-[10px] text-gray-500">v{playbook.version}</span>
         </div>
+        {playbook.issueType === 'epic' && (
+          <button onClick={onRun} className="ml-auto mr-2 px-3 py-1 text-xs bg-blue-600 hover:bg-blue-500 text-white rounded">Run</button>
+        )}
         <button
           onClick={onClose}
           className="text-gray-500 hover:text-gray-300 text-lg leading-none px-1"
