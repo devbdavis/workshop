@@ -36,6 +36,12 @@ describe('Plugin Repository', () => {
     expect(egm?.enabled).toBe(true);
   });
 
+  it.each(['frontend-design', 'skill-creator'])('seeds %s from the official marketplace', (name) => {
+    const plugin = repo.findByName(`${name}@claude-plugins-official`);
+    expect(plugin?.marketplaceRepo).toBe('anthropics/claude-plugins-official');
+    expect(plugin?.enabled).toBe(true);
+  });
+
   it('creates and finds a plugin', () => {
     const plugin = repo.create({
       marketplaceRepo: 'acme/tools',
