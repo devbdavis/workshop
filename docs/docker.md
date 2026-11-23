@@ -14,6 +14,8 @@ ships with a full toolchain (`git`, `tmux`, the `claude` CLI, `gh`, `nix`,
 - **Nix** (multi-user, flakes enabled) + **direnv** so per-project `flake.nix` /
   `use flake` dependency management works inside agent sessions. The `nix-daemon`
   is started automatically by the entrypoint.
+- **Python 3.15** (+ pip), copied from the official `python:3.15-slim-bookworm`
+  image; override with `--build-arg PYTHON_VERSION=3.x`.
 - **gh**, **jq**, **sqlite3**, **ripgrep**, **git**, **tmux**, **openssh-client**.
 
 ## Volumes

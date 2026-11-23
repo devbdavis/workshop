@@ -1,5 +1,10 @@
 # syntax=docker/dockerfile:1
 
+# Python for agent sessions: copied out of the official image rather than built.
+# Its Debian release must match node:24-slim (bookworm) so the shared libs line up.
+ARG PYTHON_VERSION=3.15
+FROM python:${PYTHON_VERSION}-slim-bookworm AS python
+
 ###############################################################################
 # Builder stage — install all deps (incl. native modules) and build frontend
 ###############################################################################
@@ -77,6 +82,23 @@ RUN curl -fsSL https://code-server.dev/install.sh | sh -s -- --method=standalone
 RUN curl --proto '=https' --tlsv1.2 -sSf -L https://install.determinate.systems/nix \
       | sh -s -- install linux --init none --no-confirm
 ENV PATH="/nix/var/nix/profiles/default/bin:${PATH}"
+
+# --- Python ----------------------------------------------------------------
+# Libs are the runtime counterparts of the -dev packages the official image
+# builds against (tkinter omitted). libpython is found via its $ORIGIN rpath.
+ARG PYTHON_VERSION
+RUN apt-get update && apt-get install -y --no-install-recommends \
+      netbase tzdata libbz2-1.0 libdb5.3 libffi8 libgdbm6 \
+      liblzma5 libncursesw6 libreadline8 libsqlite3-0 libssl3 libuuid1 libzstd1 zlib1g \
+  && rm -rf /var/lib/apt/lists/*
+COPY --from=python /usr/local/bin/python${PYTHON_VERSION} /usr/local/bin/pip${PYTHON_VERSION} /usr/local/bin/
+COPY --from=python /usr/local/lib/libpython${PYTHON_VERSION}.so.1.0 /usr/local/lib/
+COPY --from=python /usr/local/lib/python${PYTHON_VERSION} /usr/local/lib/python${PYTHON_VERSION}
+RUN cd /usr/local/bin \
+  && ln -s python${PYTHON_VERSION} python3 && ln -s python3 python \
+  && ln -s pip${PYTHON_VERSION} pip3 && ln -s pip3 pip \
+  && python --version && pip --version \
+  && python -c 'import ssl, sqlite3, ctypes, lzma, bz2, zlib, readline, uuid, dbm.gnu, compression.zstd'
 
 # --- Claude Code CLI -------------------------------------------------------
 # Installed in-image so `command -v claude` resolves to an arch-correct binary;
