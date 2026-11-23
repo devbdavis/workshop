@@ -57,6 +57,14 @@ export function setupWebSocket(
 
   const eventsWss = new WebSocketServer({ noServer: true });
 
+  // Reverse proxies (SWAG/nginx proxy_read_timeout, Cloudflare ~100s) drop idle sockets; a ping frame counts as traffic.
+  const keepalive = setInterval(() => {
+    for (const client of [...wss.clients, ...eventsWss.clients]) {
+      if (client.readyState === WebSocket.OPEN) client.ping();
+    }
+  }, 30_000);
+  keepalive.unref();
+
   server.on('upgrade', (request: IncomingMessage, socket, head) => {
     // Authenticate before allowing any WebSocket upgrade
     const token = extractToken(request);
