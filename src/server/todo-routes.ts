@@ -1,4 +1,6 @@
 import { Router } from 'express';
+import { existsSync } from 'fs';
+import os from 'os';
 import type { TrackId, TodoId, SessionId, AgentId, SessionProvider, TrackRepo } from '@foundation/types';
 import { resolveSessionProvider } from '@foundation/types.js';
 import type { TodoRepository } from '@domain/todo/repository';
@@ -14,6 +16,8 @@ import type { PrMonitorRegistrar } from '@application/pr-monitor/registrar.js';
 import { slugifyTrackName } from '@infrastructure/vault/utils.js';
 import { interpolateTemplate } from '@application/track-management/prompt-interpolation.js';
 import { composeVaultContext } from '@application/vault/compose-vault-context.js';
+import type { SessionHistoryScanner } from '@infrastructure/usage/session-history.js';
+import { buildHandoff } from './handoff-context.js';
 import { broadcast } from './events.js';
 
 /** Settings key caching the dedicated system track that hosts issue-drafting sessions. */
@@ -45,12 +49,14 @@ export interface TodoRouterDeps {
   terminal: {
     createSession: (
       trackId: TrackId,
-      opts?: { systemPrompt?: string; workingDirectory?: string; background?: boolean; todoId?: string; initialPrompt?: string; provider?: SessionProvider; model?: string; name?: string; worktreeMode?: boolean; repos?: TrackRepo[]; additionalDirs?: string[]; issueKey?: string; dangerouslySkipPermissions?: boolean; skipBackgroundInstructions?: boolean; onReady?: (session: { id: SessionId }) => void },
+      opts?: { systemPrompt?: string; workingDirectory?: string; background?: boolean; todoId?: string; initialPrompt?: string; provider?: SessionProvider; model?: string; name?: string; worktreeMode?: boolean; repos?: TrackRepo[]; additionalDirs?: string[]; issueKey?: string; dangerouslySkipPermissions?: boolean; skipBackgroundInstructions?: boolean; handoffFrom?: { sessionId: SessionId; worktreeRoot?: string; workingDirectory: string }; onReady?: (session: { id: SessionId }) => void },
     ) => Promise<{ id: SessionId; trackId: TrackId; tmuxSession: string; state: string }>;
     destroySession: (sessionId: SessionId) => Promise<void>;
     softDeleteSession: (sessionId: SessionId) => Promise<void>;
   };
   vaultReader: VaultReader;
+  /** Reads the previous session's Claude transcript when handing a todo off to another CLI. */
+  historyScanner: SessionHistoryScanner;
   /**
    * Optional — when provided, the todo update endpoint reconciles PR monitor
    * rows against the new `pullRequests` list so submit-for-review et al don't
@@ -73,6 +79,7 @@ export function createTodoRouter(deps: TodoRouterDeps): Router {
     projectRoot,
     terminal,
     vaultReader,
+    historyScanner,
     prMonitorRegistrar,
   } = deps;
 
@@ -260,7 +267,10 @@ export function createTodoRouter(deps: TodoRouterDeps): Router {
 
   // --- Dispatch todo to an agent session ---
 
+  const handingOff = new Set<SessionId>();
+
   router.post('/todos/:todoId/dispatch', async (req, res) => {
+    let lockId: SessionId | undefined;
     try {
       const todo = todos.findById(req.params.todoId as TodoId);
       if (!todo) {
@@ -372,6 +382,22 @@ export function createTodoRouter(deps: TodoRouterDeps): Router {
         parts.push(`## Task\n\n**${todo.title}**\n\n${todo.description || ''}`);
       }
 
+      // Handoff continues in the old session's directory — a fresh worktree would lose its uncommitted work.
+      const handoff = req.body?.handoff === true;
+      const prev = handoff && todo.sessionId ? sessions.findById(todo.sessionId) : null;
+      const prevCwd = prev?.workingDirectory;
+      // Sessions launched without a directory default to $HOME; there is no work there to continue.
+      if (handoff && (!prevCwd || !existsSync(prevCwd) || prevCwd === os.homedir())) {
+        res.status(400).json({ error: 'Todo has no previous session to hand off from' });
+        return;
+      }
+      if (prev && (prev.deletedAt || handingOff.has(prev.id))) {
+        res.status(409).json({ error: 'This session has already been handed off' });
+        return;
+      }
+      if (prev) handingOff.add((lockId = prev.id));
+      if (prev && prevCwd) parts.push(await buildHandoff(prev, prevCwd, todo, historyScanner));
+
       const systemPrompt = parts.join('\n\n---\n\n');
 
       const prLines = (todo.pullRequests ?? [])
@@ -381,14 +407,17 @@ export function createTodoRouter(deps: TodoRouterDeps): Router {
 
       const session = await terminal.createSession(todo.trackId, {
         systemPrompt,
-        workingDirectory: repos[0]?.path,
+        workingDirectory: prev ? prevCwd : repos[0]?.path,
         background: true,
         todoId: todo.id,
-        initialPrompt: taskPrompt,
+        initialPrompt: prev
+          ? `You are taking over an in-progress task from another agent. Read the Handoff section of your instructions, check git state, then continue: **${todo.title}**`
+          : taskPrompt,
         provider,
         model,
         name: todo.title,
-        worktreeMode: track.worktreeMode && repos.length > 0,
+        handoffFrom: prev && prevCwd ? { sessionId: prev.id, worktreeRoot: prev.worktreeRoot, workingDirectory: prevCwd } : undefined,
+        worktreeMode: !prev && track.worktreeMode && repos.length > 0,
         repos: track.worktreeMode ? repos : undefined,
         issueKey: todo.issueKey,
         dangerouslySkipPermissions,
@@ -409,6 +438,8 @@ export function createTodoRouter(deps: TodoRouterDeps): Router {
     } catch (err) {
       console.error('Failed to dispatch todo:', err);
       res.status(500).json({ error: 'Failed to dispatch todo to agent' });
+    } finally {
+      if (lockId) handingOff.delete(lockId);
     }
   });
 

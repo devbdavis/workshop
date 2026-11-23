@@ -7,6 +7,7 @@ import path from 'path';
 import { v4 as uuid } from 'uuid';
 import type { SessionRepository } from '@domain/session/repository';
 import type { Session, SessionId, TrackId, TrackRepo } from '@foundation/types';
+import { isClaudeHarness } from '@foundation/types';
 import type { SoulLoader } from '@infrastructure/soul/soul-loader.js';
 import type { TodoRepository } from '@domain/todo/repository.js';
 import type { PluginRepository } from '@domain/plugin/repository';
@@ -24,6 +25,7 @@ import {
 // Re-export domain interfaces so existing consumers are not broken
 export type { TerminalManager, CreateSessionOptions, SyncResult } from '@domain/terminal/manager.js';
 import { parseTuiPrompt } from './tui-prompt.js';
+import { adoptWorktrees } from './worktree-adopt.js';
 import type { TuiPrompt } from '@foundation/tui-prompt-types';
 import type { TerminalManager, CreateSessionOptions, SyncResult } from '@domain/terminal/manager.js';
 
@@ -679,8 +681,8 @@ export function createTerminalManager(
       buildGeminiLauncher(launcherLines, session.id, sessionDir, cwd, effectiveOptions);
     } else if (provider === 'cursor') {
       buildCursorLauncher(launcherLines, sessionDir, cwd, effectiveOptions);
-    } else if (provider === 'claude') {
-      buildClaudeLauncher(launcherLines, session.id, sessionDir, tmuxName, cwd, effectiveOptions);
+    } else if (isClaudeHarness(provider)) {
+      buildClaudeLauncher(launcherLines, session.id, sessionDir, tmuxName, cwd, { ...effectiveOptions, provider });
     } else {
       throw new Error(`Unknown session provider: ${provider}`);
     }
@@ -718,7 +720,7 @@ export function createTerminalManager(
     // tmux pane cannot reach the tmux server. The keys are derived from the
     // pane, not hardcoded: the dialog's cursor defaults to "No, exit", so a
     // blind Enter declines trust and drops the session to a bare shell.
-    if (provider === 'claude') {
+    if (isClaudeHarness(provider)) {
       const deadline = Date.now() + 30_000;
       const trustTimer = setInterval(() => {
         if (Date.now() > deadline) {
@@ -749,7 +751,7 @@ export function createTerminalManager(
     // positional argument in the launch script (no race condition).
     if (
       effectiveOptions?.initialPrompt &&
-      provider !== 'claude' &&
+      !isClaudeHarness(provider) &&
       provider !== 'cursor'
     ) {
       sendInitialPrompt(sessionDir, tmuxName, provider);
@@ -796,7 +798,42 @@ export function createTerminalManager(
         let resolvedSystemPrompt = systemPrompt;
         let initialPrompt = options?.initialPrompt;
 
-        if (options?.worktreeMode && options.repos?.length) {
+        if (options?.handoffFrom) {
+          const from = options.handoffFrom;
+          if (from.worktreeRoot) {
+            const oldRoot = from.worktreeRoot;
+            const worktreeRoot = path.join(SESSION_DATA_DIR, session.id, 'workspace');
+            // No fallback on failure: two sessions sharing one worktree means deleting either destroys the work.
+            try {
+              await adoptWorktrees(oldRoot, worktreeRoot);
+            } finally {
+              // Record ownership once the rename landed, even if worktree repair then failed.
+              if (existsSync(worktreeRoot) && !existsSync(oldRoot)) {
+                sessionRepo.updateWorktreeRoot(from.sessionId, null);
+                sessionRepo.updateWorktreeRoot(session.id, worktreeRoot);
+              }
+            }
+            session.worktreeRoot = worktreeRoot;
+            cwd = path.join(worktreeRoot, path.relative(oldRoot, from.workingDirectory));
+            const move = (s: string) => {
+              const moved = s.replace(new RegExp(oldRoot.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '(?![\\w.-])', 'g'), worktreeRoot);
+              return options.repos?.length ? rewritePathsForWorktree(moved, options.repos, worktreeRoot) : moved;
+            };
+            if (resolvedSystemPrompt) resolvedSystemPrompt = move(resolvedSystemPrompt);
+            if (initialPrompt) initialPrompt = move(initialPrompt);
+          } else {
+            cwd = from.workingDirectory;
+          }
+          sessionRepo.updateWorkingDirectory(session.id, cwd);
+          session.workingDirectory = cwd;
+          // Retire the old session to the recycle bin so it is never auto-resumed into the same tree; its transcript stays.
+          const prev = sessionRepo.findById(from.sessionId);
+          if (prev) {
+            try { execSync(`tmux kill-session -t ${JSON.stringify(prev.tmuxSession)}`, { stdio: 'pipe' }); } catch { /* already gone */ }
+            sessionRepo.softDelete(prev.id);
+            clearSessionMaps(prev.id);
+          }
+        } else if (options?.worktreeMode && options.repos?.length) {
           try {
             // Rules payload for AGENTS.md-reading CLIs (Codex/Cursor), read
             // from the locally synced plugin clones — no network here.
@@ -1126,7 +1163,7 @@ export function createTerminalManager(
           }
 
           // Grace period expired — suspend (resumable) or retire to recycle bin
-          if (session.claudeResumeId && session.provider === 'claude') {
+          if (session.claudeResumeId && isClaudeHarness(session.provider)) {
             suspend(session, 'tmux session dead (resumable)');
           } else {
             retire(session, 'tmux session dead');
@@ -1285,7 +1322,7 @@ export function createTerminalManager(
     async resumeSuspendedSessions(): Promise<Session[]> {
       const allSessions = sessionRepo.findAll();
       const suspendedSessions = allSessions.filter(
-        (s) => s.state === 'suspended' && s.claudeResumeId && s.provider === 'claude',
+        (s) => s.state === 'suspended' && s.claudeResumeId && isClaudeHarness(s.provider),
       );
 
       if (suspendedSessions.length === 0) return [];
@@ -1377,7 +1414,7 @@ export function createTerminalManager(
         deletedAt: undefined,
       };
 
-      if (session.claudeResumeId && session.provider === 'claude') {
+      if (session.claudeResumeId && isClaudeHarness(session.provider)) {
         // Re-launch Claude picking up the prior conversation
         await launchCli(restoredSession, tmuxName, cwd, {
           claudeResumeId: session.claudeResumeId,

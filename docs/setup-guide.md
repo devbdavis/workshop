@@ -198,6 +198,22 @@ Use the workshop_list_tracks tool to show my tracks
 
 You should see the MCP tools respond. If not, check that the Workshop server is running.
 
+### Local models (Ollama on a Mac)
+
+The `Local (Ollama)` provider runs the Claude Code CLI against an Ollama server (>= 0.14, which serves the Anthropic Messages API at its root URL). Zero per-token cost; good for overnight jobs.
+
+```bash
+# On the Mac
+brew install ollama
+OLLAMA_HOST=0.0.0.0 OLLAMA_CONTEXT_LENGTH=32768 ollama serve   # or launchctl setenv for the app
+ollama pull qwen3-coder:30b   # fits 48GB with room for context; gpt-oss:20b is lighter. Model must support tool calling.
+```
+
+In Workshop's environment (docker-compose.yml passes these through):
+`WORKSHOP_LOCAL_LLM_URL=http://mac:11434` and optionally `WORKSHOP_LOCAL_MODEL=qwen3-coder:30b` (the default).
+
+Ollama has no authentication: expose it only on your LAN or Tailscale.
+
 ## 6. Claude Code Skills (Optional)
 
 Workshop ships with two Claude Code skills that teach Claude how to manage the server and use MCP tools effectively:

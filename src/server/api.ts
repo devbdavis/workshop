@@ -308,6 +308,7 @@ export function createApiRouter(deps: ApiRouterDeps = {}): Router {
     projectRoot,
     terminal,
     vaultReader,
+    historyScanner: createSessionHistoryScanner(),
     prMonitorRegistrar: prRegistrar,
   });
   router.use(todoRouter);

@@ -107,7 +107,7 @@ export function createSessionRepository(): SessionRepository {
       return this.findById(id);
     },
 
-    updateWorktreeRoot(id: SessionId, worktreeRoot: string): Session | null {
+    updateWorktreeRoot(id: SessionId, worktreeRoot: string | null): Session | null {
       const now = new Date().toISOString();
       const result = updateWorktreeRootStmt.run(worktreeRoot, now, id);
       if (result.changes === 0) return null;

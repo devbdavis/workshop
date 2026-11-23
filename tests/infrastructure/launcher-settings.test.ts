@@ -108,6 +108,21 @@ describe('buildClaudeLauncher print vs interactive', () => {
     return lines.join('\n');
   }
 
+  it('local provider exports Ollama env and swaps Claude aliases for the local model', () => {
+    const script = launch({ provider: 'local', model: 'opus', initialPrompt: 'go' });
+    expect(script).toContain('export ANTHROPIC_BASE_URL="http://localhost:11434"');
+    expect(script).toContain('export ANTHROPIC_API_KEY=""');
+    expect(script).toContain('export ANTHROPIC_DEFAULT_OPUS_MODEL="qwen3-coder:30b"');
+    expect(script).toContain('--model "qwen3-coder:30b"');
+    expect(script).not.toContain('"opus"');
+  });
+
+  it('claude provider does not export Ollama env', () => {
+    const script = launch({ model: 'opus', initialPrompt: 'go' });
+    expect(script).not.toContain('ANTHROPIC_BASE_URL');
+    expect(script).toContain('--model "opus"');
+  });
+
   it('adds --print for scheduled background sessions (no todoId, no interactive)', () => {
     const script = launch({ background: true, initialPrompt: 'go' });
     expect(script).toContain('--print');

@@ -89,9 +89,12 @@ export interface TrackPath {
 
 // Session
 export type SessionState = 'active' | 'detached' | 'dead' | 'suspended';
-export type SessionProvider = 'claude' | 'codex' | 'gemini' | 'cursor';
+export type SessionProvider = 'claude' | 'codex' | 'gemini' | 'cursor' | 'local';
 
-const SESSION_PROVIDER_VALUES = new Set<string>(['claude', 'codex', 'gemini', 'cursor']);
+const SESSION_PROVIDER_VALUES = new Set<string>(['claude', 'codex', 'gemini', 'cursor', 'local']);
+
+/** `local` is the Claude Code CLI pointed at an Ollama server, so it shares every Claude code path. */
+export const isClaudeHarness = (p: SessionProvider): boolean => p === 'claude' || p === 'local';
 
 export function isSessionProvider(value: unknown): value is SessionProvider {
   return typeof value === 'string' && SESSION_PROVIDER_VALUES.has(value);

@@ -27,6 +27,9 @@ services:
       PUID: "${PUID:-99}"
       PGID: "${PGID:-100}"
       WORKSHOP_VAULT_ROOT: /config/.workshop/vault
+      # Optional: Ollama server + model for the "Local (Ollama)" provider
+      WORKSHOP_LOCAL_LLM_URL: "${WORKSHOP_LOCAL_LLM_URL:-}"
+      WORKSHOP_LOCAL_MODEL: "${WORKSHOP_LOCAL_MODEL:-}"
     volumes:
       # Persistent Workshop state (SQLite db, auth-token, sessions, vault, sprites)
       - workshop-state:/config

@@ -34,6 +34,7 @@ export const CLI_REGISTRY: CliDescriptor[] = [
   { id: 'codex', label: 'Codex CLI', kind: 'agent', binary: 'codex', loginCommand: 'codex login', provider: 'codex' },
   { id: 'gemini', label: 'Gemini CLI', kind: 'agent', binary: 'gemini', loginCommand: 'gemini', provider: 'gemini' },
   { id: 'cursor', label: 'Cursor CLI', kind: 'agent', binary: 'cursor-agent', loginCommand: 'cursor-agent login', provider: 'cursor' },
+  { id: 'local', label: 'Local (Ollama)', kind: 'agent', binary: 'claude', loginCommand: 'curl -fsS "${WORKSHOP_LOCAL_LLM_URL:-http://localhost:11434}/api/tags"', provider: 'local' },
 
   // --- Tools ---
   { id: 'gh', label: 'GitHub CLI (gh)', kind: 'tool', binary: 'gh', loginCommand: 'gh auth login' },

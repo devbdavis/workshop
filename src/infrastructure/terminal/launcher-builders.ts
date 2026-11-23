@@ -230,14 +230,35 @@ export function buildClaudeLauncher(
   lines.push('');
 
   const claudeArgs = ['claude'];
+  let model = options?.model;
+
+  if (options?.provider === 'local') {
+    // Todo dispatch defaults to a Claude alias, which Ollama can't serve.
+    model = model && !/^(opus|sonnet|haiku)(\[1m\])?$|^claude-/i.test(model)
+      ? model
+      : process.env.WORKSHOP_LOCAL_MODEL || 'qwen3-coder:30b';
+    const env: Record<string, string> = {
+      ANTHROPIC_BASE_URL: process.env.WORKSHOP_LOCAL_LLM_URL || 'http://localhost:11434',
+      ANTHROPIC_AUTH_TOKEN: 'ollama',
+      ANTHROPIC_API_KEY: '',
+      ANTHROPIC_MODEL: model,
+      ANTHROPIC_DEFAULT_OPUS_MODEL: model,
+      ANTHROPIC_DEFAULT_SONNET_MODEL: model,
+      ANTHROPIC_DEFAULT_HAIKU_MODEL: model,
+      CLAUDE_CODE_SUBAGENT_MODEL: model,
+      CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC: '1',
+    };
+    for (const [k, v] of Object.entries(env)) lines.push(`export ${k}=${JSON.stringify(v)}`);
+    lines.push('');
+  }
 
   // Resume a previous Claude session if we have a resume ID
   if (options?.claudeResumeId) {
     claudeArgs.push('--resume', options.claudeResumeId);
   }
 
-  if (options?.model) {
-    claudeArgs.push('--model', JSON.stringify(options.model));
+  if (model) {
+    claudeArgs.push('--model', JSON.stringify(model));
   }
 
   if (options?.systemPrompt && !options?.claudeResumeId) {
