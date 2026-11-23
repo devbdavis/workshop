@@ -83,6 +83,17 @@ No `sshd`, no `docker exec`, no Docker socket mount. The "Open in Terminal" butt
 in the pane header is a *host*-side launcher (iTerm/Konsole/Windows Terminal) and
 is only useful for native, non-Docker installs.
 
+## Dev servers
+
+A track can run a per-session dev server behind its own hostname.
+
+1. In the track's settings, set **Dev server command** (e.g. `npm run dev -- --port $PORT`). The server must listen on `$PORT`.
+2. Set `WORKSHOP_DEV_DOMAIN` (e.g. `beta.workshop.chu.zone`). The feature is off without it. Only one Workshop instance should set it.
+3. Point wildcard DNS `*.<domain>` and a wildcard TLS cert at Workshop's port 3002, preserving the `Host` header (Nginx Proxy Manager, SWAG, or Caddy with Let's Encrypt DNS-01). Cloudflare's free cert covers only one level, so with Cloudflare use a domain one level under the zone, or a paid cert.
+4. Click **Dev Server** on a session. The first load shows "Starting...". A failure shows the log with Retry. The server stops when the session is deleted.
+
+The proxy sends `Host: 127.0.0.1:<port>`, so Vite's host check passes, but projects that hard-code `server.hmr.clientPort` must drop it. Apps that redirect to absolute `127.0.0.1` URLs won't work through the proxy.
+
 ## Per-user editor paths
 
 "Open in Editor" hands `<uri prefix><path>` to your local editor. If you SSH into

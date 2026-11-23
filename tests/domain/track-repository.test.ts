@@ -23,6 +23,13 @@ describe('Track Repository', () => {
   });
 
   describe('create', () => {
+    it('should round-trip devCommand, trimming and clearing empty values', () => {
+      const track = repo.create({ name: 'Dev Cmd Track', status: 'active', devCommand: '  npm run dev  ' });
+      expect(repo.findById(track.id)?.devCommand).toBe('npm run dev');
+      expect(repo.update(track.id, { devCommand: '   ' })?.devCommand).toBeUndefined();
+      expect(repo.findById(track.id)?.devCommand).toBeUndefined();
+    });
+
     it('should create a track with required fields', () => {
       const track = repo.create({ name: 'My Track', status: 'active' });
 

@@ -12,6 +12,7 @@
 import type { Request, Response, NextFunction } from 'express';
 import type { IncomingMessage } from 'http';
 import { ensureAuthToken, verifyToken } from '@foundation/auth.js';
+import { devDomain, parseDevHost } from './dev-host.js';
 
 let serverToken: string | null = null;
 
@@ -34,6 +35,9 @@ export function parseCookie(cookieHeader: string | undefined, name: string): str
  * Extract a token from an incoming HTTP request, checking all three sources.
  */
 export function extractToken(req: IncomingMessage): string | null {
+  // Dev hosts are same-site with Workshop, so the browser would attach its cookie to their pages' requests.
+  if (isFromDevHost(req)) return null;
+
   // 1. Authorization header
   const authHeader = req.headers.authorization;
   if (authHeader?.startsWith('Bearer ')) {
@@ -50,6 +54,24 @@ export function extractToken(req: IncomingMessage): string | null {
   if (queryToken) return queryToken;
 
   return null;
+}
+
+/**
+ * True when the request was made by a page on a per-session dev hostname. Cross-origin
+ * same-site subresource loads (img/script/iframe/fetch) carry no Origin, so Sec-Fetch-* covers them;
+ * top-level navigation stays allowed.
+ */
+function isFromDevHost(req: IncomingMessage): boolean {
+  const domain = devDomain();
+  if (!domain) return false;
+  if (req.headers['sec-fetch-site'] === 'same-site' && req.headers['sec-fetch-dest'] !== 'document') return true;
+  const origin = req.headers.origin;
+  if (!origin) return false;
+  try {
+    return parseDevHost(new URL(origin).host, domain) !== null;
+  } catch {
+    return false;
+  }
 }
 
 /**

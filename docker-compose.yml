@@ -30,6 +30,8 @@ services:
       # Optional: Ollama server + model for the "Local (Ollama)" provider
       WORKSHOP_LOCAL_LLM_URL: "${WORKSHOP_LOCAL_LLM_URL:-}"
       WORKSHOP_LOCAL_MODEL: "${WORKSHOP_LOCAL_MODEL:-}"
+      # Optional: base domain for per-session dev servers (needs wildcard DNS + TLS, see docs/docker.md)
+      WORKSHOP_DEV_DOMAIN: "${WORKSHOP_DEV_DOMAIN:-}"
     volumes:
       # Persistent Workshop state (SQLite db, auth-token, sessions, vault, sprites)
       - workshop-state:/config

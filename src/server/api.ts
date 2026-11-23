@@ -73,6 +73,7 @@ import { ensureRegisteredPluginsInstalled } from '@infrastructure/plugins/ensure
 import { createGlobalRepoRepository, createSettingsRepository } from '@infrastructure/persistence/repo-repository.js';
 import { createRepoRouter, parsePrMonitorIgnoredAuthors } from './repo-routes.js';
 import { createWorkspaceRouter } from './workspace-routes.js';
+import { createDevServerRoutes } from './dev-server-routes.js';
 import { createSessionHistoryRouter } from './session-history-routes.js';
 import { createSessionHistoryScanner } from '@infrastructure/usage/session-history.js';
 import { createDiffCommentRouter } from './diff-comment-routes.js';
@@ -662,6 +663,8 @@ export function createApiRouter(deps: ApiRouterDeps = {}): Router {
   const workspaceRouter = createWorkspaceRouter({ sessions, tracks });
   router.use(workspaceRouter);
 
+  router.use(createDevServerRoutes({ sessions, tracks }));
+
   // Mount session-history sub-router (browse + resume any past Claude Code session on the box)
   const sessionHistoryScanner = createSessionHistoryScanner();
   const sessionHistoryRouter = createSessionHistoryRouter({ scanner: sessionHistoryScanner, sessions, tracks, terminal });
@@ -840,8 +843,12 @@ export function createApiRouter(deps: ApiRouterDeps = {}): Router {
   });
 
   router.put('/tracks/:id', (req, res) => {
-    const { name, description, context, label, matrixRoomId, status, worktreeMode, defaultAgentId } = req.body;
-    const track = tracks.update(req.params.id as TrackId, { name, description, context, label, matrixRoomId, status, worktreeMode, defaultAgentId });
+    const { name, description, context, label, matrixRoomId, status, worktreeMode, devCommand, defaultAgentId } = req.body;
+    if (devCommand !== undefined && typeof devCommand !== 'string') {
+      res.status(400).json({ error: 'devCommand must be a string' });
+      return;
+    }
+    const track = tracks.update(req.params.id as TrackId, { name, description, context, label, matrixRoomId, status, worktreeMode, devCommand, defaultAgentId });
     if (!track) {
       res.status(404).json({ error: 'Track not found' });
       return;

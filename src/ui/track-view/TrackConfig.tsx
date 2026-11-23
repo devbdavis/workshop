@@ -26,6 +26,7 @@ export function TrackConfig({ track, onUpdate }: Props) {
   const [editingName, setEditingName] = useState(false);
   const [name, setName] = useState(track.name);
   const [description, setDescription] = useState(track.description || '');
+  const [devCommand, setDevCommand] = useState(track.devCommand || '');
   const [agents, setAgents] = useState<Agent[]>([]);
   const [templates, setTemplates] = useState<PromptTemplate[]>([]);
 
@@ -248,6 +249,28 @@ export function TrackConfig({ track, onUpdate }: Props) {
           </select>
           <p className="text-[10px] text-gray-600 mt-1">
             Injected into the system prompt when dispatching todos. Manage templates in Settings → Prompt Templates.
+          </p>
+        </div>
+
+        <div className="mb-3">
+          <label className="block text-xs text-gray-400 mb-1">Dev server command</label>
+          <input
+            value={devCommand}
+            onChange={(e) => setDevCommand(e.target.value)}
+            onBlur={async () => {
+              if (devCommand.trim() === (track.devCommand || '')) return;
+              await fetch(`/api/tracks/${track.id}`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ devCommand: devCommand.trim() }),
+              });
+              onUpdate();
+            }}
+            placeholder="npm run dev -- --port $PORT"
+            className="block w-full px-2 py-1 bg-gray-800 border border-gray-700 rounded text-xs text-gray-300 font-mono"
+          />
+          <p className="text-[10px] text-gray-600 mt-1">
+            Runs in the session's workspace with $PORT set, e.g. <code>npm run dev -- --port $PORT</code>. Requires WORKSHOP_DEV_DOMAIN.
           </p>
         </div>
 

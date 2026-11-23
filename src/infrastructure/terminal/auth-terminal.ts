@@ -1,6 +1,7 @@
 import { execSync } from 'child_process';
 import { v4 as uuid } from 'uuid';
-import { NIX_CLEAN_TMUX_FLAGS, TMUX_PATH_FLAG, configureTmuxSession } from './manager.js';
+import { configureTmuxSession } from './manager.js';
+import { NIX_CLEAN_TMUX_FLAGS, TMUX_PATH_FLAG } from './tmux-flags.js';
 
 /**
  * Ephemeral, DB-less terminals: CLI auth popups and plain shells.

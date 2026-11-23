@@ -48,6 +48,8 @@ export interface Track {
   terminalLayout?: TerminalLayout;
   /** If true, all background sessions on this track get per-session git worktrees */
   worktreeMode?: boolean;
+  /** Shell command that starts the session's dev server; $PORT is set by Workshop */
+  devCommand?: string;
   /** Default agent to use when dispatching messages on this track */
   defaultAgentId?: AgentId;
   /** Shared "owner tag" — which user this track belongs to (drives Mine/Theirs filter). */

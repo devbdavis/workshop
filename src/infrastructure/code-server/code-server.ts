@@ -6,8 +6,8 @@
 import { spawn, type ChildProcess } from 'child_process';
 import { once } from 'events';
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'fs';
-import { createServer, connect } from 'net';
 import path from 'path';
+import { findFreePort, waitForPort } from '@infrastructure/net/ports.js';
 import { hasCli } from '@infrastructure/launch/launch-apps.js';
 
 const BIN = process.env.WORKSHOP_CODE_SERVER_BIN || 'code-server';
@@ -23,43 +23,6 @@ interface RunningCodeServer {
 
 let running: RunningCodeServer | null = null;
 let starting: Promise<number> | null = null;
-
-function findFreePort(): Promise<number> {
-  return new Promise((resolve, reject) => {
-    const probe = createServer();
-    probe.once('error', reject);
-    probe.listen(0, '127.0.0.1', () => {
-      const address = probe.address();
-      if (address === null || typeof address === 'string') {
-        reject(new Error('could not determine a free port'));
-        return;
-      }
-      probe.close(() => resolve(address.port));
-    });
-  });
-}
-
-function waitForPort(port: number, timeoutMs = 15_000): Promise<void> {
-  const deadline = Date.now() + timeoutMs;
-  return new Promise((resolve, reject) => {
-    const attempt = (): void => {
-      const socket = connect(port, '127.0.0.1');
-      socket.once('connect', () => {
-        socket.destroy();
-        resolve();
-      });
-      socket.once('error', () => {
-        socket.destroy();
-        if (Date.now() >= deadline) {
-          reject(new Error('code-server did not start listening in time'));
-          return;
-        }
-        setTimeout(attempt, 200);
-      });
-    };
-    attempt();
-  });
-}
 
 const DEFAULT_SETTINGS: Record<string, unknown> = {
   // Follow the browser's OS light/dark preference; Dark Modern is the fallback theme.
@@ -119,7 +82,7 @@ async function spawnCodeServer(): Promise<number> {
   });
 
   await Promise.race([
-    waitForPort(port),
+    waitForPort(port, 15_000, 'code-server'),
     once(child, 'exit').then(() => { throw new Error('code-server exited during startup'); }),
   ]);
   running = { port, child };

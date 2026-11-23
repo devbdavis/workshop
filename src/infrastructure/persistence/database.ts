@@ -1004,6 +1004,13 @@ function runMigrations(db: Database.Database): void {
     // Table already exists — safe to ignore
   }
 
+  // Migration: add dev_command column to tracks
+  try {
+    db.exec(`ALTER TABLE tracks ADD COLUMN dev_command TEXT;`);
+  } catch {
+    // Column already exists — safe to ignore
+  }
+
   // In-memory waiters don't survive a restart, so any still-pending request is dead.
   db.prepare(`UPDATE permission_requests SET status = 'expired', decided_at = ? WHERE status = 'pending'`)
     .run(new Date().toISOString());
