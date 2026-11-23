@@ -2,7 +2,7 @@ import { useEffect, useState, useCallback, useRef } from 'react';
 import { useParams, useSearchParams, Link } from 'react-router-dom';
 import type { Track, Session, SessionId, ExternalIssue, Todo, DefaultAiCli, PrMonitor, TodoId } from '@foundation/types';
 import { issueBaseUrlFor } from '@foundation/issue-tracker.js';
-import type { DispatchOptions } from './DispatchDropdown';
+import { dispatchTodoRequest, type DispatchOptions } from './DispatchDropdown';
 import { ContextPanel } from './ContextPanel';
 import { IssuePanel } from './IssuePanel';
 import { TodoPanel } from './TodoPanel';
@@ -271,11 +271,7 @@ export function TrackView() {
         body: JSON.stringify(formData),
       });
     }
-    await fetch(`/api/todos/${todoId}/dispatch`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(opts),
-    });
+    await dispatchTodoRequest(todoId, opts);
     setSelectedTodo(null);
     loadTrack();
   }

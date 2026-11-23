@@ -89,10 +89,6 @@ describe('DispatchCoordinator — Dark Factory auto-advance', () => {
     topologyLoader,
   });
 
-  afterAll(() => {
-    resetDatabase();
-    if (fs.existsSync(testDbPath)) fs.unlinkSync(testDbPath);
-  });
 
   function createAutonomousEpic(): WorkflowIssue {
     const epic = engine.createEpic({ title: 'Dark epic', description: 'x' });
@@ -201,4 +197,38 @@ describe('DispatchCoordinator — Dark Factory auto-advance', () => {
 
     expect(issues.findById(epic.id)!.stateData?.paused).not.toBe(true);
   });
+});
+
+describe('DispatchCoordinator — onTerminal hook', () => {
+  const issues = createWorkflowIssueRepository();
+  const transitions = createWorkflowTransitionRepository();
+  const dependencies = createIssueDependencyRepository();
+  const topologyLoader = createMockTopologyLoader();
+  const engine = createWorkflowEngine({ issues, transitions, dependencies, topologyLoader });
+  const onTerminal = vi.fn().mockResolvedValue(undefined);
+  const coordinator = createDispatchCoordinator({
+    engine,
+    issues,
+    executionDispatcher: createMockExecutionDispatcher(),
+    agentDispatcher: createMockAgentDispatcher(),
+    topologyLoader,
+    onTerminal,
+  });
+
+  it('fires only when a transition lands in a terminal state', async () => {
+    const epic = engine.createEpic({ title: 'Terminal epic', description: 'x' });
+    await coordinator.transitionWithDispatch(epic.id, 'review-a', { type: 'human' });
+    expect(onTerminal).not.toHaveBeenCalled();
+
+    await coordinator.transitionWithDispatch(epic.id, 'mid', { type: 'human' });
+    await coordinator.transitionWithDispatch(epic.id, 'merge-gate', { type: 'human' });
+    await coordinator.approveWithDispatch(epic.id);
+    expect(onTerminal).toHaveBeenCalledTimes(1);
+    expect(onTerminal.mock.calls[0][0].state).toBe('merged');
+  });
+});
+
+afterAll(() => {
+  resetDatabase();
+  if (fs.existsSync(testDbPath)) fs.unlinkSync(testDbPath);
 });
