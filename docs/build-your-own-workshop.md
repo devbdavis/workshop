@@ -914,7 +914,7 @@ Each phase should end with typecheck, tests, and a demo.
 ## 14. Personal bits to swap for your own
 
 - `soul.md`: the ship-AI persona prepended to every session.
-- The seeded default plugin (`ponytail@ponytail`).
+- The seeded default plugins (`ponytail@ponytail`, `egm@egm`, `frontend-design@claude-plugins-official`, `skill-creator@claude-plugins-official`).
 - The hardcoded Linear team `ASY` in the issue-creation prompt.
 - Skills and agents tied to one environment: `linear`, `nozzle-repo-bootstrap`, and `ci-cd-devops-engineer` (internal ECR / BuildKite).
 - The bundled schedules `diary` (an external Go collector), `bubble-permissions`, `sync-repos`, and `periodic-checkup`. They're good examples of pre-script plus prompt, so rewrite them for your own setup.

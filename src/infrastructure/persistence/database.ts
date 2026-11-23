@@ -1018,7 +1018,7 @@ function runMigrations(db: Database.Database): void {
   // Seed default prompt templates if the table is empty
   seedDefaultTemplates(db);
 
-  // Seed default plugins (ponytail, egm) if not present
+  // Seed default plugins (ponytail, egm, frontend-design, skill-creator) if not present
   seedDefaultPlugins(db);
 }
 
@@ -1030,6 +1030,8 @@ function seedDefaultPlugins(db: Database.Database): void {
   );
   insert.run(uuid(), 'DietrichGebert/ponytail', 'ponytail@ponytail', 'Lazy senior dev discipline — YAGNI ladder + /ponytail-review over-engineering review', now, now);
   insert.run(uuid(), 'google/elephant-goldfish-model', 'egm@egm', 'Draft specs, review designs, and check implementation drift', now, now);
+  insert.run(uuid(), 'anthropics/claude-plugins-official', 'frontend-design@claude-plugins-official', 'Distinctive, production-grade frontend design guidance', now, now);
+  insert.run(uuid(), 'anthropics/claude-plugins-official', 'skill-creator@claude-plugins-official', 'Create, edit, and evaluate skills', now, now);
 }
 
 function seedDefaultTemplates(db: Database.Database): void {
