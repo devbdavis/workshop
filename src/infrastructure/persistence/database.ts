@@ -1103,6 +1103,8 @@ Be thorough in your analysis but keep recommendations practical and prioritized.
   );
 }
 
+const TODO_SUMMARY_LINE = "2. Put a brief summary of what you accomplished or why you stopped in the todo's resolution field, never the description. Open PRs only through the submit-for-review skill";
+
 const DEFAULT_TODO_TEMPLATE_CONTENT = `## Repositories
 
 {{track.repos}}
@@ -1127,8 +1129,10 @@ You are running as a background agent dispatched from Workshop.
 
 When you have completed the task (or determined you cannot proceed):
 1. Use the workshop_update_todo MCP tool to update todo "{{todo.id}}" status to "review"
-2. Add a brief summary of what you accomplished or why you stopped to the description
+${TODO_SUMMARY_LINE}
 `;
+
+const LEGACY_TODO_SUMMARY_LINE = '2. Add a brief summary of what you accomplished or why you stopped to the description';
 
 /**
  * Ensure the "Todo Prompt Template" (the system default) exists and is assigned
@@ -1152,6 +1156,11 @@ export function ensureDefaultTodoTemplate(): void {
     if (existing.content.includes('Workshop Agent Soul') || existing.content.includes('You are Jeeves') || existing.content.includes('Use /exit to close your session') || existing.content.includes('skill "orchestrate"')) {
       db.prepare(`UPDATE prompt_templates SET content = ?, updated_at = ? WHERE id = ?`).run(
         DEFAULT_TODO_TEMPLATE_CONTENT, new Date().toISOString(), templateId,
+      );
+    } else if (existing.content.includes(LEGACY_TODO_SUMMARY_LINE)) {
+      // Swap just the one line so any user edits to the rest of the template survive.
+      db.prepare(`UPDATE prompt_templates SET content = ?, updated_at = ? WHERE id = ?`).run(
+        existing.content.replace(LEGACY_TODO_SUMMARY_LINE, TODO_SUMMARY_LINE), new Date().toISOString(), templateId,
       );
     }
   } else {

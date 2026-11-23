@@ -195,7 +195,7 @@ export function appendBackgroundInstructions(prompt: string, todoId?: string): s
     instructions.push(
       'When you have completed the task (or determined you cannot proceed):',
       `1. Use the workshop_update_todo MCP tool to update todo "${todoId}" status to "review"`,
-      '2. Add a brief summary of what you accomplished or why you stopped to the description',
+      "2. Put a brief summary of what you accomplished or why you stopped in the todo's resolution field, never the description. Open PRs only through the submit-for-review skill",
       '',
     );
   }
