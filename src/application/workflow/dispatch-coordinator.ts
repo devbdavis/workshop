@@ -54,6 +54,8 @@ export interface DispatchCoordinatorDeps {
   onEpicAdvanced?: (issue: WorkflowIssue) => Promise<void>;
   /** Dark Factory: called when an autonomous issue comes to rest at a human gate or terminal state */
   onAutonomousRest?: (issueId: WorkflowIssueId) => Promise<void>;
+  /** Called when a transition or approval lands an issue in a terminal state */
+  onTerminal?: (issue: WorkflowIssue) => Promise<void>;
   /** Dark Factory usage pacing: returns whether autonomous work should pause now, and until when */
   usageGate?: () => { over: boolean; resumeAt?: string };
   /** Dark Factory: called when an autonomous issue is paused for usage pacing */
@@ -168,6 +170,15 @@ export function createDispatchCoordinator(
     }
   }
 
+  async function notifyTerminal(issue: WorkflowIssue): Promise<void> {
+    if (!checkIsTerminal(issue, issue.state)) return;
+    try {
+      await deps.onTerminal?.(issue);
+    } catch (err) {
+      console.warn(`onTerminal failed for issue ${issue.id}:`, err);
+    }
+  }
+
   /**
    * Dark Factory: for autonomous issues, auto-approve through human gates
    * (except merge/terminal gates and any gate an escalation is waiting on).
@@ -222,6 +233,7 @@ export function createDispatchCoordinator(
       data?: Record<string, unknown>,
     ): Promise<WorkflowIssue> {
       const updated = engine.transition(issueId, toState, actor, comment, data);
+      await notifyTerminal(updated);
 
       // If a task reached a terminal state, resolve dependencies and check epic progress
       if (updated.type === 'task' && checkIsTerminal(updated, toState)) {
@@ -240,6 +252,7 @@ export function createDispatchCoordinator(
       comment?: string,
     ): Promise<WorkflowIssue> {
       const updated = engine.approve(issueId, comment);
+      await notifyTerminal(updated);
 
       // If a task reached a terminal state via approval, resolve dependencies
       if (updated.type === 'task' && checkIsTerminal(updated, updated.state)) {

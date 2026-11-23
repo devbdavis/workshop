@@ -81,23 +81,29 @@ export function createWorkflowRouter(deps: WorkflowRouterDeps): Router {
   // --- Dark Factory: create an autonomous epic from a template ---
 
   router.post('/workflow/issues/from-template', async (req, res) => {
-    const { title, description, trackId, provider, priority, templateSlug, autonomous, budget } = req.body;
+    const { title, description, trackId, provider, priority, templateSlug, playbookRowId: customRowId, autonomous, budget } = req.body;
 
     if (!title || typeof title !== 'string') {
       res.status(400).json({ error: 'title is required' });
       return;
     }
-    if (!templateSlug || typeof templateSlug !== 'string') {
-      res.status(400).json({ error: 'templateSlug is required' });
+    const hasSlug = typeof templateSlug === 'string' && templateSlug !== '';
+    const hasRowId = typeof customRowId === 'string' && customRowId !== '';
+    if (hasSlug === hasRowId) {
+      res.status(400).json({ error: 'Exactly one of templateSlug or playbookRowId is required' });
       return;
     }
     if (!playbooks || !projectRoot) {
       res.status(503).json({ error: 'Template seeding not available' });
       return;
     }
+    if (hasRowId && !playbooks.findByRowId(customRowId)) {
+      res.status(404).json({ error: 'Playbook not found' });
+      return;
+    }
 
     try {
-      const playbookRowId = ensurePlaybookForTemplate(projectRoot, templateSlug, playbooks);
+      const playbookRowId = hasRowId ? customRowId : ensurePlaybookForTemplate(projectRoot, templateSlug, playbooks);
 
       let issue = engine.createEpic({
         title,

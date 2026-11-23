@@ -98,6 +98,9 @@ export function TodoDetailModal({ todo, tracks, onClose, onSave, onDelete, onDis
 
   const trackName = tracks.find((t) => t.id === todo.trackId)?.name || 'Unknown';
   const canDispatch = status === 'ready' || status === 'backlog';
+  const trackDefaultAgentId = tracks.find((t) => t.id === todo.trackId)?.defaultAgentId;
+  const defaultAgent = trackDefaultAgentId ? agents.find((a) => a.id === trackDefaultAgentId) : undefined;
+  const defaultAgentName = defaultAgent?.name;
   // Unset means Linear (server default); Jira has no create flow; hidden until settings load.
   const trackerKind = tracker && (tracker.tracker ?? 'linear');
   const issueUrl = issueHref(issueBaseUrlFor(trackerKind || undefined, tracker?.orgName), issueKey || undefined);
@@ -401,20 +404,25 @@ export function TodoDetailModal({ todo, tracks, onClose, onSave, onDelete, onDis
           )}
           <div className="flex flex-wrap gap-2">
             {canDispatch && (
-              <div className="relative">
+              <div className="relative flex items-center gap-px">
                 <button
-                  onClick={() => setShowDispatch(!showDispatch)}
-                  className="px-3 py-1.5 text-xs bg-green-700 hover:bg-green-600 text-white rounded-lg transition-colors"
+                  onClick={() => onDispatch(todo.id, {}, { title, description: description || undefined, status, priority })}
+                  title={defaultAgentName ? `Dispatch to ${defaultAgentName}` : 'Dispatch to Agent'}
+                  className="px-3 py-1.5 text-xs bg-green-700 hover:bg-green-600 text-white rounded-l-lg transition-colors"
                 >
                   Dispatch to Agent
+                </button>
+                <button
+                  onClick={() => setShowDispatch(!showDispatch)}
+                  title="Dispatch options"
+                  className="px-2 py-1.5 text-xs bg-green-700 hover:bg-green-600 text-white rounded-r-lg transition-colors"
+                >
+                  ▾
                 </button>
                 {showDispatch && (
                   <DispatchDropdown
                     agents={agents}
-                    defaultAgent={(() => {
-                      const track = tracks.find((t) => t.id === todo.trackId);
-                      return track?.defaultAgentId ? agents.find((a) => a.id === track.defaultAgentId) : undefined;
-                    })()}
+                    defaultAgent={defaultAgent}
                     popUp
                     onSelect={(opts) => {
                       setShowDispatch(false);
@@ -438,6 +446,7 @@ export function TodoDetailModal({ todo, tracks, onClose, onSave, onDelete, onDis
                   <DispatchDropdown
                     agents={agents}
                     popUp
+                    hideWorkflows
                     onSelect={(opts) => {
                       setShowHandoff(false);
                       onDispatch(todo.id, { ...opts, handoff: true });

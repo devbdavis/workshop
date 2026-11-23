@@ -34,6 +34,7 @@ import { createSkillRouter } from './skill-routes.js';
 import { createVaultRouter } from './vault-routes.js';
 import { createScheduledTaskRouter } from './scheduled-task-routes.js';
 import { createWorkflowRouter } from './workflow-routes.js';
+import { createTodoWorkflowRouter } from './todo-workflow-routes.js';
 import { createPlaybookRouter } from './workflow-playbook-routes.js';
 import { createWorkflowProposalRouter } from './workflow-proposal-routes.js';
 import { createWorkflowIssueRepository, createWorkflowTransitionRepository } from '@infrastructure/persistence/workflow-repository.js';
@@ -447,6 +448,18 @@ export function createApiRouter(deps: ApiRouterDeps = {}): Router {
     executionDispatcher,
     agentDispatcher,
     topologyLoader,
+    // Workflows dispatched from a todo move it to review when they finish.
+    onTerminal: async (issue) => {
+      const todoId = issue.stateData?.todoId;
+      if (typeof todoId !== 'string') return;
+      const todo = todos.findById(todoId as TodoId);
+      if (!todo || todo.status === 'done') return;
+      todos.update(todo.id, {
+        status: 'review',
+        resolution: `Workflow finished: ${issue.title} (${issue.state})`,
+      });
+      broadcast('todo:updated', todo.trackId);
+    },
     // Dark Factory usage pacing: pause new autonomous work at 75% of the learned
     // usage ceiling, leaving headroom for interactive sessions (window is account-wide).
     usageGate: () => ({
@@ -469,6 +482,15 @@ export function createApiRouter(deps: ApiRouterDeps = {}): Router {
       broadcast('workflow:updated', issueId);
     },
   });
+
+  router.use(createTodoWorkflowRouter({
+    todos,
+    playbooks: workflowPlaybooks,
+    engine: workflowEngine,
+    issues: workflowIssues,
+    coordinator: dispatchCoordinator,
+    broadcast,
+  }));
 
   // Wire the callback after coordinator exists (B4 fix: parent epic dispatch)
   epicAdvancedCallback = async (epic) => {

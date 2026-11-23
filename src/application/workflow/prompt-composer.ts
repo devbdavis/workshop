@@ -102,6 +102,10 @@ function formatStateData(stateData: Record<string, unknown>): string {
     sections.push(`## Refined Spec\n\n${stateData.refinedSpec}`);
   }
 
+  if (typeof stateData.previousStep === 'string' && stateData.previousStep) {
+    sections.push(`## Output From Previous Step\n\n${stateData.previousStep}`);
+  }
+
   if (Array.isArray(stateData.findings)) {
     const findings = stateData.findings as Array<{ text: string; severity: string; resolved?: boolean }>;
     const blocking = findings.filter(f => f.severity === 'blocking' && !f.resolved);

@@ -5,7 +5,7 @@ import { issueBaseUrlFor } from '@foundation/issue-tracker.js';
 import { TerminalPane } from '../terminal-panel/TerminalPane';
 import { SessionPanel } from '../track-view/SessionPanel';
 import { NewSessionModal, type NewSessionOptions } from '../track-view/NewSessionModal';
-import type { DispatchOptions } from '../track-view/DispatchDropdown';
+import { dispatchTodoRequest, type DispatchOptions } from '../track-view/DispatchDropdown';
 import { TodoDetailModal } from '../kanban/TodoDetailModal';
 import { LinearIssueModal } from '../kanban/LinearIssueModal';
 import { groupSessionsByTrack, isVisibleTrack, sortTracks } from './group-sessions';
@@ -246,11 +246,7 @@ export function SessionOverview() {
         body: JSON.stringify(formData),
       });
     }
-    await fetch(`/api/todos/${todoId}/dispatch`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(opts),
-    });
+    await dispatchTodoRequest(todoId, opts);
     setSelectedTodo(null);
     reload();
   }

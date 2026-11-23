@@ -8,6 +8,22 @@ export interface DispatchOptions {
   dangerouslySkipPermissions?: boolean;
   /** Continue the todo's previous session's work in a new session. */
   handoff?: boolean;
+  /** Run the todo through this epic playbook instead of a single agent session. */
+  playbookRowId?: string;
+}
+
+export function dispatchTodoRequest(todoId: string, opts: DispatchOptions): Promise<Response> {
+  const dispatchWorkflow = opts.playbookRowId !== undefined;
+  return fetch(`/api/todos/${todoId}/${dispatchWorkflow ? 'dispatch-workflow' : 'dispatch'}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(dispatchWorkflow ? { playbookRowId: opts.playbookRowId } : opts),
+  });
+}
+
+interface PlaybookSummary {
+  rowId: string;
+  name: string;
 }
 
 const PROVIDER_COLORS: Record<string, string> = {
@@ -25,9 +41,12 @@ interface Props {
   popUp?: boolean;
   /** Track's configured default agent, shown as the top option */
   defaultAgent?: Agent;
+  /** Handoff continues a session, so workflows don't apply */
+  hideWorkflows?: boolean;
 }
 
-export function DispatchDropdown({ agents, onSelect, onClose, popUp, defaultAgent }: Props) {
+export function DispatchDropdown({ agents, onSelect, onClose, popUp, defaultAgent, hideWorkflows }: Props) {
+  const [workflows, setWorkflows] = useState<PlaybookSummary[]>([]);
   const [provider, setProvider] = useState<SessionProvider>('claude');
   const [dangerouslySkipPermissions, setDangerouslySkipPermissions] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
@@ -48,6 +67,14 @@ export function DispatchDropdown({ agents, onSelect, onClose, popUp, defaultAgen
       setProvider(providerOptions[0].value);
     }
   }, [providerOptions, provider]);
+
+  useEffect(() => {
+    if (hideWorkflows) return;
+    fetch('/api/workflow/playbooks?issueType=epic')
+      .then((r) => (r.ok ? r.json() : []))
+      .then(setWorkflows)
+      .catch(() => setWorkflows([]));
+  }, [hideWorkflows]);
 
   useEffect(() => {
     function handleClickOutside(e: MouseEvent) {
@@ -129,6 +156,21 @@ export function DispatchDropdown({ agents, onSelect, onClose, popUp, defaultAgen
           <span className="font-medium">{agent.name}</span>
         </button>
       ))}
+
+      {workflows.length > 0 && (
+        <>
+          <div className="px-3 py-1 text-[10px] text-gray-500 border-t border-gray-700">Run workflow</div>
+          {workflows.map((w) => (
+            <button
+              key={w.rowId}
+              onClick={() => onSelect({ playbookRowId: w.rowId })}
+              className="w-full text-left px-3 py-1.5 text-xs text-gray-300 hover:bg-gray-700"
+            >
+              <span className="font-medium">{w.name}</span>
+            </button>
+          ))}
+        </>
+      )}
 
       {/* Cancel */}
       <div className="border-t border-gray-700" />

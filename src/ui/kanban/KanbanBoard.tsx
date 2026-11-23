@@ -15,7 +15,7 @@ import {
 import { arrayMove } from '@dnd-kit/sortable';
 import { useSearchParams } from 'react-router-dom';
 import type { Todo, TodoStatus, TodoPriority, Track } from '@foundation/types';
-import type { DispatchOptions } from '../track-view/DispatchDropdown';
+import { dispatchTodoRequest, type DispatchOptions } from '../track-view/DispatchDropdown';
 import { KanbanColumn } from './KanbanColumn';
 import { KanbanCard } from './KanbanCard';
 import { TodoDetailModal } from './TodoDetailModal';
@@ -234,11 +234,7 @@ export function KanbanBoard() {
         body: JSON.stringify(formData),
       });
     }
-    await fetch(`/api/todos/${todoId}/dispatch`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(opts),
-    });
+    await dispatchTodoRequest(todoId, opts);
     setSelectedTodo(null);
     loadData();
   }

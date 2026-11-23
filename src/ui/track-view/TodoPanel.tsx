@@ -5,7 +5,7 @@ import { TodoDetailModal } from '../kanban/TodoDetailModal';
 import { LinearIssueModal } from '../kanban/LinearIssueModal';
 import { ImportFromLinearModal } from '../kanban/ImportFromLinearModal';
 import { importLabel, useIssueTracker } from '../hooks/useIssueTracker';
-import { DispatchDropdown, type DispatchOptions } from './DispatchDropdown';
+import { DispatchDropdown, dispatchTodoRequest, type DispatchOptions } from './DispatchDropdown';
 
 interface Props {
   track: Track;
@@ -78,11 +78,7 @@ export function TodoPanel({ track, todos, sessions, onUpdate }: Props) {
   }
 
   async function dispatchTodo(todoId: string, opts: DispatchOptions) {
-    await fetch(`/api/todos/${todoId}/dispatch`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(opts),
-    });
+    await dispatchTodoRequest(todoId, opts);
     setDispatchingTodoId(null);
     onUpdate();
   }
@@ -108,11 +104,7 @@ export function TodoPanel({ track, todos, sessions, onUpdate }: Props) {
   }
 
   async function dispatchTodoFromModal(todoId: string, opts: DispatchOptions) {
-    await fetch(`/api/todos/${todoId}/dispatch`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(opts),
-    });
+    await dispatchTodoRequest(todoId, opts);
     setEditingTodo(null);
     onUpdate();
   }
@@ -167,12 +159,20 @@ export function TodoPanel({ track, todos, sessions, onUpdate }: Props) {
                       {STATUS_LABELS[todo.status]}
                     </button>
                     {(todo.status === 'ready' || todo.status === 'backlog') && (
-                      <div className="relative">
+                      <div className="relative flex items-center gap-px">
                         <button
-                          onClick={() => setDispatchingTodoId(dispatchingTodoId === todo.id ? null : todo.id)}
-                          className="text-[10px] px-1.5 py-0.5 rounded bg-green-900 text-green-300 hover:bg-green-800"
+                          onClick={() => dispatchTodo(todo.id, {})}
+                          title={track.defaultAgentId ? `Dispatch to ${agents.find((a) => a.id === track.defaultAgentId)?.name ?? 'track default agent'}` : 'Dispatch'}
+                          className="text-[10px] px-1.5 py-0.5 rounded-l bg-green-900 text-green-300 hover:bg-green-800"
                         >
                           Dispatch
+                        </button>
+                        <button
+                          onClick={() => setDispatchingTodoId(dispatchingTodoId === todo.id ? null : todo.id)}
+                          title="Dispatch options"
+                          className="text-[10px] px-1 py-0.5 rounded-r bg-green-900 text-green-300 hover:bg-green-800"
+                        >
+                          ▾
                         </button>
                         {dispatchingTodoId === todo.id && (
                           <DispatchDropdown
